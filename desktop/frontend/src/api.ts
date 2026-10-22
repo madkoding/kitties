@@ -394,7 +394,21 @@ function fixSettings<T>(path: string, data: T): T {
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const app = window.go?.main?.App;
   if (app) {
-    const raw = await app.Request(method, path, body === undefined ? "" : JSON.stringify(body));
+    // A reading that gets no answer from the app fails with a message instead of leaving the
+    // screen waiting for good (a message that never comes back through the webview's bridge).
+    // Writes may legitimately take minutes, so only reads have a limit.
+    const call = app.Request(method, path, body === undefined ? "" : JSON.stringify(body));
+    const raw = await (method === "GET"
+      ? Promise.race([
+          call,
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new ApiError(0, `the app got no answer for ${method} ${path} in 20 s`)),
+              20_000,
+            ),
+          ),
+        ])
+      : call);
     const parsed = JSON.parse(raw) as { status: number; body: string };
     const data = parsed.body ? JSON.parse(parsed.body) : {};
     if (parsed.status >= 400) {

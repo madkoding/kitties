@@ -114,6 +114,20 @@ export default function App() {
     }
   }, []);
 
+  // Whatever the page fails to do and nobody caught (a screen that cannot be drawn, a promise
+  // nobody handled) is said in the banner, so a blank or stuck screen always has a reason.
+  useEffect(() => {
+    const onError = (e: ErrorEvent) => setError(`Something broke in the page: ${e.message}`);
+    const onRejection = (e: PromiseRejectionEvent) =>
+      setError(`Something failed: ${(e.reason as Error)?.message || String(e.reason)}`);
+    addEventListener("error", onError);
+    addEventListener("unhandledrejection", onRejection);
+    return () => {
+      removeEventListener("error", onError);
+      removeEventListener("unhandledrejection", onRejection);
+    };
+  }, []);
+
   useEffect(() => {
     refresh();
     const onHash = () => {

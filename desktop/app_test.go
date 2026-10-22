@@ -138,3 +138,31 @@ func TestWatch(t *testing.T) {
 		t.Error("a bad url")
 	}
 }
+
+func TestRequestAnswersInPlainASCII(t *testing.T) {
+	text := "sk_… and rk_… \u2014 café \u2028 😸 <b> & more"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"help": text})
+	}))
+	defer srv.Close()
+	a := NewApp()
+	a.conn = Connection{URL: srv.URL}
+	raw, err := a.Request("GET", "/v1/settings", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range raw {
+		if r >= 0x80 {
+			t.Fatalf("%q is not ASCII in %s", r, raw)
+		}
+	}
+	// What the page does with it gives the text back unchanged.
+	var res Response
+	if err := json.Unmarshal([]byte(raw), &res); err != nil || res.Status != 200 {
+		t.Fatalf("response = %+v %v", res, err)
+	}
+	var got map[string]string
+	if err := json.Unmarshal([]byte(res.Body), &got); err != nil || got["help"] != text {
+		t.Errorf("round trip = %q, %v", got["help"], err)
+	}
+}

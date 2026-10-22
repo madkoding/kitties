@@ -251,5 +251,26 @@ func (a *App) Request(method, path, body string) (string, error) {
 		out.Body = string(data)
 	}
 	encoded, err := json.Marshal(out)
-	return string(encoded), err
+	return asciiOnly(string(encoded)), err
+}
+
+// asciiOnly rewrites every non-ASCII character of a JSON text as a \uXXXX escape (a surrogate pair
+// above U+FFFF), which JSON reads back as the same text. What the page receives from this app
+// crosses the webview's bridge as a script, and the answers of the gateway are full of dashes,
+// ellipses and accents: plain ASCII leaves nothing in them for that bridge to choke on.
+func asciiOnly(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		switch {
+		case r < 0x80:
+			b.WriteRune(r)
+		case r < 0x10000:
+			fmt.Fprintf(&b, "\\u%04x", r)
+		default:
+			r -= 0x10000
+			fmt.Fprintf(&b, "\\u%04x\\u%04x", 0xd800+(r>>10), 0xdc00+(r&0x3ff))
+		}
+	}
+	return b.String()
 }
