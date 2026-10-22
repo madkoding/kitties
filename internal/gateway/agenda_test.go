@@ -9,11 +9,14 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/agenda"
+	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/kitty"
 )
@@ -329,5 +332,172 @@ func TestHooks(t *testing.T) {
 	req, _ = http.NewRequest("POST", none.URL+"/v1/hooks/gh", nil)
 	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != 404 {
 		t.Error("hook without an agenda")
+	}
+}
+
+func TestStripeSignature(t *testing.T) {
+	body := []byte(`{"type":"invoice.payment_failed"}`)
+	now := time.Unix(1_800_000_000, 0)
+	sign := func(ts int64, secret string) string {
+		mac := hmac.New(sha256.New, []byte(secret))
+		mac.Write([]byte(strconv.FormatInt(ts, 10) + "."))
+		mac.Write(body)
+		return hex.EncodeToString(mac.Sum(nil))
+	}
+	ts := now.Unix()
+	good := "t=" + strconv.FormatInt(ts, 10) + ",v1=" + sign(ts, "whsec")
+	if !stripeSigned(good, body, "whsec", now) {
+		t.Error("a valid signature")
+	}
+	// Rotated secrets send several v1 signatures: any one will do.
+	if !stripeSigned("t="+strconv.FormatInt(ts, 10)+",v1=00,v1="+sign(ts, "whsec"), body, "whsec", now) {
+		t.Error("one of several")
+	}
+	for name, header := range map[string]string{
+		"wrong secret":    "t=" + strconv.FormatInt(ts, 10) + ",v1=" + sign(ts, "other"),
+		"no timestamp":    "v1=" + sign(ts, "whsec"),
+		"no signature":    "t=" + strconv.FormatInt(ts, 10),
+		"bad timestamp":   "t=x,v1=" + sign(ts, "whsec"),
+		"too old":         "t=" + strconv.FormatInt(ts-600, 10) + ",v1=" + sign(ts-600, "whsec"),
+		"from the future": "t=" + strconv.FormatInt(ts+600, 10) + ",v1=" + sign(ts+600, "whsec"),
+	} {
+		if stripeSigned(header, body, "whsec", now) {
+			t.Errorf("%s must be refused", name)
+		}
+	}
+	if stripeSigned(good, []byte("tampered"), "whsec", now) {
+		t.Error("a changed body")
+	}
+	// Through the hook: the header decides, with the real clock.
+	srv, a := agendaServer(t)
+	_, _ = a.AddGoal(agenda.Goal{Kitty: "a1", Title: "Overdue", On: []string{"gh"}, Enabled: true})
+	nowTS := time.Now().Unix()
+	mac := hmac.New(sha256.New, []byte("shh"))
+	mac.Write([]byte(strconv.FormatInt(nowTS, 10) + "."))
+	mac.Write(body)
+	req, _ := http.NewRequest("POST", srv.URL+"/v1/hooks/gh", strings.NewReader(string(body)))
+	req.Header.Set("Stripe-Signature", "t="+strconv.FormatInt(nowTS, 10)+",v1="+hex.EncodeToString(mac.Sum(nil)))
+	if resp, err := http.DefaultClient.Do(req); err != nil || resp.StatusCode != 200 {
+		t.Errorf("a signed stripe hook = %v %v", resp, err)
+	}
+}
+
+// fakeApprover holds a few approvals in memory.
+type fakeApprover struct {
+	list  []approvals.Approval
+	rules []approvals.Rule
+	none  bool
+}
+
+func (a *fakeApprover) ListApprovals(status string) ([]approvals.Approval, error) {
+	if a.none {
+		return nil, chat.ErrNoApprovals
+	}
+	var out []approvals.Approval
+	for _, x := range a.list {
+		if status == "" || x.Status == status {
+			out = append(out, x)
+		}
+	}
+	return out, nil
+}
+
+func (a *fakeApprover) DecideApproval(_ context.Context, id string, approve bool, reason string, always bool) (*approvals.Approval, error) {
+	for i := range a.list {
+		if a.list[i].ID != id {
+			continue
+		}
+		if a.list[i].Status != approvals.Pending {
+			return nil, errors.New("approval \"" + id + "\" is already " + a.list[i].Status)
+		}
+		if always && a.list[i].Risk == "always" {
+			return nil, errors.New("this kind of action cannot be allowed for good: it is always asked")
+		}
+		a.list[i].Status, a.list[i].Reason, a.list[i].Always = approvals.Rejected, reason, always
+		if approve {
+			a.list[i].Status = approvals.Approved
+		}
+		return &a.list[i], nil
+	}
+	return nil, errors.New("no such approval " + id)
+}
+
+func (a *fakeApprover) ApprovalRules() ([]approvals.Rule, error) { return a.rules, nil }
+func (a *fakeApprover) RemoveApprovalRule(id string) error {
+	for i, r := range a.rules {
+		if r.ID == id {
+			a.rules = append(a.rules[:i], a.rules[i+1:]...)
+			return nil
+		}
+	}
+	return errors.New("no such rule " + id)
+}
+
+func TestApprovalsAPI(t *testing.T) {
+	ap := &fakeApprover{
+		list: []approvals.Approval{
+			{ID: "p1", Kitty: "a1", Connector: "slack", Action: "send", Status: approvals.Pending, Risk: "ask", Summary: "slack.send"},
+			{ID: "p2", Kitty: "a1", Connector: "pay", Action: "refund", Status: approvals.Pending, Risk: "always"},
+			{ID: "p3", Kitty: "a1", Status: approvals.Approved},
+		},
+		rules: []approvals.Rule{{ID: "r1", Kitty: "a1", Connector: "slack", Action: "send", Mode: "auto"}},
+	}
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": {ID: "a1", Name: "ana"}}}
+	srv := httptest.NewServer(New(f, &fakeChats{}, "tok", "").WithApprovals(ap))
+	defer srv.Close()
+	if code, m, _ := call(t, srv, "GET", "/v1/approvals?status=pending", "tok", nil); code != 200 || len(m["approvals"].([]any)) != 2 {
+		t.Errorf("pending = %d %v", code, m)
+	}
+	if code, m, _ := call(t, srv, "GET", "/v1/approvals", "tok", nil); code != 200 || len(m["approvals"].([]any)) != 3 {
+		t.Errorf("all = %d %v", code, m)
+	}
+	if code, m, _ := call(t, srv, "GET", "/v1/approvals?status=rejected", "tok", nil); code != 200 || len(m["approvals"].([]any)) != 0 {
+		t.Errorf("none = %d %v", code, m)
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/approvals/p1/approve", "tok", map[string]any{"always": true}); code != 200 || m["approval"].(map[string]any)["status"] != "approved" || m["approval"].(map[string]any)["always"] != true {
+		t.Errorf("approve = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/approvals/p1/approve", "tok", nil); code != 409 {
+		t.Error("deciding twice is a conflict")
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/approvals/p2/approve", "tok", map[string]any{"always": true}); code != 400 {
+		t.Error("an always-asked action cannot be for good")
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/approvals/p2/reject", "tok", map[string]any{"reason": "no refunds today"}); code != 200 || m["approval"].(map[string]any)["reason"] != "no refunds today" {
+		t.Errorf("reject = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/approvals/zz/reject", "tok", nil); code != 404 {
+		t.Error("unknown")
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/approvals/p3/approve", "tok", "{bad"); code != 400 {
+		t.Error("bad json")
+	}
+	if code, m, _ := call(t, srv, "GET", "/v1/approvals/rules", "tok", nil); code != 200 || len(m["rules"].([]any)) != 1 {
+		t.Errorf("rules = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/approvals/rules/r1", "tok", nil); code != 200 || len(ap.rules) != 0 {
+		t.Error("remove rule")
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/approvals/rules/r1", "tok", nil); code != 404 {
+		t.Error("remove unknown rule")
+	}
+	if code, m, _ := call(t, srv, "GET", "/v1/approvals/rules", "tok", nil); code != 200 || len(m["rules"].([]any)) != 0 {
+		t.Errorf("no rules = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "GET", "/v1/approvals", "", nil); code != 401 {
+		t.Error("auth")
+	}
+	// A deployment where nothing is held says so everywhere.
+	for _, tc := range []struct{ method, path string }{{"GET", "/v1/approvals"}, {"GET", "/v1/approvals/rules"}, {"DELETE", "/v1/approvals/rules/x"}, {"POST", "/v1/approvals/x/approve"}, {"POST", "/v1/approvals/x/reject"}} {
+		none := httptest.NewServer(New(f, &fakeChats{}, "tok", ""))
+		if code, _, data := call(t, none, tc.method, tc.path, "tok", nil); code != 404 || !strings.Contains(string(data), "no actions for approval") {
+			t.Errorf("%s %s without approvals = %d", tc.method, tc.path, code)
+		}
+		none.Close()
+	}
+	off := httptest.NewServer(New(f, &fakeChats{}, "tok", "").WithApprovals(&fakeApprover{none: true}))
+	defer off.Close()
+	if code, _, _ := call(t, off, "GET", "/v1/approvals", "tok", nil); code != 404 {
+		t.Error("the service says none are held")
 	}
 }

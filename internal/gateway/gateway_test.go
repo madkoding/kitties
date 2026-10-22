@@ -21,6 +21,7 @@ import (
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
@@ -31,6 +32,7 @@ type fakeFleet struct {
 	kitties map[string]*kitty.Kitty
 	fail    error
 	calls   []string
+	notify  notify.Config
 }
 
 func (f *fakeFleet) List() []*kitty.Kitty {
@@ -175,6 +177,14 @@ func (o *oauthStore) SaveOAuthCredentials(_ string, c oauth.Credentials) error {
 var sharedOAuth = oauth.New(&oauthStore{})
 
 func (f *fakeFleet) OAuth() *oauth.Manager { return sharedOAuth }
+func (f *fakeFleet) Notify() notify.Config { return f.notify }
+func (f *fakeFleet) SetNotify(c notify.Config) error {
+	if c.Connector == "bad" {
+		return errors.New("notify.connector: no such connector \"bad\"")
+	}
+	f.notify = c
+	return nil
+}
 func (f *fakeFleet) InboundSecret(name string) (string, error) {
 	switch name {
 	case "gh":

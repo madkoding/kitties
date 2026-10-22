@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/madkoding/kitties/internal/agenda"
+	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/config"
@@ -25,6 +26,8 @@ import (
 	"github.com/madkoding/kitties/internal/demo"
 	"github.com/madkoding/kitties/internal/gateway"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/memory"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/skills"
@@ -73,11 +76,16 @@ type app struct {
 	fleet  *orchestrator.Manager
 	chats  *chat.Service
 	agenda *agenda.Agenda
-	skills *skills.Library
-	arts   *artifacts.Store
-	in     io.Reader
-	out    io.Writer
-	err    io.Writer
+	// approvals hold the actions that wait for a yes; memory is what the kitties know of the
+	// person; notifier tells the person outside the interface.
+	approvals *approvals.Store
+	memory    *memory.Store
+	notifier  *notify.Notifier
+	skills    *skills.Library
+	arts      *artifacts.Store
+	in        io.Reader
+	out       io.Writer
+	err       io.Writer
 }
 
 // Seams for the tests.
@@ -201,6 +209,23 @@ func (a *app) open(cmd string) error {
 	}
 	chats.SetAgenda(ag.Journal, ag)
 	a.agenda = ag
+	dataDir := a.cfg.DataDirOr()
+	if a.approvals, err = approvals.Open(filepath.Join(dataDir, "approvals.json")); err != nil {
+		return err
+	}
+	a.memory = memory.Open(filepath.Join(dataDir, "memory"))
+	chats.SetApprovals(a.approvals)
+	chats.SetMemory(a.memory)
+	g := a.cfg.Gateway
+	a.notifier = notify.New(fleet.Connectors(), fleet.Notify, func() string {
+		if g.PublicURL != "" {
+			return g.PublicURL
+		}
+		return "http://" + g.Listen
+	}, nil)
+	chats.SetNotifier(a.notifier)
+	// A removed kitty takes its held actions and its memory along.
+	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty)
 	a.fleet, a.chats = fleet, chats
 	return nil
 }
@@ -330,6 +355,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	}
 	g := a.cfg.Gateway
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
+		WithApprovals(a.chats).WithMemory(a.chats).WithNotifier(a.notifier).
 		WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
 	if site, ok := webFS(); ok {
 		srv.WithWeb(site)
@@ -343,10 +369,12 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	// the kitties up for their goals; the watchdog keeps their containers up.
 	go a.fleet.KeepTokensFresh(ctx, logf)
 	a.agenda.Scheduler.SetLog(logf)
+	a.notifier.SetLog(logf)
 	go a.agenda.Run(ctx)
 	go a.fleet.Watch(ctx, watchEvery, func(k *kitty.Kitty, what string) {
 		logf("watchdog: %s is back (%s)", k.Name, what)
 		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindRecovered, Text: what})
+		a.notifier.Notify(notify.Notification{Event: notify.Recovered, Kitty: k.Name, Title: "is back", Body: what})
 	}, logf)
 	return srv.Listen(ctx, g.Listen, logf)
 }

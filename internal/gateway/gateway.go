@@ -23,6 +23,7 @@ import (
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
@@ -54,6 +55,9 @@ type Fleet interface {
 	OAuth() *oauth.Manager
 	// InboundSecret is the secret a service presents to post events to a connector.
 	InboundSecret(name string) (string, error)
+	// Notify is where the person is told outside the interface; SetNotify changes it.
+	Notify() notify.Config
+	SetNotify(c notify.Config) error
 }
 
 // Chats is what the gateway needs from the chat service.
@@ -91,6 +95,12 @@ type Server struct {
 	limit        *limiter
 	// agenda is the goals and journals, nil when the deployment has none.
 	agenda Agenda
+	// approver holds actions for the person's yes, nil when none are held.
+	approver Approver
+	// memories is what the kitties know about the person, nil when they keep none.
+	memories Memories
+	// notifier tests notifications, nil when the gateway sends none.
+	notifier NotifyTester
 }
 
 // WithLibrary serves the skills and the artifacts.
@@ -157,6 +167,8 @@ func (s *Server) routes() {
 	s.mux.Handle("DELETE /v1/settings/connectors/{name}", api(s.handleRemoveConnector))
 	s.mux.HandleFunc("GET /v1/local-token", s.handleLocalToken)
 	s.agendaRoutes()
+	s.approvalRoutes()
+	s.memoryRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
@@ -422,8 +434,10 @@ func codeFor(err error) int {
 	switch {
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
-	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"):
+	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"), strings.Contains(msg, "is already approved"), strings.Contains(msg, "is already rejected"):
 		return http.StatusConflict
+	case errors.Is(err, chat.ErrNoApprovals), errors.Is(err, chat.ErrNoMemory):
+		return http.StatusNotFound
 	case strings.Contains(msg, "configuration file"):
 		return http.StatusForbidden
 	case strings.Contains(msg, "already exists"), strings.Contains(msg, "not valid"), strings.Contains(msg, "unknown "),
@@ -435,7 +449,9 @@ func codeFor(err error) int {
 		strings.Contains(msg, "built in"), strings.Contains(msg, "holds"), strings.Contains(msg, " needs "), strings.Contains(msg, "not a valid"),
 		strings.Contains(msg, "does not sign in"), strings.Contains(msg, "no OAuth flow"), strings.Contains(msg, "not signed in"),
 		strings.HasPrefix(msg, "schedule:"), strings.HasPrefix(msg, "on:"), strings.Contains(msg, "a goal "), strings.Contains(msg, "back itself up"),
-		strings.Contains(msg, "limits"):
+		strings.Contains(msg, "limits"), strings.Contains(msg, "not ask or auto"), strings.Contains(msg, "can be for good"), strings.Contains(msg, "always asked"),
+		strings.HasPrefix(msg, "notify."), strings.Contains(msg, "rating is"), strings.Contains(msg, "feedback is for"), strings.Contains(msg, "demand is a level"),
+		strings.Contains(msg, "a note needs"), strings.HasPrefix(msg, "scope "), strings.Contains(msg, "the turn is"):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError

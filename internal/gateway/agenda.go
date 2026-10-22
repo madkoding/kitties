@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/madkoding/kitties/internal/agenda"
 )
@@ -53,6 +54,8 @@ func (s *Server) agendaRoutes() {
 }
 
 var errNoAgenda = errors.New("this gateway has no agenda (goals and journals are off)")
+
+var errNoApprovals = errors.New("this gateway holds no actions for approval")
 
 func (s *Server) handleGoals(w http.ResponseWriter, r *http.Request) {
 	if s.agenda == nil {
@@ -265,6 +268,9 @@ func (s *Server) handleHook(w http.ResponseWriter, r *http.Request) {
 
 // hookAllowed checks the secret a service presented, in whichever of the three ways.
 func hookAllowed(r *http.Request, body []byte, secret string) bool {
+	if sig := r.Header.Get("Stripe-Signature"); sig != "" {
+		return stripeSigned(sig, body, secret, time.Now())
+	}
 	if sig := r.Header.Get("X-Hub-Signature-256"); sig != "" {
 		mac := hmac.New(sha256.New, []byte(secret))
 		mac.Write(body)
@@ -276,4 +282,36 @@ func hookAllowed(r *http.Request, body []byte, secret string) bool {
 		got = r.URL.Query().Get("secret")
 	}
 	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(secret)) == 1
+}
+
+// stripeSigned checks Stripe's signature: t=<unix>,v1=<hmac of "t.body">, no older than five minutes.
+func stripeSigned(header string, body []byte, secret string, now time.Time) bool {
+	var ts string
+	var sigs []string
+	for _, part := range strings.Split(header, ",") {
+		k, v, _ := strings.Cut(strings.TrimSpace(part), "=")
+		switch k {
+		case "t":
+			ts = v
+		case "v1":
+			sigs = append(sigs, v)
+		}
+	}
+	sec, err := strconv.ParseInt(ts, 10, 64)
+	if err != nil || len(sigs) == 0 {
+		return false
+	}
+	if d := now.Sub(time.Unix(sec, 0)); d > 5*time.Minute || d < -5*time.Minute {
+		return false
+	}
+	mac := hmac.New(sha256.New, []byte(secret))
+	mac.Write([]byte(ts + "."))
+	mac.Write(body)
+	want := hex.EncodeToString(mac.Sum(nil))
+	for _, sig := range sigs {
+		if hmac.Equal([]byte(sig), []byte(want)) {
+			return true
+		}
+	}
+	return false
 }

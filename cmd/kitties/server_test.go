@@ -235,3 +235,32 @@ func TestGatewayGoalsAndWatchdog(t *testing.T) {
 		t.Errorf("sync without kitties: %v %d", err, len(ag.Goals("")))
 	}
 }
+
+func TestGatewayServesApprovalsMemoryAndNotifications(t *testing.T) {
+	withRuntime(t, false)
+	cfg := writeConfig(t, "http://127.0.0.1:1")
+	addr, out, _, stop := serve(t, "-config", cfg, "gateway")
+	tok := strings.TrimSpace(strings.SplitN(strings.SplitN(out.String(), "gateway token: ", 2)[1], " ", 2)[0])
+	get := func(path string) (int, string) {
+		resp, err := http.Get("http://" + addr + path + "?token=" + tok)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(body)
+	}
+	if code, body := get("/v1/approvals"); code != 200 || !strings.Contains(body, `"approvals":[]`) {
+		t.Errorf("approvals = %d %s", code, body)
+	}
+	if code, body := get("/v1/approvals/rules"); code != 200 || !strings.Contains(body, `"rules":[]`) {
+		t.Errorf("rules = %d %s", code, body)
+	}
+	if code, body := get("/v1/kitties/mimi/memory"); code != 200 || !strings.Contains(body, `"demand":3`) || !strings.Contains(body, "balanced") {
+		t.Errorf("memory = %d %s", code, body)
+	}
+	if code, body := get("/v1/settings"); code != 200 || !strings.Contains(body, `"notify":{"connector":"","on":[]}`) || !strings.Contains(body, `"notify_events"`) {
+		t.Errorf("settings = %d %s", code, body)
+	}
+	stop()
+}
