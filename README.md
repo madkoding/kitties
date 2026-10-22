@@ -45,8 +45,9 @@ gateway) or run the desktop app, then ask Tom to *open https://example.com*.
 
 ## Downloading a release
 
-Each release has binaries for Linux, macOS, Windows and Android, plus the desktop app (a disk
-image for macOS, a zip for Linux and Windows) and `SHA256SUMS`. The desktop app carries its own
+Each release has binaries for Linux, macOS, Windows and Android (Termux), the desktop app (a disk
+image for macOS, a zip for Linux and Windows), the Android app (`kitties-android-app.apk`) and
+`SHA256SUMS`. The desktop app carries its own
 gateway and starts it when none is running, so it needs nothing else installed. They are not yet signed with an Apple Developer ID, so macOS blocks a file that
 came through a browser ("Apple could not verify..."). It is the quarantine flag, not damage:
 
@@ -102,6 +103,25 @@ Compose, Caddy, nginx and systemd files are in [`deploy/`](deploy); the full gui
 protect and how to update and back up, is [docs/DEPLOY.md](docs/DEPLOY.md). The image is published
 as `ghcr.io/madkoding/kitties` with each release.
 
+## The Android app
+
+`kitties-android-app.apk` is the desktop app's page on the phone: a remote for a gateway that runs
+on your computer or server (the kitties and their desktops stay there). Install it (Android asks to
+allow installs from the browser or the file manager once), then type the gateway's address and
+token:
+
+```sh
+KITTIES_LISTEN=0.0.0.0:7488 kitties gateway   # on the computer: listen on the home network
+cat ~/.kitties/gateway.token                   # the token the app asks for
+```
+
+The address is the computer's on the network, like `http://192.168.1.20:7488`; over the internet,
+put the gateway behind HTTPS ([docs/DEPLOY.md](docs/DEPLOY.md)). The gateway lets the app's page
+call it with the token, and nothing else from other sites. `android/` is a plain WebView project:
+`make android` builds the APK (Android SDK and JDK 17+). Releases are signed with the
+`KITTIES_KEYSTORE_BASE64`, `KITTIES_KEYSTORE_PASSWORD` and `KITTIES_KEY_ALIAS` secrets when they
+are set; without them each release gets a debug key, and updating means uninstalling first.
+
 ## The desktop app
 
 `desktop/` is a [Wails](https://wails.io) application (Linux, macOS, Windows) with a Preact page
@@ -130,6 +150,7 @@ cd desktop && wails dev   # live reload while working on it
 | ![A first run is a checklist](docs/screenshots/31-welcome.png) | ![Adding a model: pick the provider](docs/screenshots/32-pick-provider.png) |
 | ![Adding a model: the key and the suggested model](docs/screenshots/34-add-model.png) | ![A connection and the kitties that may use it](docs/screenshots/33-connection-form.png) |
 | ![A Claude subscription, through Claude Code](docs/screenshots/35-claude-subscription.png) | ![GitHub Copilot: sign in with a code](docs/screenshots/36-copilot-code.png) |
+| ![The Android app asks for the gateway](docs/screenshots/37-android-connect.png) | ![The Android app, connected](docs/screenshots/38-android-app.png) |
 | ![A kitty posting through Slack: the chip carries the logo](docs/screenshots/19-connector-call.png) | ![The phone layout](docs/screenshots/12-phone.png) |
 
 More in [docs/screenshots](docs/screenshots): the new chat and new kitty dialogs, the gateway
