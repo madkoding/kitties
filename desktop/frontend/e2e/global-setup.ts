@@ -127,8 +127,78 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   const post = await newChat(["mimi"], "Announcement");
   await say(post, "Mimi, please post the launch announcement to the team.");
   const tom = (await api<{ kitty: { id: string } }>("GET", "/v1/kitties/tom")).kitty.id;
+  const mimi = (await api<{ kitty: { id: string } }>("GET", "/v1/kitties/mimi")).kitty.id;
 
-  fs.writeFileSync(STATE, JSON.stringify({ single, group, desktop, post, tom }, null, 2));
+  // Delegation: mimi hands a subtask to luna and reports back.
+  const delegated = await newChat(["mimi"], "Plan review");
+  await say(delegated, "Mimi, ask luna to summarise the launch plan in three lines.");
+
+  // Autonomy: mimi has a goal on a schedule and one on GitHub's events; the person runs the
+  // first now, and GitHub posts an issue for the second. Limits and a backup are set too.
+  await api("PATCH", `/v1/kitties/${mimi}`, {
+    limits: { max_tokens: 20000, max_seconds: 600, retries: 2 },
+    backup: "luna",
+  });
+  await api("PUT", "/v1/settings/connectors/github", {
+    kind: "github",
+    description: "issues and pull requests of the kitties repository",
+    settings: { token: "ghp_demo", repo: "madkoding/kitties", inbound_secret: "e2e-hook-secret" },
+  });
+  const inbox = await api<{ goal: { id: string } }>("POST", "/v1/goals", {
+    kitty: "mimi",
+    title: "Inbox check",
+    text: "Look at the inbox and answer what is easy.",
+    every: "@hourly",
+  });
+  await api("POST", "/v1/goals", {
+    kitty: "mimi",
+    title: "Triage new issues",
+    text: "Read the new issue, label it and answer if it is easy.",
+    on: ["github"],
+  });
+  await api("POST", `/v1/goals/${inbox.goal.id}/run`);
+  const hook = await fetch(`${GATEWAY}/v1/hooks/github`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Kitties-Secret": "e2e-hook-secret",
+      "X-GitHub-Event": "issues",
+    },
+    body: JSON.stringify({
+      action: "opened",
+      issue: {
+        number: 42,
+        title: "Crash on start",
+        body: "It crashes when the config is empty.",
+        html_url: "https://github.com/madkoding/kitties/issues/42",
+        user: { login: "pat" },
+      },
+      repository: { full_name: "madkoding/kitties" },
+    }),
+  });
+  if (!hook.ok) {
+    throw new Error(`hook: ${hook.status} ${await hook.text()}`);
+  }
+  // The goals answer in the background: wait for their chats to settle.
+  const settle = async () => {
+    const deadline = Date.now() + 20_000;
+    while (Date.now() < deadline) {
+      const goals = (
+        await api<{ goals: { last_result?: string }[] }>("GET", `/v1/goals?kitty=mimi`)
+      ).goals;
+      if (goals.every((g) => g.last_result && g.last_result !== "running")) {
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    throw new Error("the goals did not finish");
+  };
+  await settle();
+
+  fs.writeFileSync(
+    STATE,
+    JSON.stringify({ single, group, desktop, post, tom, mimi, delegated }, null, 2),
+  );
   return async () => {
     await new Promise<void>((resolve) => stub.close(() => resolve()));
   };

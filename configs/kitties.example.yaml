@@ -38,6 +38,19 @@ kitties:
       breed: tabby               # tabby | shorthair | tuxedo | fluffy | siamese (empty: from the name)
       color: orange              # orange | gray | black | white | cream | brown | blue | pink | mint | lilac
     connectors: [team-slack]
+    backup: tom                  # takes over a task mimi gives up on (empty: mimi asks you)
+    limits:                      # what one task may spend; 0 takes the default
+      max_tokens: 200000
+      max_seconds: 900
+      max_rounds: 25
+      retries: 2                 # failed attempts tried another way
+    goals:                       # standing tasks, worked in a thread of their own
+      - title: Inbox check
+        text: Look at the inbox and answer what is easy.
+        every: "@hourly"         # cron (minute hour day month weekday), or @hourly @daily @weekly @monthly
+      - title: Triage new issues
+        text: Read the new issue, label it and answer it if it is easy.
+        on: [repo]               # runs when the repo connector receives an event (see inbound_secret)
   - name: tom
     provider: fast
     soul_file: souls/tom.yaml    # a soul from a file; inline fields override it
@@ -80,6 +93,7 @@ connectors:
       token: ""                  # a token here, or leave it empty and sign in with GitHub
       client_id: Iv1.abc         # the OAuth app to sign in with (optional with a token)
       client_secret: ""
+      inbound_secret: ""         # set it, and point GitHub's webhook at POST /v1/hooks/repo
   coder:
     kind: motita
     description: runs a coding task in motita and returns its result

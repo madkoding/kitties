@@ -11,6 +11,8 @@ const ids = JSON.parse(fs.readFileSync(STATE, "utf8")) as {
   desktop: string;
   post: string;
   tom: string;
+  mimi: string;
+  delegated: string;
 };
 const Q = "?theme=dark&motion=off";
 
@@ -168,4 +170,39 @@ test("a kitty posting through a connector shows the service's logo", async ({ pa
   await expect(chip).toBeVisible();
   await expect(chip.locator("svg.logo")).toBeVisible();
   await shot(page, "19-connector-call");
+});
+
+test("a kitty hands a subtask to another and the chip leads to their thread", async ({ page }) => {
+  await open(page, `#chat/${ids.delegated}`);
+  await expect(page.getByText("luna took care of it").first()).toBeVisible();
+  const chip = page.locator(".tag", { hasText: "→ luna" }).first();
+  await expect(chip).toBeVisible();
+  await shot(page, "20-delegation");
+  await chip.click();
+  await expect(page.getByText("mimi → luna").first()).toBeVisible();
+  await expect(page.getByText("summarise the launch plan").first()).toBeVisible();
+});
+
+test("the kitty's drawer: goals, the journal, limits and the backup", async ({ page }) => {
+  await open(page, `#kitty/${ids.mimi}`);
+  const goals = page.getByTestId("goals");
+  await expect(goals.getByText("Inbox check")).toBeVisible();
+  await expect(goals.getByText("Triage new issues")).toBeVisible();
+  await expect(goals.getByText("hourly").first()).toBeVisible();
+  await expect(goals.getByText("on events from github")).toBeVisible();
+  await expect(goals.locator(".tag", { hasText: "done" })).toHaveCount(2);
+  const journal = page.getByTestId("journal");
+  await expect(journal.locator(".tag", { hasText: "event" }).first()).toBeVisible();
+  await expect(journal.locator(".tag", { hasText: "done" }).first()).toBeVisible();
+  await expect(journal.locator(".tag", { hasText: "delegated" }).first()).toBeVisible();
+  await expect(page.getByLabel("Backup (takes over a task mimi gives up on)")).toHaveValue("luna");
+  await expect(page.getByLabel("Retries (another way)")).toHaveValue("2");
+  await goals.scrollIntoViewIfNeeded();
+  await shot(page, "21-goals-journal");
+  // The sidebar marks the goal chats, and a goal's chat shows the scheduler's call.
+  await expect(page.locator("aside .tag", { hasText: "goal" }).first()).toBeVisible();
+  await goals.getByText("open chat").first().click();
+  await expect(page.locator(".msg.scheduler").first()).toBeVisible();
+  await expect(page.getByText("Checked Inbox check").first()).toBeVisible();
+  await shot(page, "22-goal-chat");
 });

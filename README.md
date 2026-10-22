@@ -94,6 +94,49 @@ cd desktop && wails dev   # live reload while working on it
 More in [docs/screenshots](docs/screenshots): the new chat and new kitty dialogs, the gateway
 page, the phone layout and a kitty's own display.
 
+## On their own
+
+A kitty is not only something you talk to. Each one has an agenda:
+
+- **Goals.** Standing tasks it pursues without being asked: on a schedule (cron, or
+  *hourly*, *daily*, *weekdays at nine*), when a service reports something, or when you press
+  *run now*. Each goal works in a thread of its own, so you can read along and chime in.
+- **Incoming events.** GitHub, Slack, Discord, Jira and any service that can POST send their
+  events to `POST /v1/hooks/<connector>`, signed with the connector's incoming events secret
+  (GitHub's HMAC signature, or an `X-Kitties-Secret` header). The goals that listen to that
+  connector run with the event.
+- **Limits.** Per kitty: tokens, seconds and rounds per task, and how many times a failed
+  attempt is tried another way. A task that hits a limit stops and says so instead of running
+  on.
+- **Recovery.** A failed attempt is retried with a different approach. When a kitty gives up,
+  its **backup** kitty takes the task over; without one, the kitty asks you (the chat is
+  marked *help* until you answer). A watchdog brings a stopped container back and retries a
+  kitty in error.
+- **Delegation.** A kitty can hand a subtask to another (`@delegate luna {"task": "..."}`,
+  or the native `delegate` tool), waits for the answer and goes on. Hand-overs are bounded in
+  depth so two kitties cannot bounce a task back and forth.
+- **A journal.** Every run, event, retry, hand-over, cry for help and recovery is a line in the
+  kitty's journal, in its drawer.
+
+| | |
+| --- | --- |
+| ![A kitty's goals and journal](docs/screenshots/21-goals-journal.png) | ![A goal's thread: the scheduler's call and the answer](docs/screenshots/22-goal-chat.png) |
+| ![A kitty hands a subtask to another](docs/screenshots/20-delegation.png) | |
+
+In the YAML, under a kitty:
+
+```yaml
+  - name: mimi
+    backup: luna                 # takes over what mimi gives up on
+    limits: {max_tokens: 200000, max_seconds: 900, retries: 2}
+    goals:
+      - title: Inbox check
+        text: Look at the inbox and answer what is easy.
+        every: "@hourly"
+      - title: Triage new issues
+        on: [github]             # the github connector's inbound_secret signs the hook
+```
+
 ## How it fits together
 
 ```

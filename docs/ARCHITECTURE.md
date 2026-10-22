@@ -62,6 +62,50 @@ Each responder answers in turn:
 
 Turns of one session are serialised; different sessions run in parallel.
 
+## The agenda (`internal/agenda`)
+
+What makes a kitty work on its own. A `Goal` belongs to a kitty and has a title, the text the
+kitty is told, a cron schedule (`every`, five fields or `@hourly`/`@daily`/`@weekly`/`@monthly`)
+and the connectors whose events run it (`on`). The `Store` keeps them in `goals.json`; goals
+from the configuration file are synced on every start (`Sync`, matched by kitty and title so
+their run history survives) and the page cannot edit them. The `Scheduler` ticks every minute
+and runs the goals that are due, `Fire` runs the ones listening to an event's source, `RunNow`
+runs one by hand; a goal still busy with its previous run is skipped (and journaled), never
+stacked. The `Runner` is the chat service: `RunGoal` finds or opens the goal's thread and posts
+the scheduler's message (the goal, and why now); the result (`done`, `blocked`, `escalated`,
+`delegated`) comes back through `Report` when the work ends.
+
+The `Journal` is an append-only JSONL file per kitty: runs, events, retries, hand-overs,
+escalations, recoveries and skips, newest first in the drawer. `Summarise` turns a webhook
+body into the text a kitty reads: GitHub's action, issue or pull request and repository;
+Slack's message, user and channel; a flat listing of fields otherwise.
+
+Incoming events land on `POST /v1/hooks/{connector}` (open, rate limited): the connector's
+`inbound_secret` must be presented as GitHub's `X-Hub-Signature-256`, as `X-Kitties-Secret`,
+or as `?secret=`; the event's kind is `X-GitHub-Event` or `X-Kitties-Event`.
+
+## Limits, retries, backup and delegation (`internal/chat/autonomy.go`)
+
+A task runs within the kitty's `Limits` (tokens, seconds, rounds, retries; zero fields take the
+chat service's defaults: 400k tokens, 30 minutes, 25 rounds, one retry). The round limit lets a
+batch that calls `done` through. An attempt that fails for a reason worth retrying (an error
+from the brain, the rounds running out) is tried again with the message "that attempt failed;
+try a different approach"; a spent budget or a cancel is final. When the task is given up on
+and a person did not cancel it, `giveUp` hands it to the kitty's `backup` (a thread
+"mimi → luna", with the failure and the original request) or marks the turn `needs_help` and
+journals an escalation.
+
+`@delegate <name> {"task": ...}` (or the native `delegate` tool, offered when another kitty
+exists) opens or reuses the thread between the two kitties (`Owner`, `Depth`), posts the task
+in the delegating kitty's name, waits for the answer, including the background work the
+other kitty may start, within that kitty's time limit, and feeds the answer back as the
+action's result. `MaxDepth` (2) bounds how deep hand-overs go; at the limit the prompt names
+no peers and the action is refused.
+
+The orchestrator's `Watch` is the watchdog: every 30 seconds a running kitty whose container
+stopped or vanished is started again and a kitty in error is tried once more; recoveries are
+journaled.
+
 ## Desktop tasks (`internal/desktop`)
 
 A kitty with a container has, in its system prompt, a catalogue of tools: `screenshot`, `click`,
