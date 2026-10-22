@@ -20,7 +20,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git jq python3 openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress \
         inkscape imagemagick mtpaint \
-        tini \
+        tini procps \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
     && mkdir -p /home/kitty/work && chown -R kitty:kitty /home/kitty
