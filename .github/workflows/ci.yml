@@ -75,6 +75,47 @@ jobs:
       - name: vet and test the Wails module
         run: cd desktop && go vet ./... && go test -count=1 -cover ./...
 
+  # The Android app: the same page in a WebView, a remote for a gateway on the network. Signed
+  # with the KITTIES_KEYSTORE_* secrets when they are set (so an installed app updates), else with
+  # a debug key.
+  android:
+    name: android app
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: desktop
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: build the page
+        run: cd desktop/frontend && npm ci && npm run build
+      - name: build the APK
+        env:
+          KITTIES_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
+          KITTIES_KEYSTORE_BASE64: ${{ secrets.KITTIES_KEYSTORE_BASE64 }}
+          KITTIES_KEYSTORE_PASSWORD: ${{ secrets.KITTIES_KEYSTORE_PASSWORD }}
+          KITTIES_KEY_ALIAS: ${{ secrets.KITTIES_KEY_ALIAS }}
+        run: |
+          if [ -n "$KITTIES_KEYSTORE_BASE64" ]; then
+            echo "$KITTIES_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/kitties.jks"
+            export KITTIES_KEYSTORE_FILE="$RUNNER_TEMP/kitties.jks"
+          fi
+          cd android && ./gradlew --no-daemon assembleRelease
+          mkdir -p ../out && cp app/build/outputs/apk/release/app-release.apk ../out/kitties-android-app.apk
+          tools="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)"
+          "$tools/apksigner" verify --print-certs ../out/kitties-android-app.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kitties-android-app
+          path: out/kitties-android-app.apk
+
   # The desktop app end to end: a demo gateway, the built page and a browser. The screens it
   # checks are photographed into docs/screenshots and kept as an artifact.
   e2e:
@@ -329,7 +370,7 @@ jobs:
   release:
     name: release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [check, build, wails, publish-image, publish-gateway-image]
+    needs: [check, build, wails, android, publish-image, publish-gateway-image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -349,6 +390,10 @@ jobs:
           pattern: kitties-desktop-*
           path: dist
           merge-multiple: true
+      - uses: actions/download-artifact@v4
+        with:
+          name: kitties-android-app
+          path: dist
       - run: cd dist && sha256sum kitties-* > SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
