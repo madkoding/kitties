@@ -536,3 +536,26 @@ func TestOAuthKinds(t *testing.T) {
 		t.Error("mailRFC822")
 	}
 }
+
+func TestInboundKinds(t *testing.T) {
+	for _, name := range []string{"slack", "github", "discord", "jira", "webhook"} {
+		k, _ := LookupKind(name)
+		found := false
+		for _, f := range k.Fields {
+			found = found || f.Name == "inbound_secret"
+		}
+		if !k.Inbound || !found {
+			t.Errorf("%s takes incoming events", name)
+		}
+	}
+	for _, name := range []string{"shell", "google-workspace", "kroki", "x"} {
+		k, _ := LookupKind(name)
+		if k.Inbound {
+			t.Errorf("%s does not take incoming events", name)
+		}
+	}
+	// The field is optional and secret: a connector without it still validates.
+	if _, err := Build("discord", Settings{"url": "u"}, ""); err != nil {
+		t.Error(err)
+	}
+}

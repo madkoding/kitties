@@ -49,6 +49,8 @@ type Kind struct {
 	// "github"), empty for a kind that only takes a key or a token. A kind with a token field
 	// takes either: the token when typed, the sign-in otherwise.
 	OAuth string `json:"oauth,omitempty"`
+	// Inbound marks a kind whose service can post events to the gateway (inbound_secret).
+	Inbound bool `json:"inbound,omitempty"`
 	// make builds the connector; nil for the kinds built elsewhere (shell, motita, webhook).
 	make  func(s Settings) Connector
 	oauth string
@@ -92,7 +94,7 @@ func init() {
 }
 
 func catalog() []Kind {
-	return []Kind{
+	kinds := withInbound([]Kind{
 		// ── messaging ──────────────────────────────────────────────────────────────────────────
 		{Name: "slack", Category: CatMessaging, Label: "Slack", Help: "posts messages to a Slack channel, through a webhook, a bot token or a sign-in",
 			Fields: []Field{f("url", "Incoming webhook URL", "from Slack's app settings", false, true), f("token", "Bot token", "xoxb-…, instead of a webhook", false, true), f("channel", "Channel", "#general, used with a bot token or a sign-in", false, false),
@@ -213,8 +215,28 @@ func catalog() []Kind {
 			Actions: []Action{{Name: "call", Help: "make a request", Args: []string{"method", "path", "body (optional JSON)"}}}, make: makeHTTP},
 		{Name: "shell", Category: CatGeneric, Label: "Program", Help: "runs a fixed program on the gateway's machine with the text as its argument",
 			Fields: []Field{f("command", "Command", "/usr/local/bin/notify", true, false)}, Actions: []Action{{Name: "run", Help: "run it", Args: []string{fText}}}},
-	}
+	})
+	return kinds
 }
+
+// withInbound adds the incoming events field to the kinds whose services report events.
+func withInbound(kinds []Kind) []Kind {
+	for i := range kinds {
+		if inboundCategories[kinds[i].Category] && kinds[i].Name != "shell" {
+			kinds[i].Fields = append(kinds[i].Fields, fInbound)
+			kinds[i].Inbound = true
+		}
+	}
+	return kinds
+}
+
+// fInbound is the field a kind that receives events takes: the secret the service presents
+// when it posts to the connector's hook (POST /v1/hooks/<name>), so a kitty can act on
+// what arrives.
+var fInbound = f("inbound_secret", "Incoming events secret", "to receive events at /v1/hooks/<name>: GitHub's webhook secret, or any secret sent as X-Kitties-Secret", false, true)
+
+// inboundCategories are the categories whose services report events.
+var inboundCategories = map[string]bool{CatMessaging: true, CatGit: true, CatProductivity: true, CatGeneric: true}
 
 // Kinds lists the catalogue, by category then name.
 func Kinds() []Kind {

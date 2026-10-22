@@ -280,6 +280,10 @@ type Spec struct {
 	Desktop *bool `json:"desktop"`
 	// Avatar is the pixel cat; empty parts come from the name.
 	Avatar kitty.Avatar `json:"avatar"`
+	// Limits bound one task; zero fields take the defaults.
+	Limits kitty.Limits `json:"limits"`
+	// Backup names the kitty that takes over a task this one gives up on.
+	Backup string `json:"backup"`
 }
 
 // Create adds a kitty. The container is created on Start.
@@ -303,6 +307,12 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := s.Limits.Validate(); err != nil {
+		return nil, err
+	}
+	if s.Backup == s.Name {
+		return nil, errors.New("a kitty cannot back itself up")
+	}
 	personality := soul.Default(s.Name)
 	if s.SoulFile != "" {
 		fromFile, err := soul.Load(s.SoulFile)
@@ -325,6 +335,7 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 	k := &kitty.Kitty{
 		ID: m.newID(), Name: s.Name, Provider: prov, Soul: personality, Connectors: s.Connectors,
 		Desktop: desktop, Status: kitty.StatusCreated, CreatedAt: m.now(), Avatar: avatar,
+		Limits: s.Limits, Backup: s.Backup,
 	}
 	if desktop {
 		k.Container = kitty.ContainerName(s.Name)
@@ -396,7 +407,7 @@ func (m *Manager) Bootstrap(ctx context.Context) error {
 			if _, err := m.Get(name); err == nil {
 				continue
 			}
-			spec := Spec{Name: name, Provider: k.Provider, Soul: k.Soul, SoulFile: k.SoulFile, Connectors: k.Connectors, Desktop: k.Desktop, Avatar: k.Avatar}
+			spec := Spec{Name: name, Provider: k.Provider, Soul: k.Soul, SoulFile: k.SoulFile, Connectors: k.Connectors, Desktop: k.Desktop, Avatar: k.Avatar, Limits: k.Limits, Backup: k.Backup}
 			if spec.Soul.Name == "" {
 				spec.Soul.Name = k.Name
 			}
@@ -581,6 +592,9 @@ func (m *Manager) fail(id string, err error) error {
 type Update struct {
 	Avatar *kitty.Avatar `json:"avatar,omitempty"`
 	Soul   *soul.Soul    `json:"soul,omitempty"`
+	Limits *kitty.Limits `json:"limits,omitempty"`
+	// Backup is the kitty to hand tasks to; an empty string, when set, clears it.
+	Backup *string `json:"backup,omitempty"`
 }
 
 // Edit applies an update to a kitty and saves it.
@@ -601,11 +615,103 @@ func (m *Manager) Edit(ref string, u Update) (*kitty.Kitty, error) {
 	if u.Soul != nil {
 		k.Soul = soul.Merge(k.Soul, *u.Soul)
 	}
+	if u.Limits != nil {
+		if err := u.Limits.Validate(); err != nil {
+			return nil, err
+		}
+		k.Limits = *u.Limits
+	}
+	if u.Backup != nil {
+		backup := strings.TrimSpace(*u.Backup)
+		if backup != "" {
+			other, ok := m.byNameLocked(backup)
+			if !ok {
+				if byID, found := m.kitties[backup]; found {
+					other, ok = byID, true
+				}
+			}
+			if !ok {
+				return nil, fmt.Errorf("no such kitty %q to back %s up", backup, k.Name)
+			}
+			if other.ID == k.ID {
+				return nil, errors.New("a kitty cannot back itself up")
+			}
+			backup = other.Name
+		}
+		k.Backup = backup
+	}
 	if err := m.saveLocked(); err != nil {
 		return nil, err
 	}
 	c := *k
 	return &c, nil
+}
+
+// Watch keeps the kitties up until ctx ends: every `every`, a running kitty whose container
+// has stopped is started again, and a kitty in error is tried once more. recovered hears
+// about each one brought back; warn about each one that could not be.
+func (m *Manager) Watch(ctx context.Context, every time.Duration, recovered func(k *kitty.Kitty, what string), warn func(format string, args ...any)) {
+	t := time.NewTicker(every)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		m.Check(ctx, recovered, warn)
+	}
+}
+
+// Check is one round of Watch.
+func (m *Manager) Check(ctx context.Context, recovered func(k *kitty.Kitty, what string), warn func(format string, args ...any)) {
+	if m.containers == nil {
+		return
+	}
+	infos, err := m.containers.List(ctx)
+	if err != nil {
+		warn("watchdog: %v", err)
+		return
+	}
+	running := map[string]bool{}
+	for _, i := range infos {
+		running[i.Name] = i.Running
+	}
+	for _, k := range m.List() {
+		if !k.Desktop {
+			continue
+		}
+		switch {
+		case k.Status == kitty.StatusRunning && !running[k.Container]:
+			what := "its container had stopped"
+			if _, exists := running[k.Container]; !exists {
+				what = "its container was gone"
+			}
+			if err := m.Start(ctx, k.ID); err != nil {
+				warn("watchdog: %s: %v", k.Name, err)
+				continue
+			}
+			recovered(k, what)
+		case k.Status == kitty.StatusError:
+			if err := m.Start(ctx, k.ID); err != nil {
+				warn("watchdog: %s still fails: %v", k.Name, err)
+				continue
+			}
+			recovered(k, "it was in error: "+k.Error)
+		}
+	}
+}
+
+// InboundSecret is the secret a service must present to post events to a connector's hook
+// (its inbound_secret setting); empty when the connector takes no events.
+func (m *Manager) InboundSecret(name string) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	c, ok := m.cfg.Connectors[name]
+	if !ok {
+		return "", fmt.Errorf("%w: connector %q", ErrNotFound, name)
+	}
+	return c.ConnectorSettings()["inbound_secret"], nil
 }
 
 // Brain returns the provider client the kitty thinks with.
