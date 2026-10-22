@@ -1,0 +1,117 @@
+import type { Kitty, Session } from "./api";
+import { IconBook, IconBrain, IconMonitor, IconPlus, IconSettings, IconSun, IconUsers, IconX } from "./icons";
+import PixelCat, { type Mood } from "./PixelCat";
+
+// moodOf is how a kitty looks in a list, from its state.
+export function moodOf(k: Kitty, working?: boolean): Mood {
+  if (working) {
+    return "working";
+  }
+  switch (k.status) {
+    case "running":
+      return "idle";
+    case "error":
+      return "error";
+    default:
+      return "sleeping";
+  }
+}
+
+interface Props {
+  chats: Session[];
+  kitties: Kitty[];
+  current: string | null;
+  workingChats: Set<string>;
+  workingKitties: Set<string>;
+  version: string;
+  open: boolean;
+  onClose: () => void;
+  onOpenChat: (id: string) => void;
+  onOpenKitty: (id: string) => void;
+  onNewChat: () => void;
+  onNewKitty: () => void;
+  onSettings: () => void;
+  onLibrary: () => void;
+  onTheme: () => void;
+}
+
+export default function Sidebar(p: Props) {
+  const byId = new Map(p.kitties.map((k) => [k.id, k]));
+  return (
+    <>
+      {p.open && <div class="fixed inset-0 bg-black/50 z-20 md:hidden backdrop" onClick={p.onClose} />}
+      <aside
+        class={`sidebar fixed md:relative inset-y-0 left-0 w-72 max-w-[85vw] z-30 flex flex-col ${p.open ? "" : "max-md:hidden"}`}
+      >
+        <div class="flex items-center gap-2 px-4 py-3 border-b border-white/5 flex-none">
+          <span class="text-accent text-lg">🐱</span>
+          <h1 class="text-base font-semibold tracking-wide">Kitties</h1>
+          <span class="text-[10px] text-[var(--t4)] font-mono mt-0.5">{p.version}</span>
+          <button class="plain ml-auto p-1.5 md:hidden" onClick={p.onClose} aria-label="Close">
+            <IconX />
+          </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto px-2 pb-2 scroll-thin">
+          <div class="section-title">Chats</div>
+          {p.chats.length === 0 && <div class="px-3 text-xs text-[var(--t4)]">No chats yet.</div>}
+          {p.chats.map((c, i) => (
+            <div
+              key={c.id}
+              class={`row ${p.current === c.id ? "on" : ""}`}
+              style={`animation-delay: ${Math.min(i, 10) * 30}ms`}
+            >
+              <button class="row-hit" onClick={() => p.onOpenChat(c.id)} aria-label={c.title} />
+              <span class="flex -space-x-2">
+                {c.members.slice(0, 3).map((id) => {
+                  const k = byId.get(id);
+                  return k ? <PixelCat key={id} breed={k.avatar?.breed} color={k.avatar?.color} mood={p.workingChats.has(c.id) ? "working" : moodOf(k)} size={22} /> : null;
+                })}
+              </span>
+              <span class="flex-1 min-w-0 truncate text-sm">{c.title}</span>
+              <span class="tag">
+                {c.members.length > 1 ? <IconUsers size={10} /> : null}
+                {c.members.length > 1 ? c.members.length : (byId.get(c.members[0])?.name ?? "1")}
+              </span>
+            </div>
+          ))}
+          <button class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm" onClick={p.onNewChat}>
+            <IconPlus size={14} /> New chat
+          </button>
+
+          <div class="section-title">Kitties</div>
+          {p.kitties.length === 0 && <div class="px-3 text-xs text-[var(--t4)]">No kitties yet.</div>}
+          {p.kitties.map((k, i) => (
+            <div key={k.id} class="row" style={`animation-delay: ${Math.min(i, 10) * 30}ms`}>
+              <button class="row-hit" onClick={() => p.onOpenKitty(k.id)} aria-label={k.name} />
+              <PixelCat breed={k.avatar?.breed} color={k.avatar?.color} mood={moodOf(k, p.workingKitties.has(k.id))} size={26} />
+              <span class={`dot ${k.status}`} />
+              <span class="flex-1 min-w-0 truncate text-sm">{k.name}</span>
+              <span class="text-[10px] font-mono text-[var(--t4)] truncate max-w-[70px]">{k.provider}</span>
+              {k.desktop ? (
+                <IconMonitor size={12} class="text-accent/70" />
+              ) : (
+                <IconBrain size={12} class="text-[var(--t4)]" />
+              )}
+            </div>
+          ))}
+          <button class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm" onClick={p.onNewKitty}>
+            <IconPlus size={14} /> New kitty
+          </button>
+        </div>
+
+        <div class="px-3 py-2 border-t border-white/5 flex-none flex gap-1">
+          <button class="btn-ghost flex-1 flex items-center gap-2 px-3 py-2 text-xs" onClick={p.onLibrary}>
+            <IconBook size={14} /> Library
+          </button>
+          <button class="btn-ghost flex-1 flex items-center gap-2 px-3 py-2 text-xs" onClick={p.onSettings}>
+            <IconSettings size={14} /> Settings
+          </button>
+          <button class="btn-ghost px-3 py-2 text-xs" onClick={p.onTheme} aria-label="Theme">
+            <IconSun size={14} />
+          </button>
+        </div>
+      </aside>
+    </>
+  );
+}

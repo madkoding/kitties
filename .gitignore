@@ -15,3 +15,8 @@ coverage*.html
 .idea/
 .vscode/
 *.swp
+
+# The desktop app: installed packages, the built page (embedded at build time) and Wails output
+desktop/frontend/node_modules/
+desktop/frontend/dist/
+desktop/build/

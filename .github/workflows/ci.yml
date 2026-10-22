@@ -51,6 +51,25 @@ jobs:
           path: dist/
           retention-days: 7
 
+  desktop:
+    name: desktop app · page · wails module
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: desktop/go.mod
+      - name: build the page
+        run: cd desktop/frontend && npm ci && npm run typecheck && npm run build
+      - name: vet and test the Wails module
+        run: cd desktop && go vet ./... && go test -count=1 -cover ./...
+
   image:
     name: kitty-desktop image
     runs-on: ubuntu-latest

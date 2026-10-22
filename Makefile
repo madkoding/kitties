@@ -16,7 +16,7 @@ PLATFORMS := linux/amd64 linux/arm64 linux/arm android/arm64 \
              windows/amd64 windows/arm64 darwin/amd64 darwin/arm64
 
 .DEFAULT_GOAL := help
-.PHONY: help build dist test vet fmt fmt-check check cover image run clean
+.PHONY: help build dist test vet fmt fmt-check check cover image run clean frontend desktop desktop-check demo
 
 help: ## Show this list of commands
 	@printf '\nkitties: what you can run here\n\n'
@@ -59,6 +59,18 @@ cover: ## Coverage per package, against COVER_MIN
 		printf '  %-6s %6s%%  %s\n' "$$ok" "$$pct" "$$pkg"; \
 		[ "$$ok" = "LOW" ] && fail=1; \
 	done; [ "$$fail" = 0 ] || { echo "a package is under $(COVER_MIN)%"; exit 1; }
+
+frontend: ## Build the desktop app's page (desktop/frontend/dist)
+	@cd desktop/frontend && npm ci --no-audit --no-fund && npm run typecheck && npm run build
+
+desktop-check: frontend ## Vet and test the Wails app (needs the page built)
+	@cd desktop && $(GO) vet ./... && $(GO) test -count=1 -cover ./...
+
+desktop: frontend ## Build the native app with the Wails CLI (wails build)
+	@cd desktop && wails build
+
+demo: build ## Try the interface with no key and no Docker (a scripted brain, a drawn desktop)
+	@$(DIST)/kitties -demo gateway
 
 image: ## Build the kitty-desktop container image (Xvfb + browser)
 	@docker build -t $(IMAGE) docker/kitty-desktop
