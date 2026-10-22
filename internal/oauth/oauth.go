@@ -40,12 +40,12 @@ type Provider struct {
 var Providers = map[string]Provider{
 	"google": {
 		Name: "google", Label: "Google", AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: "https://oauth2.googleapis.com/token",
-		Scopes: []string{"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/documents"},
+		Scopes: []string{"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/documents", "https://www.googleapis.com/auth/contacts", "https://www.googleapis.com/auth/tasks"},
 		Extra:  map[string]string{"access_type": "offline", "prompt": "consent"},
 	},
 	"microsoft": {
 		Name: "microsoft", Label: "Microsoft", AuthURL: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", TokenURL: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-		Scopes: []string{"offline_access", "Mail.Send", "Mail.Read", "Calendars.ReadWrite", "Files.ReadWrite", "User.Read"},
+		Scopes: []string{"offline_access", "Mail.Send", "Mail.Read", "Calendars.ReadWrite", "Files.ReadWrite", "User.Read", "Contacts.ReadWrite", "Tasks.ReadWrite"},
 	},
 	"slack": {
 		Name: "slack", Label: "Slack", AuthURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access",

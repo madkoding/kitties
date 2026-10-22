@@ -39,11 +39,18 @@ func extraActions(kind string) map[string]actionFn {
 	case "jira":
 		return map[string]actionFn{"search": jiraSearch}
 	case "google-workspace":
-		return googleReads()
+		return merged(googleReads(), googlePersonal())
 	case "microsoft-365":
-		return microsoftReads()
+		return merged(microsoftReads(), microsoftPersonal())
 	}
 	return nil
+}
+
+func merged(a, b map[string]actionFn) map[string]actionFn {
+	for k, v := range b {
+		a[k] = v
+	}
+	return a
 }
 
 // readRender says an answer of a reading action as lines; ok is false for the actions that
@@ -76,6 +83,8 @@ func readRender(kind, action string, data []byte) (string, bool) {
 		return outlookRead(data), true
 	case "microsoft-365.list_events":
 		return listing(data, "value", 20, "id", "start.dateTime", "subject"), true
+	case "google-workspace.tasks":
+		return listing(data, "items", 30, "id", "title", "due", "notes"), true
 	case "stripe.balance":
 		return stripeBalance(data), true
 	case "stripe.list_invoices":
@@ -716,12 +725,22 @@ func readActions(kind string) []Action {
 			{Name: "list_mail", Help: "the latest mail (from, subject, date, start of the text), searchable like Gmail", Args: []string{"query (optional, Gmail search)", fLimit}},
 			{Name: "read_mail", Help: "read one message", Args: []string{"id"}},
 			{Name: "list_events", Help: "upcoming calendar events", Args: []string{"from (RFC 3339, optional)", fLimit}},
+			{Name: "contacts", Help: "find people in Google Contacts", Args: []string{"query (optional)", fLimit}},
+			{Name: "add_contact", Help: "add a person to Google Contacts", Args: []string{"name", "email (optional)", "phone (optional)", "company (optional)"}},
+			{Name: "tasks", Help: "the Google Tasks still to do, with their ids", Args: []string{fLimit}},
+			{Name: "add_task", Help: "add a task", Args: []string{fTitle, "due (optional)", "notes (optional)"}},
+			{Name: "complete_task", Help: "tick a task off", Args: []string{"id"}},
 		}
 	case "microsoft-365":
 		return []Action{
 			{Name: "list_mail", Help: "the latest mail, searchable", Args: []string{"query (optional)", fLimit}},
 			{Name: "read_mail", Help: "read one message", Args: []string{"id"}},
 			{Name: "list_events", Help: "upcoming calendar events", Args: []string{fLimit}},
+			{Name: "contacts", Help: "find people in Outlook contacts", Args: []string{"query (optional)", fLimit}},
+			{Name: "add_contact", Help: "add a person to Outlook contacts", Args: []string{"name", "email (optional)", "phone (optional)", "company (optional)"}},
+			{Name: "tasks", Help: "the Microsoft To Do tasks still to do, with their ids", Args: []string{fLimit}},
+			{Name: "add_task", Help: "add a task to To Do", Args: []string{fTitle, "due (optional)", "notes (optional)"}},
+			{Name: "complete_task", Help: "tick a task off", Args: []string{"id"}},
 		}
 	}
 	return nil

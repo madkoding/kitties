@@ -181,6 +181,8 @@ export function signedInWith(kind: string, auth?: string): string {
 export const CATEGORY: Record<string, string> = {
   messaging: "Chat & messages",
   "social media": "Social media",
+  personal: "Calendar, reminders & contacts",
+  home: "Home, news & weather",
   git: "Code",
   productivity: "Productivity",
   office: "Office & files",

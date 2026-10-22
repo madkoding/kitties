@@ -363,9 +363,11 @@ connectors:
 | --- | --- |
 | Messaging | Slack (webhook, bot token or OAuth sign-in; reads and replies), Discord, Telegram, WhatsApp (Cloud API), Email (SMTP), Matrix, Google Chat, Microsoft Teams, ntfy (push to your phone) |
 | Social media | Facebook Pages (post, posts, comments, reply, like, Messenger inbox and answers), Instagram professional accounts (pictures and reels, posts, comments, replies), Mastodon and Bluesky (post, timeline, mentions, reply, like), X, LinkedIn |
+| Calendar, reminders & contacts | CalDAV (iCloud, Fastmail, Nextcloud, Synology…: events, new events, reminders, ticking them off), CardDAV (find and add people), the Mac's own Calendar, Reminders and Contacts (when the gateway runs on the Mac), Google Contacts and Tasks, Outlook contacts and Microsoft To Do |
 | Git | GitHub (issues, comments, pull requests, files; a token or OAuth sign-in), GitLab, Gitea/Forgejo, motita (coding tasks) |
 | Productivity | Notion, Trello, Todoist, Linear, Jira, Zendesk (support tickets) |
 | Finance | Stripe (balance, invoices, payments, refunds) |
+| Home, news & weather | Home Assistant (states, acting on devices: asks first), RSS and Atom feeds, the weather and forecast (Open-Meteo, no key) |
 | Office | Google Workspace (OAuth: Gmail inbox and send, Calendar, Drive, Sheets, Docs), Microsoft 365 (OAuth: Outlook inbox and send, Calendar, OneDrive), Airtable, Nextcloud (WebDAV files), Google Sheets (Apps Script) |
 | Drawing | Diagrams through Kroki (mermaid, plantuml, graphviz, d2…) rendered to SVG artifacts, Figma, Excalidraw scenes |
 | Generic | Webhook, any HTTP API with a bearer token, a program on the gateway's machine |
@@ -378,6 +380,12 @@ fails on a stale token. In a chat, every call a kitty makes shows up as a chip w
 service's logo. Inside its
 container a kitty also has LibreOffice, Inkscape, ImageMagick and mtPaint for office documents
 and drawing on its own display.
+
+For iCloud calendars and contacts use `https://caldav.icloud.com` and `https://contacts.icloud.com`
+with an app-specific password from appleid.apple.com. iCloud reminders made with iOS 13 or later
+are no longer served over CalDAV: on a Mac, the **Mac Calendar, Reminders & Contacts** connection
+reaches them through the Reminders app (macOS asks once to allow it). Google and Microsoft accounts
+signed in before contacts and tasks were added need to sign in once more for them.
 
 Facebook and Instagram use Meta's Graph API with a token of your own app (developers.facebook.com):
 for a Page, a long-lived Page token and the Page id; for Instagram, a professional (business or

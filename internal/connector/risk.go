@@ -30,6 +30,8 @@ func (r Risk) String() string {
 var askActions = map[string]bool{
 	"send": true, "post": true, "reply": true, "comment": true, "like": true, "boost": true, "repost": true,
 	"send_mail": true, "send_invoice": true, "create_pr": true, "run": true,
+	// Home Assistant: a service can unlock a door or turn the heating off.
+	"call_service": true,
 }
 
 // alwaysActions are never done without approval, whatever the trust.

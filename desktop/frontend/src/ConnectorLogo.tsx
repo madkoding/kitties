@@ -2,6 +2,9 @@
 // mark otherwise, so the catalogue reads as a row of buttons rather than a list of names.
 import {
   siAirtable,
+  siApple,
+  siHomeassistant,
+  siRss,
   siClaude,
   siDeepseek,
   siGithubcopilot,
@@ -78,6 +81,19 @@ const HTTP: Mark = {
   hex: "0F766E",
   path: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm6.9 9h-3a15 15 0 0 0-1.1-5.1A8 8 0 0 1 18.9 11zM12 4a13 13 0 0 1 1.9 7h-3.8A13 13 0 0 1 12 4zM5.1 11a8 8 0 0 1 4.1-5.1A15 15 0 0 0 8.1 11zm0 2h3a15 15 0 0 0 1.1 5.1A8 8 0 0 1 5.1 13zM12 20a13 13 0 0 1-1.9-7h3.8A13 13 0 0 1 12 20zm2.8-1.9a15 15 0 0 0 1.1-5.1h3a8 8 0 0 1-4.1 5.1z",
 };
+// A calendar page, a contact card and a sun, for the open standards that have no brand.
+const CALENDAR: Mark = {
+  hex: "4C8DFF",
+  path: "M7 2h2v2h6V2h2v2h2a2 2 0 0 1 2 2v13a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2zM5 9v10h14V9zm2 2h4v4H7z",
+};
+const CONTACTS: Mark = {
+  hex: "F5A524",
+  path: "M5 2h13a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5V2zm7 5a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm-5 11h10c0-2.2-2.2-4-5-4s-5 1.8-5 4zM2 6h2v2H2zm0 5h2v2H2zm0 5h2v2H2z",
+};
+const WEATHER: Mark = {
+  hex: "FFB020",
+  path: "M11 1h2v3h-2zm0 19h2v3h-2zM1 11h3v2H1zm19 0h3v2h-3zM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4zm12.1 12.1 1.4-1.4 2.1 2.1-1.4 1.4zM4.2 18.4l2.1-2.1 1.4 1.4-2.1 2.1zM16.3 6.3l2.1-2.1 1.4 1.4-2.1 2.1zM12 6a6 6 0 1 1 0 12 6 6 0 0 1 0-12z",
+};
 const SHELL: Mark = {
   hex: "4EAA25",
   path: "M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v12h16V6zm2.5 2.6 1.4-1.4L11.3 11l-3.4 3.4-1.4-1.4 2-2zM12 14h6v2h-6z",
@@ -104,6 +120,12 @@ const MARKS: Record<string, Mark> = {
   x: brand(siX),
   linkedin: LINKEDIN,
   facebook: brand(siFacebook),
+  caldav: CALENDAR,
+  carddav: CONTACTS,
+  apple: brand(siApple),
+  "home-assistant": brand(siHomeassistant),
+  rss: brand(siRss),
+  weather: WEATHER,
   instagram: brand(siInstagram),
   github: brand(siGithub),
   gitlab: brand(siGitlab),
@@ -132,7 +154,7 @@ const MARKS: Record<string, Mark> = {
 };
 
 // Some brand marks are black and would vanish on the dark ground: they take the text colour.
-const DARK_MARKS = new Set(["x", "notion", "matrix", "github"]);
+const DARK_MARKS = new Set(["x", "notion", "matrix", "github", "apple"]);
 
 export function logoColor(kind: string): string {
   const m = MARKS[kind];

@@ -627,3 +627,28 @@ test("creating a kitty closes the dialog at once, and a desktop that cannot star
     "bruma was created, but not started: docker is not running",
   );
 });
+
+test("calendars, reminders and contacts: iCloud and others over CalDAV, the Mac's own apps, and home", async ({
+  page,
+}) => {
+  await open(page, "#new-connectors-add");
+  await page.getByRole("button", { name: "Calendar, reminders & contacts", exact: true }).click();
+  for (const name of [
+    "Calendar & reminders (CalDAV)",
+    "Contacts (CardDAV)",
+    "Mac Calendar, Reminders & Contacts",
+  ]) {
+    await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
+  }
+  await page.locator(".service-btn", { hasText: "Calendar & reminders (CalDAV)" }).click();
+  await expect(page.getByText("App password")).toBeVisible();
+  await expect(page.getByText("caldav.icloud.com").first()).toBeVisible();
+  await page.getByText("What the kitties can do with it").click();
+  await expect(page.locator("li", { hasText: "Add reminder" })).toBeVisible();
+  await shot(page, "40-calendars");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "Home, news & weather", exact: true }).click();
+  for (const name of ["Home Assistant", "News feeds (RSS)", "Weather"]) {
+    await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
+  }
+});
