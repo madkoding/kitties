@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,7 +30,7 @@ type chatResponse struct {
 func (c *HTTPClient) callChat(ctx context.Context, messages []Message) (Reply, error) {
 	body := map[string]any{
 		"model":       c.opts.Model,
-		"messages":    messages,
+		"messages":    chatMessages(messages),
 		"max_tokens":  c.opts.MaxTokens,
 		"temperature": c.temperature(0.7),
 	}
@@ -57,6 +58,24 @@ func (c *HTTPClient) callChat(ctx context.Context, messages []Message) (Reply, e
 	return reply, nil
 }
 
+// chatMessages renders the conversation for /chat/completions: plain text, or text and image
+// parts when a turn carries pictures.
+func chatMessages(messages []Message) []map[string]any {
+	out := make([]map[string]any, 0, len(messages))
+	for _, m := range messages {
+		if len(m.Images) == 0 {
+			out = append(out, map[string]any{"role": m.Role, "content": m.Content})
+			continue
+		}
+		parts := []map[string]any{{"type": "text", "text": m.Content}}
+		for _, img := range m.Images {
+			parts = append(parts, map[string]any{"type": "image_url", "image_url": map[string]any{"url": img.dataURL()}})
+		}
+		out = append(out, map[string]any{"role": m.Role, "content": parts})
+	}
+	return out
+}
+
 // --- responses (codex) ---------------------------------------------------------------------
 
 type responsesResponse struct {
@@ -80,7 +99,15 @@ func (c *HTTPClient) callResponses(ctx context.Context, messages []Message) (Rep
 	system, rest := splitSystem(messages)
 	input := make([]map[string]any, 0, len(rest))
 	for _, m := range rest {
-		input = append(input, map[string]any{"role": m.Role, "content": m.Content})
+		if len(m.Images) == 0 {
+			input = append(input, map[string]any{"role": m.Role, "content": m.Content})
+			continue
+		}
+		parts := []map[string]any{{"type": "input_text", "text": m.Content}}
+		for _, img := range m.Images {
+			parts = append(parts, map[string]any{"type": "input_image", "image_url": img.dataURL()})
+		}
+		input = append(input, map[string]any{"role": m.Role, "content": parts})
 	}
 	body := map[string]any{
 		"model":             c.opts.Model,
@@ -146,7 +173,12 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, messages []Message) (Rep
 		if m.Role == "assistant" {
 			role = "assistant"
 		}
-		conversation = append(conversation, map[string]any{"role": role, "content": m.Content})
+		blocks := []map[string]any{{"type": "text", "text": m.Content}}
+		for _, img := range m.Images {
+			blocks = append(blocks, map[string]any{"type": "image", "source": map[string]any{
+				"type": "base64", "media_type": img.MIME, "data": base64.StdEncoding.EncodeToString(img.Data)}})
+		}
+		conversation = append(conversation, map[string]any{"role": role, "content": blocks})
 	}
 	body := map[string]any{
 		"model":      c.opts.Model,
@@ -215,7 +247,12 @@ func (c *HTTPClient) callGemini(ctx context.Context, messages []Message) (Reply,
 		if m.Role == "assistant" {
 			role = "model"
 		}
-		contents = append(contents, map[string]any{"role": role, "parts": []map[string]any{{"text": m.Content}}})
+		parts := []map[string]any{{"text": m.Content}}
+		for _, img := range m.Images {
+			parts = append(parts, map[string]any{"inlineData": map[string]any{
+				"mimeType": img.MIME, "data": base64.StdEncoding.EncodeToString(img.Data)}})
+		}
+		contents = append(contents, map[string]any{"role": role, "parts": parts})
 	}
 	body := map[string]any{
 		"contents": contents,

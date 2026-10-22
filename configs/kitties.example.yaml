@@ -33,6 +33,9 @@ kitties:
       traits: [curious, thorough]
       skills: [research, summaries]
       language: ""               # empty follows the person
+    avatar:
+      breed: tabby               # tabby | shorthair | tuxedo | fluffy | siamese (empty: from the name)
+      color: orange              # orange | gray | black | white | cream | brown | blue | pink | mint | lilac
     connectors: [team-slack]
   - name: tom
     provider: fast

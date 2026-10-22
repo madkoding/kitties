@@ -71,6 +71,10 @@ func TestRegistry(t *testing.T) {
 	if _, ok := r.Get("zz"); ok {
 		t.Error("Get")
 	}
+	r.Remove("ok")
+	if _, ok := r.Get("ok"); ok {
+		t.Error("Remove")
+	}
 }
 
 // stub answers HTTP requests in order and records them.

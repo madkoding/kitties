@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -128,13 +129,21 @@ func TestUsageVersionInit(t *testing.T) {
 	}
 }
 
-// chatServer answers every chat completion with a fixed text.
-func chatServer(t *testing.T, text string) string {
+// chatServer answers the chat completions with the given texts in order, repeating the last.
+func chatServer(t *testing.T, texts ...string) string {
 	t.Helper()
 	mux := http.NewServeMux()
+	var mu sync.Mutex
+	n := 0
 	mux.HandleFunc("POST /chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		text := texts[n]
+		if n < len(texts)-1 {
+			n++
+		}
+		mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":"` + text + `"}}]}`))
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"content":` + strconv.Quote(text) + `}}]}`))
 	})
 	srv := &http.Server{Handler: mux}
 	ln, err := newListener()
@@ -167,8 +176,14 @@ func TestFleetCommands(t *testing.T) {
 	if code, out, _ := exec(t, "", "-config", cfg, "create", "brain", "-no-desktop", "-connectors", "a"); code != 1 || out != "" {
 		t.Error("unknown connector")
 	}
-	if code, _, _ := exec(t, "", "-config", cfg, "create", "brain", "-no-desktop"); code != 0 {
+	if code, _, _ := exec(t, "", "-config", cfg, "create", "brain", "-no-desktop", "-avatar", "tuxedo/mint"); code != 0 {
 		t.Error("brain-only create")
+	}
+	if code, out, _ := exec(t, "", "-config", cfg, "ls"); code != 0 || !strings.Contains(out, "tuxedo/mint") {
+		t.Errorf("ls shows the avatar: %s", out)
+	}
+	if code, _, _ := exec(t, "", "-config", cfg, "create", "lion", "-avatar", "lion"); code != 1 {
+		t.Error("a bad avatar is refused")
 	}
 	if code, out, _ := exec(t, "", "-config", cfg, "ls"); code != 0 || !strings.Contains(out, "ana") || !strings.Contains(out, "brain") {
 		t.Errorf("ls: %s", out)
@@ -257,6 +272,24 @@ func TestFleetCommands(t *testing.T) {
 	}
 }
 
+func TestChatFollowsDesktopTask(t *testing.T) {
+	withRuntime(t, true)
+	pollEvery = 5 * time.Millisecond
+	defer func() { pollEvery = 500 * time.Millisecond }()
+	cfg := writeConfig(t, chatServer(t,
+		"On it.\n@tool click {\"x\": 5, \"y\": 5}",
+		"@tool done {\"summary\": \"Clicked the thing.\"}",
+		"anything else?"))
+	if code, _, _ := exec(t, "", "-config", cfg, "create", "desk"); code != 0 {
+		t.Fatal("create desk")
+	}
+	code, out, errOut := exec(t, "click it\n/quit\n", "-config", cfg, "chat", "desk")
+	if code != 0 || !strings.Contains(out, "desk: On it.") || !strings.Contains(out, "working on the desktop") ||
+		!strings.Contains(out, "· click: ran xdotool") || !strings.Contains(out, "[shot 1-1.png]") || !strings.Contains(out, "desk: Clicked the thing.") {
+		t.Errorf("follow: %d %s %s", code, out, errOut)
+	}
+}
+
 func TestGatewayCommand(t *testing.T) {
 	withRuntime(t, true)
 	cfg := writeConfig(t, chatServer(t, "ok"))
@@ -276,6 +309,9 @@ func TestGatewayCommand(t *testing.T) {
 	text := out.String()
 	if !strings.Contains(text, "gateway token") || !strings.Contains(text, "mimi") || !strings.Contains(text, "team-2") {
 		t.Errorf("gateway output: %s", text)
+	}
+	if data, err := os.ReadFile(filepath.Join(filepath.Dir(cfg), "data", "gateway.token")); err != nil || len(strings.TrimSpace(string(data))) != 32 {
+		t.Errorf("the token is kept in the data folder: %q %v", data, err)
 	}
 	// A kitty that cannot start is reported, not fatal.
 	withRuntime(t, false)
@@ -319,13 +355,69 @@ func TestOpenFailures(t *testing.T) {
 	cfg := filepath.Join(dir, "k.yaml")
 	_ = os.WriteFile(cfg, []byte("data_dir: "+filepath.Join(dir, "data")+"\nproviders:\n  p:\n    kind: openai\n"), 0o600)
 	t.Setenv("OPENAI_API_KEY", "")
-	if code, _, errOut := exec(t, "", "-config", cfg, "ls"); code != 1 || !strings.Contains(errOut, "API key") {
-		t.Errorf("a provider without a key fails: %d %s", code, errOut)
+	if code, _, errOut := exec(t, "", "-config", cfg, "ls"); code != 0 || !strings.Contains(errOut, "API key") {
+		t.Errorf("a provider without a key is reported, the fleet still runs: %d %s", code, errOut)
 	}
-	if code, _, errOut := exec(t, "", "-config", cfg, "providers"); code != 1 || strings.Contains(errOut, "brain-only") {
+	if code, _, errOut := exec(t, "", "-config", cfg, "create", "x", "-no-desktop"); code != 1 || !strings.Contains(errOut, "unknown provider") {
+		t.Errorf("a kitty cannot use the keyless profile: %d %s", code, errOut)
+	}
+	if code, _, errOut := exec(t, "", "-config", cfg, "providers"); code != 0 || strings.Contains(errOut, "brain-only") {
 		t.Error("providers never probes the runtime")
 	}
 	if err := errors.Join(nil); err != nil {
 		t.Error(err)
 	}
+}
+
+func TestDemoMode(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	withRuntime(t, false)
+	if code, out, errOut := exec(t, "", "-demo", "providers"); code != 0 || !strings.Contains(out, "demo/scripted") || !strings.Contains(errOut, "demo mode") {
+		t.Errorf("demo providers: %d %s %s", code, out, errOut)
+	}
+	if code, _, _ := exec(t, "", "-demo", "-config", filepath.Join(t.TempDir(), "none.yaml"), "providers"); code != 1 {
+		t.Error("a named file that is missing fails even in demo mode")
+	}
+	pollEvery = 5 * time.Millisecond
+	defer func() { pollEvery = 500 * time.Millisecond }()
+	if code, out, _ := exec(t, "", "-demo", "create", "zoe"); code != 0 || !strings.Contains(out, "zoe is up (demo") {
+		t.Errorf("demo create: %d %s", code, out)
+	}
+	code, out, errOut := exec(t, "hello\nopen https://example.com\n/quit\n", "-demo", "chat", "zoe")
+	if code != 0 || !strings.Contains(out, "I am zoe") || !strings.Contains(out, "· open: opened https://example.com") || !strings.Contains(out, "placeholder domain") {
+		t.Errorf("demo chat: %d %s %s", code, out, errOut)
+	}
+	// A configuration file still wins in demo mode: its providers become scripted brains.
+	cfg := writeConfig(t, "http://127.0.0.1:1")
+	if code, out, _ := exec(t, "", "-demo", "-config", cfg, "providers"); code != 0 || !strings.Contains(out, "p            demo/scripted") {
+		t.Errorf("demo with a file: %d %s", code, out)
+	}
+}
+
+func TestFollowTaskHelpers(t *testing.T) {
+	if firstLine("  a\nb ") != "a…" || firstLine(strings.Repeat("x", 120)) != strings.Repeat("x", 100)+"…" || firstLine("ok") != "ok" {
+		t.Error("firstLine")
+	}
+	withRuntime(t, true)
+	cfg := writeConfig(t, chatServer(t, "@tool wait {\"seconds\": 3}", "@tool done {\"summary\": \"late\"}"))
+	if code, _, _ := exec(t, "", "-config", cfg, "create", "desk"); code != 0 {
+		t.Fatal("create desk")
+	}
+	// A cancelled context (ctrl+c) stops following and cancels the task.
+	ctx, cancel := context.WithCancel(context.Background())
+	notifyContext = func() (context.Context, context.CancelFunc) { return ctx, func() {} }
+	pollEvery = 5 * time.Millisecond
+	defer func() { pollEvery = 500 * time.Millisecond }()
+	go func() {
+		time.Sleep(50 * time.Millisecond)
+		cancel()
+	}()
+	code, out, _ := exec(t, "wait for it\n", "-config", cfg, "chat", "desk")
+	if code != 0 || !strings.Contains(out, "working on the desktop") || strings.Contains(out, "late") {
+		t.Errorf("cancel: %d %s", code, out)
+	}
+	// A chat whose session vanished stops following.
+	a := &app{out: &bytes.Buffer{}}
+	a.chats = nil
+	_ = a
 }

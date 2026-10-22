@@ -17,11 +17,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/madkoding/kitties/internal/artifacts"
 	"github.com/madkoding/kitties/internal/chat"
+	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/skills"
 )
 
 // Fleet is what the gateway needs from the orchestrator.
@@ -29,6 +32,7 @@ type Fleet interface {
 	List() []*kitty.Kitty
 	Get(ref string) (*kitty.Kitty, error)
 	Create(ctx context.Context, s orchestrator.Spec) (*kitty.Kitty, error)
+	Edit(ref string, u orchestrator.Update) (*kitty.Kitty, error)
 	Start(ctx context.Context, ref string) error
 	Stop(ctx context.Context, ref string) error
 	Remove(ctx context.Context, ref string) error
@@ -38,6 +42,13 @@ type Fleet interface {
 	Providers() *provider.Registry
 	Connectors() *connector.Registry
 	HasContainers() (bool, error)
+	Settings() orchestrator.SettingsView
+	SetProvider(name string, p config.Provider) error
+	RemoveProvider(name string) error
+	SetDefaultProvider(name string) error
+	TestProvider(ctx context.Context, name string) (string, error)
+	SetConnector(name string, c config.Connector) error
+	RemoveConnector(name string) error
 }
 
 // Chats is what the gateway needs from the chat service.
@@ -49,6 +60,8 @@ type Chats interface {
 	AddMembers(id string, members []string) (*chat.Session, error)
 	RemoveMember(id, ref string) (*chat.Session, error)
 	Send(ctx context.Context, id, text string) ([]chat.Turn, error)
+	Cancel(id string) bool
+	Shot(id, name string) ([]byte, error)
 }
 
 // Server is the HTTP API.
@@ -59,6 +72,14 @@ type Server struct {
 	version string
 	started time.Time
 	mux     *http.ServeMux
+	skills  *skills.Library
+	arts    *artifacts.Store
+}
+
+// WithLibrary serves the skills and the artifacts.
+func (s *Server) WithLibrary(sk *skills.Library, arts *artifacts.Store) *Server {
+	s.skills, s.arts = sk, arts
+	return s
 }
 
 // NewToken makes a random bearer token.
@@ -88,6 +109,8 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/kitties", api(s.handleCreateKitty))
 	s.mux.Handle("GET /v1/kitties/{ref}", api(s.handleGetKitty))
 	s.mux.Handle("DELETE /v1/kitties/{ref}", api(s.handleRemoveKitty))
+	s.mux.Handle("PATCH /v1/kitties/{ref}", api(s.handleEditKitty))
+	s.mux.Handle("GET /v1/avatars", api(s.handleAvatars))
 	s.mux.Handle("POST /v1/kitties/{ref}/start", api(s.handleStartKitty))
 	s.mux.Handle("POST /v1/kitties/{ref}/stop", api(s.handleStopKitty))
 	s.mux.Handle("POST /v1/kitties/{ref}/exec", api(s.handleExec))
@@ -100,6 +123,182 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/chats/{id}/members", api(s.handleAddMembers))
 	s.mux.Handle("DELETE /v1/chats/{id}/members/{ref}", api(s.handleRemoveMember))
 	s.mux.Handle("POST /v1/chats/{id}/messages", api(s.handleSend))
+	s.mux.Handle("POST /v1/chats/{id}/cancel", api(s.handleCancel))
+	s.mux.Handle("GET /v1/chats/{id}/shots/{name}", api(s.handleShot))
+	s.mux.Handle("GET /v1/settings", api(s.handleSettings))
+	s.mux.Handle("PUT /v1/settings/providers/{name}", api(s.handleSetProvider))
+	s.mux.Handle("DELETE /v1/settings/providers/{name}", api(s.handleRemoveProvider))
+	s.mux.Handle("POST /v1/settings/providers/{name}/test", api(s.handleTestProvider))
+	s.mux.Handle("PUT /v1/settings/default-provider", api(s.handleDefaultProvider))
+	s.mux.Handle("PUT /v1/settings/connectors/{name}", api(s.handleSetConnector))
+	s.mux.Handle("DELETE /v1/settings/connectors/{name}", api(s.handleRemoveConnector))
+	s.mux.HandleFunc("GET /v1/local-token", s.handleLocalToken)
+	s.mux.Handle("GET /v1/skills", api(s.handleSkills))
+	s.mux.Handle("GET /v1/skills/{name}", api(s.handleSkill))
+	s.mux.Handle("PUT /v1/skills/{name}", api(s.handleSaveSkill))
+	s.mux.Handle("DELETE /v1/skills/{name}", api(s.handleDeleteSkill))
+	s.mux.Handle("POST /v1/skills/{name}/accept", api(s.handleAcceptSkill))
+	s.mux.Handle("GET /v1/artifacts", api(s.handleArtifacts))
+	s.mux.Handle("GET /v1/artifacts/{name}", api(s.handleArtifact))
+	s.mux.Handle("PUT /v1/artifacts/{name}", api(s.handlePutArtifact))
+	s.mux.Handle("DELETE /v1/artifacts/{name}", api(s.handleDeleteArtifact))
+}
+
+func (s *Server) noLibrary(w http.ResponseWriter) bool {
+	if s.skills == nil || s.arts == nil {
+		fail(w, http.StatusNotFound, errors.New("this gateway has no library"))
+		return true
+	}
+	return false
+}
+
+func (s *Server) handleSkills(w http.ResponseWriter, _ *http.Request) {
+	if s.noLibrary(w) {
+		return
+	}
+	list, err := s.skills.List()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"skills": list})
+}
+
+func (s *Server) handleSkill(w http.ResponseWriter, r *http.Request) {
+	if s.noLibrary(w) {
+		return
+	}
+	sk, err := s.skills.Get(r.PathValue("name"))
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"skill": sk})
+}
+
+func (s *Server) handleSaveSkill(w http.ResponseWriter, r *http.Request) {
+	if s.noLibrary(w) {
+		return
+	}
+	var body struct {
+		Body string `json:"body"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	sk, err := s.skills.Save(r.PathValue("name"), body.Body)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"skill": sk})
+}
+
+func (s *Server) handleDeleteSkill(w http.ResponseWriter, r *http.Request) {
+	if s.noLibrary(w) {
+		return
+	}
+	if err := s.skills.Delete(r.PathValue("name")); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleAcceptSkill(w http.ResponseWriter, r *http.Request) {
+	if s.noLibrary(w) {
+		return
+	}
+	sk, err := s.skills.Accept(r.PathValue("name"))
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"skill": sk})
+}
+
+func (s *Server) handleArtifacts(w http.ResponseWriter, _ *http.Request) {
+	if s.noLibrary(w) {
+		return
+	}
+	list, err := s.arts.List()
+	if err != nil {
+		fail(w, http.StatusInternalServerError, err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"artifacts": list})
+}
+
+func (s *Server) handleArtifact(w http.ResponseWriter, r *http.Request) {
+	if s.noLibrary(w) {
+		return
+	}
+	name := r.PathValue("name")
+	data, err := s.arts.Get(name)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	w.Header().Set("Content-Type", artifacts.Type(name))
+	w.Header().Set("Content-Disposition", "inline; filename=\""+name+"\"")
+	w.Header().Set("Cache-Control", "no-store")
+	_, _ = w.Write(data)
+}
+
+func (s *Server) handlePutArtifact(w http.ResponseWriter, r *http.Request) {
+	if s.noLibrary(w) {
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(r.Body, 9<<20))
+	if err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	a, err := s.arts.Put(r.PathValue("name"), data, "")
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"artifact": a})
+}
+
+func (s *Server) handleDeleteArtifact(w http.ResponseWriter, r *http.Request) {
+	if s.noLibrary(w) {
+		return
+	}
+	if err := s.arts.Delete(r.PathValue("name")); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleLocalToken hands the token to a client on this machine, so a local executable or the
+// gateway's own page needs no typing. Only a loopback peer gets it, and never a page of another
+// site: a cross-origin fetch carries an Origin header that is not this gateway's.
+func (s *Server) handleLocalToken(w http.ResponseWriter, r *http.Request) {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil || !net.ParseIP(host).IsLoopback() {
+		fail(w, http.StatusForbidden, errors.New("the token is only handed out on this machine"))
+		return
+	}
+	if origin := r.Header.Get("Origin"); origin != "" && !sameOrigin(origin, r.Host) {
+		fail(w, http.StatusForbidden, errors.New("the token is not handed to another site"))
+		return
+	}
+	if s.token == "" {
+		fail(w, http.StatusNotFound, errors.New("the gateway has no token"))
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	reply(w, http.StatusOK, map[string]string{"token": s.token})
+}
+
+// sameOrigin reports whether origin names the host this request arrived on.
+func sameOrigin(origin, host string) bool {
+	o := strings.TrimPrefix(strings.TrimPrefix(origin, "http://"), "https://")
+	return strings.EqualFold(o, host)
 }
 
 // auth checks the bearer token (or the token query, for the page's screenshot links).
@@ -133,9 +332,15 @@ func codeFor(err error) int {
 	switch {
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
+	case errors.Is(err, chat.ErrBusy):
+		return http.StatusConflict
 	case strings.Contains(msg, "already exists"), strings.Contains(msg, "not valid"), strings.Contains(msg, "unknown "),
 		strings.Contains(msg, "cannot be"), strings.Contains(msg, "is empty"), strings.Contains(msg, "needs at least"),
-		strings.Contains(msg, "not between"), strings.Contains(msg, "not a kitty"):
+		strings.Contains(msg, "not between"), strings.Contains(msg, "not a kitty"), strings.Contains(msg, "is not one of"),
+		strings.Contains(msg, "needs a"), strings.Contains(msg, "profile name"), strings.Contains(msg, "connector name"),
+		strings.Contains(msg, "clear text"), strings.Contains(msg, ".kind:"), strings.HasPrefix(msg, "avatar."),
+		strings.Contains(msg, "too big"), strings.Contains(msg, "too long"), strings.Contains(msg, "is empty"), strings.Contains(msg, "needs a name"),
+		strings.Contains(msg, "built in"), strings.Contains(msg, "holds"), strings.Contains(msg, " needs "), strings.Contains(msg, "not a valid"):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
@@ -203,6 +408,24 @@ func (s *Server) handleCreateKitty(w http.ResponseWriter, r *http.Request) {
 		k, _ = s.fleet.Get(k.ID)
 	}
 	reply(w, http.StatusCreated, map[string]any{"kitty": k})
+}
+
+func (s *Server) handleAvatars(w http.ResponseWriter, _ *http.Request) {
+	reply(w, http.StatusOK, map[string]any{"breeds": kitty.Breeds, "colors": kitty.Colors})
+}
+
+func (s *Server) handleEditKitty(w http.ResponseWriter, r *http.Request) {
+	var u orchestrator.Update
+	if err := decode(r, &u); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	k, err := s.fleet.Edit(r.PathValue("ref"), u)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"kitty": k})
 }
 
 func (s *Server) handleGetKitty(w http.ResponseWriter, r *http.Request) {
@@ -357,6 +580,93 @@ func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusOK, map[string]any{"turns": turns})
+}
+
+func (s *Server) handleSettings(w http.ResponseWriter, _ *http.Request) {
+	reply(w, http.StatusOK, s.fleet.Settings())
+}
+
+func (s *Server) handleSetProvider(w http.ResponseWriter, r *http.Request) {
+	var p config.Provider
+	if err := decode(r, &p); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.fleet.SetProvider(r.PathValue("name"), p); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, s.fleet.Settings())
+}
+
+func (s *Server) handleRemoveProvider(w http.ResponseWriter, r *http.Request) {
+	if err := s.fleet.RemoveProvider(r.PathValue("name")); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, s.fleet.Settings())
+}
+
+func (s *Server) handleTestProvider(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 60*time.Second)
+	defer cancel()
+	answer, err := s.fleet.TestProvider(ctx, r.PathValue("name"))
+	if err != nil {
+		reply(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true, "reply": answer})
+}
+
+func (s *Server) handleDefaultProvider(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.fleet.SetDefaultProvider(body.Name); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, s.fleet.Settings())
+}
+
+func (s *Server) handleSetConnector(w http.ResponseWriter, r *http.Request) {
+	var c config.Connector
+	if err := decode(r, &c); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.fleet.SetConnector(r.PathValue("name"), c); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, s.fleet.Settings())
+}
+
+func (s *Server) handleRemoveConnector(w http.ResponseWriter, r *http.Request) {
+	if err := s.fleet.RemoveConnector(r.PathValue("name")); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, s.fleet.Settings())
+}
+
+func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
+	reply(w, http.StatusOK, map[string]any{"cancelled": s.chats.Cancel(r.PathValue("id"))})
+}
+
+func (s *Server) handleShot(w http.ResponseWriter, r *http.Request) {
+	png, err := s.chats.Shot(r.PathValue("id"), r.PathValue("name"))
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	w.Header().Set("Content-Type", "image/png")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	_, _ = w.Write(png)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {

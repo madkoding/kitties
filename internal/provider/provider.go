@@ -14,6 +14,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -97,6 +98,19 @@ type Options struct {
 type Message struct {
 	Role    string `json:"role"` // system | user | assistant
 	Content string `json:"content"`
+	// Images are pictures a user turn shows the model (a screenshot of the kitty's display).
+	Images []Image `json:"images,omitempty"`
+}
+
+// Image is one picture attached to a turn.
+type Image struct {
+	MIME string `json:"mime"` // image/png, image/jpeg
+	Data []byte `json:"data"`
+}
+
+// dataURL renders the image as a data: URL.
+func (i Image) dataURL() string {
+	return "data:" + i.MIME + ";base64," + base64.StdEncoding.EncodeToString(i.Data)
 }
 
 // Usage counts the tokens of one reply, when the provider reported them.

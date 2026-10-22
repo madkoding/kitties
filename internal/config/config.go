@@ -8,9 +8,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/soul"
 	"github.com/madkoding/kitties/internal/yamlx"
@@ -38,16 +41,16 @@ type Config struct {
 
 // Provider is one AI profile.
 type Provider struct {
-	Kind        string            `yaml:"kind"` // one of provider.Kinds()
-	Model       string            `yaml:"model"`
-	APIKey      string            `yaml:"api_key"`
-	APIKeyEnv   string            `yaml:"api_key_env"` // variable that holds the key, when not the provider's own
-	BaseURL     string            `yaml:"base_url"`
-	MaxTokens   int               `yaml:"max_tokens"`
-	Temperature *float64          `yaml:"temperature"`
-	Timeout     time.Duration     `yaml:"timeout"`
-	MaxAttempts int               `yaml:"max_attempts"`
-	Headers     map[string]string `yaml:"headers"`
+	Kind        string            `yaml:"kind" json:"kind"` // one of provider.Kinds()
+	Model       string            `yaml:"model" json:"model"`
+	APIKey      string            `yaml:"api_key" json:"api_key,omitempty"`
+	APIKeyEnv   string            `yaml:"api_key_env" json:"api_key_env,omitempty"` // variable that holds the key, when not the provider's own
+	BaseURL     string            `yaml:"base_url" json:"base_url,omitempty"`
+	MaxTokens   int               `yaml:"max_tokens" json:"max_tokens,omitempty"`
+	Temperature *float64          `yaml:"temperature" json:"temperature,omitempty"`
+	Timeout     time.Duration     `yaml:"timeout" json:"timeout,omitempty"`
+	MaxAttempts int               `yaml:"max_attempts" json:"max_attempts,omitempty"`
+	Headers     map[string]string `yaml:"headers" json:"headers,omitempty"`
 }
 
 // Options converts the profile into what the provider package takes.
@@ -70,6 +73,8 @@ type Kitty struct {
 	// Soul is the personality, inline; SoulFile points at a YAML file instead (both merge).
 	Soul     soul.Soul `yaml:"soul"`
 	SoulFile string    `yaml:"soul_file"`
+	// Avatar is the pixel cat shown for it; empty parts are picked from the name.
+	Avatar kitty.Avatar `yaml:"avatar"`
 	// Connectors names the services this kitty may use. Empty means every configured one.
 	Connectors []string `yaml:"connectors"`
 	// Replicas is how many copies to run (name-1, name-2, ...). 0 and 1 mean one.
@@ -107,16 +112,89 @@ type Motita struct {
 	Token string `yaml:"token"`
 }
 
-// Connector is one external service.
+// Connector is one external service: a kind of the catalogue (connector.Catalog) and its
+// settings. url, token, chat_id, command and headers are the common ones with a field of their
+// own; anything else the kind needs goes in settings.
 type Connector struct {
-	// Kind is webhook, slack, discord, telegram, motita or shell.
-	Kind        string            `yaml:"kind"`
-	Description string            `yaml:"description"`
-	URL         string            `yaml:"url"`
-	Token       string            `yaml:"token"`
-	ChatID      string            `yaml:"chat_id"`
-	Command     string            `yaml:"command"`
-	Headers     map[string]string `yaml:"headers"`
+	Kind        string            `yaml:"kind" json:"kind"`
+	Description string            `yaml:"description" json:"description,omitempty"`
+	URL         string            `yaml:"url" json:"url,omitempty"`
+	Token       string            `yaml:"token" json:"token,omitempty"`
+	ChatID      string            `yaml:"chat_id" json:"chat_id,omitempty"`
+	Command     string            `yaml:"command" json:"command,omitempty"`
+	Headers     map[string]string `yaml:"headers" json:"headers,omitempty"`
+	Settings    map[string]string `yaml:"settings" json:"settings,omitempty"`
+}
+
+// ConnectorSettings folds the connector into the settings its kind reads.
+func (c Connector) ConnectorSettings() connector.Settings {
+	s := connector.Settings{}
+	for k, v := range c.Settings {
+		s[k] = v
+	}
+	put := func(k, v string) {
+		if v != "" {
+			s[k] = v
+		}
+	}
+	put("url", c.URL)
+	put("token", c.Token)
+	put("chat_id", c.ChatID)
+	put("command", c.Command)
+	if len(c.Headers) > 0 {
+		var lines []string
+		for k, v := range c.Headers {
+			lines = append(lines, k+": "+v)
+		}
+		sort.Strings(lines)
+		s["headers"] = strings.Join(lines, "\n")
+	}
+	return s
+}
+
+// ConnectorKinds are the values connectors.<name>.kind accepts.
+var ConnectorKinds = func() []string {
+	var out []string
+	for _, k := range connector.Kinds() {
+		out = append(out, k.Name)
+	}
+	return out
+}()
+
+// ValidateProvider checks one profile on its own, as the settings page saves it.
+func ValidateProvider(name string, p Provider) error {
+	if !ValidName(name) {
+		return fmt.Errorf("providers.%s: a profile name is lowercase letters, digits and dashes", name)
+	}
+	if _, ok := provider.Lookup(p.Kind); !ok {
+		return fmt.Errorf("providers.%s.kind: %q is not one of %s", name, p.Kind, strings.Join(provider.Kinds(), ", "))
+	}
+	if p.APIKey != "" && strings.HasPrefix(strings.ToLower(p.BaseURL), "http://") && !isLocal(p.BaseURL) {
+		return fmt.Errorf("providers.%s.base_url: plain http to a remote host would send the key in clear text", name)
+	}
+	return nil
+}
+
+// ValidateConnector checks one connector on its own. motitaURL is the shared motita block's URL.
+func ValidateConnector(name string, cn Connector, motitaURL string) error {
+	if !ValidName(name) {
+		return fmt.Errorf("connectors.%s: a connector name is lowercase letters, digits and dashes", name)
+	}
+	kind, ok := connector.LookupKind(cn.Kind)
+	if !ok {
+		return fmt.Errorf("connectors.%s.kind: %q is not one of %s", name, cn.Kind, strings.Join(ConnectorKinds, ", "))
+	}
+	s := cn.ConnectorSettings()
+	if cn.Kind == "motita" && s["url"] == "" {
+		if motitaURL == "" {
+			return fmt.Errorf("connectors.%s: motita needs a url (or the motita block)", name)
+		}
+		return nil
+	}
+	if err := kind.Validate(s); err != nil {
+		return fmt.Errorf("connectors.%s: %v", name, err)
+	}
+	return nil
 }
 
 // Defaults is the configuration before the file is read.
@@ -165,14 +243,8 @@ func ValidName(name string) bool { return nameRe.MatchString(name) }
 // Validate checks the configuration.
 func (c *Config) Validate() error {
 	for name, p := range c.Providers {
-		if !ValidName(name) {
-			return fmt.Errorf("providers.%s: a profile name is lowercase letters, digits and dashes", name)
-		}
-		if _, ok := provider.Lookup(p.Kind); !ok {
-			return fmt.Errorf("providers.%s.kind: %q is not one of %s", name, p.Kind, strings.Join(provider.Kinds(), ", "))
-		}
-		if p.APIKey != "" && strings.HasPrefix(strings.ToLower(p.BaseURL), "http://") && !isLocal(p.BaseURL) {
-			return fmt.Errorf("providers.%s.base_url: plain http to a remote host would send the key in clear text", name)
+		if err := ValidateProvider(name, p); err != nil {
+			return err
 		}
 	}
 	if c.DefaultProvider != "" {
@@ -195,6 +267,9 @@ func (c *Config) Validate() error {
 			}
 		} else if c.DefaultProvider == "" && len(c.Providers) != 1 {
 			return fmt.Errorf("kitties[%d] (%s) names no provider and there is no default_provider", i, k.Name)
+		}
+		if _, err := k.Avatar.Normalize(k.Name); err != nil {
+			return fmt.Errorf("kitties[%d].%v", i, err)
 		}
 		if k.Replicas < 0 || k.Replicas > 999 {
 			return fmt.Errorf("kitties[%d].replicas: %d is not between 0 and 999", i, k.Replicas)
@@ -220,28 +295,8 @@ func (c *Config) Validate() error {
 		return errors.New("gateway.listen cannot be empty")
 	}
 	for name, cn := range c.Connectors {
-		if !ValidName(name) {
-			return fmt.Errorf("connectors.%s: a connector name is lowercase letters, digits and dashes", name)
-		}
-		switch cn.Kind {
-		case "webhook", "slack", "discord":
-			if cn.URL == "" {
-				return fmt.Errorf("connectors.%s: kind %s needs a url", name, cn.Kind)
-			}
-		case "telegram":
-			if cn.Token == "" || cn.ChatID == "" {
-				return fmt.Errorf("connectors.%s: telegram needs a token and a chat_id", name)
-			}
-		case "shell":
-			if cn.Command == "" {
-				return fmt.Errorf("connectors.%s: shell needs a command", name)
-			}
-		case "motita":
-			if cn.URL == "" && c.Motita.URL == "" {
-				return fmt.Errorf("connectors.%s: motita needs a url (or the motita block)", name)
-			}
-		default:
-			return fmt.Errorf("connectors.%s.kind: %q is not webhook, slack, discord, telegram, shell or motita", name, cn.Kind)
+		if err := ValidateConnector(name, cn, c.Motita.URL); err != nil {
+			return err
 		}
 	}
 	return nil

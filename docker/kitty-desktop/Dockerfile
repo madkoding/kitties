@@ -1,7 +1,9 @@
 # kitty-desktop: the body of a kitty.
 #
 # A headless X display on Xvfb with a browser and the usual desktop tools, so an agent can open
-# graphical applications and take screenshots of them. Nothing listens on a port: the
+# graphical applications and take screenshots of them: Chromium for the web, LibreOffice for
+# office documents (also headless: `soffice --headless --convert-to pdf file.docx`), Inkscape,
+# ImageMagick and mtPaint for drawing. Nothing listens on a port: the
 # orchestrator reaches the container through `docker exec` only.
 #
 #   docker build -t ghcr.io/madkoding/kitty-desktop:latest docker/kitty-desktop
@@ -16,6 +18,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb x11-utils x11-xserver-utils xdotool scrot \
         chromium fonts-dejavu fonts-noto-color-emoji \
         ca-certificates curl git jq python3 openssh-client \
+        libreoffice-writer libreoffice-calc libreoffice-impress \
+        inkscape imagemagick mtpaint \
         tini \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \

@@ -52,17 +52,20 @@ func TestValidation(t *testing.T) {
 		{base + "kitties:\n  - name: a\n    provider: q\n", "not a configured profile"},
 		{base + "  q:\n    kind: ollama\nkitties:\n  - name: a\n", "no default_provider"},
 		{base + "kitties:\n  - name: a\n    replicas: 1000\n", "between 0 and 999"},
+		{base + "kitties:\n  - name: a\n    avatar:\n      breed: lion\n", "avatar.breed"},
 		{base + "kitties:\n  - name: a\n    connectors: [x]\n", "not a configured connector"},
 		{base + "containers:\n  runtime: lxc\n", "not auto, docker or podman"},
 		{base + "containers:\n  image: ''\n", "image cannot be empty"},
 		{base + "containers:\n  cpus: -1\n", "cannot be negative"},
 		{base + "gateway:\n  listen: ''\n", "listen cannot be empty"},
 		{base + "connectors:\n  Bad:\n    kind: webhook\n", "connector name"},
-		{base + "connectors:\n  w:\n    kind: webhook\n", "needs a url"},
-		{base + "connectors:\n  w:\n    kind: telegram\n", "token and a chat_id"},
-		{base + "connectors:\n  w:\n    kind: shell\n", "needs a command"},
+		{base + "connectors:\n  w:\n    kind: webhook\n", "needs url"},
+		{base + "connectors:\n  w:\n    kind: telegram\n", "needs bot token"},
+		{base + "connectors:\n  w:\n    kind: shell\n", "needs command"},
 		{base + "connectors:\n  w:\n    kind: motita\n", "needs a url"},
-		{base + "connectors:\n  w:\n    kind: fax\n", "not webhook"},
+		{base + "connectors:\n  w:\n    kind: slack\n    token: t\n", "webhook url, or a bot token"},
+		{base + "connectors:\n  w:\n    kind: github\n    settings:\n      repo: a/b\n", "needs token"},
+		{base + "connectors:\n  w:\n    kind: fax\n", "is not one of"},
 	}
 	for _, tc := range cases {
 		_, err := Parse([]byte(tc.text))
@@ -83,6 +86,14 @@ func TestValidation(t *testing.T) {
 	}
 	if isLocal("http://example.com") {
 		t.Error("example.com is remote")
+	}
+	cs := Connector{Kind: "x", URL: "u", Token: "t", ChatID: "c", Command: "cmd", Headers: map[string]string{"B": "2", "A": "1"}, Settings: map[string]string{"repo": "a/b", "url": "shadowed"}}.ConnectorSettings()
+	if cs["url"] != "u" || cs["token"] != "t" || cs["chat_id"] != "c" || cs["command"] != "cmd" || cs["repo"] != "a/b" || cs["headers"] != "A: 1\nB: 2" {
+		t.Errorf("ConnectorSettings = %v", cs)
+	}
+	good2 := base + "connectors:\n  gh:\n    kind: github\n    token: t\n  em:\n    kind: email\n    settings:\n      host: h:25\n      user: u\n      password: p\n      from: f\n"
+	if _, err := Parse([]byte(good2)); err != nil {
+		t.Errorf("catalogue connectors parse: %v", err)
 	}
 }
 

@@ -43,7 +43,20 @@ func client(t *testing.T, kind string, reply func(int) (int, string)) (*HTTPClie
 	return c, r
 }
 
-var convo = []Message{{Role: "system", Content: "be brief"}, {Role: "user", Content: "hi"}, {Role: "assistant", Content: "hello"}, {Role: "user", Content: "?"}}
+var convo = []Message{{Role: "system", Content: "be brief"}, {Role: "user", Content: "hi"}, {Role: "assistant", Content: "hello"},
+	{Role: "user", Content: "?", Images: []Image{{MIME: "image/png", Data: []byte("PNG")}}}}
+
+// imagePart checks that the last message of a request carries one picture in the family's shape.
+func imagePart(t *testing.T, call map[string]any, listKey, partsKey string) map[string]any {
+	t.Helper()
+	list := call[listKey].([]any)
+	last := list[len(list)-1].(map[string]any)
+	parts := last[partsKey].([]any)
+	if len(parts) != 2 {
+		t.Fatalf("the picture turn has %d parts: %v", len(parts), parts)
+	}
+	return parts[1].(map[string]any)
+}
 
 func TestNewDefaultsAndErrors(t *testing.T) {
 	if _, err := New(Options{Kind: "nope"}); err == nil {
@@ -89,6 +102,9 @@ func TestChatFamily(t *testing.T) {
 	}
 	if msgs := r.calls[0]["messages"].([]any); len(msgs) != 4 {
 		t.Errorf("messages = %v", msgs)
+	}
+	if part := imagePart(t, r.calls[0], "messages", "content"); part["type"] != "image_url" || !strings.HasPrefix(part["image_url"].(map[string]any)["url"].(string), "data:image/png;base64,UE5H") {
+		t.Errorf("chat image = %v", part)
 	}
 }
 
@@ -159,6 +175,9 @@ func TestResponsesFamily(t *testing.T) {
 	if r.calls[0]["instructions"] != "be brief" || len(r.calls[0]["input"].([]any)) != 3 || !strings.HasSuffix(r.paths[0], "/responses") {
 		t.Errorf("request = %v", r.calls[0])
 	}
+	if part := imagePart(t, r.calls[0], "input", "content"); part["type"] != "input_image" {
+		t.Errorf("responses image = %v", part)
+	}
 	for body, want := range map[string]string{`{"output":[]}`: "no text", `{"error":{"message":"nope"}}`: "nope", `x`: "unreadable", `{}`: "no text"} {
 		c, _ := client(t, "codex", func(int) (int, string) { return 200, body })
 		if _, err := c.Complete(context.Background(), []Message{{Role: "user", Content: "hi"}}); err == nil || !strings.Contains(err.Error(), want) {
@@ -189,6 +208,9 @@ func TestAnthropicFamily(t *testing.T) {
 	if call["system"] != "be brief" || call["temperature"] != 0.3 || len(call["messages"].([]any)) != 3 || !strings.HasSuffix(r.paths[0], "/v1/messages") {
 		t.Errorf("request = %v", call)
 	}
+	if part := imagePart(t, call, "messages", "content"); part["type"] != "image" || part["source"].(map[string]any)["data"] != "UE5H" {
+		t.Errorf("anthropic image = %v", part)
+	}
 	for body, want := range map[string]string{`{"content":[]}`: "no text", `{"error":{"message":"nope"}}`: "nope", `x`: "unreadable"} {
 		c, _ := client(t, "anthropic", func(int) (int, string) { return 200, body })
 		if _, err := c.Complete(context.Background(), convo); err == nil || !strings.Contains(err.Error(), want) {
@@ -210,6 +232,9 @@ func TestGeminiFamily(t *testing.T) {
 	}
 	if _, ok := r.calls[0]["systemInstruction"]; !ok || len(r.calls[0]["contents"].([]any)) != 3 {
 		t.Errorf("request = %v", r.calls[0])
+	}
+	if part := imagePart(t, r.calls[0], "contents", "parts"); part["inlineData"].(map[string]any)["mimeType"] != "image/png" {
+		t.Errorf("gemini image = %v", part)
 	}
 	for body, want := range map[string]string{`{"candidates":[]}`: "no candidates", `{"candidates":[{"content":{"parts":[]},"finishReason":"SAFETY"}]}`: "SAFETY", `{"error":{"message":"nope"}}`: "nope", `x`: "unreadable"} {
 		c, _ := client(t, "gemini", func(int) (int, string) { return 200, body })
@@ -262,5 +287,10 @@ func TestRegistry(t *testing.T) {
 	list := reg.List()
 	if len(list) != 2 || list[1].Describe != "ollama/m" || list[1].Kind != "ollama" {
 		t.Errorf("List = %+v", list)
+	}
+	reg.Remove("fake")
+	reg.Remove("nope")
+	if names := reg.Names(); len(names) != 1 || names[0] != "local" {
+		t.Errorf("Remove: %v", names)
 	}
 }

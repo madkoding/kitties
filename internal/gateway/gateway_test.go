@@ -9,15 +9,20 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/madkoding/kitties/internal/artifacts"
 	"github.com/madkoding/kitties/internal/chat"
+	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/skills"
 )
 
 type fakeFleet struct {
@@ -50,6 +55,20 @@ func (f *fakeFleet) Create(_ context.Context, s orchestrator.Spec) (*kitty.Kitty
 	}
 	k := &kitty.Kitty{ID: "id-" + s.Name, Name: s.Name, Status: kitty.StatusCreated, Desktop: true}
 	f.kitties[k.ID] = k
+	return k, nil
+}
+func (f *fakeFleet) Edit(ref string, u orchestrator.Update) (*kitty.Kitty, error) {
+	k, err := f.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	if u.Avatar != nil {
+		a, err := u.Avatar.Normalize(k.Name)
+		if err != nil {
+			return nil, err
+		}
+		k.Avatar = a
+	}
 	return k, nil
 }
 func (f *fakeFleet) op(name, ref string, status string) error {
@@ -107,6 +126,34 @@ func (f *fakeFleet) Connectors() *connector.Registry {
 	return r
 }
 func (f *fakeFleet) HasContainers() (bool, error) { return false, errors.New("no docker") }
+func (f *fakeFleet) Settings() orchestrator.SettingsView {
+	return orchestrator.SettingsView{Providers: []orchestrator.ProviderView{{Name: "p", Kind: "ollama"}}, Connectors: []orchestrator.ConnectorView{}, DefaultProvider: "p"}
+}
+func (f *fakeFleet) SetProvider(name string, p config.Provider) error {
+	return config.ValidateProvider(name, p)
+}
+func (f *fakeFleet) RemoveProvider(name string) error {
+	if name != "p" {
+		return orchestrator.ErrNotFound
+	}
+	return nil
+}
+func (f *fakeFleet) SetDefaultProvider(name string) error { return f.RemoveProvider(name) }
+func (f *fakeFleet) TestProvider(_ context.Context, name string) (string, error) {
+	if name != "p" {
+		return "", errors.New("no such provider")
+	}
+	return "hello", nil
+}
+func (f *fakeFleet) SetConnector(name string, c config.Connector) error {
+	return config.ValidateConnector(name, c, "")
+}
+func (f *fakeFleet) RemoveConnector(name string) error {
+	if name != "c" {
+		return orchestrator.ErrNotFound
+	}
+	return nil
+}
 
 type fakeChats struct {
 	sessions map[string]*chat.Session
@@ -157,6 +204,13 @@ func (c *fakeChats) RemoveMember(id, ref string) (*chat.Session, error) {
 	}
 	s.Members = nil
 	return s, nil
+}
+func (c *fakeChats) Cancel(id string) bool { return id == "c1" }
+func (c *fakeChats) Shot(id, name string) ([]byte, error) {
+	if id != "c1" || name != "1-1.png" {
+		return nil, errors.New("no such screenshot")
+	}
+	return []byte("png"), nil
 }
 func (c *fakeChats) Send(_ context.Context, id, text string) ([]chat.Turn, error) {
 	if _, err := c.Get(id); err != nil {
@@ -250,6 +304,21 @@ func TestKittyRoutes(t *testing.T) {
 	}
 	if code, _, _ := call(t, srv, "GET", "/v1/kitties/zz", "tok", nil); code != 404 {
 		t.Error("get unknown")
+	}
+	if code, m, _ := call(t, srv, "GET", "/v1/avatars", "tok", nil); code != 200 || len(m["breeds"].([]any)) != 5 || len(m["colors"].([]any)) != 10 {
+		t.Errorf("avatars = %v", m)
+	}
+	if code, m, _ := call(t, srv, "PATCH", "/v1/kitties/ana", "tok", map[string]any{"avatar": map[string]any{"breed": "fluffy", "color": "mint"}}); code != 200 || m["kitty"].(map[string]any)["avatar"].(map[string]any)["breed"] != "fluffy" {
+		t.Errorf("edit = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "PATCH", "/v1/kitties/ana", "tok", map[string]any{"avatar": map[string]any{"breed": "lion"}}); code != 400 {
+		t.Error("edit bad avatar")
+	}
+	if code, _, _ := call(t, srv, "PATCH", "/v1/kitties/ana", "tok", "{"); code != 400 {
+		t.Error("edit bad json")
+	}
+	if code, _, _ := call(t, srv, "PATCH", "/v1/kitties/zz", "tok", map[string]any{}); code != 404 {
+		t.Error("edit unknown")
 	}
 	code, m, _ = call(t, srv, "POST", "/v1/kitties", "tok", map[string]any{"name": "bo"})
 	if code != 201 || m["kitty"].(map[string]any)["status"] != "running" {
@@ -374,11 +443,204 @@ func TestChatRoutes(t *testing.T) {
 	if code, _, _ := call(t, srv, "POST", "/v1/chats/c1/messages", "tok", map[string]any{"text": "hi"}); code != 500 {
 		t.Error("send failure")
 	}
+	c.fail = chat.ErrBusy
+	if code, _, _ := call(t, srv, "POST", "/v1/chats/c1/messages", "tok", map[string]any{"text": "hi"}); code != 409 {
+		t.Error("busy is a conflict")
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/chats/c1/cancel", "tok", nil); code != 200 || m["cancelled"] != true {
+		t.Errorf("cancel = %v", m)
+	}
+	if code, _, data := call(t, srv, "GET", "/v1/chats/c1/shots/1-1.png", "tok", nil); code != 200 || string(data) != "png" {
+		t.Error("shot")
+	}
+	if code, _, _ := call(t, srv, "GET", "/v1/chats/c1/shots/9-9.png", "tok", nil); code != 404 {
+		t.Error("shot unknown")
+	}
 	if code, _, _ := call(t, srv, "DELETE", "/v1/chats/c1", "tok", nil); code != 200 {
 		t.Error("delete")
 	}
 	if code, _, _ := call(t, srv, "DELETE", "/v1/chats/c1", "tok", nil); code != 404 {
 		t.Error("delete unknown")
+	}
+}
+
+func TestSettingsRoutes(t *testing.T) {
+	srv, _, _ := setup(t)
+	if code, m, _ := call(t, srv, "GET", "/v1/settings", "tok", nil); code != 200 || m["default_provider"] != "p" {
+		t.Errorf("settings = %v", m)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/providers/fast", "tok", map[string]any{"kind": "openai", "model": "m"}); code != 200 {
+		t.Error("set provider")
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/providers/fast", "tok", map[string]any{"kind": "nope"}); code != 400 {
+		t.Error("bad kind is 400")
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/providers/fast", "tok", "{"); code != 400 {
+		t.Error("bad json")
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/settings/providers/p", "tok", nil); code != 200 {
+		t.Error("remove provider")
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/settings/providers/zz", "tok", nil); code != 404 {
+		t.Error("remove unknown provider")
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/settings/providers/p/test", "tok", nil); code != 200 || m["ok"] != true || m["reply"] != "hello" {
+		t.Errorf("test provider = %v", m)
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/settings/providers/zz/test", "tok", nil); code != 200 || m["ok"] != false {
+		t.Errorf("test unknown provider = %v", m)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/default-provider", "tok", map[string]any{"name": "p"}); code != 200 {
+		t.Error("default provider")
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/default-provider", "tok", map[string]any{"name": "zz"}); code != 404 {
+		t.Error("default unknown")
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/default-provider", "tok", "{"); code != 400 {
+		t.Error("default bad json")
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/connectors/c", "tok", map[string]any{"kind": "webhook", "url": "http://x"}); code != 200 {
+		t.Error("set connector")
+	}
+	if code, m, _ := call(t, srv, "PUT", "/v1/settings/connectors/c", "tok", map[string]any{"kind": "webhook"}); code != 400 {
+		t.Errorf("connector needs a url: %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/connectors/c", "tok", "{"); code != 400 {
+		t.Error("connector bad json")
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/settings/connectors/c", "tok", nil); code != 200 {
+		t.Error("remove connector")
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/settings/connectors/zz", "tok", nil); code != 404 {
+		t.Error("remove unknown connector")
+	}
+}
+
+func TestLibraryRoutes(t *testing.T) {
+	srv, _, _ := setup(t)
+	if code, _, _ := call(t, srv, "GET", "/v1/skills", "tok", nil); code != 404 {
+		t.Error("no library, no skills")
+	}
+	for _, path := range []string{"/v1/skills/x", "/v1/artifacts", "/v1/artifacts/x"} {
+		if code, _, _ := call(t, srv, "GET", path, "tok", nil); code != 404 {
+			t.Errorf("%s without a library", path)
+		}
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/skills/x", "tok", map[string]any{"body": "# x"}); code != 404 {
+		t.Error("put skill without a library")
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/skills/x", "tok", nil); code != 404 {
+		t.Error("delete skill without a library")
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/skills/x/accept", "tok", nil); code != 404 {
+		t.Error("accept without a library")
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/artifacts/x.txt", "tok", "x"); code != 404 {
+		t.Error("put artifact without a library")
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/artifacts/x.txt", "tok", nil); code != 404 {
+		t.Error("delete artifact without a library")
+	}
+	dir := t.TempDir()
+	lib := New(&fakeFleet{kitties: map[string]*kitty.Kitty{}}, &fakeChats{sessions: map[string]*chat.Session{}}, "tok", "").
+		WithLibrary(skills.New(filepath.Join(dir, "skills")), artifacts.New(filepath.Join(dir, "artifacts")))
+	srv2 := httptest.NewServer(lib)
+	defer srv2.Close()
+	if code, m, _ := call(t, srv2, "GET", "/v1/skills", "tok", nil); code != 200 || len(m["skills"].([]any)) < 3 {
+		t.Errorf("skills = %d %v", code, m)
+	}
+	if code, m, _ := call(t, srv2, "PUT", "/v1/skills/Deploy It", "tok", map[string]any{"body": "# Deploy\n\nHow."}); code != 200 || m["skill"].(map[string]any)["name"] != "deploy-it" {
+		t.Errorf("save skill = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv2, "PUT", "/v1/skills/x", "tok", map[string]any{"body": ""}); code != 400 {
+		t.Error("an empty skill is 400")
+	}
+	if code, _, _ := call(t, srv2, "PUT", "/v1/skills/x", "tok", "{"); code != 400 {
+		t.Error("bad json")
+	}
+	if code, m, _ := call(t, srv2, "GET", "/v1/skills/deploy-it", "tok", nil); code != 200 || !strings.Contains(m["skill"].(map[string]any)["body"].(string), "How.") {
+		t.Errorf("get skill = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv2, "GET", "/v1/skills/zz", "tok", nil); code != 404 {
+		t.Error("unknown skill")
+	}
+	if code, _, _ := call(t, srv2, "POST", "/v1/skills/zz/accept", "tok", nil); code != 404 {
+		t.Error("accept unknown")
+	}
+	if code, _, _ := call(t, srv2, "DELETE", "/v1/skills/browse-a-site", "tok", nil); code != 400 {
+		t.Error("a built-in cannot be deleted")
+	}
+	if code, _, _ := call(t, srv2, "DELETE", "/v1/skills/deploy-it", "tok", nil); code != 200 {
+		t.Error("delete skill")
+	}
+	if code, m, _ := call(t, srv2, "PUT", "/v1/artifacts/notes.md", "tok", "# notes"); code != 200 || m["artifact"].(map[string]any)["type"] != "text/markdown" {
+		t.Errorf("put artifact = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv2, "PUT", "/v1/artifacts/.hidden", "tok", "x"); code != 400 {
+		t.Error("bad artifact name")
+	}
+	if code, m, _ := call(t, srv2, "GET", "/v1/artifacts", "tok", nil); code != 200 || len(m["artifacts"].([]any)) != 1 {
+		t.Errorf("artifacts = %v", m)
+	}
+	if code, _, data := call(t, srv2, "GET", "/v1/artifacts/notes.md", "tok", nil); code != 200 || string(data) != "# notes" {
+		t.Error("get artifact")
+	}
+	if code, _, _ := call(t, srv2, "GET", "/v1/artifacts/zz.md", "tok", nil); code != 404 {
+		t.Error("unknown artifact")
+	}
+	if code, _, _ := call(t, srv2, "DELETE", "/v1/artifacts/notes.md", "tok", nil); code != 200 {
+		t.Error("delete artifact")
+	}
+	if code, _, _ := call(t, srv2, "DELETE", "/v1/artifacts/notes.md", "tok", nil); code != 404 {
+		t.Error("delete unknown artifact")
+	}
+	// A library on a broken folder.
+	file := filepath.Join(dir, "file")
+	_ = os.WriteFile(file, nil, 0o600)
+	broken := httptest.NewServer(New(&fakeFleet{kitties: map[string]*kitty.Kitty{}}, &fakeChats{}, "tok", "").WithLibrary(skills.New(file), artifacts.New(file)))
+	defer broken.Close()
+	if code, _, _ := call(t, broken, "GET", "/v1/skills", "tok", nil); code != 500 {
+		t.Error("unreadable skills")
+	}
+	if code, _, _ := call(t, broken, "GET", "/v1/artifacts", "tok", nil); code != 500 {
+		t.Error("unreadable artifacts")
+	}
+}
+
+func TestLocalToken(t *testing.T) {
+	srv, _, _ := setup(t)
+	if code, m, _ := call(t, srv, "GET", "/v1/local-token", "", nil); code != 200 || m["token"] != "tok" {
+		t.Errorf("a loopback client gets the token: %d %v", code, m)
+	}
+	req, _ := http.NewRequest("GET", srv.URL+"/v1/local-token", nil)
+	req.Header.Set("Origin", "http://evil.example")
+	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != 403 {
+		t.Error("another site gets nothing")
+	}
+	req.Header.Set("Origin", srv.URL)
+	if resp, _ := http.DefaultClient.Do(req); resp.StatusCode != 200 {
+		t.Error("the gateway's own page gets it")
+	}
+	s := New(&fakeFleet{kitties: map[string]*kitty.Kitty{}}, &fakeChats{}, "tok", "")
+	rec := httptest.NewRecorder()
+	r := httptest.NewRequest("GET", "/v1/local-token", nil)
+	r.RemoteAddr = "10.0.0.5:4000"
+	s.ServeHTTP(rec, r)
+	if rec.Code != 403 {
+		t.Error("a network peer gets nothing")
+	}
+	r.RemoteAddr = "garbage"
+	rec = httptest.NewRecorder()
+	s.ServeHTTP(rec, r)
+	if rec.Code != 403 {
+		t.Error("an unreadable peer gets nothing")
+	}
+	none := New(&fakeFleet{kitties: map[string]*kitty.Kitty{}}, &fakeChats{}, "", "")
+	rec = httptest.NewRecorder()
+	r.RemoteAddr = "127.0.0.1:1"
+	none.ServeHTTP(rec, r)
+	if rec.Code != 404 {
+		t.Error("no token, nothing to hand out")
 	}
 }
 

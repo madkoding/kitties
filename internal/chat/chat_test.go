@@ -77,7 +77,7 @@ func fleet(t *testing.T) (*fakeFleet, *scripted, *scripted, *echoConn) {
 	return &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": ana, "b1": bo}, brains: map[string]provider.Client{"a1": sa, "b1": sb}, conns: reg}, sa, sb, e
 }
 
-func service(t *testing.T, f *fakeFleet) *Service {
+func service(t *testing.T, f Fleet) *Service {
 	t.Helper()
 	s, err := New(f, filepath.Join(t.TempDir(), "chats"))
 	if err != nil {
@@ -194,7 +194,7 @@ func TestSendSingle(t *testing.T) {
 	if first[0].Role != "system" || !strings.Contains(first[0].Content, "You are ana") || !strings.Contains(first[0].Content, "echo: echoes") || !strings.Contains(first[0].Content, "kind to Pat") || !strings.Contains(first[0].Content, "/home/kitty/work") {
 		t.Errorf("system prompt = %s", first[0].Content)
 	}
-	if first[1] != (provider.Message{Role: "user", Content: "[Pat]: hello ana"}) {
+	if first[1].Role != "user" || first[1].Content != "[Pat]: hello ana" {
 		t.Errorf("user turn = %+v", first[1])
 	}
 	second := sa.seen[1]

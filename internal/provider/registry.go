@@ -38,6 +38,14 @@ func (r *Registry) Build(name string, opts Options) error {
 	return nil
 }
 
+// Remove forgets the profile called name.
+func (r *Registry) Remove(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.clients, name)
+	delete(r.options, name)
+}
+
 // Get returns the client called name.
 func (r *Registry) Get(name string) (Client, error) {
 	r.mu.RLock()

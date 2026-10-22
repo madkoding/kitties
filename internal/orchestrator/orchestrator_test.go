@@ -12,6 +12,7 @@ import (
 	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/soul"
 )
 
 // fakeContainers remembers what exists and runs.
@@ -108,8 +109,12 @@ func TestNewBuildsProvidersAndConnectors(t *testing.T) {
 	bad := cfg
 	bad.Providers = map[string]config.Provider{"x": {Kind: "openai"}}
 	t.Setenv("OPENAI_API_KEY", "")
-	if _, err := New(bad); err == nil {
-		t.Error("a provider that cannot be built fails New")
+	keyless, err := New(bad)
+	if err != nil {
+		t.Fatalf("a provider without its key does not stop the fleet: %v", err)
+	}
+	if v := keyless.Settings().Providers; len(v) != 1 || !strings.Contains(v[0].Error, "API key") || v[0].APIKeySet {
+		t.Errorf("the page says why the profile is unavailable: %+v", v)
 	}
 	_ = os.WriteFile(filepath.Join(cfg.DataDir, "kitties.json"), []byte("{"), 0o600)
 	if _, err := New(cfg); err == nil || !strings.Contains(err.Error(), "damaged") {
@@ -159,7 +164,20 @@ func TestCreateGetListRemove(t *testing.T) {
 	if err != nil || brain.Desktop || brain.Container != "" || brain.Soul.Persona != "from file" {
 		t.Errorf("brain-only kitty = %+v, %v", brain, err)
 	}
-	for _, s := range []Spec{{Name: "Bad"}, {Name: "x", Provider: "zz"}, {Name: "x", Connectors: []string{"zz"}}, {Name: "x", SoulFile: "/nope"}, {Name: "mimi"}} {
+	if k.Avatar != kitty.DefaultAvatar("mimi") {
+		t.Errorf("avatar from the name: %+v", k.Avatar)
+	}
+	edited, err := m.Edit("mimi", Update{Avatar: &kitty.Avatar{Breed: "tuxedo", Color: "pink"}, Soul: &soul.Soul{Tone: "edited"}})
+	if err != nil || edited.Avatar != (kitty.Avatar{Breed: "tuxedo", Color: "pink"}) || edited.Soul.Tone != "edited" || edited.Soul.Persona != "from file" {
+		t.Errorf("Edit = %+v %v", edited, err)
+	}
+	if _, err := m.Edit("mimi", Update{Avatar: &kitty.Avatar{Breed: "lion"}}); err == nil {
+		t.Error("Edit validates the avatar")
+	}
+	if _, err := m.Edit("zz", Update{}); err == nil {
+		t.Error("Edit unknown")
+	}
+	for _, s := range []Spec{{Name: "Bad"}, {Name: "x", Provider: "zz"}, {Name: "x", Connectors: []string{"zz"}}, {Name: "x", SoulFile: "/nope"}, {Name: "mimi"}, {Name: "x", Avatar: kitty.Avatar{Color: "plaid"}}} {
 		if _, err := m.Create(ctx, s); err == nil {
 			t.Errorf("%+v must fail", s)
 		}
@@ -191,6 +209,10 @@ func TestCreateGetListRemove(t *testing.T) {
 	}
 	m.newID = func() string { return k.ID }
 	m.path = filepath.Join(t.TempDir(), "missing", "x", "kitties.json")
+	_ = os.WriteFile(filepath.Dir(filepath.Dir(m.path)), nil, 0o600)
+	if _, err := m.Edit("mimi", Update{Avatar: &kitty.Avatar{Breed: "tabby"}}); err == nil {
+		t.Error("Edit reports a save failure")
+	}
 	_ = os.WriteFile(filepath.Dir(filepath.Dir(m.path)), nil, 0o600)
 	if _, err := m.Create(ctx, Spec{Name: "nosave"}); err == nil {
 		t.Error("a save failure is reported and the kitty is not kept")

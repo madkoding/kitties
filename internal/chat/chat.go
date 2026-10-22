@@ -21,9 +21,12 @@ import (
 	"sync"
 	"time"
 
+	"github.com/madkoding/kitties/internal/artifacts"
 	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
 )
 
@@ -37,6 +40,26 @@ type Turn struct {
 	// Calls are the connectors the kitty used in this turn, if any.
 	Calls []connector.Result `json:"calls,omitempty"`
 	Usage provider.Usage     `json:"usage,omitempty"`
+	// Steps are the actions the kitty took on its desktop in this turn, with their screenshots.
+	Steps []Step `json:"steps,omitempty"`
+	// Artifacts names the files the kitty saved to the library in this turn.
+	Artifacts []string `json:"artifacts,omitempty"`
+	// Skills names the skills it read or proposed in this turn.
+	Skills []string `json:"skills,omitempty"`
+	// Working is true while the kitty is still acting on its desktop for this turn.
+	Working bool `json:"working,omitempty"`
+}
+
+// Step is one action on the desktop.
+type Step struct {
+	At     time.Time      `json:"at"`
+	Action string         `json:"action"`
+	Args   map[string]any `json:"args,omitempty"`
+	Result string         `json:"result,omitempty"`
+	Error  string         `json:"error,omitempty"`
+	// Shot is the screenshot taken after this step, as a file name under the chat's shots
+	// (served by the gateway); empty when the step took none.
+	Shot string `json:"shot,omitempty"`
 }
 
 // Session is one thread.
@@ -51,6 +74,19 @@ type Session struct {
 
 // Group reports whether the session has more than one kitty.
 func (s *Session) Group() bool { return len(s.Members) > 1 }
+
+// Working reports whether a kitty is still acting on its desktop in this session.
+func (s *Session) Working() bool {
+	for i := range s.Turns {
+		if s.Turns[i].Working {
+			return true
+		}
+	}
+	return false
+}
+
+// ErrBusy is returned when a message arrives while a kitty is still working on the thread.
+var ErrBusy = errors.New("the kitties are still working on this chat")
 
 // Fleet is what the chat needs from the orchestrator.
 type Fleet interface {
@@ -75,12 +111,26 @@ type Service struct {
 	MaxRounds int
 	// MaxTurns is how much of the thread a kitty is shown.
 	MaxTurns int
+	// MaxSteps bounds how many desktop rounds a task may take in one turn.
+	MaxSteps int
+	// skills and arts are the libraries, nil when the deployment has none.
+	skills *skills.Library
+	arts   *artifacts.Store
+	// tasks are the background desktop tasks in flight, by session id.
+	tasks map[string]*task
+	// wg counts the background tasks, so a test (or a shutdown) can wait for them.
+	wg sync.WaitGroup
+}
+
+// task is one desktop task running in the background.
+type task struct {
+	cancel context.CancelFunc
 }
 
 // New creates the service, loading the sessions kept in dir.
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
-		now: time.Now, newID: randomID, MaxRounds: 4, MaxTurns: 60}
+		now: time.Now, newID: randomID, MaxRounds: 4, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
@@ -89,6 +139,164 @@ func New(fleet Fleet, dir string) (*Service, error) {
 
 // SetUser sets how kitties refer to the person.
 func (s *Service) SetUser(name string) { s.user = name }
+
+// SetLibrary gives the kitties the skills and the artifacts.
+func (s *Service) SetLibrary(sk *skills.Library, arts *artifacts.Store) {
+	s.skills, s.arts = sk, arts
+}
+
+// libraryPrompt tells a kitty what it can look up and keep.
+func (s *Service) libraryPrompt() string {
+	var b strings.Builder
+	if s.skills != nil {
+		b.WriteString("You have a library of skills (procedures). Read one with a line `@skill read <name>` " +
+			"before a task it covers; when you learn a procedure worth keeping, propose it with " +
+			"`@skill save {\"name\": \"…\", \"body\": \"# Title\\n\\nHow to…\"}` (a person accepts it).\n")
+		if idx := s.skills.Index(); idx != "" {
+			b.WriteString("Skills:\n" + idx)
+		}
+	}
+	if s.arts != nil {
+		b.WriteString("You have a library of artifacts (files) shared by every kitty. Keep a result for later " +
+			"with `@artifact save {\"name\": \"report.md\", \"content\": \"…\"}`, read one with " +
+			"`@artifact read <name>`, list them with `@artifact list`.\n")
+		if idx := s.arts.Index(12); idx != "" {
+			b.WriteString("Artifacts:\n" + idx)
+		}
+	}
+	return b.String()
+}
+
+// Directive is one `@skill` or `@artifact` line of a reply.
+type Directive struct {
+	Kind string // skill | artifact
+	Verb string // read | save | list
+	Args map[string]any
+	Raw  string
+}
+
+// parseDirectives finds the library lines of a reply and returns them with the remaining text.
+func parseDirectives(text string) ([]Directive, string) {
+	var out []Directive
+	var kept []string
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(strings.Trim(strings.TrimSpace(line), "`"))
+		kind := ""
+		switch {
+		case strings.HasPrefix(trimmed, "@skill "):
+			kind = "skill"
+		case strings.HasPrefix(trimmed, "@artifact "):
+			kind = "artifact"
+		default:
+			kept = append(kept, line)
+			continue
+		}
+		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "@"+kind+" "))
+		verb, argsText, _ := strings.Cut(rest, " ")
+		d := Directive{Kind: kind, Verb: strings.ToLower(strings.TrimSpace(verb)), Raw: trimmed, Args: map[string]any{}}
+		if argsText = strings.TrimSpace(argsText); argsText != "" {
+			if err := json.Unmarshal([]byte(argsText), &d.Args); err != nil {
+				d.Args["name"] = strings.Trim(argsText, "\"' ")
+			}
+		}
+		out = append(out, d)
+	}
+	return out, strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
+func argText(args map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if v, ok := args[k].(string); ok && v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// runDirective executes one library line for a kitty and says what happened.
+func (s *Service) runDirective(d Directive, k *kitty.Kitty, turn *Turn) string {
+	name := argText(d.Args, "name", "skill", "file")
+	switch d.Kind {
+	case "skill":
+		if s.skills == nil {
+			return "[skill] there is no skills library here"
+		}
+		switch d.Verb {
+		case "read", "get", "show":
+			sk, err := s.skills.Get(name)
+			if err != nil {
+				return "[skill " + name + "] " + err.Error()
+			}
+			turn.Skills = append(turn.Skills, sk.Name)
+			return "[skill " + sk.Name + "]\n" + sk.Body
+		case "save", "propose", "write":
+			body := argText(d.Args, "body", "content", "text")
+			sk, err := s.skills.Propose(name, body)
+			if err != nil {
+				return "[skill save] " + err.Error()
+			}
+			turn.Skills = append(turn.Skills, sk.Name)
+			return "[skill " + sk.Name + "] proposed; a person will accept it from the library"
+		case "list", "search":
+			found, err := s.skills.Search(argText(d.Args, "query", "name"), 20)
+			if err != nil {
+				return "[skill list] " + err.Error()
+			}
+			var b strings.Builder
+			for _, sk := range found {
+				fmt.Fprintf(&b, "- %s: %s\n", sk.Name, sk.Summary)
+			}
+			return "[skills]\n" + strings.TrimSpace(b.String())
+		}
+	case "artifact":
+		if s.arts == nil {
+			return "[artifact] there is no artifacts library here"
+		}
+		switch d.Verb {
+		case "save", "write", "put":
+			content := argText(d.Args, "content", "text", "body")
+			a, err := s.arts.Put(name, []byte(content), k.Name)
+			if err != nil {
+				return "[artifact save] " + err.Error()
+			}
+			turn.Artifacts = append(turn.Artifacts, a.Name)
+			return "[artifact " + a.Name + "] saved (" + a.Type + ", " + fmt.Sprint(a.Size) + " bytes)"
+		case "read", "get", "open":
+			data, err := s.arts.Get(name)
+			if err != nil {
+				return "[artifact " + name + "] " + err.Error()
+			}
+			text := string(data)
+			if len(text) > 6000 {
+				text = text[:6000] + "…"
+			}
+			return "[artifact " + name + "]\n" + text
+		case "list", "ls":
+			idx := s.arts.Index(50)
+			if idx == "" {
+				idx = "(none yet)"
+			}
+			return "[artifacts]\n" + strings.TrimSpace(idx)
+		}
+	}
+	return "[" + d.Kind + "] unknown verb " + d.Verb + " (read, save or list)"
+}
+
+// keepFiles saves the files connectors answered with into the artifacts library.
+func (s *Service) keepFiles(results []connector.Result, k *kitty.Kitty, turn *Turn) {
+	for i := range results {
+		if results[i].File == nil || s.arts == nil {
+			continue
+		}
+		a, err := s.arts.Put(results[i].File.Name, results[i].File.Data, k.Name)
+		if err != nil {
+			results[i].Err = err.Error()
+			continue
+		}
+		results[i].Artifact = a.Name
+		turn.Artifacts = append(turn.Artifacts, a.Name)
+	}
+}
 
 func randomID() string {
 	var b [6]byte
@@ -250,7 +458,11 @@ func (s *Service) Delete(id string) error {
 	if _, ok := s.sessions[id]; !ok {
 		return fmt.Errorf("no such chat %q", id)
 	}
+	if t, ok := s.tasks[id]; ok {
+		t.cancel()
+	}
 	delete(s.sessions, id)
+	_ = os.RemoveAll(filepath.Join(s.dir, id))
 	err := os.Remove(filepath.Join(s.dir, id+".json"))
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
@@ -285,6 +497,10 @@ func (s *Service) Send(ctx context.Context, id, text string) ([]Turn, error) {
 		s.mu.Unlock()
 		return nil, fmt.Errorf("no such chat %q", id)
 	}
+	if sess.Working() {
+		s.mu.Unlock()
+		return nil, ErrBusy
+	}
 	sess.Turns = append(sess.Turns, Turn{At: s.now(), From: "user", Text: text})
 	sess.UpdatedAt = s.now()
 	members := append([]string(nil), sess.Members...)
@@ -308,12 +524,13 @@ func (s *Service) Send(ctx context.Context, id, text string) ([]Turn, error) {
 	responders := s.responders(kitties, text)
 	var replies []Turn
 	for _, k := range responders {
-		turn, err := s.answer(ctx, id, k, kitties)
+		turn, pending, err := s.answer(ctx, id, k, kitties)
 		if err != nil {
 			turn = Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: "(" + k.Name + " could not answer: " + err.Error() + ")"}
 		}
 		s.mu.Lock()
 		sess.Turns = append(sess.Turns, turn)
+		index := len(sess.Turns) - 1
 		sess.UpdatedAt = s.now()
 		saveErr := s.save(sess)
 		s.mu.Unlock()
@@ -321,9 +538,47 @@ func (s *Service) Send(ctx context.Context, id, text string) ([]Turn, error) {
 			return replies, saveErr
 		}
 		replies = append(replies, turn)
+		if pending != nil {
+			s.startTask(id, index, k, pending)
+			// The kitties after this one in a group wait for the task: they answer on the
+			// person's next message, with the task's result in the thread.
+			break
+		}
 	}
 	return replies, nil
 }
+
+// Cancel stops the desktop task running in a session, if any.
+func (s *Service) Cancel(id string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	t, ok := s.tasks[id]
+	if !ok {
+		return false
+	}
+	t.cancel()
+	return true
+}
+
+// Wait blocks until every background task has ended.
+func (s *Service) Wait() { s.wg.Wait() }
+
+// Shot reads one screenshot of a session.
+func (s *Service) Shot(id, name string) ([]byte, error) {
+	if !shotName.MatchString(name) {
+		return nil, fmt.Errorf("no such screenshot %q", name)
+	}
+	if _, err := s.Get(id); err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(s.dir, id, name))
+	if err != nil {
+		return nil, fmt.Errorf("no such screenshot %q", name)
+	}
+	return data, nil
+}
+
+var shotName = regexp.MustCompile(`^[0-9]+-[0-9]+\.png$`)
 
 func (s *Service) lockFor(id string) *sync.Mutex {
 	s.mu.Lock()
@@ -364,11 +619,21 @@ func containsKitty(list []*kitty.Kitty, k *kitty.Kitty) bool {
 	return false
 }
 
-// answer asks one kitty for its turn, running the connectors it calls.
-func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members []*kitty.Kitty) (Turn, error) {
+// pendingTask is a turn whose kitty asked to act on its desktop: the loop continues in the
+// background from these messages and actions.
+type pendingTask struct {
+	brain    provider.Client
+	messages []provider.Message
+	reply    string
+	actions  []desktop.Action
+}
+
+// answer asks one kitty for its turn, running the connectors it calls. When the kitty asks to
+// act on its desktop, the turn is returned as it stands with the pending task to continue.
+func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members []*kitty.Kitty) (Turn, *pendingTask, error) {
 	brain, err := s.fleet.Brain(k)
 	if err != nil {
-		return Turn{}, err
+		return Turn{}, nil, err
 	}
 	allowed := s.fleet.Connectors().Descriptions(k.Connectors)
 	var group []string
@@ -380,9 +645,15 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	system := k.Soul.SystemPrompt(soul.Context{
 		KittyName: k.Name, Desktop: k.Desktop, Workspace: workspaceOf(k), Group: group, Connectors: allowed, User: s.user,
 	})
+	if k.Desktop {
+		system += "\n" + desktop.Catalogue()
+	}
+	if lib := s.libraryPrompt(); lib != "" {
+		system += "\n" + lib
+	}
 	sess, err := s.Get(id)
 	if err != nil {
-		return Turn{}, err
+		return Turn{}, nil, err
 	}
 	messages := s.transcript(system, sess.Turns, k)
 
@@ -391,32 +662,250 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	for round := 0; round < s.MaxRounds; round++ {
 		reply, err := brain.Complete(ctx, messages)
 		if err != nil {
-			return Turn{}, err
+			return Turn{}, nil, err
 		}
 		turn.Usage.Input += reply.Usage.Input
 		turn.Usage.Output += reply.Usage.Output
-		calls, text := connector.Parse(reply.Content)
+		actions, content := desktop.Parse(reply.Content)
+		directives, content := parseDirectives(content)
+		if k.Desktop && len(actions) > 0 {
+			calls, text := connector.Parse(content)
+			if text != "" {
+				parts = append(parts, text)
+			}
+			if len(calls) > 0 && len(allowed) > 0 {
+				var results []connector.Result
+				for _, c := range calls {
+					results = append(results, s.fleet.Connectors().Call(ctx, c, k.Connectors))
+				}
+				s.keepFiles(results, k, &turn)
+				turn.Calls = append(turn.Calls, results...)
+			}
+			for _, d := range directives {
+				s.runDirective(d, k, &turn)
+			}
+			turn.At = s.now()
+			turn.Text = strings.TrimSpace(strings.Join(parts, "\n\n"))
+			turn.Working = true
+			return turn, &pendingTask{brain: brain, messages: messages, reply: reply.Content, actions: actions}, nil
+		}
+		calls, text := connector.Parse(content)
 		if text != "" {
 			parts = append(parts, text)
 		}
-		if len(calls) == 0 || len(allowed) == 0 {
+		if len(allowed) == 0 {
+			calls = nil
+		}
+		if len(calls) == 0 && len(directives) == 0 {
 			break
 		}
-		var results []connector.Result
-		for _, c := range calls {
-			results = append(results, s.fleet.Connectors().Call(ctx, c, k.Connectors))
+		var feedback []string
+		if len(calls) > 0 {
+			var results []connector.Result
+			for _, c := range calls {
+				results = append(results, s.fleet.Connectors().Call(ctx, c, k.Connectors))
+			}
+			s.keepFiles(results, k, &turn)
+			turn.Calls = append(turn.Calls, results...)
+			feedback = append(feedback, connector.Format(results))
 		}
-		turn.Calls = append(turn.Calls, results...)
+		for _, d := range directives {
+			feedback = append(feedback, s.runDirective(d, k, &turn))
+		}
 		messages = append(messages,
 			provider.Message{Role: "assistant", Content: reply.Content},
-			provider.Message{Role: "user", Content: connector.Format(results) + "\n\nContinue, and answer the person."})
+			provider.Message{Role: "user", Content: strings.Join(feedback, "\n\n") + "\n\nContinue, and answer the person."})
 	}
 	turn.At = s.now()
 	turn.Text = strings.TrimSpace(strings.Join(parts, "\n\n"))
 	if turn.Text == "" {
 		turn.Text = "(" + k.Name + " had nothing to add)"
 	}
-	return turn, nil
+	return turn, nil, nil
+}
+
+// startTask continues a turn in the background: the kitty acts on its desktop, sees the
+// screenshot, and goes on until it says done or the steps run out.
+func (s *Service) startTask(id string, index int, k *kitty.Kitty, p *pendingTask) {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.mu.Lock()
+	s.tasks[id] = &task{cancel: cancel}
+	s.mu.Unlock()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		defer cancel()
+		s.runTask(ctx, id, index, k, p)
+		s.mu.Lock()
+		delete(s.tasks, id)
+		s.mu.Unlock()
+	}()
+}
+
+// runner is the fleet as a desktop runner, when it is one.
+func (s *Service) runner() desktop.Runner {
+	r, _ := s.fleet.(desktop.Runner)
+	return r
+}
+
+func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Kitty, p *pendingTask) {
+	runner := s.runner()
+	messages := p.messages
+	actions := p.actions
+	reply := p.reply
+	var parts []string
+	final := ""
+	fail := ""
+	for round := 0; ; round++ {
+		if runner == nil {
+			fail = "this kitty has no desktop runner"
+			break
+		}
+		if round >= s.MaxSteps {
+			fail = fmt.Sprintf("stopped after %d rounds without finishing", s.MaxSteps)
+			break
+		}
+		var results []string
+		done := false
+		for _, a := range actions {
+			if summary, ok := a.Done(); ok {
+				final, done = summary, true
+				s.appendStep(id, index, Step{At: s.now(), Action: a.Name, Args: a.Args, Result: summary})
+				break
+			}
+			out, err := desktop.Run(ctx, runner, k.ID, a)
+			step := Step{At: s.now(), Action: a.Name, Args: a.Args, Result: out}
+			line := "- " + a.Raw + ": "
+			if err != nil {
+				step.Error = err.Error()
+				line += "failed: " + err.Error()
+			} else {
+				line += "ok"
+			}
+			if out != "" {
+				line += "\n  " + strings.ReplaceAll(out, "\n", "\n  ")
+			}
+			results = append(results, line)
+			s.appendStep(id, index, step)
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		if ctx.Err() != nil {
+			fail = "the task was cancelled"
+			break
+		}
+		if done {
+			break
+		}
+		png, err := runner.Screenshot(ctx, k.ID)
+		var images []provider.Image
+		if err != nil {
+			results = append(results, "- screenshot failed: "+err.Error())
+		} else if name, err := s.saveShot(id, index, png); err == nil {
+			s.markShot(id, index, name)
+			images = []provider.Image{{MIME: "image/png", Data: png}}
+		}
+		messages = append(messages,
+			provider.Message{Role: "assistant", Content: reply},
+			provider.Message{Role: "user", Content: "[desktop] Results of your actions:\n" + strings.Join(results, "\n") +
+				"\n\nHere is the screenshot of your display now. Continue with the next @tool lines, or " +
+				"write `@tool done {\"summary\": \"...\"}` when the task is finished.", Images: images})
+		if len(messages) > s.MaxTurns*2 {
+			messages = append(messages[:1], messages[len(messages)-s.MaxTurns*2:]...)
+		}
+		answer, err := p.brain.Complete(ctx, messages)
+		if err != nil {
+			fail = err.Error()
+			break
+		}
+		s.addUsage(id, index, answer.Usage)
+		reply = answer.Content
+		actions, _ = desktop.Parse(reply)
+		if text := strings.TrimSpace(stripTools(reply)); text != "" {
+			parts = append(parts, text)
+		}
+		if len(actions) == 0 {
+			break
+		}
+	}
+	if final != "" {
+		parts = append(parts, final)
+	}
+	if fail != "" {
+		parts = append(parts, "("+k.Name+" could not finish: "+fail+")")
+	}
+	s.finishTurn(id, index, strings.TrimSpace(strings.Join(parts, "\n\n")))
+}
+
+func stripTools(text string) string {
+	_, rest := desktop.Parse(text)
+	return rest
+}
+
+// edit changes one turn of a session under the lock and saves it.
+func (s *Service) edit(id string, index int, fn func(*Turn)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	if !ok || index >= len(sess.Turns) {
+		return
+	}
+	fn(&sess.Turns[index])
+	sess.UpdatedAt = s.now()
+	_ = s.save(sess)
+}
+
+func (s *Service) appendStep(id string, index int, step Step) {
+	s.edit(id, index, func(t *Turn) { t.Steps = append(t.Steps, step) })
+}
+
+func (s *Service) markShot(id string, index int, name string) {
+	s.edit(id, index, func(t *Turn) {
+		if len(t.Steps) > 0 {
+			t.Steps[len(t.Steps)-1].Shot = name
+		} else {
+			t.Steps = append(t.Steps, Step{At: s.now(), Action: "screenshot", Shot: name})
+		}
+	})
+}
+
+func (s *Service) addUsage(id string, index int, u provider.Usage) {
+	s.edit(id, index, func(t *Turn) {
+		t.Usage.Input += u.Input
+		t.Usage.Output += u.Output
+	})
+}
+
+func (s *Service) finishTurn(id string, index int, text string) {
+	s.edit(id, index, func(t *Turn) {
+		t.Working = false
+		if text != "" {
+			if t.Text != "" {
+				t.Text += "\n\n"
+			}
+			t.Text += text
+		}
+		if t.Text == "" {
+			t.Text = "(" + t.From + " finished without a word)"
+		}
+	})
+}
+
+// saveShot writes a screenshot under the session's folder and returns its name.
+func (s *Service) saveShot(id string, index int, png []byte) (string, error) {
+	dir := filepath.Join(s.dir, id)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return "", err
+	}
+	n := 0
+	s.mu.RLock()
+	if sess, ok := s.sessions[id]; ok && index < len(sess.Turns) {
+		n = len(sess.Turns[index].Steps)
+	}
+	s.mu.RUnlock()
+	name := fmt.Sprintf("%d-%d.png", index, n)
+	return name, os.WriteFile(filepath.Join(dir, name), png, 0o600)
 }
 
 func workspaceOf(k *kitty.Kitty) string {

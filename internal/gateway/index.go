@@ -39,7 +39,9 @@ label{display:block;font-size:13px;margin:6px 0}.empty{color:var(--muted);paddin
 </main>
 <script>
 let token=sessionStorage.getItem('kitties.token')||'';let chat=null;
+async function localToken(){try{const r=await fetch('/v1/local-token');if(r.ok){const j=await r.json();if(j.token){token=j.token;sessionStorage.setItem('kitties.token',token);}}}catch(e){}}
 async function api(method,path,body){
+  if(!token){await localToken();}
   if(!token){token=prompt('Gateway token (printed when the gateway started):')||'';sessionStorage.setItem('kitties.token',token);}
   const r=await fetch(path,{method,headers:{'Authorization':'Bearer '+token,'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});
   const j=await r.json().catch(()=>({}));

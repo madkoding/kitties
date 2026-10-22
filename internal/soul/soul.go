@@ -17,19 +17,19 @@ import (
 // Soul is the personality of one kitty.
 type Soul struct {
 	// Name is how the kitty calls itself. Empty takes the kitty's name.
-	Name string `yaml:"name"`
+	Name string `yaml:"name" json:"name,omitempty"`
 	// Persona is one paragraph on who the kitty is ("a patient research assistant").
-	Persona string `yaml:"persona"`
+	Persona string `yaml:"persona" json:"persona,omitempty"`
 	// Tone is how it speaks ("warm and concise").
-	Tone string `yaml:"tone"`
+	Tone string `yaml:"tone" json:"tone,omitempty"`
 	// Traits are short adjectives or habits ("double-checks sources").
-	Traits []string `yaml:"traits"`
+	Traits []string `yaml:"traits" json:"traits,omitempty"`
 	// Instructions is free text appended verbatim to the prompt.
-	Instructions string `yaml:"instructions"`
+	Instructions string `yaml:"instructions" json:"instructions,omitempty"`
 	// Language is the language the kitty answers in. Empty follows the user.
-	Language string `yaml:"language"`
+	Language string `yaml:"language" json:"language,omitempty"`
 	// Skills names what the kitty is good at; they are listed to the model and to people.
-	Skills []string `yaml:"skills"`
+	Skills []string `yaml:"skills" json:"skills,omitempty"`
 }
 
 // Default is the soul every kitty starts from: helpful, kind and adaptable.

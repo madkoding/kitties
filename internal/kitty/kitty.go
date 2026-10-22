@@ -22,6 +22,8 @@ type Kitty struct {
 	// Provider is the profile the brain uses.
 	Provider string    `json:"provider"`
 	Soul     soul.Soul `json:"soul"`
+	// Avatar is the pixel cat the interface draws for it.
+	Avatar Avatar `json:"avatar"`
 	// Connectors the kitty may use; empty means every configured one.
 	Connectors []string `json:"connectors,omitempty"`
 	// Desktop is true when the kitty has a container of its own.

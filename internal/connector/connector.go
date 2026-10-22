@@ -37,6 +37,17 @@ type Result struct {
 	Name   string `json:"name"`
 	Output string `json:"output"`
 	Err    string `json:"error,omitempty"`
+	// File is a file the connector produced (a rendered diagram), for the artifacts; it is
+	// not sent to the page.
+	File *File `json:"-"`
+	// Artifact is the name the file was kept under, once saved.
+	Artifact string `json:"artifact,omitempty"`
+}
+
+// File is a connector's binary answer.
+type File struct {
+	Name string
+	Data []byte
 }
 
 // Connector is one external service.
@@ -61,6 +72,13 @@ func (r *Registry) Add(name string, c Connector) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.items[name] = c
+}
+
+// Remove forgets the connector called name.
+func (r *Registry) Remove(name string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.items, name)
 }
 
 // Get returns the connector called name.
@@ -119,7 +137,18 @@ func (r *Registry) Call(ctx context.Context, call Call, allow []string) Result {
 	}
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()
-	out, err := c.Call(ctx, call.Args)
+	var out string
+	var err error
+	if filer, ok := c.(Filer); ok {
+		var name string
+		var data []byte
+		out, name, data, err = filer.CallFile(ctx, call.Args)
+		if err == nil && name != "" {
+			res.File = &File{Name: name, Data: data}
+		}
+	} else {
+		out, err = c.Call(ctx, call.Args)
+	}
 	res.Output = clip(out, 4000)
 	if err != nil {
 		res.Err = err.Error()

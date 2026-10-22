@@ -50,8 +50,11 @@ type Manager struct {
 	mu      sync.RWMutex
 	kitties map[string]*kitty.Kitty
 	path    string
-	now     func() time.Time
-	newID   func() string
+	// overlay is what the settings page changed; buildErrors says why a profile has no client.
+	overlay     Settings
+	buildErrors map[string]string
+	now         func() time.Time
+	newID       func() string
 }
 
 // Option tunes a manager.
@@ -75,20 +78,26 @@ func New(cfg config.Config, opts ...Option) (*Manager, error) {
 	m := &Manager{
 		cfg: cfg, connectors: connector.NewRegistry(), kitties: map[string]*kitty.Kitty{},
 		path: filepath.Join(cfg.DataDirOr(), "kitties.json"), now: time.Now, newID: randomID,
+		buildErrors: map[string]string{},
 	}
 	for _, o := range opts {
 		o(m)
 	}
+	if err := m.loadSettings(); err != nil {
+		return nil, err
+	}
 	if m.providers == nil {
 		m.providers = provider.NewRegistry()
-		for name, p := range cfg.Providers {
+		for name, p := range m.cfg.Providers {
 			if err := m.providers.Build(name, p.Options()); err != nil {
-				return nil, err
+				// A profile without its key is kept on the page, with the reason, instead of
+				// stopping everything: the page is where the key gets typed.
+				m.buildErrors[name] = err.Error()
 			}
 		}
 	}
-	for name, c := range cfg.Connectors {
-		m.connectors.Add(name, buildConnector(c, cfg.Motita))
+	for name, c := range m.cfg.Connectors {
+		m.connectors.Add(name, buildConnector(c, m.cfg.Motita))
 	}
 	if err := m.load(); err != nil {
 		return nil, err
@@ -96,25 +105,19 @@ func New(cfg config.Config, opts ...Option) (*Manager, error) {
 	return m, nil
 }
 
+// buildConnector makes the connector of one configured entry through the catalogue. An entry
+// that does not validate (it was checked before) falls back to a webhook, which never happens
+// in practice.
 func buildConnector(c config.Connector, mt config.Motita) connector.Connector {
-	switch c.Kind {
-	case "slack":
-		return connector.Slack{URL: c.URL, Description: c.Description}
-	case "discord":
-		return connector.Discord{URL: c.URL, Description: c.Description}
-	case "telegram":
-		return connector.Telegram{Token: c.Token, ChatID: c.ChatID, Description: c.Description}
-	case "shell":
-		return connector.Shell{Command: c.Command, Description: c.Description}
-	case "motita":
-		url, token := c.URL, c.Token
-		if url == "" {
-			url, token = mt.URL, mt.Token
-		}
-		return connector.Motita{URL: url, Token: token, Description: c.Description}
-	default:
-		return connector.Webhook{URL: c.URL, Headers: c.Headers, Description: c.Description}
+	s := c.ConnectorSettings()
+	if c.Kind == "motita" && s["url"] == "" {
+		s["url"], s["token"] = mt.URL, mt.Token
 	}
+	built, err := connector.Build(c.Kind, s, c.Description)
+	if err != nil {
+		return connector.Webhook{URL: s["url"], Description: c.Description}
+	}
+	return built
 }
 
 func randomID() string {
@@ -192,6 +195,8 @@ type Spec struct {
 	Connectors []string  `json:"connectors"`
 	// Desktop is nil for the default (a container when a runtime exists).
 	Desktop *bool `json:"desktop"`
+	// Avatar is the pixel cat; empty parts come from the name.
+	Avatar kitty.Avatar `json:"avatar"`
 }
 
 // Create adds a kitty. The container is created on Start.
@@ -210,6 +215,10 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 		if _, ok := m.connectors.Get(c); !ok {
 			return nil, fmt.Errorf("unknown connector %q", c)
 		}
+	}
+	avatar, err := s.Avatar.Normalize(s.Name)
+	if err != nil {
+		return nil, err
 	}
 	personality := soul.Default(s.Name)
 	if s.SoulFile != "" {
@@ -232,7 +241,7 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 	}
 	k := &kitty.Kitty{
 		ID: m.newID(), Name: s.Name, Provider: prov, Soul: personality, Connectors: s.Connectors,
-		Desktop: desktop, Status: kitty.StatusCreated, CreatedAt: m.now(),
+		Desktop: desktop, Status: kitty.StatusCreated, CreatedAt: m.now(), Avatar: avatar,
 	}
 	if desktop {
 		k.Container = kitty.ContainerName(s.Name)
@@ -304,7 +313,7 @@ func (m *Manager) Bootstrap(ctx context.Context) error {
 			if _, err := m.Get(name); err == nil {
 				continue
 			}
-			spec := Spec{Name: name, Provider: k.Provider, Soul: k.Soul, SoulFile: k.SoulFile, Connectors: k.Connectors, Desktop: k.Desktop}
+			spec := Spec{Name: name, Provider: k.Provider, Soul: k.Soul, SoulFile: k.SoulFile, Connectors: k.Connectors, Desktop: k.Desktop, Avatar: k.Avatar}
 			if spec.Soul.Name == "" {
 				spec.Soul.Name = k.Name
 			}
@@ -439,7 +448,7 @@ func (m *Manager) Scale(ctx context.Context, name string, n int) error {
 		if _, err := m.Get(replica); err == nil {
 			continue
 		}
-		spec := Spec{Name: replica, Provider: base.Provider, Soul: base.Soul, SoulFile: base.SoulFile, Connectors: base.Connectors, Desktop: base.Desktop}
+		spec := Spec{Name: replica, Provider: base.Provider, Soul: base.Soul, SoulFile: base.SoulFile, Connectors: base.Connectors, Desktop: base.Desktop, Avatar: base.Avatar}
 		if spec.Soul.Name == "" {
 			spec.Soul.Name = name
 		}
@@ -483,6 +492,37 @@ func (m *Manager) setStatus(id, status, msg string) error {
 func (m *Manager) fail(id string, err error) error {
 	_ = m.setStatus(id, kitty.StatusError, err.Error())
 	return err
+}
+
+// Update is what can change on a kitty after it exists.
+type Update struct {
+	Avatar *kitty.Avatar `json:"avatar,omitempty"`
+	Soul   *soul.Soul    `json:"soul,omitempty"`
+}
+
+// Edit applies an update to a kitty and saves it.
+func (m *Manager) Edit(ref string, u Update) (*kitty.Kitty, error) {
+	k, err := m.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if u.Avatar != nil {
+		avatar, err := u.Avatar.Normalize(k.Name)
+		if err != nil {
+			return nil, err
+		}
+		k.Avatar = avatar
+	}
+	if u.Soul != nil {
+		k.Soul = soul.Merge(k.Soul, *u.Soul)
+	}
+	if err := m.saveLocked(); err != nil {
+		return nil, err
+	}
+	c := *k
+	return &c, nil
 }
 
 // Brain returns the provider client the kitty thinks with.
