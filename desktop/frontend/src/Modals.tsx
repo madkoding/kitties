@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
-import { api, inWails, saveConnection, savedConnection } from "./api";
+import { api, errText, inWails, saveConnection, savedConnection } from "./api";
 import { Shot } from "./Conversation";
 import { IconCamera, IconPlay, IconStop, IconTrash, IconX } from "./icons";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
@@ -452,7 +452,7 @@ export function ConnectModal({
       }
       onDone();
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(errText(e));
       setBusy(false);
     }
   };

@@ -9,9 +9,10 @@ KITTIES
 
        xattr -dr com.apple.quarantine /Applications/Kitties.app
 
-3. Open Kitties from Applications. It talks to a kitties gateway
-   (http://127.0.0.1:7488 by default): start one with `kitties gateway`,
-   or `kitties -demo gateway` to try it without a key or Docker.
+3. Open Kitties from Applications. It carries its own gateway and starts it
+   by itself: there is nothing else to install. In Settings add a model (an
+   AI key) to give the kitties a brain; with Docker running they also get a
+   desktop of their own, and without it they work brain-only.
 
    https://github.com/madkoding/kitties
 
@@ -27,6 +28,7 @@ KITTIES (en español)
 
        xattr -dr com.apple.quarantine /Applications/Kitties.app
 
-3. Abre Kitties desde Aplicaciones. Se conecta a un gateway de kitties
-   (http://127.0.0.1:7488 por defecto): inicia uno con `kitties gateway`,
-   o `kitties -demo gateway` para probarlo sin clave ni Docker.
+3. Abre Kitties desde Aplicaciones. Trae su propio gateway y lo inicia solo:
+   no hay que instalar nada más. En Ajustes agrega un modelo (una clave de
+   IA) para darles cerebro a los kitties; con Docker encendido tienen además
+   un escritorio propio, y sin él trabajan solo con su cerebro.

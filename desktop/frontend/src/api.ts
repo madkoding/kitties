@@ -291,6 +291,7 @@ export interface ProviderInfo {
 interface WailsApp {
   Request(method: string, path: string, body: string): Promise<string>;
   Gateway(): Promise<{ url: string; token: string }>;
+  GatewayNote(): Promise<string>;
   Connect(url: string, token: string): Promise<string>;
 }
 
@@ -301,6 +302,11 @@ declare global {
 }
 
 export const inWails = (): boolean => Boolean(window.go?.main?.App);
+
+// errText is the words of whatever was thrown: Wails rejects with a plain string.
+export function errText(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
 
 export class ApiError extends Error {
   constructor(
@@ -397,7 +403,12 @@ export async function request<T>(method: string, path: string, body?: unknown): 
     // A reading that gets no answer from the app fails with a message instead of leaving the
     // screen waiting for good (a message that never comes back through the webview's bridge).
     // Writes may legitimately take minutes, so only reads have a limit.
-    const call = app.Request(method, path, body === undefined ? "" : JSON.stringify(body));
+    // Wails rejects with a plain string, not an Error: keep its words.
+    const call = app
+      .Request(method, path, body === undefined ? "" : JSON.stringify(body))
+      .catch((e: unknown) => {
+        throw new ApiError(0, e instanceof Error ? e.message : String(e));
+      });
     const raw = await (method === "GET"
       ? Promise.race([
           call,

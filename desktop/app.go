@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -28,6 +29,10 @@ type App struct {
 	emit    func(name string, data any)
 	mu      sync.Mutex
 	watches map[string]context.CancelFunc
+	// gateway is the gateway process this app started, if it did (see gateway.go).
+	gateway *exec.Cmd
+	// gatewayNote says what startup did about the gateway, for the page to show when it is offline.
+	gatewayNote string
 }
 
 // Connection is where the gateway is and how to talk to it.
@@ -44,12 +49,14 @@ func NewApp() *App {
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.conn = loadConnection()
+	a.gatewayNote = a.startGateway()
 	if a.emit == nil {
 		a.emit = func(name string, data any) { runtime.EventsEmit(ctx, name, data) }
 	}
 }
 
 func (a *App) shutdown(context.Context) {
+	a.stopGateway()
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	for id, cancel := range a.watches {
@@ -172,6 +179,10 @@ func localToken() string {
 	}
 	return strings.TrimSpace(string(data))
 }
+
+// GatewayNote says what the app did about the gateway when it started (which one it found, or
+// why it started none): the page shows it when it cannot reach the gateway.
+func (a *App) GatewayNote() string { return a.gatewayNote }
 
 // Gateway returns the connection the app uses, token included: the page shows it in Settings.
 func (a *App) Gateway() Connection { return a.conn }

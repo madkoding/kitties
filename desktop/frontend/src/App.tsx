@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import type { Kitty, Session } from "./api";
-import { ApiError, api, cookieLogin, inWails, watchChat } from "./api";
+import { ApiError, api, cookieLogin, errText, inWails, watchChat } from "./api";
 import Login from "./Login";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
@@ -93,7 +93,16 @@ export default function App() {
       if (e instanceof ApiError && e.status === 401) {
         setModal(cookieLogin() ? "login" : "connect");
       } else {
-        setError((e as Error).message);
+        // In the app, no answer at all means no gateway: say what the app did about it and let
+        // the person point it at another.
+        let why = errText(e);
+        const app = window.go?.main?.App;
+        if (app && e instanceof ApiError && e.status === 0) {
+          const note = await app.GatewayNote().catch(() => "");
+          why = note ? `${why} (${note})` : why;
+          setModal((m) => (m === "none" ? "connect" : m));
+        }
+        setError(why);
       }
     }
   }, []);
@@ -402,7 +411,11 @@ export default function App() {
       {modal === "connect" && (
         <ConnectModal
           onClose={() => setModal("none")}
-          reason={online === false ? "The gateway did not answer or refused the token." : undefined}
+          reason={
+            online === false
+              ? error || "The gateway did not answer or refused the token."
+              : undefined
+          }
           onDone={() => {
             setModal("none");
             refresh();

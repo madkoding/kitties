@@ -45,8 +45,9 @@ gateway) or run the desktop app, then ask Tom to *open https://example.com*.
 
 ## Downloading a release
 
-Each release has binaries for Linux, macOS, Windows and Android, plus the desktop app and
-`SHA256SUMS`. They are not yet signed with an Apple Developer ID, so macOS blocks a file that
+Each release has binaries for Linux, macOS, Windows and Android, plus the desktop app (a disk
+image for macOS, a zip for Linux and Windows) and `SHA256SUMS`. The desktop app carries its own
+gateway and starts it when none is running, so it needs nothing else installed. They are not yet signed with an Apple Developer ID, so macOS blocks a file that
 came through a browser ("Apple could not verify..."). It is the quarantine flag, not damage:
 
 ```sh
@@ -105,8 +106,8 @@ as `ghcr.io/madkoding/kitties` with each release.
 
 `desktop/` is a [Wails](https://wails.io) application (Linux, macOS, Windows) with a Preact page
 that uses the Motita design system: dark ground, neon edges, cut corners, frosted panels,
-Sansation and JetBrains Mono. It talks to a gateway, local by default, and needs no token on the
-machine the gateway runs on: the gateway leaves its token in `~/.kitties/gateway.token` and the
+Sansation and JetBrains Mono. It talks to a gateway, local by default (the downloads carry one and start it for you), and
+needs no token on the machine the gateway runs on: the gateway leaves its token in `~/.kitties/gateway.token` and the
 app picks it up. **Settings** holds the models (AI profiles, with their keys kept on the gateway),
 the connectors and the gateway address.
 

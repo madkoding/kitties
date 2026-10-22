@@ -171,7 +171,7 @@ jobs:
             name: kitties-desktop-linux-amd64
           - os: windows-latest
             out: build/bin/kitties-desktop.exe
-            name: kitties-desktop-windows-amd64.exe
+            name: kitties-desktop-windows-amd64
           - os: macos-latest
             out: build/bin/kitties-desktop.app
             name: kitties-desktop-macos-arm64
@@ -195,6 +195,14 @@ jobs:
         run: |
           cd desktop
           if [ "${{ runner.os }}" = "Linux" ]; then wails build -tags webkit2_41; else wails build; fi
+      # The app is a window onto a gateway: the release carries one next to it and the app starts
+      # it when none is running (desktop/gateway.go), so nothing else has to be installed.
+      - name: build the gateway the app starts
+        shell: bash
+        run: |
+          ext=""; if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" -o "desktop/build/bin/kitties-gateway$ext" ./cmd/kitties
+          ls -la desktop/build/bin
       - name: pack
         shell: bash
         run: |
@@ -204,6 +212,8 @@ jobs:
           # output file: take whatever .app it made.
           app="$(find desktop/build/bin -maxdepth 1 -name '*.app' -type d | head -n 1)"
           if [ -n "$app" ]; then
+            # The gateway goes inside the app, where the app looks for it, before the bundle is signed.
+            cp desktop/build/bin/kitties-gateway "$app/Contents/MacOS/kitties-gateway"
             # An arm64 program must carry a signature to run at all; sign the finished bundle
             # (ad hoc: no Apple account needed) and check it.
             codesign --force --deep --sign - "$app"
@@ -243,7 +253,14 @@ jobs:
             test -f "$mnt/READ ME FIRST.txt"
             hdiutil detach "$mnt"
           else
-            cp "desktop/${{ matrix.out }}" "out/${{ matrix.name }}"
+            # Linux and Windows: the app and its gateway side by side in one zip.
+            ext=""; if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi
+            files=("$(basename "${{ matrix.out }}")" "kitties-gateway$ext")
+            if command -v zip >/dev/null 2>&1; then
+              (cd desktop/build/bin && zip -q "../../../out/${{ matrix.name }}.zip" "${files[@]}")
+            else
+              (cd desktop/build/bin && 7z a -bso0 "../../../out/${{ matrix.name }}.zip" "${files[@]}")
+            fi
           fi
       - uses: actions/upload-artifact@v4
         with:
