@@ -9,13 +9,15 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p .",
     "format": "prettier --write src",
-    "format:check": "prettier --check src"
+    "format:check": "prettier --check src",
+    "e2e": "playwright test -c e2e/playwright.config.ts"
   },
   "dependencies": {
     "preact": "^11.0.0",
     "simple-icons": "^16.35.0"
   },
   "devDependencies": {
+    "@playwright/test": "1.56.1",
     "@preact/preset-vite": "^2.9.0",
     "@tailwindcss/postcss": "^4.3.3",
     "esbuild": "^0.28.2",

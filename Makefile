@@ -16,7 +16,7 @@ PLATFORMS := linux/amd64 linux/arm64 linux/arm android/arm64 \
              windows/amd64 windows/arm64 darwin/amd64 darwin/arm64
 
 .DEFAULT_GOAL := help
-.PHONY: help build dist test vet fmt fmt-check check cover image run clean frontend desktop desktop-check demo
+.PHONY: help build dist test vet fmt fmt-check check cover image run clean frontend desktop desktop-check e2e demo
 
 help: ## Show this list of commands
 	@printf '\nkitties: what you can run here\n\n'
@@ -65,6 +65,9 @@ frontend: ## Build the desktop app's page (desktop/frontend/dist)
 
 desktop-check: frontend ## Vet and test the Wails app (needs the page built)
 	@cd desktop && $(GO) vet ./... && $(GO) test -count=1 -cover ./...
+
+e2e: frontend ## Drive the desktop app end to end in a browser and rewrite docs/screenshots
+	@cd desktop/frontend && npm run e2e
 
 desktop: frontend ## Build the native app with the Wails CLI (wails build)
 	@cd desktop && wails build

@@ -20,3 +20,9 @@ coverage*.html
 desktop/frontend/node_modules/
 desktop/frontend/dist/
 desktop/build/
+
+# The end-to-end run: its data, state and reports
+desktop/frontend/e2e/.data/
+desktop/frontend/e2e/.state.json
+desktop/frontend/e2e/test-results/
+desktop/frontend/e2e/report/
