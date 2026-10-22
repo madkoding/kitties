@@ -105,6 +105,8 @@ type Context struct {
 	Connectors map[string]string
 	// User is how to refer to the person, empty for "the user".
 	User string
+	// Peers lists the other kitties this one may hand a subtask to.
+	Peers []string
 }
 
 // SystemPrompt renders the soul into the system prompt of a conversation.
@@ -164,6 +166,11 @@ func (s Soul) SystemPrompt(c Context) string {
 		for _, n := range names {
 			fmt.Fprintf(&b, "- %s: %s\n", n, c.Connectors[n])
 		}
+	}
+	if len(c.Peers) > 0 {
+		fmt.Fprintf(&b, "Other kitties you can hand a subtask to: %s. Write @delegate <name> {\"task\": \"...\"} on its own line "+
+			"with everything they need to know; their answer comes back to you and you go on. Use it for work another "+
+			"kitty is better placed for, never for the whole task.\n", strings.Join(c.Peers, ", "))
 	}
 	if s.Instructions != "" {
 		b.WriteString("\n" + strings.TrimSpace(s.Instructions) + "\n")

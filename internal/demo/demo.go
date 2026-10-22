@@ -52,6 +52,9 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	lower := strings.ToLower(last)
 	usage := provider.Usage{Input: len(system) / 4, Output: 40}
 	switch {
+	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "- @delegate "):
+		who := strings.TrimSpace(strings.SplitN(strings.SplitN(last, "- @delegate ", 2)[1], " ", 2)[0])
+		return provider.Reply{Content: fmt.Sprintf("%s took care of it and reported back; I checked the result and it looks right. Anything else?", who), Usage: usage}, nil
 	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "- @connector "):
 		// The service answered: say so, in the connector's own words.
 		if strings.Contains(last, "failed:") {
@@ -63,6 +66,21 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 		return provider.Reply{Content: "Saved the plan to the library as **launch-plan.md** so the team can pick it up, and I followed the report-findings skill for the format.", Usage: usage}, nil
 	case strings.HasPrefix(last, "Results of your actions") || strings.HasPrefix(last, "[desktop] Results"):
 		return provider.Reply{Content: b.nextRound(last), Usage: usage}, nil
+	case strings.Contains(last, "Goal: "):
+		// The scheduler woke the kitty up for a goal of its own.
+		title := strings.TrimSpace(strings.SplitN(strings.SplitN(last, "Goal: ", 2)[1], "\n", 2)[0])
+		if strings.Contains(last, "an event from ") {
+			return provider.Reply{Content: fmt.Sprintf("Something arrived for **%s**. I read it: it needs a short reply, which I drafted and left in the thread. Nothing else is pending.", title), Usage: usage}, nil
+		}
+		return provider.Reply{Content: fmt.Sprintf("Checked **%s**: nothing new since last time. Next check as scheduled; nothing is blocked.", title), Usage: usage}, nil
+	case peerAsked(system, lower) != "":
+		name := peerAsked(system, lower)
+		task := strings.TrimSpace(last[strings.Index(lower, name)+len(name):])
+		task = strings.TrimPrefix(strings.TrimPrefix(task, " to "), "to ")
+		if task == "" {
+			task = "help with this"
+		}
+		return provider.Reply{Content: fmt.Sprintf("Good idea, %s is better placed for that. I will ask.\n@delegate %s {\"task\": %q}", name, name, task), Usage: usage}, nil
 	case firstConnector(system) != "" && (strings.Contains(lower, "post ") || strings.Contains(lower, "announce") || strings.Contains(lower, "publica") || strings.Contains(lower, "share ")):
 		name := firstConnector(system)
 		return provider.Reply{Content: fmt.Sprintf("Sure, I will post it through %s.\n@connector %s {\"text\": \"Kitties launches next week: autonomous kitties with their own desktops, a connector for every service and a library of skills.\"}", name, name), Usage: usage}, nil
@@ -87,6 +105,26 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	default:
 		return provider.Reply{Content: fmt.Sprintf("Good question. In short: %s. Tell me if you want me to dig deeper or try it on my desktop.", summarise(last)), Usage: usage}, nil
 	}
+}
+
+// peerAsked is the other kitty the person asked this one to involve ("ask luna to ..."),
+// when the prompt lists it as a peer; "" otherwise.
+func peerAsked(system, lower string) string {
+	i := strings.Index(system, "hand a subtask to: ")
+	if i < 0 || !strings.Contains(lower, "ask ") {
+		return ""
+	}
+	list := system[i+len("hand a subtask to: "):]
+	if j := strings.Index(list, "."); j >= 0 {
+		list = list[:j]
+	}
+	for _, name := range strings.Split(list, ", ") {
+		name = strings.TrimSpace(name)
+		if name != "" && strings.Contains(lower, "ask "+name) {
+			return name
+		}
+	}
+	return ""
 }
 
 // firstConnector is the service the system prompt lists ("- name: what it does") to post

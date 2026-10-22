@@ -272,7 +272,7 @@ func TestMarkShotWithoutSteps(t *testing.T) {
 	if len(got.Turns[0].Steps) != 1 || got.Turns[0].Steps[0].Shot != "0-0.png" {
 		t.Errorf("a shot without a step makes one: %+v", got.Turns[0])
 	}
-	s.finishTurn(sess.ID, 0, "")
+	s.closeTask(sess.ID, 0, nil, "", false, "done")
 	got, _ = s.Get(sess.ID)
 	if got.Turns[0].Text != "(ana finished without a word)" {
 		t.Errorf("empty finish = %q", got.Turns[0].Text)

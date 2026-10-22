@@ -51,6 +51,28 @@ func TestBrain(t *testing.T) {
 	if got := ask(t, b, desk, "Results of your actions:\n- @skill read report-findings: ok\n  # Report\n- @artifact save {\"name\": \"launch-plan.md\"}: ok\n\nContinue, and answer the person."); !strings.Contains(got, "launch-plan.md") || strings.Contains(got, "@tool") {
 		t.Error("library results end the turn: " + got)
 	}
+	peers := desk + "\nOther kitties you can hand a subtask to: luna, tom. Write @delegate <name> on its own line.\n"
+	if got := ask(t, b, peers, "[Pat]: ask luna to summarise the plan"); !strings.Contains(got, `@delegate luna {"task": "summarise the plan"}`) {
+		t.Error(got)
+	}
+	if got := ask(t, b, peers, "[Pat]: ask tom"); !strings.Contains(got, `@delegate tom {"task": "help with this"}`) {
+		t.Error(got)
+	}
+	if got := ask(t, b, desk, "[Pat]: ask luna to summarise"); strings.Contains(got, "@delegate") {
+		t.Error("no peers, no delegation: " + got)
+	}
+	if got := ask(t, b, peers, "[Pat]: ask zed to do it"); strings.Contains(got, "@delegate") {
+		t.Error("not a peer: " + got)
+	}
+	if got := ask(t, b, peers, "Results of your actions:\n- @delegate luna {\"task\": \"x\"}: ok\n  luna answered:\n  done\n\nContinue, and answer the person."); !strings.Contains(got, "luna took care of it") {
+		t.Error(got)
+	}
+	if got := ask(t, b, desk, "[scheduler]: Goal: Inbox\nLook at it.\n\nWhy now: the schedule"); !strings.Contains(got, "Checked **Inbox**") {
+		t.Error(got)
+	}
+	if got := ask(t, b, desk, "[scheduler]: Goal: Triage\nLook.\n\nWhy now: an event from github (issues):\nissue #1"); !strings.Contains(got, "Something arrived for **Triage**") {
+		t.Error(got)
+	}
 	if firstConnector("x @connector <name> y\n\nno list") != "" || firstConnector("nothing") != "" {
 		t.Error("firstConnector without a list")
 	}

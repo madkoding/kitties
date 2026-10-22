@@ -19,7 +19,7 @@ import (
 
 // action is one thing the model asked for.
 type action struct {
-	kind   string // tool | connector | skill | artifact
+	kind   string // tool | connector | skill | artifact | delegate
 	name   string // the tool, the connector, or the verb (skill/artifact)
 	args   map[string]any
 	raw    string
@@ -71,6 +71,10 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 			provider.Tool{Name: prefixSkill + "save", Description: "Propose a new skill you learned; a person accepts it.", Parameters: obj(map[string]any{"name": str("a short name"), "body": str("the markdown document: a title, what it is for, the steps")}, "name", "body")},
 		)
 	}
+	if s.canDelegate(k) {
+		tools = append(tools, provider.Tool{Name: "delegate", Description: "Hand a subtask to another kitty and get its answer back. For work another kitty is better placed for, never the whole task.",
+			Parameters: obj(map[string]any{"kitty": str("the other kitty's name"), "task": str("what to do, with everything it needs to know")}, "kitty", "task")})
+	}
 	if s.arts != nil {
 		tools = append(tools,
 			provider.Tool{Name: prefixArtifact + "save", Description: "Keep a file in the shared library for later (a report, a table, a draft).", Parameters: obj(map[string]any{"name": str("file name, like report.md"), "content": str("the text")}, "name", "content")},
@@ -109,6 +113,9 @@ func fromCalls(calls []provider.ToolCall) []action {
 			a.kind, a.name = "skill", strings.TrimPrefix(c.Name, prefixSkill)
 		case strings.HasPrefix(c.Name, prefixArtifact):
 			a.kind, a.name = "artifact", strings.TrimPrefix(c.Name, prefixArtifact)
+		case c.Name == "delegate":
+			a.kind = "delegate"
+			a.name, _ = a.args["kitty"].(string)
 		default:
 			a.kind, a.name = "tool", c.Name
 		}
@@ -170,10 +177,12 @@ func (o outcome) result() string {
 
 // runNonDesktop executes the connector and library actions of a batch (desktop tools are the
 // background task's business) and records them on the turn.
-func (s *Service) runNonDesktop(ctx context.Context, actions []action, k *kitty.Kitty, allowed map[string]string, turn *Turn) []outcome {
+func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action, k *kitty.Kitty, allowed map[string]string, turn *Turn) []outcome {
 	var out []outcome
 	for _, a := range actions {
 		switch a.kind {
+		case "delegate":
+			out = append(out, s.delegate(ctx, id, a, k, turn))
 		case "connector":
 			if len(allowed) == 0 {
 				out = append(out, outcome{action: a, err: "this kitty has no connectors"})

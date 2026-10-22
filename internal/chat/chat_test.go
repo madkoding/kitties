@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,14 @@ func (f *fakeFleet) Get(ref string) (*kitty.Kitty, error) {
 		}
 	}
 	return nil, errors.New("no such kitty " + ref)
+}
+func (f *fakeFleet) List() []*kitty.Kitty {
+	var out []*kitty.Kitty
+	for _, k := range f.kitties {
+		out = append(out, k)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
 }
 func (f *fakeFleet) Brain(k *kitty.Kitty) (provider.Client, error) {
 	b, ok := f.brains[k.ID]
@@ -83,6 +92,9 @@ func service(t *testing.T, f Fleet) *Service {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The older tests count rounds and steps exactly: no second attempt, and quick polls.
+	s.DefaultLimits.Retries = 0
+	s.pollEvery = time.Millisecond
 	return s
 }
 

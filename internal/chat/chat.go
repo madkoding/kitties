@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/artifacts"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/desktop"
@@ -48,6 +49,20 @@ type Turn struct {
 	Skills []string `json:"skills,omitempty"`
 	// Working is true while the kitty is still acting on its desktop for this turn.
 	Working bool `json:"working,omitempty"`
+	// NeedsHelp is true when the kitty gave up on this turn and asked the person.
+	NeedsHelp bool `json:"needs_help,omitempty"`
+	// Delegations are the subtasks the kitty handed to other kitties in this turn.
+	Delegations []Delegation `json:"delegations,omitempty"`
+}
+
+// Delegation is a subtask one kitty handed to another.
+type Delegation struct {
+	Kitty   string `json:"kitty"` // the other kitty's name
+	KittyID string `json:"kitty_id"`
+	Chat    string `json:"chat"` // where it happened
+	Task    string `json:"task"`
+	Result  string `json:"result,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 // Step is one action on the desktop.
@@ -70,6 +85,19 @@ type Session struct {
 	Turns     []Turn    `json:"turns"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+	// Goal is the goal this thread works on, when the scheduler opened it.
+	Goal string `json:"goal,omitempty"`
+	// Owner is the kitty that opened this thread to delegate, and Depth how many hand-overs
+	// deep it is (a person's chat is 0).
+	Owner string `json:"owner,omitempty"`
+	Depth int    `json:"depth,omitempty"`
+	// Help says the last turn is a kitty asking for help; set on the copies Get and List hand out.
+	Help bool `json:"needs_help,omitempty"`
+}
+
+// NeedsHelp reports whether the last turn is a kitty asking the person for help.
+func (s *Session) NeedsHelp() bool {
+	return len(s.Turns) > 0 && s.Turns[len(s.Turns)-1].NeedsHelp
 }
 
 // Group reports whether the session has more than one kitty.
@@ -91,6 +119,7 @@ var ErrBusy = errors.New("the kitties are still working on this chat")
 // Fleet is what the chat needs from the orchestrator.
 type Fleet interface {
 	Get(ref string) (*kitty.Kitty, error)
+	List() []*kitty.Kitty
 	Brain(k *kitty.Kitty) (provider.Client, error)
 	Connectors() *connector.Registry
 }
@@ -124,6 +153,20 @@ type Service struct {
 	nativeTools bool
 	// wg counts the background tasks, so a test (or a shutdown) can wait for them.
 	wg sync.WaitGroup
+	// DefaultLimits bound a task of a kitty that sets none of its own.
+	DefaultLimits kitty.Limits
+	// MaxDepth is how many hand-overs deep a delegation may go.
+	MaxDepth int
+	// journal and goals are the agenda's record and its report line, nil without an agenda.
+	journal *agenda.Journal
+	goals   Reporter
+	// pollEvery is how often a delegating kitty looks whether the other one finished.
+	pollEvery time.Duration
+}
+
+// Reporter hears how a goal's run ended.
+type Reporter interface {
+	Report(goalID, result string)
 }
 
 // task is one desktop task running in the background.
@@ -177,7 +220,8 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 // New creates the service, loading the sessions kept in dir.
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
-		now: time.Now, newID: randomID, MaxRounds: 4, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true}
+		now: time.Now, newID: randomID, MaxRounds: 4, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
+		DefaultLimits: kitty.Limits{MaxTokens: 400000, MaxSeconds: 1800, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
@@ -234,6 +278,8 @@ func parseDirectives(text string) ([]Directive, string) {
 			kind = "skill"
 		case strings.HasPrefix(trimmed, "@artifact "):
 			kind = "artifact"
+		case strings.HasPrefix(trimmed, "@delegate "):
+			kind = "delegate"
 		default:
 			kept = append(kept, line)
 			continue
@@ -243,7 +289,11 @@ func parseDirectives(text string) ([]Directive, string) {
 		d := Directive{Kind: kind, Verb: strings.ToLower(strings.TrimSpace(verb)), Raw: trimmed, Args: map[string]any{}}
 		if argsText = strings.TrimSpace(argsText); argsText != "" {
 			if err := json.Unmarshal([]byte(argsText), &d.Args); err != nil {
-				d.Args["name"] = strings.Trim(argsText, "\"' ")
+				key := "name"
+				if kind == "delegate" {
+					key = "task"
+				}
+				d.Args[key] = strings.Trim(argsText, "\"' ")
 			}
 		}
 		out = append(out, d)
@@ -481,6 +531,7 @@ func (s *Service) Get(id string) (*Session, error) {
 	c := *sess
 	c.Members = append([]string(nil), sess.Members...)
 	c.Turns = append([]Turn(nil), sess.Turns...)
+	c.Help = sess.NeedsHelp()
 	return &c, nil
 }
 
@@ -492,6 +543,7 @@ func (s *Service) List() []*Session {
 	for _, sess := range s.sessions {
 		c := *sess
 		c.Turns = nil
+		c.Help = sess.NeedsHelp()
 		out = append(out, &c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })
@@ -531,6 +583,12 @@ var mention = regexp.MustCompile(`@([a-z0-9][a-z0-9-]*)`)
 
 // Send posts the person's message and returns the kitties' replies.
 func (s *Service) Send(ctx context.Context, id, text string) ([]Turn, error) {
+	return s.send(ctx, id, "user", "", text)
+}
+
+// send posts a message from someone (the person, the scheduler, or a kitty delegating) and has
+// the kitties answer it.
+func (s *Service) send(ctx context.Context, id, from, fromID, text string) ([]Turn, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, errors.New("the message is empty")
@@ -549,9 +607,10 @@ func (s *Service) Send(ctx context.Context, id, text string) ([]Turn, error) {
 		s.mu.Unlock()
 		return nil, ErrBusy
 	}
-	sess.Turns = append(sess.Turns, Turn{At: s.now(), From: "user", Text: text})
+	sess.Turns = append(sess.Turns, Turn{At: s.now(), From: from, Kitty: fromID, Text: text})
 	sess.UpdatedAt = s.now()
 	members := append([]string(nil), sess.Members...)
+	goal := sess.Goal
 	err := s.save(sess)
 	s.emitLocked(Event{Type: "turn", Session: id, Index: len(sess.Turns) - 1, Turn: &sess.Turns[len(sess.Turns)-1]})
 	s.mu.Unlock()
@@ -592,7 +651,15 @@ func (s *Service) Send(ctx context.Context, id, text string) ([]Turn, error) {
 			s.startTask(id, index, k, pending)
 			// The kitties after this one in a group wait for the task: they answer on the
 			// person's next message, with the task's result in the thread.
-			break
+			return replies, nil
+		}
+		if goal != "" {
+			// A goal answered in words alone: the run is over.
+			result := "done"
+			if err != nil {
+				result = "blocked"
+			}
+			s.reportGoal(k, goal, id, result, turn.Text)
 		}
 	}
 	return replies, nil
@@ -711,6 +778,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	}
 	system := k.Soul.SystemPrompt(soul.Context{
 		KittyName: k.Name, Desktop: k.Desktop, Workspace: workspaceOf(k), Group: group, Connectors: allowed, User: s.user,
+		Peers: s.peers(k, id),
 	})
 	if k.Desktop {
 		system += "\n" + desktop.Catalogue()
@@ -756,6 +824,9 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 			if (a.kind == "tool" && !k.Desktop) || (a.kind == "connector" && len(allowed) == 0) {
 				continue
 			}
+			if a.kind == "delegate" && !s.canDelegate(k) {
+				continue
+			}
 			kept = append(kept, a)
 		}
 		actions = kept
@@ -768,7 +839,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 			pre := map[int]outcome{}
 			for i, a := range actions {
 				if a.kind != "tool" {
-					pre[i] = s.runNonDesktop(ctx, []action{a}, k, allowed, &turn)[0]
+					pre[i] = s.runNonDesktop(ctx, id, []action{a}, k, allowed, &turn)[0]
 				}
 			}
 			turn.At = s.now()
@@ -776,7 +847,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 			turn.Working = true
 			return turn, &pendingTask{brain: brain, messages: messages, tools: tools, native: native, reply: reply, text: reply.Content, actions: actions, allowed: allowed, pre: pre}, nil
 		}
-		outs := s.runNonDesktop(ctx, actions, k, allowed, &turn)
+		outs := s.runNonDesktop(ctx, id, actions, k, allowed, &turn)
 		messages = append(messages, feedback(native, reply, reply.Content, outs, nil)...)
 	}
 	turn.At = s.now()
@@ -811,46 +882,103 @@ func (s *Service) runner() desktop.Runner {
 	return r
 }
 
+// taskState is what a background task carries between its rounds and attempts.
+type taskState struct {
+	messages  []provider.Message
+	actions   []action
+	reply     provider.Reply
+	replyText string
+	parts     []string
+	final     string
+	tokens    int
+	rounds    int
+	// pre are the outcomes of the first batch's non-desktop actions, run before the task.
+	pre map[int]outcome
+}
+
+// runTask drives a desktop task to its end within the kitty's limits: rounds of actions, a
+// screenshot after each, and the brain's next move; a failed attempt is tried another way as
+// many times as the limits allow, and a task given up on is handed to the backup kitty or
+// left with the person.
 func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Kitty, p *pendingTask) {
-	runner := s.runner()
-	messages := p.messages
-	actions := p.actions
-	reply := p.reply
-	replyText := p.text
-	var parts []string
-	final := ""
-	fail := ""
-	for round := 0; ; round++ {
-		if runner == nil {
-			fail = "this kitty has no desktop runner"
+	limits := k.Limits.Or(s.DefaultLimits)
+	if limits.MaxSeconds > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(limits.MaxSeconds)*time.Second)
+		defer cancel()
+	}
+	st := &taskState{messages: p.messages, actions: p.actions, reply: p.reply, replyText: p.text, pre: p.pre, tokens: p.reply.Usage.Input + p.reply.Usage.Output}
+	fail, retryable := "", false
+	for attempt := 0; ; attempt++ {
+		fail, retryable = s.attempt(ctx, id, index, k, p, st, limits)
+		if fail == "" || !retryable || attempt >= limits.Retries {
 			break
 		}
-		if round >= s.MaxSteps {
-			fail = fmt.Sprintf("stopped after %d rounds without finishing", s.MaxSteps)
-			break
+		s.note(k, agenda.KindRetry, "", id, fmt.Sprintf("attempt %d failed (%s); trying another way", attempt+1, fail))
+		st.parts = append(st.parts, fmt.Sprintf("(attempt %d failed: %s; trying another way)", attempt+1, fail))
+		st.messages = append(st.messages, provider.Message{Role: "user", Content: "That attempt failed: " + fail + ". Try a different approach: do not repeat the same actions, and call done when the task is finished."})
+		st.actions, st.rounds = nil, 0
+	}
+	if st.final != "" {
+		st.parts = append(st.parts, st.final)
+	}
+	result, needsHelp := "done", false
+	if fail != "" {
+		result = "blocked"
+		st.parts = append(st.parts, "("+k.Name+" could not finish: "+fail+")")
+		if !errors.Is(ctx.Err(), context.Canceled) {
+			// Given up, not stopped by a person: the backup takes over, or the person is asked.
+			var handed string
+			result, needsHelp, handed = s.giveUp(id, index, k, fail)
+			if handed != "" {
+				st.parts = append(st.parts, handed)
+			}
+		}
+	}
+	s.closeTask(id, index, k, strings.TrimSpace(strings.Join(st.parts, "\n\n")), needsHelp, result)
+}
+
+// attempt runs rounds until the task is done, the model stops asking for actions, or something
+// gives: it returns why, and whether another attempt makes sense.
+func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Kitty, p *pendingTask, st *taskState, limits kitty.Limits) (fail string, retryable bool) {
+	runner := s.runner()
+	maxRounds := limits.MaxRounds
+	if maxRounds == 0 {
+		maxRounds = s.MaxSteps
+	}
+	for ; ; st.rounds++ {
+		if runner == nil {
+			return "this kitty has no desktop runner", false
+		}
+		if st.rounds >= maxRounds && !endsTask(st.actions) {
+			return fmt.Sprintf("stopped after %d rounds without finishing", maxRounds), true
+		}
+		if ctx.Err() != nil {
+			return stopReason(ctx, limits), false
 		}
 		var outs []outcome
 		done := false
-		for i, a := range actions {
+		for i, a := range st.actions {
 			if a.kind != "tool" {
-				if o, ok := p.pre[i]; ok && round == 0 {
+				if o, ok := st.pre[i]; ok {
 					outs = append(outs, o)
 					continue
 				}
-				// A library or connector action in a later round runs here.
+				// A library, connector or delegation action in a later round runs here.
 				var turn Turn
-				o := s.runNonDesktop(ctx, []action{a}, k, p.allowed, &turn)
+				o := s.runNonDesktop(ctx, id, []action{a}, k, p.allowed, &turn)
 				s.edit(id, index, func(t *Turn) {
 					t.Calls = append(t.Calls, turn.Calls...)
 					t.Artifacts = append(t.Artifacts, turn.Artifacts...)
 					t.Skills = append(t.Skills, turn.Skills...)
+					t.Delegations = append(t.Delegations, turn.Delegations...)
 				})
 				outs = append(outs, o...)
 				continue
 			}
 			da := desktop.Action{Name: a.name, Args: a.args, Raw: a.raw}
 			if summary, ok := da.Done(); ok {
-				final, done = summary, true
+				st.final, done = summary, true
 				s.appendStep(id, index, Step{At: s.now(), Action: a.name, Args: a.args, Result: summary})
 				outs = append(outs, outcome{action: a, text: "finished"})
 				break
@@ -868,53 +996,73 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 				break
 			}
 		}
-		if ctx.Err() != nil {
-			fail = "the task was cancelled"
-			break
-		}
+		st.pre = nil
 		if done {
-			break
+			return "", false
 		}
-		png, err := runner.Screenshot(ctx, k.ID)
-		extra := provider.Message{Role: "user", Content: "Here is the screenshot of your display now. Continue with your next actions, or call done when the task is finished."}
+		if ctx.Err() != nil {
+			return stopReason(ctx, limits), false
+		}
+		if len(st.actions) > 0 {
+			png, err := runner.Screenshot(ctx, k.ID)
+			extra := provider.Message{Role: "user", Content: "Here is the screenshot of your display now. Continue with your next actions, or call done when the task is finished."}
+			if err != nil {
+				extra.Content = "The screenshot failed: " + err.Error() + ". Continue with your next actions, or call done when the task is finished."
+			} else if name, err := s.saveShot(id, index, png); err == nil {
+				s.markShot(id, index, name)
+				extra.Images = []provider.Image{{MIME: "image/png", Data: png}}
+			}
+			st.messages = append(st.messages, feedback(p.native, st.reply, st.replyText, outs, &extra)...)
+		}
+		if len(st.messages) > s.MaxTurns*2 {
+			st.messages = append(st.messages[:1], st.messages[len(st.messages)-s.MaxTurns*2:]...)
+		}
+		answer, err := ask(ctx, p.brain, p.native, st.messages, p.tools)
 		if err != nil {
-			extra.Content = "The screenshot failed: " + err.Error() + ". Continue with your next actions, or call done when the task is finished."
-		} else if name, err := s.saveShot(id, index, png); err == nil {
-			s.markShot(id, index, name)
-			extra.Images = []provider.Image{{MIME: "image/png", Data: png}}
-		}
-		messages = append(messages, feedback(p.native, reply, replyText, outs, &extra)...)
-		if len(messages) > s.MaxTurns*2 {
-			messages = append(messages[:1], messages[len(messages)-s.MaxTurns*2:]...)
-		}
-		answer, err := ask(ctx, p.brain, p.native, messages, p.tools)
-		if err != nil {
-			fail = err.Error()
-			break
+			if ctx.Err() != nil {
+				return stopReason(ctx, limits), false
+			}
+			return err.Error(), true
 		}
 		s.addUsage(id, index, answer.Usage)
-		reply = answer
-		replyText = answer.Content
+		st.tokens += answer.Usage.Input + answer.Usage.Output
+		if limits.MaxTokens > 0 && st.tokens > limits.MaxTokens {
+			return fmt.Sprintf("stopped: the token budget (%d) is spent", limits.MaxTokens), false
+		}
+		st.reply, st.replyText = answer, answer.Content
 		var text string
 		if p.native && len(answer.Calls) > 0 {
-			actions, text = fromCalls(answer.Calls), answer.Content
+			st.actions, text = fromCalls(answer.Calls), answer.Content
 		} else {
-			actions, text = fromText(answer.Content)
+			st.actions, text = fromText(answer.Content)
 		}
 		if text = strings.TrimSpace(text); text != "" {
-			parts = append(parts, text)
+			st.parts = append(st.parts, text)
 		}
-		if len(actions) == 0 {
-			break
+		if len(st.actions) == 0 {
+			return "", false
 		}
 	}
-	if final != "" {
-		parts = append(parts, final)
+}
+
+// endsTask reports whether a batch calls done: that batch runs even past the round limit.
+func endsTask(actions []action) bool {
+	for _, a := range actions {
+		if a.kind == "tool" {
+			if _, ok := (desktop.Action{Name: a.name, Args: a.args, Raw: a.raw}).Done(); ok {
+				return true
+			}
+		}
 	}
-	if fail != "" {
-		parts = append(parts, "("+k.Name+" could not finish: "+fail+")")
+	return false
+}
+
+// stopReason says why a context ended a task.
+func stopReason(ctx context.Context, limits kitty.Limits) string {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return fmt.Sprintf("stopped: the time budget (%ds) is spent", limits.MaxSeconds)
 	}
-	s.finishTurn(id, index, strings.TrimSpace(strings.Join(parts, "\n\n")))
+	return "the task was cancelled"
 }
 
 // edit changes one turn of a session under the lock and saves it.
@@ -956,9 +1104,12 @@ func (s *Service) addUsage(id string, index int, u provider.Usage) {
 	})
 }
 
-func (s *Service) finishTurn(id string, index int, text string) {
+// closeTask ends a turn's background work: the text, whether the person is needed, and the
+// goal's result when the thread works a goal.
+func (s *Service) closeTask(id string, index int, k *kitty.Kitty, text string, needsHelp bool, result string) {
 	s.edit(id, index, func(t *Turn) {
 		t.Working = false
+		t.NeedsHelp = needsHelp
 		if text != "" {
 			if t.Text != "" {
 				t.Text += "\n\n"
@@ -969,6 +1120,15 @@ func (s *Service) finishTurn(id string, index int, text string) {
 			t.Text = "(" + t.From + " finished without a word)"
 		}
 	})
+	s.mu.RLock()
+	goal := ""
+	if sess, ok := s.sessions[id]; ok {
+		goal = sess.Goal
+	}
+	s.mu.RUnlock()
+	if goal != "" {
+		s.reportGoal(k, goal, id, result, text)
+	}
 }
 
 // saveShot writes a screenshot under the session's folder and returns its name.
