@@ -1,0 +1,388 @@
+// Command kitties orchestrates a fleet of autonomous agents, each with its own soul, its own AI
+// provider and its own isolated container.
+package main
+
+import (
+	"bufio"
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"io"
+	"os"
+	"os/signal"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"syscall"
+
+	"github.com/madkoding/kitties/internal/chat"
+	"github.com/madkoding/kitties/internal/config"
+	"github.com/madkoding/kitties/internal/container"
+	"github.com/madkoding/kitties/internal/gateway"
+	"github.com/madkoding/kitties/internal/orchestrator"
+	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/soul"
+)
+
+// version is set by the linker (-X main.version=...).
+var version = "dev"
+
+const usage = `kitties %s: a fleet of autonomous agents, each with its own soul and desktop.
+
+Usage: kitties [-config file] <command> [arguments]
+
+Commands:
+  init                      write an example configuration (and a sample soul) to start from
+  gateway                   bootstrap the fleet from the configuration and serve the HTTP API
+  ls                        list the kitties and their state
+  create <name> [flags]     create a kitty (-provider, -persona, -soul file, -no-desktop)
+  start|stop|rm <name>      manage one kitty
+  scale <name> <n>          run n replicas of a configured kitty (name-1 ... name-n)
+  chat <name>[,<name>...]   talk to one kitty, or to a group of them, from the terminal
+  exec <name> <cmd...>      run a command inside the kitty's container
+  shot <name> <file.png>    save a screenshot of the kitty's display
+  providers                 list the configured AI profiles and the supported kinds
+  version                   print the version
+
+Environment: KITTIES_CONFIG names the configuration file (default ./kitties.yaml or ~/.kitties/kitties.yaml).
+`
+
+func main() {
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+}
+
+// app is the state every command shares.
+type app struct {
+	cfg   config.Config
+	fleet *orchestrator.Manager
+	chats *chat.Service
+	in    io.Reader
+	out   io.Writer
+	err   io.Writer
+}
+
+// Seams for the tests.
+var (
+	detectRuntime = container.Detect
+	newContainers = func(rt container.Runtime) orchestrator.Containers { return container.New(rt) }
+	notifyContext = func() (context.Context, context.CancelFunc) {
+		return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	}
+)
+
+func run(args []string, in io.Reader, out, errOut io.Writer) int {
+	fs := flag.NewFlagSet("kitties", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	configPath := fs.String("config", "", "configuration file (default: KITTIES_CONFIG, ./kitties.yaml or ~/.kitties/kitties.yaml)")
+	fs.Usage = func() { fmt.Fprintf(errOut, usage, version) }
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	rest := fs.Args()
+	if len(rest) == 0 {
+		fs.Usage()
+		return 2
+	}
+	cmd, rest := rest[0], rest[1:]
+	switch cmd {
+	case "version":
+		fmt.Fprintln(out, "kitties", version)
+		return 0
+	case "init":
+		return cmdInit(*configPath, out, errOut)
+	case "help", "-h", "--help":
+		fs.Usage()
+		return 0
+	}
+	path := *configPath
+	if path == "" {
+		path = config.DefaultPath()
+	}
+	cfg, err := config.Load(path)
+	if err != nil {
+		fmt.Fprintf(errOut, "kitties: %v\nRun `kitties init` to write an example configuration.\n", err)
+		return 1
+	}
+	a := &app{cfg: cfg, in: in, out: out, err: errOut}
+	if err := a.open(cmd); err != nil {
+		fmt.Fprintf(errOut, "kitties: %v\n", err)
+		return 1
+	}
+	if err := a.dispatch(cmd, rest); err != nil {
+		fmt.Fprintf(errOut, "kitties: %v\n", err)
+		return 1
+	}
+	return 0
+}
+
+// open builds the orchestrator and the chat service; the runtime is probed except for the
+// commands that never touch a container.
+func (a *app) open(cmd string) error {
+	var opts []orchestrator.Option
+	if cmd != "providers" {
+		rt, err := detectRuntime(context.Background(), a.cfg.Containers.Runtime)
+		if err != nil {
+			fmt.Fprintf(a.err, "kitties: %v; the kitties run brain-only\n", err)
+			opts = append(opts, orchestrator.WithContainers(nil, err))
+		} else {
+			opts = append(opts, orchestrator.WithContainers(newContainers(rt), nil))
+		}
+	}
+	fleet, err := orchestrator.New(a.cfg, opts...)
+	if err != nil {
+		return err
+	}
+	chats, err := chat.New(fleet, filepath.Join(a.cfg.DataDirOr(), "chats"))
+	if err != nil {
+		return err
+	}
+	if u := os.Getenv("USER"); u != "" {
+		chats.SetUser(u)
+	}
+	a.fleet, a.chats = fleet, chats
+	return nil
+}
+
+func (a *app) dispatch(cmd string, args []string) error {
+	ctx, cancel := notifyContext()
+	defer cancel()
+	switch cmd {
+	case "gateway":
+		return a.cmdGateway(ctx)
+	case "ls":
+		return a.cmdList()
+	case "providers":
+		return a.cmdProviders()
+	case "create":
+		return a.cmdCreate(ctx, args)
+	case "start", "stop", "rm":
+		return a.cmdLifecycle(ctx, cmd, args)
+	case "scale":
+		return a.cmdScale(ctx, args)
+	case "chat":
+		return a.cmdChat(ctx, args)
+	case "exec":
+		return a.cmdExec(ctx, args)
+	case "shot":
+		return a.cmdShot(ctx, args)
+	default:
+		return fmt.Errorf("unknown command %q (run `kitties help`)", cmd)
+	}
+}
+
+func cmdInit(path string, out, errOut io.Writer) int {
+	if path == "" {
+		path = "kitties.yaml"
+	}
+	if _, err := os.Stat(path); err == nil {
+		fmt.Fprintf(errOut, "kitties: %s already exists, not touching it\n", path)
+		return 1
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		fmt.Fprintf(errOut, "kitties: %v\n", err)
+		return 1
+	}
+	if err := os.WriteFile(path, []byte(exampleConfig), 0o600); err != nil {
+		fmt.Fprintf(errOut, "kitties: %v\n", err)
+		return 1
+	}
+	soulPath := filepath.Join(filepath.Dir(path), "souls", "tom.yaml")
+	_ = os.MkdirAll(filepath.Dir(soulPath), 0o700)
+	if _, err := os.Stat(soulPath); err != nil {
+		_ = os.WriteFile(soulPath, []byte(exampleSoul), 0o600)
+	}
+	fmt.Fprintf(out, "Wrote %s and %s.\nEdit the providers (keys come from OPENAI_API_KEY, ANTHROPIC_API_KEY...), then run: kitties gateway\n", path, soulPath)
+	return 0
+}
+
+func (a *app) cmdGateway(ctx context.Context) error {
+	if err := a.fleet.Bootstrap(ctx); err != nil {
+		fmt.Fprintf(a.err, "kitties: some kitties did not start: %v\n", err)
+	}
+	token := a.cfg.Gateway.Token
+	if token == "" {
+		token = gateway.NewToken()
+		fmt.Fprintf(a.out, "gateway token (set gateway.token to keep one): %s\n", token)
+	}
+	for _, k := range a.fleet.List() {
+		fmt.Fprintf(a.out, "  %-16s %-8s %s\n", k.Name, k.Status, k.Provider)
+	}
+	srv := gateway.New(a.fleet, a.chats, token, version)
+	return srv.Listen(ctx, a.cfg.Gateway.Listen, func(format string, args ...any) {
+		fmt.Fprintf(a.out, format+"\n", args...)
+	})
+}
+
+func (a *app) cmdList() error {
+	list := a.fleet.List()
+	if len(list) == 0 {
+		fmt.Fprintln(a.out, "no kitties yet: `kitties create <name>` or list them in the configuration and run `kitties gateway`")
+		return nil
+	}
+	fmt.Fprintf(a.out, "%-16s %-8s %-12s %-8s %s\n", "NAME", "STATUS", "PROVIDER", "DESKTOP", "ID")
+	for _, k := range list {
+		desktop := "no"
+		if k.Desktop {
+			desktop = "yes"
+		}
+		fmt.Fprintf(a.out, "%-16s %-8s %-12s %-8s %s\n", k.Name, k.Status, k.Provider, desktop, k.ID)
+		if k.Error != "" {
+			fmt.Fprintf(a.out, "  error: %s\n", k.Error)
+		}
+	}
+	return nil
+}
+
+func (a *app) cmdProviders() error {
+	fmt.Fprintln(a.out, "configured profiles:")
+	for _, p := range a.fleet.Providers().List() {
+		fmt.Fprintf(a.out, "  %-12s %s\n", p.Name, p.Describe)
+	}
+	fmt.Fprintln(a.out, "supported kinds:", strings.Join(provider.Kinds(), ", "))
+	return nil
+}
+
+func (a *app) cmdCreate(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("create", flag.ContinueOnError)
+	fs.SetOutput(a.err)
+	prov := fs.String("provider", "", "provider profile (default: default_provider)")
+	persona := fs.String("persona", "", "one line on who the kitty is")
+	soulFile := fs.String("soul", "", "a soul YAML file")
+	connectors := fs.String("connectors", "", "comma-separated connector names (default: every configured one)")
+	noDesktop := fs.Bool("no-desktop", false, "no container, brain only")
+	// The name may come first (kitties create ana -persona ...): flags are parsed after it.
+	name := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		name, args = args[0], args[1:]
+	}
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if name == "" && fs.NArg() == 1 {
+		name = fs.Arg(0)
+	} else if fs.NArg() != 0 {
+		name = ""
+	}
+	if name == "" {
+		return errors.New("usage: kitties create <name> [-provider p] [-persona text] [-soul file] [-connectors a,b] [-no-desktop]")
+	}
+	spec := orchestrator.Spec{Name: name, Provider: *prov, SoulFile: *soulFile, Soul: soul.Soul{Persona: *persona}}
+	if *connectors != "" {
+		spec.Connectors = strings.Split(*connectors, ",")
+	}
+	if *noDesktop {
+		no := false
+		spec.Desktop = &no
+	}
+	k, err := a.fleet.Create(ctx, spec)
+	if err != nil {
+		return err
+	}
+	if err := a.fleet.Start(ctx, k.ID); err != nil {
+		return fmt.Errorf("%s was created but did not start: %w", k.Name, err)
+	}
+	fmt.Fprintf(a.out, "%s is up (%s, id %s)\n", k.Name, k.Provider, k.ID)
+	return nil
+}
+
+func (a *app) cmdLifecycle(ctx context.Context, cmd string, args []string) error {
+	if len(args) != 1 {
+		return fmt.Errorf("usage: kitties %s <name>", cmd)
+	}
+	ops := map[string]func(context.Context, string) error{"start": a.fleet.Start, "stop": a.fleet.Stop, "rm": a.fleet.Remove}
+	if err := ops[cmd](ctx, args[0]); err != nil {
+		return err
+	}
+	fmt.Fprintf(a.out, "%s: %s\n", args[0], cmd)
+	return nil
+}
+
+func (a *app) cmdScale(ctx context.Context, args []string) error {
+	if len(args) != 2 {
+		return errors.New("usage: kitties scale <name> <replicas>")
+	}
+	n, err := strconv.Atoi(args[1])
+	if err != nil {
+		return fmt.Errorf("%q is not a number", args[1])
+	}
+	if err := a.fleet.Scale(ctx, args[0], n); err != nil {
+		return err
+	}
+	return a.cmdList()
+}
+
+func (a *app) cmdExec(ctx context.Context, args []string) error {
+	if len(args) < 2 {
+		return errors.New("usage: kitties exec <name> <command...>")
+	}
+	out, err := a.fleet.Exec(ctx, args[0], args[1:]...)
+	fmt.Fprint(a.out, out)
+	return err
+}
+
+func (a *app) cmdShot(ctx context.Context, args []string) error {
+	if len(args) != 2 {
+		return errors.New("usage: kitties shot <name> <file.png>")
+	}
+	png, err := a.fleet.Screenshot(ctx, args[0])
+	if err != nil {
+		return err
+	}
+	if err := os.WriteFile(args[1], png, 0o600); err != nil {
+		return err
+	}
+	fmt.Fprintf(a.out, "saved %s (%d bytes)\n", args[1], len(png))
+	return nil
+}
+
+// cmdChat is the terminal chat: one kitty, or a group of them.
+func (a *app) cmdChat(ctx context.Context, args []string) error {
+	if len(args) != 1 {
+		return errors.New("usage: kitties chat <name>[,<name>...]")
+	}
+	members := strings.Split(args[0], ",")
+	sess, err := a.chats.Create("", members)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(a.out, "chat %s with %s. Type a message; /quit ends it.\n", sess.ID, sess.Title)
+	if sess.Group() {
+		fmt.Fprintln(a.out, "(@name sends the message to one kitty; otherwise every kitty answers in turn)")
+	}
+	scanner := bufio.NewScanner(a.in)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	for {
+		fmt.Fprint(a.out, "> ")
+		if !scanner.Scan() {
+			fmt.Fprintln(a.out)
+			return scanner.Err()
+		}
+		line := strings.TrimSpace(scanner.Text())
+		switch line {
+		case "":
+			continue
+		case "/quit", "/exit":
+			return nil
+		}
+		turns, err := a.chats.Send(ctx, sess.ID, line)
+		if err != nil {
+			fmt.Fprintf(a.err, "kitties: %v\n", err)
+			if ctx.Err() != nil {
+				return nil
+			}
+			continue
+		}
+		for _, t := range turns {
+			fmt.Fprintf(a.out, "\n%s: %s\n", t.From, t.Text)
+			for _, c := range t.Calls {
+				if c.Err != "" {
+					fmt.Fprintf(a.out, "  [%s failed: %s]\n", c.Name, c.Err)
+				} else {
+					fmt.Fprintf(a.out, "  [%s: done]\n", c.Name)
+				}
+			}
+		}
+		fmt.Fprintln(a.out)
+	}
+}

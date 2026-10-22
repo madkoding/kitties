@@ -1,0 +1,70 @@
+# kitties: build, verification and cross-compilation.
+#
+# VERSION can be overridden: make VERSION=v1.0.0 dist
+VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS  := -s -w -X main.version=$(VERSION)
+GO       ?= go
+DIST     := dist
+PKGS     := ./internal/... ./cmd/...
+# Coverage every package must reach (percent).
+COVER_MIN ?= 90
+IMAGE    ?= ghcr.io/madkoding/kitty-desktop:latest
+
+# Every platform the binary is built for. Android (arm64) runs the CLI and the gateway under
+# Termux; the containers live wherever Docker does.
+PLATFORMS := linux/amd64 linux/arm64 linux/arm android/arm64 \
+             windows/amd64 windows/arm64 darwin/amd64 darwin/arm64
+
+.DEFAULT_GOAL := help
+.PHONY: help build dist test vet fmt fmt-check check cover image run clean
+
+help: ## Show this list of commands
+	@printf '\nkitties: what you can run here\n\n'
+	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
+	@printf '\n'
+
+build: ## Build kitties for this computer (result: dist/kitties)
+	@mkdir -p $(DIST)
+	@$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/kitties ./cmd/kitties && echo "built $(DIST)/kitties ($(VERSION))"
+
+dist: ## Build kitties for every supported system
+	@mkdir -p $(DIST)
+	@for p in $(PLATFORMS); do \
+		os=$${p%/*}; arch=$${p#*/}; ext=""; \
+		[ "$$os" = "windows" ] && ext=".exe"; \
+		GOOS=$$os GOARCH=$$arch CGO_ENABLED=0 $(GO) build -trimpath -ldflags "$(LDFLAGS)" \
+			-o $(DIST)/kitties-$$os-$$arch$$ext ./cmd/kitties || exit 1; \
+		printf '  %-16s ok\n' "$$os/$$arch"; \
+	done
+
+test: ## Run the tests with the race detector
+	@$(GO) test -count=1 -race $(PKGS)
+
+vet: ## Static analysis
+	@$(GO) vet ./...
+
+fmt: ## Format the Go files
+	@gofmt -w -l .
+
+fmt-check: ## Fail if any Go file is unformatted
+	@out="$$(gofmt -l .)"; if [ -n "$$out" ]; then echo "unformatted:"; echo "$$out"; exit 1; fi
+
+check: fmt-check vet test ## Everything CI checks, in one go
+
+cover: ## Coverage per package, against COVER_MIN
+	@fail=0; for pkg in $$($(GO) list $(PKGS)); do \
+		pct=$$($(GO) test -count=1 -cover $$pkg 2>/dev/null | sed -n 's/.*coverage: \([0-9.]*\)%.*/\1/p'); \
+		[ -z "$$pct" ] && pct=0; \
+		ok=$$(awk -v p="$$pct" -v m="$(COVER_MIN)" 'BEGIN{print (p+0 >= m+0) ? "ok" : "LOW"}'); \
+		printf '  %-6s %6s%%  %s\n' "$$ok" "$$pct" "$$pkg"; \
+		[ "$$ok" = "LOW" ] && fail=1; \
+	done; [ "$$fail" = 0 ] || { echo "a package is under $(COVER_MIN)%"; exit 1; }
+
+image: ## Build the kitty-desktop container image (Xvfb + browser)
+	@docker build -t $(IMAGE) docker/kitty-desktop
+
+run: build ## Start the gateway with the local kitties.yaml
+	@$(DIST)/kitties gateway
+
+clean: ## Remove the build output
+	@rm -rf $(DIST) coverage.out

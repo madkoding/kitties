@@ -1,0 +1,71 @@
+# kitties: example configuration. Copy it to ~/.kitties/kitties.yaml (or ./kitties.yaml).
+#
+# Every kitty is an autonomous agent with its own soul (personality), its own AI provider and,
+# by default, its own container with an XFCE desktop. The gateway is the HTTP API the CLI, the
+# web UI and other programs talk to.
+
+data_dir: ""                     # state (kitties, chats); empty is ~/.kitties
+
+# AI providers. Keys come from the usual variables (OPENAI_API_KEY, ANTHROPIC_API_KEY,
+# GEMINI_API_KEY, GROQ_API_KEY, OLLAMA_API_KEY...) unless api_key or api_key_env says otherwise.
+providers:
+  strong:
+    kind: anthropic              # openai | codex | anthropic | gemini | ollama | ollama-cloud | groq
+    model: claude-sonnet-5-5     # | openrouter | deepseek | qwen | mistral | copilot | custom
+    max_tokens: 4096
+  fast:
+    kind: openai
+    model: gpt-5.5
+    temperature: 0.7
+  local:
+    kind: ollama
+    model: qwen3:8b
+    base_url: http://127.0.0.1:11434/v1
+default_provider: strong
+
+# The fleet. Each entry is one kitty, or `replicas` copies of it (name-1, name-2, ...).
+kitties:
+  - name: mimi
+    provider: strong
+    soul:
+      persona: a patient researcher who loves to explain
+      tone: warm and precise
+      traits: [curious, thorough]
+      skills: [research, summaries]
+      language: ""               # empty follows the person
+    connectors: [team-slack]
+  - name: tom
+    provider: fast
+    soul_file: souls/tom.yaml    # a soul from a file; inline fields override it
+    replicas: 3                  # tom-1, tom-2, tom-3
+  - name: cli
+    provider: local
+    desktop: false               # brain only: no container
+
+# One container per kitty, with a headless X display (Xvfb), a browser and the usual tools.
+# Nothing is published on the host: a screenshot of the display is one API call away.
+containers:
+  runtime: auto                  # auto | docker | podman
+  image: ghcr.io/madkoding/kitty-desktop:latest
+  memory_mb: 2048
+  cpus: 2
+  workspace: ""                  # host folder with one subfolder per kitty; empty is data_dir/work
+
+gateway:
+  listen: 127.0.0.1:7488
+  token: ""                      # empty generates one on first start and prints it
+
+# A motita gateway kitties can hand coding tasks to (optional).
+motita:
+  url: http://127.0.0.1:7477     # leave empty when motita is not used
+  token: ""
+
+# External services. A kitty calls one by writing `@connector <name> {...}` in a reply.
+connectors:
+  team-slack:
+    kind: slack                  # webhook | slack | discord | telegram | shell | motita
+    description: posts a message to the team channel
+    url: https://hooks.slack.com/services/XXX/YYY/ZZZ
+  coder:
+    kind: motita
+    description: runs a coding task in motita and returns its result

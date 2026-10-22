@@ -1,0 +1,17 @@
+# Build output
+/dist/
+/kitties
+/kitties.exe
+coverage.out
+coverage*.html
+
+# Local state and secrets
+/kitties.yaml
+/.kitties/
+*.local.yaml
+
+# Editors and systems
+.DS_Store
+.idea/
+.vscode/
+*.swp
