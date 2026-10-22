@@ -39,6 +39,7 @@ kitties:
       color: orange              # orange | gray | black | white | cream | brown | blue | pink | mint | lilac
     connectors: [team-slack]
     backup: tom                  # takes over a task mimi gives up on (empty: mimi asks you)
+    approvals: ask               # ask: posting, replying, sending, refunding... wait for a yes | auto: never ask
     limits:                      # what one task may spend; 0 takes the default
       max_tokens: 200000
       max_seconds: 900
@@ -77,6 +78,12 @@ motita:
   url: http://127.0.0.1:7477     # leave empty when motita is not used
   token: ""
 
+# Where kitties tell you when they need you, outside the chat. Any messaging connector works;
+# an ntfy topic pushes to your phone.
+notify:
+  connector: phone
+  on: [help, approval]           # help | approval | goal_done | goal_blocked | recovered
+
 # External services. A kitty calls one by writing `@connector <name> {...}` in a reply.
 connectors:
   team-slack:
@@ -103,3 +110,19 @@ connectors:
     settings:
       client_id: 1234-abc.apps.googleusercontent.com
       client_secret: ""        # a Desktop client needs none
+  phone:
+    kind: ntfy                   # push notifications; install the ntfy app and subscribe to the topic
+    description: push notifications to my phone
+    settings:
+      topic: my-kitties
+  payments:
+    kind: stripe                 # balance, invoices, payments; refunds always ask
+    settings:
+      token: rk_live_XXX         # a restricted key; read-only is enough to watch
+      inbound_secret: ""         # Stripe's whsec_..., for POST /v1/hooks/payments
+  support:
+    kind: zendesk                # tickets: list, read, reply
+    settings:
+      subdomain: acme
+      email: bot@acme.com
+      token: XXX                 # the API token

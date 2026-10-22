@@ -137,6 +137,55 @@ In the YAML, under a kitty:
         on: [github]             # the github connector's inbound_secret signs the hook
 ```
 
+## Learning, trust and being told
+
+Autonomy needs a memory, a leash that loosens with trust, and a way to reach you.
+
+- **Memory.** Each kitty keeps what it knows about you and the work: notes in three scopes
+  (*you*, *work* and one per project), pinned notes of your own, and a level of how demanding you
+  are (1 relaxed to 5 strict) that it learns from the thumbs under its answers. Every few verdicts
+  it distils the corrections into lasting notes with its own brain. It writes notes itself
+  (`@memory remember {...}` or the native `memory_*` tools) when you say "remember that...". The
+  memory sits in its prompt, so it answers the way you like.
+- **Approvals.** Every connector action has a risk: reading is free, posting, replying, liking,
+  sending mail or opening a pull request is *ask*, refunding or deleting is *always ask*. A kitty
+  in `approvals: ask` holds an *ask* action and goes on with the rest; you answer in the
+  Approvals screen (*approve*, *approve and stop asking*, *reject with a reason*) and the action
+  runs or the reason reaches the kitty. Yeses in a row earn a kitty the right to do that kind of
+  action alone, sooner for a relaxed person (2) than a strict one (12), never for a level 5.
+  `approvals: auto` skips the questions.
+- **Notifications.** A kitty that needs you does not wait for you to open the app: through any
+  messaging connector (an [ntfy](https://ntfy.sh) topic pushes to your phone) it tells you when it
+  needs help, when an action waits for a yes, and optionally when a goal finishes, gets blocked or
+  a container recovers. Bursts are folded into one message every ten minutes.
+- **Community manager, support, finance.** Besides writing, connectors read and answer: Mastodon
+  and Bluesky timelines, mentions, replies and likes; Gmail and Outlook inboxes; Slack and
+  Telegram messages; Stripe balance, invoices and payments; Zendesk tickets. Results come back as
+  one line per item, and Stripe's events (failed payments, disputes) can start a goal.
+- **A browser that stays signed in.** Chromium keeps its profile in the kitty's workspace, so
+  logins and cookies survive restarts and the kitty does not sign in again each morning.
+- **Long threads.** When a thread passes forty turns the early ones are summarised and only the
+  latest sixteen stay verbatim, so a goal that runs for weeks does not outgrow its context.
+
+| | |
+| --- | --- |
+| ![An action waits for a yes](docs/screenshots/23-waiting-for-a-yes.png) | ![The Approvals screen](docs/screenshots/24-approvals.png) |
+| ![Thumbs under the answers](docs/screenshots/25-feedback.png) | ![What a kitty knows about you](docs/screenshots/26-memory.png) |
+| ![Notifications: a phone channel and its events](docs/screenshots/27-notifications.png) | ![Stripe: invoices and payments as one line each](docs/screenshots/28-stripe.png) |
+
+In the YAML:
+
+```yaml
+kitties:
+  - name: mimi
+    approvals: ask               # ask (default) | auto
+notify:
+  connector: phone               # any messaging connector; ntfy pushes to your phone
+  on: [help, approval, goal_done, goal_blocked, recovered]   # default: help, approval
+connectors:
+  phone: { kind: ntfy, settings: { topic: my-kitties } }
+```
+
 ## How it fits together
 
 ```
@@ -244,11 +293,12 @@ connectors:
 
 | Category | Services |
 | --- | --- |
-| Messaging | Slack (webhook, bot token or OAuth sign-in), Discord, Telegram, WhatsApp (Cloud API), Email (SMTP), Matrix, Google Chat, Microsoft Teams |
-| Social media | Mastodon, Bluesky, X, LinkedIn |
+| Messaging | Slack (webhook, bot token or OAuth sign-in; reads and replies), Discord, Telegram, WhatsApp (Cloud API), Email (SMTP), Matrix, Google Chat, Microsoft Teams, ntfy (push to your phone) |
+| Social media | Mastodon and Bluesky (post, timeline, mentions, reply, like), X, LinkedIn |
 | Git | GitHub (issues, comments, pull requests, files; a token or OAuth sign-in), GitLab, Gitea/Forgejo, motita (coding tasks) |
-| Productivity | Notion, Trello, Todoist, Linear, Jira |
-| Office | Google Workspace (OAuth: Gmail, Calendar, Drive, Sheets, Docs), Microsoft 365 (OAuth: Outlook, Calendar, OneDrive), Airtable, Nextcloud (WebDAV files), Google Sheets (Apps Script) |
+| Productivity | Notion, Trello, Todoist, Linear, Jira, Zendesk (support tickets) |
+| Finance | Stripe (balance, invoices, payments, refunds) |
+| Office | Google Workspace (OAuth: Gmail inbox and send, Calendar, Drive, Sheets, Docs), Microsoft 365 (OAuth: Outlook inbox and send, Calendar, OneDrive), Airtable, Nextcloud (WebDAV files), Google Sheets (Apps Script) |
 | Drawing | Diagrams through Kroki (mermaid, plantuml, graphviz, d2…) rendered to SVG artifacts, Figma, Excalidraw scenes |
 | Generic | Webhook, any HTTP API with a bearer token, a program on the gateway's machine |
 
@@ -287,6 +337,11 @@ Keys come from the provider's usual variable (`OPENAI_API_KEY`, `ANTHROPIC_API_K
 | `PATCH /v1/kitties/{ref}` `{avatar, soul}` · `GET /v1/avatars` | change a kitty's looks; the breeds and coats |
 | `GET/PUT/DELETE /v1/skills/{name}` · `POST …/accept` | the skills library and its proposals |
 | `GET/PUT/DELETE /v1/artifacts/{name}`     | the artifacts library (raw file bodies) |
+| `GET /v1/approvals?status=pending` · `POST /v1/approvals/{id}/approve` `{always}` · `…/reject` `{reason}` | the actions held for a yes, and the answer |
+| `GET /v1/approvals/rules` · `DELETE /v1/approvals/rules/{id}` | what kitties may do alone, and taking it back |
+| `GET/POST /v1/kitties/{ref}/memory` · `DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes, its picture of you, and a distillation now |
+| `POST /v1/chats/{id}/turns/{index}/feedback` `{rating, note}` | a thumb under an answer |
+| `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` | where and when kitties tell you |
 
 Every other call needs `Authorization: Bearer <token>`; `/` and `/v1/health` are open.
 

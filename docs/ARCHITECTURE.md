@@ -106,6 +106,48 @@ The orchestrator's `Watch` is the watchdog: every 30 seconds a running kitty who
 stopped or vanished is started again and a kitty in error is tried once more; recoveries are
 journaled.
 
+## Memory, approvals and notifications
+
+**Memory** (`internal/memory`). One JSON file per kitty under `<data_dir>/memory`: notes with a
+scope (`user`, `work`, `project:<slug>`), an optional pin, and a profile with the person's
+*demand* (1 to 5) and the verdict history. `chat.Service` renders `Prompt` into the system prompt
+each turn. A thumb on a turn (`POST /v1/chats/{id}/turns/{i}/feedback`) records a verdict, moves
+the demand, and every third verdict starts a distillation: the kitty's own brain turns the notes
+of correction into lasting notes (an empty answer is dropped). `@memory` actions and the native
+`memory_*` tools write notes from inside a reply.
+
+**Approvals** (`internal/approvals`, `internal/connector/risk.go`). Every connector call has a
+`Risk` (none, ask, always): by action name (`send`, `post`, `reply`, `like`... ask; `refund`,
+`delete` always), by HTTP method for the generic API connector, and always for a shell command.
+`chat.gate` asks `Store.Check(kitty, connector, action, risk, mode, demand)`: *allow* (reads,
+`approvals: auto`, or a rule earned by `Threshold(demand)` yeses in a row: 2, 4, 6, 12, never),
+or *hold*. A held action is not a blocking prompt: it is stored, the kitty is told it waits and
+carries on, and `DecideApproval` runs it later and appends the result, or the person's reason, to
+the thread as an `approval` turn. *Approve and stop asking* writes a rule that
+`DELETE /v1/approvals/rules/{id}` removes. Pending requests, rules and a bounded history live in
+`approvals.json`.
+
+**Notifications** (`internal/notify`). A `Notifier` sends through any connector that can send a
+message (ntfy preferred, with a click link to the page), for the events `help`, `approval`,
+`goal_done`, `goal_blocked` and `recovered`. Events of the same kind within ten minutes fold into
+one message. The choice is kept in `settings.json` over the YAML's `notify`; deleting the
+connector clears it.
+
+**Reading connectors** (`internal/connector/reads.go`). Kinds gain read, reply and like actions
+(Mastodon, Bluesky, Gmail, Outlook, Slack, Telegram) and new kinds (Stripe, Zendesk, ntfy).
+`listing` renders JSON arrays as one short line per item; `request.follow` lets one action
+chain requests (Gmail lists ids, then fetches headers). Stripe events become goal inputs through
+`POST /v1/hooks/<connector>` with `Stripe-Signature` verified.
+
+**Thread compaction** (`chat.compact`). Past `CompactAfter` (40) turns since the last summary,
+the earlier turns are summarised by the kitty's brain into `Session.Summary` (covering
+`SummaryUpTo` turns) and only the last `CompactKeep` (16) go verbatim into the prompt; the
+transcript the person reads is never cut.
+
+**Persistent browser profile.** `kitty-open` starts Chromium with `--user-data-dir` in the
+kitty's workspace (`/home/kitty/work/.browser`, `KITTY_PROFILE` overrides it) and removes a stale
+profile lock, so sessions survive container restarts.
+
 ## Desktop tasks (`internal/desktop`)
 
 A kitty with a container has, in its system prompt, a catalogue of tools: `screenshot`, `click`,
@@ -192,7 +234,7 @@ CLI. The Go side (`app.go`) owns the connection and proxies the API (`App.Reques
 never holds the token; the page (`desktop/frontend`, Vite + Preact + Tailwind) works both inside
 Wails and in a browser against the gateway, with the Motita design system's tokens, fonts and
 components (`src/index.css`, `src/themes.css`). Deep links: `#chat/<id>`, `#kitty/<id>`,
-`#new-chat`, `#new-kitty`, `#new-settings`, `#new-connectors`; `?theme=light|dark` and
+`#new-chat`, `#new-kitty`, `#new-settings`, `#new-connectors`, `#new-approvals`, `#new-notifications`; `?theme=light|dark` and
 `?motion=off` for screenshots.
 
 ## Platforms
