@@ -1,163 +1,348 @@
-import { useEffect, useErrorBoundary, useState } from "preact/hooks";
-import type { ConnectorKind, ConnectorView, ProviderKind, ProviderView, SettingsView } from "./api";
-import { api } from "./api";
+import type { ComponentChildren } from "preact";
+import { useEffect, useErrorBoundary, useMemo, useState } from "preact/hooks";
+import type {
+  ConnectorKind,
+  ConnectorView,
+  Kitty,
+  ProviderKind,
+  ProviderView,
+  SettingsView,
+} from "./api";
+import { api, errText, inWails, oauthStart, openExternal } from "./api";
+import ConnectorLogo, { logoColor } from "./ConnectorLogo";
+import {
+  PROVIDER_ORDER,
+  PROVIDERS,
+  actionLabel,
+  categoryLabel,
+  friendlyError,
+  mayUse,
+  people,
+  providerLabel,
+  uniqueName,
+  withConnection,
+} from "./friendly";
 import { IconPlus, IconTrash, IconX } from "./icons";
 import { ConnectModal } from "./Modals";
-import ConnectorLogo, { logoColor } from "./ConnectorLogo";
-import { openExternal, oauthStart } from "./api";
 
-type Tab = "models" | "connectors" | "notifications" | "gateway";
+// SETTINGS, FOR PEOPLE.
+//
+// Three things a person sets up here, in plain words: the brains the kitties think with
+// (models), the services they may act in (connections, and which kitty may use each), and how
+// they are reached when away (notifications). Every form asks only for what it cannot guess;
+// names, addresses and limits wait under "More options".
+
+export type Tab = "models" | "connectors" | "notifications" | "gateway";
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";
 const INPUT = "w-full px-3 py-2 text-sm";
+const HELP = "text-xs text-[var(--t4)] mt-1";
 
-function blankProvider(kinds: ProviderKind[]): ProviderView {
-  const k = kinds[0];
-  return {
-    name: "",
-    kind: k?.Name || "openai",
-    model: k?.DefaultModel || "",
-    api_key_set: false,
-    default: false,
-    describe: "",
-    from_file: false,
-  };
+// useFlash shows a short confirmation that fades by itself.
+function useFlash(): [string, (msg: string) => void] {
+  const [msg, setMsg] = useState("");
+  useEffect(() => {
+    if (!msg) {
+      return;
+    }
+    const id = setTimeout(() => setMsg(""), 2500);
+    return () => clearTimeout(id);
+  }, [msg]);
+  return [msg, setMsg];
 }
 
-// ProviderForm edits one AI profile. The key is write-only: the page never sees a saved one.
-function ProviderForm({
-  view,
-  kinds,
-  onSaved,
-  onClose,
+function More({
+  children,
+  label = "More options",
 }: {
-  view: ProviderView;
-  kinds: ProviderKind[];
-  onSaved: (s: SettingsView) => void;
-  onClose: () => void;
+  children: ComponentChildren;
+  label?: string;
 }) {
-  const [name, setName] = useState(view.name);
-  const [kind, setKind] = useState(view.kind);
-  const [model, setModel] = useState(view.model);
-  const [key, setKey] = useState("");
-  const [base, setBase] = useState(view.base_url || "");
-  const [maxTokens, setMaxTokens] = useState(view.max_tokens ? String(view.max_tokens) : "");
-  const [err, setErr] = useState("");
-  const [busy, setBusy] = useState(false);
-  const info = kinds.find((k) => k.Name === kind);
-  const pickKind = (k: string) => {
-    setKind(k);
-    const next = kinds.find((x) => x.Name === k);
-    if (next && (!model || model === info?.DefaultModel)) {
-      setModel(next.DefaultModel);
-    }
-  };
-  const save = async () => {
-    setBusy(true);
-    setErr("");
-    try {
-      const body: Record<string, unknown> = { kind, model, base_url: base };
-      if (key) {
-        body.api_key = key;
-      }
-      if (maxTokens) {
-        body.max_tokens = Number(maxTokens);
-      }
-      onSaved(await api.setProvider(name.trim(), body));
-    } catch (e) {
-      setErr((e as Error).message);
-      setBusy(false);
-    }
-  };
   return (
-    <div class="mt-3 p-4 border border-[rgb(var(--accent-rgb)/0.3)] bg-[rgb(var(--accent-rgb)/0.05)]">
-      <div class="grid sm:grid-cols-2 gap-x-4">
-        <div>
-          <label class={LABEL}>Name</label>
-          <input
-            class={INPUT}
-            value={name}
-            disabled={Boolean(view.name)}
-            onInput={(e) => setName((e.target as HTMLInputElement).value)}
-            placeholder="strong"
-          />
-        </div>
-        <div>
-          <label class={LABEL}>Kind</label>
-          <select
-            class={INPUT}
-            value={kind}
-            onChange={(e) => pickKind((e.target as HTMLSelectElement).value)}
-          >
-            {kinds.map((k) => (
-              <option key={k.Name} value={k.Name}>
-                {k.Name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label class={LABEL}>Model</label>
-          <input
-            class={INPUT}
-            value={model}
-            onInput={(e) => setModel((e.target as HTMLInputElement).value)}
-            placeholder={info?.DefaultModel}
-          />
-        </div>
-        <div>
-          <label class={LABEL}>API key {info?.NoKey ? "(optional)" : ""}</label>
-          <input
-            class={`${INPUT} font-mono`}
-            type="password"
-            value={key}
-            onInput={(e) => setKey((e.target as HTMLInputElement).value)}
-            placeholder={
-              view.api_key_set
-                ? "saved; type to replace"
-                : info?.KeyEnv
-                  ? `or set ${info.KeyEnv}`
-                  : ""
-            }
-          />
-        </div>
-        <div>
-          <label class={LABEL}>Base URL</label>
-          <input
-            class={INPUT}
-            value={base}
-            onInput={(e) => setBase((e.target as HTMLInputElement).value)}
-            placeholder={info?.BaseURL || "https://…/v1"}
-          />
-        </div>
-        <div>
-          <label class={LABEL}>Max tokens</label>
-          <input
-            class={INPUT}
-            value={maxTokens}
-            onInput={(e) => setMaxTokens((e.target as HTMLInputElement).value)}
-            placeholder="4096"
-          />
-        </div>
-      </div>
-      {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
-      <div class="flex justify-end gap-2 mt-4">
-        <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-          Cancel
+    <details class="more mt-3">
+      <summary>{label}</summary>
+      <div class="pt-1">{children}</div>
+    </details>
+  );
+}
+
+function Err({ text }: { text: string }) {
+  return text ? (
+    <p class="text-sm text-[var(--c-red)] mt-2" role="alert">
+      {text}
+    </p>
+  ) : null;
+}
+
+// ─── Models ─────────────────────────────────────────────────────────────────────────────────
+
+// ProviderPicker offers the providers as buttons, the common ones first.
+function ProviderPicker({ kinds, onPick }: { kinds: ProviderKind[]; onPick: (k: string) => void }) {
+  const names = kinds.map((k) => k.Name);
+  const order = [
+    ...PROVIDER_ORDER.filter((n) => names.includes(n)),
+    ...names.filter((n) => !PROVIDER_ORDER.includes(n)),
+  ];
+  return (
+    <div class="grid sm:grid-cols-2 gap-2 mt-2" data-testid="provider-picker">
+      {order.map((n) => (
+        <button key={n} type="button" class="plain pick-card" onClick={() => onPick(n)}>
+          <span class="font-semibold text-sm">{providerLabel(n)}</span>
+          <span class="text-xs text-[var(--t3)]">{PROVIDERS[n]?.blurb || n}</span>
         </button>
-        <button
-          class="btn-accent px-4 py-2 text-sm"
-          disabled={busy || !name.trim() || !model.trim()}
-          onClick={save}
-        >
-          {busy ? "Saving…" : "Save"}
-        </button>
-      </div>
+      ))}
     </div>
   );
 }
 
-function ProviderRow({
+// ModelForm adds or edits a model. A new one starts with the provider; the key is write-only
+// (a saved one is never shown again). Saving tests it at once and says how it went.
+function ModelForm({
+  view,
+  kinds,
+  taken,
+  onSaved,
+  onClose,
+}: {
+  view: ProviderView | null;
+  kinds: ProviderKind[];
+  taken: string[];
+  onSaved: (s: SettingsView, note: string) => void;
+  onClose: () => void;
+}) {
+  const [kind, setKind] = useState(view?.kind || "");
+  const info = kinds.find((k) => k.Name === kind);
+  const meta = PROVIDERS[kind] || { label: kind, blurb: "" };
+  const [model, setModel] = useState(view?.model || "");
+  const [key, setKey] = useState("");
+  const [base, setBase] = useState(view?.base_url || "");
+  const [maxTokens, setMaxTokens] = useState(view?.max_tokens ? String(view.max_tokens) : "");
+  const [name, setName] = useState(view?.name || "");
+  const [err, setErr] = useState("");
+  const [phase, setPhase] = useState<"edit" | "saving" | "testing" | "failed">("edit");
+  const [saved, setSaved] = useState<SettingsView | null>(null);
+  const pick = (k: string) => {
+    setKind(k);
+    setModel(kinds.find((x) => x.Name === k)?.DefaultModel || "");
+    setBase("");
+  };
+  if (!kind) {
+    return (
+      <div class="form-card">
+        <div class="font-semibold">Which provider?</div>
+        <p class="text-xs text-[var(--t3)]">
+          Pick where the brain comes from. You need an account (and a key) with the provider, except
+          for Ollama on this computer.
+        </p>
+        <ProviderPicker kinds={kinds} onPick={pick} />
+        <div class="flex justify-end mt-4">
+          <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
+  const needsKey = !info?.NoKey;
+  const showAddress = Boolean(meta.address);
+  const finalName = view?.name || name.trim() || uniqueName(kind, taken);
+  const save = async () => {
+    setErr("");
+    setPhase("saving");
+    try {
+      const body: Record<string, unknown> = { kind, model: model.trim(), base_url: base.trim() };
+      if (key.trim()) {
+        body.api_key = key.trim();
+      }
+      if (maxTokens.trim()) {
+        body.max_tokens = Number(maxTokens);
+      }
+      const s = await api.setProvider(finalName, body);
+      setSaved(s);
+      setPhase("testing");
+      const r = await api.testProvider(finalName).catch((e) => ({ ok: false, error: errText(e) }));
+      if (r.ok) {
+        onSaved(s, `${meta.label} answered: it works.`);
+      } else {
+        setErr(friendlyError((r as { error?: string }).error || "it did not answer"));
+        setPhase("failed");
+      }
+    } catch (e) {
+      setErr(friendlyError(errText(e)));
+      setPhase("edit");
+    }
+  };
+  const missingKey = needsKey && !key.trim() && !view?.api_key_set;
+  return (
+    <div class="form-card" data-testid="model-form">
+      <div class="flex items-start gap-3">
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold">{meta.label}</div>
+          <div class="text-xs text-[var(--t3)]">{meta.blurb}</div>
+        </div>
+        {!view && (
+          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setKind("")}>
+            change
+          </button>
+        )}
+      </div>
+      {(needsKey || kind === "custom") && (
+        <>
+          <label class={LABEL} for="model-key">
+            API key{needsKey ? "" : " (if the server asks for one)"}
+          </label>
+          <input
+            id="model-key"
+            class={`${INPUT} font-mono`}
+            type="password"
+            autocomplete="off"
+            value={key}
+            onInput={(e) => setKey((e.target as HTMLInputElement).value)}
+            placeholder={view?.api_key_set ? "saved: leave empty to keep it" : "paste the key here"}
+          />
+          <p class={HELP}>
+            Kept on your gateway and never shown again.{" "}
+            {meta.keyURL && (
+              <a
+                href={meta.keyURL}
+                onClick={(e) => {
+                  e.preventDefault();
+                  openExternal(meta.keyURL!);
+                }}
+              >
+                Get a key from {meta.label} ↗
+              </a>
+            )}
+          </p>
+        </>
+      )}
+      {showAddress && (
+        <>
+          <label class={LABEL} for="model-address">
+            Server address
+          </label>
+          <input
+            id="model-address"
+            class={INPUT}
+            value={base}
+            onInput={(e) => setBase((e.target as HTMLInputElement).value)}
+            placeholder={info?.BaseURL || "http://127.0.0.1:1234/v1"}
+          />
+          <p class={HELP}>
+            {kind === "ollama"
+              ? "Leave it empty when Ollama runs on this computer. "
+              : "The address of the server's API, usually ending in /v1. "}
+            {kind === "ollama" && meta.keyURL && (
+              <a
+                href={meta.keyURL}
+                onClick={(e) => {
+                  e.preventDefault();
+                  openExternal(meta.keyURL!);
+                }}
+              >
+                Download Ollama ↗
+              </a>
+            )}
+          </p>
+        </>
+      )}
+      <label class={LABEL} for="model-name">
+        Model
+      </label>
+      <input
+        id="model-name"
+        class={`${INPUT} font-mono`}
+        list="model-suggestions"
+        value={model}
+        onInput={(e) => setModel((e.target as HTMLInputElement).value)}
+        placeholder={info?.DefaultModel || "model name"}
+      />
+      <datalist id="model-suggestions">
+        {[...new Set([info?.DefaultModel, ...(meta.models || [])].filter(Boolean))].map((m) => (
+          <option key={m} value={m} />
+        ))}
+      </datalist>
+      <p class={HELP}>Not sure? Keep the suggested one.</p>
+      <More>
+        <label class={LABEL} for="model-id">
+          Name in Kitties
+        </label>
+        <input
+          id="model-id"
+          class={INPUT}
+          value={view?.name || name}
+          disabled={Boolean(view)}
+          onInput={(e) => setName((e.target as HTMLInputElement).value)}
+          placeholder={uniqueName(kind, taken)}
+        />
+        <p class={HELP}>How the kitties and the configuration file call it.</p>
+        {!showAddress && (
+          <>
+            <label class={LABEL} for="model-base">
+              Server address
+            </label>
+            <input
+              id="model-base"
+              class={INPUT}
+              value={base}
+              onInput={(e) => setBase((e.target as HTMLInputElement).value)}
+              placeholder={info?.BaseURL}
+            />
+            <p class={HELP}>Only to reach it through a proxy or a compatible service.</p>
+          </>
+        )}
+        <label class={LABEL} for="model-max">
+          Longest answer (tokens)
+        </label>
+        <input
+          id="model-max"
+          class={INPUT}
+          inputMode="numeric"
+          value={maxTokens}
+          onInput={(e) => setMaxTokens((e.target as HTMLInputElement).value.replace(/\D/g, ""))}
+          placeholder="4096"
+        />
+      </More>
+      {phase === "failed" ? (
+        <div class="callout callout-warn mt-3">
+          <div>
+            Saved, but the test did not pass: <b>{err}</b>
+          </div>
+          <div class="flex gap-2 mt-2">
+            <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setPhase("edit")}>
+              Change something
+            </button>
+            <button
+              class="btn-ghost px-3 py-1.5 text-xs"
+              onClick={() => saved && onSaved(saved, "Saved without a passing test.")}
+            >
+              Keep it anyway
+            </button>
+          </div>
+        </div>
+      ) : (
+        <Err text={err} />
+      )}
+      {phase !== "failed" && (
+        <div class="flex justify-end gap-2 mt-4">
+          <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            class="btn-accent px-4 py-2 text-sm"
+            disabled={phase !== "edit" || !model.trim() || missingKey}
+            title={missingKey ? "Paste the API key first" : undefined}
+            onClick={save}
+          >
+            {phase === "saving" ? "Saving…" : phase === "testing" ? "Checking…" : "Save and test"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModelRow({
   p,
   onEdit,
   onChanged,
@@ -166,63 +351,90 @@ function ProviderRow({
   onEdit: () => void;
   onChanged: (s: SettingsView) => void;
 }) {
-  const [test, setTest] = useState<string>("");
+  const [test, setTest] = useState("");
+  const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  const label = providerLabel(p.kind);
   const run = async () => {
     setBusy(true);
     setTest("");
     try {
       const r = await api.testProvider(p.name);
-      setTest(r.ok ? "✓ " + (r.reply || "answered") : "✗ " + (r.error || "failed"));
+      setTest(r.ok ? "✓ It answered: it works." : "✗ " + friendlyError(r.error || "no answer"));
     } catch (e) {
-      setTest("✗ " + (e as Error).message);
+      setTest("✗ " + friendlyError(errText(e)));
     }
     setBusy(false);
   };
+  const remove = async () => {
+    const users = p.used_by || [];
+    const what = users.length
+      ? `${people(users)} will switch to another model.`
+      : "No kitty uses it.";
+    if (!confirm(`Remove ${label} (${p.model})? ${what}`)) {
+      return;
+    }
+    setErr("");
+    try {
+      onChanged(await api.removeProvider(p.name));
+    } catch (e) {
+      setErr(errText(e));
+    }
+  };
+  const users = p.used_by || [];
   return (
-    <div class="row !py-2.5">
-      <button class="row-hit" onClick={onEdit} aria-label={`Edit ${p.name}`} />
+    <div class="item" data-testid={`model-${p.name}`}>
       <span class={`dot ${p.error ? "error" : "running"}`} />
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-sm font-semibold">{p.name}</span>
-          <span class="tag tag-accent">{p.kind}</span>
+          <span class="text-sm font-semibold">{label}</span>
           <span class="text-xs font-mono text-[var(--t3)] truncate">{p.model}</span>
           {p.default && <span class="tag tag-green">default</span>}
-          {p.from_file && <span class="tag">yaml</span>}
-          {!p.api_key_set && !p.error && <span class="tag tag-amber">env key</span>}
         </div>
-        {p.error && <div class="text-xs text-[var(--c-red)] mt-0.5">{p.error}</div>}
+        <div class="text-xs text-[var(--t3)] mt-0.5">
+          {p.error ? (
+            <span class="text-[var(--c-red)]">{friendlyError(p.error)}</span>
+          ) : users.length ? (
+            `Used by ${people(users)}`
+          ) : (
+            "No kitty uses it yet"
+          )}
+          {p.name !== p.kind && <span class="text-[var(--t4)]"> · {p.name}</span>}
+          {p.from_file && <span class="text-[var(--t4)]"> · from the configuration file</span>}
+        </div>
         {test && (
           <div
-            class={`text-xs mt-0.5 ${test.startsWith("✓") ? "text-[var(--c-green)]" : "text-[var(--c-red)]"}`}
+            class={`text-xs mt-1 ${test.startsWith("✓") ? "text-[var(--c-green)]" : "text-[var(--c-red)]"}`}
           >
             {test}
           </div>
         )}
+        <Err text={err} />
       </div>
-      <div class="row-actions flex gap-1 flex-none">
-        <button
-          class="btn-ghost px-2 py-1 text-xs"
-          disabled={busy || Boolean(p.error)}
-          onClick={run}
-        >
-          {busy ? "…" : "test"}
+      <div class="flex gap-1 flex-none flex-wrap justify-end">
+        <button class="btn-ghost px-2 py-1 text-xs" disabled={busy} onClick={run}>
+          {busy ? "Testing…" : "Test"}
         </button>
         {!p.default && !p.error && (
           <button
             class="btn-ghost px-2 py-1 text-xs"
-            onClick={() => api.setDefaultProvider(p.name).then(onChanged)}
+            onClick={() =>
+              api
+                .setDefaultProvider(p.name)
+                .then(onChanged)
+                .catch((e) => setErr(errText(e)))
+            }
           >
-            default
+            Make default
           </button>
         )}
+        <button class="btn-ghost px-2 py-1 text-xs" onClick={onEdit} aria-label={`Edit ${p.name}`}>
+          Edit
+        </button>
         <button
           class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]"
           aria-label={`Remove ${p.name}`}
-          onClick={() =>
-            confirm(`Remove the profile ${p.name}?`) && api.removeProvider(p.name).then(onChanged)
-          }
+          onClick={remove}
         >
           <IconTrash size={12} />
         </button>
@@ -231,186 +443,70 @@ function ProviderRow({
   );
 }
 
-// ServiceGrid is the catalogue as buttons with their logos, grouped by category.
+// ─── Connections ────────────────────────────────────────────────────────────────────────────
+
+// ServiceGrid is the catalogue as buttons with their logos, filtered by a search and a category.
 function ServiceGrid({
   catalog,
   categories,
-  picked,
   onPick,
 }: {
   catalog: ConnectorKind[];
   categories: string[];
-  picked: string;
   onPick: (k: ConnectorKind) => void;
 }) {
+  const [q, setQ] = useState("");
+  const [cat, setCat] = useState("");
+  const words = q.trim().toLowerCase();
+  const shown = catalog.filter(
+    (k) =>
+      (!cat || k.category === cat) &&
+      (!words ||
+        k.label.toLowerCase().includes(words) ||
+        k.name.includes(words) ||
+        k.help.toLowerCase().includes(words)),
+  );
   return (
     <div class="service-grid">
-      {categories.map((c) => (
-        <div key={c}>
-          <div class="section-title !mx-0">{c}</div>
-          <div class="flex flex-wrap gap-2">
-            {catalog
-              .filter((k) => k.category === c)
-              .map((k) => (
-                <button
-                  key={k.name}
-                  type="button"
-                  class={`plain service-btn ${picked === k.name ? "on" : ""}`}
-                  style={`--brand:${logoColor(k.name)}`}
-                  onClick={() => onPick(k)}
-                  title={k.help}
-                >
-                  <ConnectorLogo kind={k.name} size={26} />
-                  <span>{k.label}</span>
-                  {k.oauth && <span class="service-oauth">OAuth</span>}
-                </button>
-              ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-// NOTIFY_LABELS say what each event is, as the page offers it.
-const NOTIFY_LABELS: Record<string, string> = {
-  help: "A kitty gave up and needs my help",
-  approval: "An action is waiting for my yes",
-  goal_done: "A goal finished",
-  goal_blocked: "A goal could not finish",
-  recovered: "A kitty's container was brought back",
-  budget: "A kitty spent its day's tokens",
-};
-
-// NotifyForm chooses where the kitties tell you what happened while you were away (a push to
-// the phone, Telegram, Slack, mail) and which events are worth a message.
-function NotifyForm({ view, onSaved }: { view: SettingsView; onSaved: (s: SettingsView) => void }) {
-  const channels = view.connectors.filter((c) => c.category === "messaging");
-  const [connector, setConnector] = useState(view.notify?.connector || "");
-  const [on, setOn] = useState<string[]>(
-    view.notify?.on?.length ? view.notify.on : ["help", "approval"],
-  );
-  const [digest, setDigest] = useState(view.notify?.digest || "");
-  const [msg, setMsg] = useState("");
-  const [err, setErr] = useState("");
-  const toggle = (e: string) => setOn(on.includes(e) ? on.filter((x) => x !== e) : [...on, e]);
-  const save = async () => {
-    setErr("");
-    setMsg("");
-    try {
-      onSaved(await api.setNotify({ connector, on, digest }));
-      setMsg("Saved.");
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-  const test = async () => {
-    setErr("");
-    setMsg("");
-    try {
-      await api.setNotify({ connector, on, digest });
-      const r = await api.testNotify(connector);
-      if (r.ok) {
-        setMsg("Sent: look at your phone or channel.");
-      } else {
-        setErr(r.error || "The test did not go through.");
-      }
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-  const sendDigest = async () => {
-    setErr("");
-    setMsg("");
-    try {
-      await api.setNotify({ connector, on, digest });
-      const r = await api.sendDigest();
-      if (r.ok) {
-        setMsg("Summary sent.");
-      } else {
-        setErr(r.error || "The summary did not go through.");
-      }
-    } catch (e) {
-      setErr((e as Error).message);
-    }
-  };
-  return (
-    <div data-testid="notify">
-      <p class="text-sm text-[var(--t3)]">
-        The kitties work while you are away. Choose how they reach you outside this page: a push to
-        your phone with ntfy is the quickest, and Telegram, Slack or mail work too. They write
-        through a connector you already set up.
-      </p>
-      <label class={LABEL} for="notify-connector">
-        Send through
-      </label>
-      <select
-        id="notify-connector"
-        class={INPUT}
-        value={connector}
-        onChange={(e) => setConnector((e.target as HTMLSelectElement).value)}
-      >
-        <option value="">nowhere: notifications are off</option>
-        {channels.map((c) => (
-          <option key={c.name} value={c.name}>
-            {c.name} ({c.label})
-          </option>
-        ))}
-      </select>
-      {channels.length === 0 && (
-        <p class="text-xs text-[var(--t4)] mt-1">
-          There is no messaging connector yet: add ntfy, Telegram, Slack or email under Connectors
-          first.
-        </p>
-      )}
-      <label class={LABEL}>Tell me when</label>
-      <div class="flex flex-col gap-1">
-        {view.notify_events.map((e) => (
-          <label key={e} class="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={on.includes(e)} onChange={() => toggle(e)} />{" "}
-            {NOTIFY_LABELS[e] || e}
-          </label>
-        ))}
-      </div>
-      <label class={LABEL} for="notify-digest">
-        A summary of the last day, every day at
-      </label>
-      <div class="flex items-center gap-2">
-        <input
-          id="notify-digest"
-          class={`${INPUT} !w-32 font-mono`}
-          type="time"
-          value={digest}
-          onInput={(e) => setDigest((e.target as HTMLInputElement).value)}
-        />
-        {digest && (
-          <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setDigest("")}>
-            none
+      <input
+        class={`${INPUT} mt-2`}
+        type="search"
+        aria-label="Search services"
+        placeholder="Search: Slack, Gmail, GitHub, Stripe…"
+        value={q}
+        onInput={(e) => setQ((e.target as HTMLInputElement).value)}
+      />
+      <div class="flex flex-wrap gap-1 mt-2">
+        {["", ...categories].map((c) => (
+          <button
+            key={c || "all"}
+            type="button"
+            class={`chip ${cat === c ? "on" : ""}`}
+            onClick={() => setCat(c)}
+          >
+            {c ? categoryLabel(c) : "All"}
           </button>
+        ))}
+      </div>
+      <div class="flex flex-wrap gap-2 mt-3">
+        {shown.map((k) => (
+          <button
+            key={k.name}
+            type="button"
+            class="plain service-btn"
+            style={`--brand:${logoColor(k.name)}`}
+            onClick={() => onPick(k)}
+            title={k.help}
+          >
+            <ConnectorLogo kind={k.name} size={26} />
+            <span>{k.label}</span>
+            {k.oauth && <span class="service-oauth">sign in</span>}
+          </button>
+        ))}
+        {shown.length === 0 && (
+          <p class="text-sm text-[var(--t4)]">Nothing matches: try another word.</p>
         )}
-        <button
-          class="btn-ghost px-3 py-1.5 text-xs"
-          disabled={!connector}
-          onClick={sendDigest}
-          data-testid="send-digest"
-        >
-          Send one now
-        </button>
       </div>
-      <p class="text-xs text-[var(--t4)] mt-1">
-        What each kitty did, what it spent, and what waits for your yes. The time is the gateway's
-        clock. Leave it empty for no summary.
-      </p>
-      <div class="flex items-center gap-2 mt-4">
-        <button class="btn-accent px-4 py-2 text-sm" onClick={save}>
-          Save
-        </button>
-        <button class="btn-ghost px-4 py-2 text-sm" disabled={!connector} onClick={test}>
-          Send a test
-        </button>
-        {msg && <span class="tag tag-green">{msg}</span>}
-      </div>
-      {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
     </div>
   );
 }
@@ -434,11 +530,11 @@ function OAuthButton({ view, onDone }: { view: ConnectorView; onDone: () => void
       const id = setInterval(onDone, 3000);
       setTimeout(() => clearInterval(id), 120000);
     } catch (e) {
-      setMsg((e as Error).message);
+      setMsg(errText(e));
     }
   };
   return (
-    <div class="mt-1 mb-3 flex items-center gap-3 flex-wrap">
+    <div class="mt-3 flex items-center gap-3 flex-wrap">
       <button
         type="button"
         class={`${view.signed_in ? "btn-ghost" : "btn-accent"} px-4 py-2 text-sm flex items-center gap-2`}
@@ -457,29 +553,116 @@ function OAuthButton({ view, onDone }: { view: ConnectorView; onDone: () => void
   );
 }
 
-function ConnectorForm({
+function FieldInput({
+  f,
+  value,
+  saved,
+  placeholder,
+  onInput,
+}: {
+  f: ConnectorKind["fields"][number];
+  value: string;
+  saved: boolean;
+  placeholder?: string;
+  onInput: (v: string) => void;
+}) {
+  const id = "field-" + f.name;
+  return (
+    <div>
+      <label class={LABEL} for={id}>
+        {f.label}
+        {f.required ? "" : " (optional)"}
+      </label>
+      {f.name === "headers" ? (
+        <textarea
+          id={id}
+          class={`${INPUT} font-mono`}
+          value={value}
+          onInput={(e) => onInput((e.target as HTMLTextAreaElement).value)}
+          placeholder={f.help}
+        />
+      ) : f.secret ? (
+        <input
+          id={id}
+          class={`${INPUT} font-mono`}
+          type="password"
+          autocomplete="off"
+          value={value}
+          onInput={(e) => onInput((e.target as HTMLInputElement).value)}
+          placeholder={saved ? "saved: leave empty to keep it" : placeholder || f.placeholder || ""}
+        />
+      ) : (
+        <input
+          id={id}
+          class={INPUT}
+          type="text"
+          autocomplete="off"
+          value={value}
+          onInput={(e) => onInput((e.target as HTMLInputElement).value)}
+          placeholder={placeholder || f.placeholder || ""}
+        />
+      )}
+      {f.help && <p class={HELP}>{f.help}</p>}
+    </div>
+  );
+}
+
+// ConnectionForm adds or edits a connection: the fields the service needs, which kitties may
+// use it, and (under "More options") its name, its description for the kitties and the
+// optional fields.
+function ConnectionForm({
   view,
+  kind,
   catalog,
-  categories,
+  kitties,
+  taken,
   motitaURL,
   onSaved,
   onClose,
+  onChange,
 }: {
-  view: ConnectorView;
+  view: ConnectorView | null;
+  kind: ConnectorKind;
   catalog: ConnectorKind[];
-  categories: string[];
+  kitties: Kitty[];
+  taken: string[];
   motitaURL?: string;
-  onSaved: (s: SettingsView) => void;
+  onSaved: (s: SettingsView, name: string) => void;
   onClose: () => void;
+  onChange: () => void;
 }) {
-  const [name, setName] = useState(view.name);
-  const [kind, setKind] = useState(view.kind || "");
-  const [description, setDescription] = useState(view.description || "");
-  const [values, setValues] = useState<Record<string, string>>({ ...view.settings });
+  const def = catalog.find((k) => k.name === kind.name) || kind;
+  const [name, setName] = useState(view?.name || "");
+  const [description, setDescription] = useState(view?.description || "");
+  const [values, setValues] = useState<Record<string, string>>({ ...(view?.settings || {}) });
+  // Who may use it starts from the kitties' own lists (all of them for a new one), and follows
+  // the list of kitties if it arrives later, until the person changes it.
+  const initialWho = () =>
+    new Set(
+      (view ? kitties.filter((k) => mayUse(k.connectors, view.name)) : kitties).map((k) => k.name),
+    );
+  const [who, setWho] = useState<Set<string>>(initialWho);
+  const [touched, setTouched] = useState(false);
+  useEffect(() => {
+    if (!touched) {
+      setWho(initialWho());
+    }
+  }, [kitties]);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const def = catalog.find((k) => k.name === kind);
   const set = (k: string, v: string) => setValues({ ...values, [k]: v });
+  const finalName = view?.name || name.trim() || uniqueName(def.name, taken);
+  const required = def.fields.filter((f) => f.required);
+  const optional = def.fields.filter((f) => !f.required);
+  const missing = required.filter(
+    (f) => !(values[f.name] || "").trim() && !(view?.secrets_set || []).includes(f.name),
+  );
+  const toggle = (n: string) => {
+    setTouched(true);
+    const next = new Set(who);
+    next.has(n) ? next.delete(n) : next.add(n);
+    setWho(next);
+  };
   const save = async () => {
     setBusy(true);
     setErr("");
@@ -487,159 +670,125 @@ function ConnectorForm({
       const settings: Record<string, string> = {};
       for (const [k, v] of Object.entries(values)) {
         if (v.trim()) {
-          settings[k] = v;
+          settings[k] = v.trim();
         }
       }
-      onSaved(await api.setConnector(name.trim(), { kind, description, settings }));
+      await api.setConnector(finalName, { kind: def.name, description, settings });
+      // Who may use it: each kitty's own list of connections changes (a kitty that may use all
+      // of them has it already).
+      const all = await api.connectorNames();
+      for (const k of kitties) {
+        const has = mayUse(k.connectors, finalName);
+        const want = who.has(k.name);
+        if (has !== want) {
+          await api.editKitty(k.id, {
+            connectors: withConnection(k.connectors, finalName, want, all),
+          });
+        }
+      }
+      onChange();
+      onSaved(await api.settings(), finalName);
     } catch (e) {
-      setErr((e as Error).message);
+      setErr(errText(e));
       setBusy(false);
     }
   };
-  if (!kind) {
-    return (
-      <div class="mt-3 p-4 border border-[rgb(var(--accent-rgb)/0.3)] bg-[rgb(var(--accent-rgb)/0.05)]">
-        <p class="text-sm text-[var(--t3)]">Pick the service to connect.</p>
-        <ServiceGrid
-          catalog={catalog}
-          categories={categories}
-          picked=""
-          onPick={(k) => {
-            setKind(k.name);
-            setValues({});
-            if (!name) {
-              setName(k.name);
-            }
-          }}
-        />
-        <div class="flex justify-end gap-2 mt-4">
-          <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
+  const field = (f: ConnectorKind["fields"][number]) => (
+    <FieldInput
+      key={f.name}
+      f={f}
+      value={values[f.name] || ""}
+      saved={(view?.secrets_set || []).includes(f.name)}
+      placeholder={f.name === "url" && def.name === "motita" ? motitaURL : undefined}
+      onInput={(v) => set(f.name, v)}
+    />
+  );
   return (
-    <div class="mt-3 p-4 border border-[rgb(var(--accent-rgb)/0.3)] bg-[rgb(var(--accent-rgb)/0.05)]">
-      <div class="flex items-center gap-3 mb-1">
-        <span class="service-badge" style={`--brand:${logoColor(kind)}`}>
-          <ConnectorLogo kind={kind} size={28} />
+    <div class="form-card" data-testid="connection-form">
+      <div class="flex items-center gap-3">
+        <span class="service-badge" style={`--brand:${logoColor(def.name)}`}>
+          <ConnectorLogo kind={def.name} size={28} />
         </span>
         <div class="flex-1 min-w-0">
-          <div class="font-semibold">{def?.label || kind}</div>
-          <div class="text-xs text-[var(--t3)]">{def?.help}</div>
+          <div class="font-semibold">{def.label}</div>
+          <div class="text-xs text-[var(--t3)]">{def.help}</div>
         </div>
-        {!view.name && (
-          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setKind("")}>
-            change service
-          </button>
-        )}
       </div>
-      {def?.oauth && view.name && (
-        <OAuthButton
-          view={view}
-          onDone={() =>
-            api
-              .settings()
-              .then(onSaved)
-              .catch(() => {})
-          }
-        />
-      )}
-      {def?.oauth && !view.name && (
-        <p class="text-xs text-[var(--t3)] mb-2">
+      {def.oauth && view && <OAuthButton view={view} onDone={onChange} />}
+      {def.oauth && !view && (
+        <p class="text-xs text-[var(--t3)] mt-3">
           {def.fields.some((f) => f.name === "token")
-            ? "Paste a token below, or save first and sign in with the button that appears here."
-            : "Save first, then sign in with the button that appears here."}
+            ? "Paste a token below, or save and then sign in with the button that appears."
+            : "Save, then sign in with the button that appears here."}
         </p>
       )}
-      <div class="grid sm:grid-cols-2 gap-x-4">
-        <div class="sm:col-span-2">
-          <label class={LABEL}>Name</label>
-          <input
-            class={INPUT}
-            value={name}
-            disabled={Boolean(view.name)}
-            onInput={(e) => setName((e.target as HTMLInputElement).value)}
-            placeholder="team-slack"
-          />
-        </div>
-        {def && def.actions.length > 0 && (
-          <div class="sm:col-span-2 text-xs text-[var(--t3)] mt-2">
-            Actions:{" "}
-            {def.actions
-              .map(
-                (a) =>
-                  a.name +
-                  "(" +
-                  (a.args || []).join(", ") +
-                  ")" +
-                  (a.risk === "always"
-                    ? " [always asks you]"
-                    : a.risk === "ask"
-                      ? " [asks you first]"
-                      : ""),
-              )
-              .join("; ")}
+      {required.map(field)}
+      {kitties.length > 0 && (
+        <>
+          <label class={LABEL}>Which kitties may use it</label>
+          <div class="flex flex-wrap gap-2" data-testid="connection-kitties">
+            {kitties.map((k) => (
+              <label key={k.id} class={`chip ${who.has(k.name) ? "on" : ""}`}>
+                <input
+                  type="checkbox"
+                  class="sr-only"
+                  checked={who.has(k.name)}
+                  onChange={() => toggle(k.name)}
+                />
+                {k.name}
+              </label>
+            ))}
           </div>
-        )}
-        <div class="sm:col-span-2">
-          <label class={LABEL}>Description (what the kitties are told it does)</label>
-          <input
-            class={INPUT}
-            value={description}
-            onInput={(e) => setDescription((e.target as HTMLInputElement).value)}
-            placeholder={def?.help}
-          />
-        </div>
-        {def?.fields.map((f) => (
-          <div key={f.name} class={f.name === "url" || f.name === "headers" ? "sm:col-span-2" : ""}>
-            <label class={LABEL}>
-              {f.label}
-              {f.required ? "" : " (optional)"}
-            </label>
-            {f.name === "headers" ? (
-              <textarea
-                class={`${INPUT} font-mono`}
-                value={values[f.name] || ""}
-                onInput={(e) => set(f.name, (e.target as HTMLTextAreaElement).value)}
-                placeholder={f.help}
-              />
-            ) : f.secret ? (
-              <input
-                class={`${INPUT} font-mono`}
-                type="password"
-                value={values[f.name] || ""}
-                onInput={(e) => set(f.name, (e.target as HTMLInputElement).value)}
-                placeholder={
-                  view.secrets_set?.includes(f.name)
-                    ? "saved; type to replace"
-                    : f.placeholder || f.help
-                }
-              />
-            ) : (
-              <input
-                class={INPUT}
-                type="text"
-                value={values[f.name] || ""}
-                onInput={(e) => set(f.name, (e.target as HTMLInputElement).value)}
-                placeholder={
-                  f.name === "url" && kind === "motita"
-                    ? motitaURL || f.help
-                    : f.placeholder || f.help
-                }
-              />
-            )}
-          </div>
-        ))}
-      </div>
-      {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
+        </>
+      )}
+      {def.actions.length > 0 && (
+        <More label="What the kitties can do with it">
+          <ul class="text-xs text-[var(--t3)] flex flex-col gap-1 mt-1">
+            {def.actions.map((a) => (
+              <li key={a.name}>
+                <b class="text-[var(--t2)]">{actionLabel(a.name)}</b>: {a.help}
+                {a.risk === "always" && <span class="tag tag-amber ml-1">always asks you</span>}
+                {a.risk === "ask" && <span class="tag ml-1">asks you first</span>}
+              </li>
+            ))}
+          </ul>
+        </More>
+      )}
+      <More>
+        {optional.map(field)}
+        <label class={LABEL} for="connection-name">
+          Name in Kitties
+        </label>
+        <input
+          id="connection-name"
+          class={INPUT}
+          value={view?.name || name}
+          disabled={Boolean(view)}
+          onInput={(e) => setName((e.target as HTMLInputElement).value)}
+          placeholder={uniqueName(def.name, taken)}
+        />
+        <label class={LABEL} for="connection-description">
+          What the kitties are told it is for
+        </label>
+        <input
+          id="connection-description"
+          class={INPUT}
+          value={description}
+          onInput={(e) => setDescription((e.target as HTMLInputElement).value)}
+          placeholder={def.help}
+        />
+      </More>
+      <Err text={err} />
       <div class="flex justify-end gap-2 mt-4">
         <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
           Cancel
         </button>
-        <button class="btn-accent px-4 py-2 text-sm" disabled={busy || !name.trim()} onClick={save}>
+        <button
+          class="btn-accent px-4 py-2 text-sm"
+          disabled={busy || missing.length > 0}
+          title={missing.length ? `Fill in: ${missing.map((f) => f.label).join(", ")}` : undefined}
+          onClick={save}
+        >
           {busy ? "Saving…" : "Save"}
         </button>
       </div>
@@ -647,73 +796,291 @@ function ConnectorForm({
   );
 }
 
-const NEW_CONNECTOR: ConnectorView = {
-  name: "",
-  kind: "",
-  category: "",
-  label: "",
-  token_set: false,
-  settings: {},
-  secrets_set: [],
-  from_file: false,
+function ConnectionRow({
+  c,
+  onEdit,
+  onChanged,
+}: {
+  c: ConnectorView;
+  onEdit: () => void;
+  onChanged: (s: SettingsView) => void;
+}) {
+  const [err, setErr] = useState("");
+  const users = c.used_by || [];
+  return (
+    <div class="item" data-testid={`connection-${c.name}`}>
+      <span class="service-badge" style={`--brand:${logoColor(c.kind)}`}>
+        <ConnectorLogo kind={c.kind} size={22} />
+      </span>
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center gap-2 flex-wrap">
+          <span class="text-sm font-semibold">{c.label || c.kind}</span>
+          {c.name !== c.kind && <span class="text-xs text-[var(--t4)]">{c.name}</span>}
+          {c.signed_in && (
+            <span class="tag tag-green">signed in{c.account ? " · " + c.account : ""}</span>
+          )}
+          {c.needs_sign_in && <span class="tag tag-amber">sign in needed</span>}
+        </div>
+        <div class="text-xs text-[var(--t3)] mt-0.5">
+          {users.length ? `Used by ${people(users)}` : "No kitty may use it yet"}
+          {c.from_file && <span class="text-[var(--t4)]"> · from the configuration file</span>}
+        </div>
+        <Err text={err} />
+      </div>
+      <div class="flex gap-1 flex-none">
+        <button class="btn-ghost px-2 py-1 text-xs" onClick={onEdit} aria-label={`Edit ${c.name}`}>
+          Edit
+        </button>
+        <button
+          class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]"
+          aria-label={`Remove ${c.name}`}
+          onClick={() =>
+            confirm(`Remove the connection ${c.label || c.name}? The kitties lose it too.`) &&
+            api
+              .removeConnector(c.name)
+              .then(onChanged)
+              .catch((e) => setErr(errText(e)))
+          }
+        >
+          <IconTrash size={12} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Notifications ──────────────────────────────────────────────────────────────────────────
+
+// NOTIFY_LABELS say what each event is, as the page offers it.
+const NOTIFY_LABELS: Record<string, string> = {
+  help: "A kitty gave up and needs my help",
+  approval: "An action is waiting for my yes",
+  goal_done: "A goal finished",
+  goal_blocked: "A goal could not finish",
+  recovered: "A kitty's container was brought back",
+  budget: "A kitty spent its day's tokens",
 };
+
+// NotifyForm chooses where the kitties tell you what happened while you were away (a push to
+// the phone, Telegram, Slack, mail) and which events are worth a message.
+function NotifyForm({
+  view,
+  onSaved,
+  onSetUp,
+}: {
+  view: SettingsView;
+  onSaved: (s: SettingsView) => void;
+  onSetUp: () => void;
+}) {
+  const channels = view.connectors.filter((c) => c.category === "messaging");
+  const [connector, setConnector] = useState(view.notify?.connector || "");
+  const [on, setOn] = useState<string[]>(
+    view.notify?.on?.length ? view.notify.on : ["help", "approval"],
+  );
+  const [digest, setDigest] = useState(view.notify?.digest || "");
+  const [msg, flash] = useFlash();
+  const [err, setErr] = useState("");
+  const toggle = (e: string) => setOn(on.includes(e) ? on.filter((x) => x !== e) : [...on, e]);
+  const body = { connector, on, digest };
+  const save = async () => {
+    setErr("");
+    try {
+      onSaved(await api.setNotify(body));
+      flash("Saved.");
+    } catch (e) {
+      setErr(errText(e));
+    }
+  };
+  const test = async () => {
+    setErr("");
+    try {
+      await api.setNotify(body);
+      const r = await api.testNotify(connector);
+      r.ok
+        ? flash("Sent: look at your phone or channel.")
+        : setErr(r.error || "It did not go through.");
+    } catch (e) {
+      setErr(errText(e));
+    }
+  };
+  const sendDigest = async () => {
+    setErr("");
+    try {
+      await api.setNotify(body);
+      const r = await api.sendDigest();
+      r.ok ? flash("Summary sent.") : setErr(r.error || "The summary did not go through.");
+    } catch (e) {
+      setErr(errText(e));
+    }
+  };
+  return (
+    <div data-testid="notify">
+      <p class="text-sm text-[var(--t3)]">
+        The kitties work while you are away. Choose how they reach you outside this window: a push
+        to your phone is the quickest, and Telegram, Slack or email work too.
+      </p>
+      {channels.length === 0 && (
+        <div class="callout mt-3">
+          <div class="font-semibold text-sm">Get alerts on your phone</div>
+          <p class="text-xs text-[var(--t3)] mt-1">
+            Install the free ntfy app on your phone, choose a topic name and subscribe to it. Then
+            connect the same topic here.
+          </p>
+          <button class="btn-accent px-3 py-1.5 text-xs mt-2" onClick={onSetUp}>
+            Set up phone notifications
+          </button>
+        </div>
+      )}
+      <label class={LABEL} for="notify-connector">
+        Send through
+      </label>
+      <select
+        id="notify-connector"
+        class={INPUT}
+        value={connector}
+        onChange={(e) => setConnector((e.target as HTMLSelectElement).value)}
+      >
+        <option value="">nowhere: notifications are off</option>
+        {channels.map((c) => (
+          <option key={c.name} value={c.name}>
+            {c.label}
+            {c.name !== c.kind ? ` (${c.name})` : ""}
+          </option>
+        ))}
+      </select>
+      <label class={LABEL}>Tell me when</label>
+      <div class="flex flex-col gap-1">
+        {view.notify_events.map((e) => (
+          <label key={e} class="flex items-center gap-2 text-sm">
+            <input type="checkbox" checked={on.includes(e)} onChange={() => toggle(e)} />{" "}
+            {NOTIFY_LABELS[e] || e}
+          </label>
+        ))}
+      </div>
+      <label class={LABEL} for="notify-digest">
+        A summary of the last day, every day at
+      </label>
+      <div class="flex items-center gap-2 flex-wrap">
+        <input
+          id="notify-digest"
+          class={`${INPUT} !w-32 font-mono`}
+          type="time"
+          value={digest}
+          onInput={(e) => setDigest((e.target as HTMLInputElement).value)}
+        />
+        {digest && (
+          <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setDigest("")}>
+            none
+          </button>
+        )}
+        <button
+          class="btn-ghost px-3 py-1.5 text-xs"
+          disabled={!connector}
+          onClick={sendDigest}
+          data-testid="send-digest"
+        >
+          Send one now
+        </button>
+      </div>
+      <p class={HELP}>
+        What each kitty did, what it spent, and what waits for your yes. Leave it empty for no
+        summary.
+      </p>
+      <div class="flex items-center gap-2 mt-4 flex-wrap">
+        <button class="btn-accent px-4 py-2 text-sm" onClick={save}>
+          Save
+        </button>
+        <button class="btn-ghost px-4 py-2 text-sm" disabled={!connector} onClick={test}>
+          Send a test
+        </button>
+        {msg && <span class="tag tag-green">{msg}</span>}
+      </div>
+      <Err text={err} />
+    </div>
+  );
+}
+
+// ─── The dialog ─────────────────────────────────────────────────────────────────────────────
+
+type ConnectionEdit = { view: ConnectorView | null; kind: ConnectorKind };
 
 export default function SettingsModal({
   onClose,
   initial,
   addConnector,
   editConnector,
+  addModel,
+  kitties = [],
+  onKittiesChanged = () => {},
 }: {
   onClose: () => void;
   initial?: Tab;
   addConnector?: boolean;
   editConnector?: string;
+  addModel?: boolean;
+  kitties?: Kitty[];
+  onKittiesChanged?: () => void;
 }) {
   const [tab, setTab] = useState<Tab>(initial || "models");
   const [view, setView] = useState<SettingsView | null>(null);
   const [err, setErr] = useState("");
   // A page that cannot draw a tab says why, instead of leaving it blank.
   const [crash] = useErrorBoundary();
-  const [editing, setEditing] = useState<ProviderView | null>(null);
-  const [editingC, setEditingC] = useState<ConnectorView | null>(
-    addConnector ? NEW_CONNECTOR : null,
-  );
-  // The route decides the tab and the form while the modal stays open (#new-settings to
-  // #new-connectors-add is one page, not a reload).
+  const [model, setModel] = useState<ProviderView | null | "new">(addModel ? "new" : null);
+  const [conn, setConn] = useState<ConnectionEdit | null>(null);
+  const [adding, setAdding] = useState(Boolean(addConnector));
+  const [note, flash] = useFlash();
+  // The route decides the tab and the form while the dialog stays open.
   useEffect(() => {
     setTab(initial || "models");
-    setEditingC(addConnector ? NEW_CONNECTOR : null);
-  }, [initial, addConnector]);
-  useEffect(() => {
+    setAdding(Boolean(addConnector));
+    if (addModel) {
+      setModel("new");
+    }
+  }, [initial, addConnector, addModel]);
+  const load = () =>
     api
       .settings()
       .then((v) => {
         setView(v);
-        if (editConnector) {
-          const c = v.connectors.find((x) => x.name === editConnector);
-          if (c) {
-            setEditingC(c);
-          }
-        }
+        return v;
       })
-      .catch((e) => setErr((e as Error).message));
+      .catch((e) => {
+        setErr(errText(e));
+        return null;
+      });
+  useEffect(() => {
+    load().then((v) => {
+      if (v && editConnector) {
+        const c = v.connectors.find((x) => x.name === editConnector);
+        const k = c && v.connector_catalog.find((x) => x.name === c.kind);
+        if (c && k) {
+          setConn({ view: c, kind: k });
+        }
+      }
+    });
   }, [editConnector]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [onClose]);
-  const saved = (s: SettingsView) => {
-    setView(s);
-    setEditing(null);
-    setEditingC(null);
-  };
+  const kindOf = (name: string) => view?.connector_catalog.find((k) => k.name === name);
   const tabs: { id: Tab; label: string }[] = [
     { id: "models", label: "Models" },
-    { id: "connectors", label: "Connectors" },
+    { id: "connectors", label: "Connections" },
     { id: "notifications", label: "Notifications" },
-    { id: "gateway", label: "Gateway" },
+    { id: "gateway", label: inWails() ? "Gateway" : "Connection" },
   ];
+  const modelNames = useMemo(() => (view?.providers || []).map((p) => p.name), [view]);
+  const connNames = useMemo(() => (view?.connectors || []).map((c) => c.name), [view]);
+  const setUpNtfy = () => {
+    const k = kindOf("ntfy");
+    setTab("connectors");
+    if (k) {
+      setConn({ view: null, kind: k });
+    }
+  };
   return (
     <div
       class="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4 backdrop"
@@ -735,54 +1102,75 @@ export default function SettingsModal({
             <IconX />
           </button>
         </div>
-        <div class="flex gap-1 border-b border-white/5 mb-3">
+        <div class="flex gap-1 border-b border-white/5 mb-3 overflow-x-auto" role="tablist">
           {tabs.map((t) => (
             <button
               key={t.id}
-              class={`plain px-4 py-2 text-sm border-b-2 ${tab === t.id ? "border-[var(--color-accent)] text-[var(--t1)]" : "border-transparent text-[var(--t3)]"}`}
+              role="tab"
+              aria-selected={tab === t.id}
+              class={`plain px-4 py-2 text-sm border-b-2 whitespace-nowrap ${tab === t.id ? "border-[var(--color-accent)] text-[var(--t1)]" : "border-transparent text-[var(--t3)]"}`}
               onClick={() => setTab(t.id)}
             >
               {t.label}
             </button>
           ))}
         </div>
-        {err && <p class="text-sm text-[var(--c-red)] mb-2">{err}</p>}
+        <Err text={err} />
         {crash && (
           <p class="text-sm text-[var(--c-red)] mb-2" role="alert">
             Settings could not be drawn: {crash.message}. The gateway may be older than this app:
-            update it (kitties version) and reopen.
+            update it and reopen.
           </p>
         )}
+        {note && <div class="callout callout-ok mb-3">{note}</div>}
         {!view && !err && !crash && <p class="text-sm text-[var(--t4)]">Loading…</p>}
 
         {tab === "models" && view && (
           <div>
             <p class="text-sm text-[var(--t3)]">
-              The AI profiles a kitty can think with. Keys are kept on the gateway and never shown
-              again; a profile from the YAML can be edited or removed here too.
+              Models are the brains your kitties think with. Add one to start; you can add others
+              later and give each kitty the one it should use.
             </p>
-            <div class="flex flex-col gap-1 mt-3">
+            <div class="flex flex-col gap-2 mt-3">
               {view.providers.map((p) => (
-                <ProviderRow key={p.name} p={p} onEdit={() => setEditing(p)} onChanged={saved} />
+                <ModelRow
+                  key={p.name}
+                  p={p}
+                  onEdit={() => setModel(p)}
+                  onChanged={(s) => {
+                    setView(s);
+                    onKittiesChanged();
+                  }}
+                />
               ))}
-              {view.providers.length === 0 && (
-                <div class="text-sm text-[var(--t4)] px-2">
-                  No profile yet: add one to give the kitties a brain.
+              {view.providers.length === 0 && model === null && (
+                <div class="callout">
+                  <div class="font-semibold text-sm">No model yet</div>
+                  <p class="text-xs text-[var(--t3)] mt-1">
+                    Your kitties need a brain to think with. Add one from a provider you have an
+                    account with, or Ollama to run free models on this computer.
+                  </p>
                 </div>
               )}
             </div>
-            {editing ? (
-              <ProviderForm
-                key={editing.name || "new"}
-                view={editing}
+            {model !== null ? (
+              <ModelForm
+                key={model === "new" ? "new" : model.name}
+                view={model === "new" ? null : model}
                 kinds={view.kinds}
-                onSaved={saved}
-                onClose={() => setEditing(null)}
+                taken={modelNames}
+                onSaved={(s, msg) => {
+                  setView(s);
+                  setModel(null);
+                  flash(msg);
+                  onKittiesChanged();
+                }}
+                onClose={() => setModel(null)}
               />
             ) : (
               <button
                 class="btn-outline mt-3 flex items-center gap-2 px-3 py-2 text-sm"
-                onClick={() => setEditing(blankProvider(view.kinds))}
+                onClick={() => setModel("new")}
               >
                 <IconPlus size={14} /> Add a model
               </button>
@@ -793,95 +1181,85 @@ export default function SettingsModal({
         {tab === "connectors" && view && (
           <div>
             <p class="text-sm text-[var(--t3)]">
-              External services the kitties may use: {view.connector_catalog.length} services in{" "}
-              {view.connector_categories.length} categories. Pick one below to connect it.
+              Connections let your kitties act in other services: send messages, read email, open
+              issues, post. You choose which kitties may use each one, and anything that reaches
+              other people asks you first.
             </p>
-            {!editingC && (
-              <ServiceGrid
+            {conn ? (
+              <ConnectionForm
+                key={(conn.view?.name || "new") + conn.kind.name}
+                view={conn.view}
+                kind={conn.kind}
                 catalog={view.connector_catalog}
-                categories={view.connector_categories}
-                picked=""
-                onPick={(k) =>
-                  setEditingC({
-                    ...NEW_CONNECTOR,
-                    kind: k.name,
-                    category: k.category,
-                    label: k.label,
-                    name: view.connectors.some((c) => c.name === k.name) ? "" : k.name,
-                  })
-                }
-              />
-            )}
-            <div class="section-title !mx-0 mt-4">Connected</div>
-            <div class="flex flex-col gap-1 mt-3">
-              {view.connectors.map((c) => (
-                <div key={c.name} class="row !py-2.5">
-                  <button
-                    class="row-hit"
-                    onClick={() => setEditingC(c)}
-                    aria-label={`Edit ${c.name}`}
-                  />
-                  <span class="service-badge" style={`--brand:${logoColor(c.kind)}`}>
-                    <ConnectorLogo kind={c.kind} size={22} />
-                  </span>
-                  <div class="flex-1 min-w-0">
-                    <div class="flex items-center gap-2 flex-wrap">
-                      <span class="text-sm font-semibold">{c.name}</span>
-                      <span class="tag tag-magenta">{c.label || c.kind}</span>
-                      <span class="tag">{c.category}</span>
-                      {c.from_file && <span class="tag">yaml</span>}
-                      {c.secrets_set?.length > 0 && <span class="tag tag-green">secrets set</span>}
-                      {c.signed_in && (
-                        <span class="tag tag-green">
-                          signed in{c.account ? " · " + c.account : ""}
-                        </span>
-                      )}
-                      {c.needs_sign_in && <span class="tag tag-amber">sign in needed</span>}
-                    </div>
-                    <div class="text-xs text-[var(--t3)] truncate">
-                      {c.description || c.url || c.command || c.kind}
-                    </div>
-                  </div>
-                  <div class="row-actions flex gap-1 flex-none">
-                    <button
-                      class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]"
-                      aria-label={`Remove ${c.name}`}
-                      onClick={() =>
-                        confirm(`Remove the connector ${c.name}?`) &&
-                        api.removeConnector(c.name).then(saved)
-                      }
-                    >
-                      <IconTrash size={12} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-              {view.connectors.length === 0 && (
-                <div class="text-sm text-[var(--t4)] px-2">No connector yet.</div>
-              )}
-            </div>
-            {editingC ? (
-              <ConnectorForm
-                key={editingC.name || "new"}
-                view={editingC}
-                catalog={view.connector_catalog}
-                categories={view.connector_categories}
+                kitties={kitties}
+                taken={connNames}
                 motitaURL={view.motita_url}
-                onSaved={saved}
-                onClose={() => setEditingC(null)}
+                onSaved={(s, name) => {
+                  setView(s);
+                  setAdding(false);
+                  const saved = s.connectors.find((c) => c.name === name);
+                  // A service that signs in stays open on its button; the rest close.
+                  if (saved?.needs_sign_in) {
+                    setConn({ view: saved, kind: conn.kind });
+                    flash("Saved: now sign in.");
+                  } else {
+                    setConn(null);
+                    flash(`${conn.kind.label} is connected.`);
+                  }
+                }}
+                onClose={() => setConn(null)}
+                onChange={() => {
+                  onKittiesChanged();
+                  load();
+                }}
               />
             ) : (
-              <button
-                class="btn-outline mt-3 flex items-center gap-2 px-3 py-2 text-sm"
-                onClick={() => setEditingC(NEW_CONNECTOR)}
-              >
-                <IconPlus size={14} /> Add a connector
-              </button>
+              <>
+                <div class="section-title !mx-0 mt-4">Your connections</div>
+                <div class="flex flex-col gap-2">
+                  {view.connectors.map((c) => (
+                    <ConnectionRow
+                      key={c.name}
+                      c={c}
+                      onEdit={() => {
+                        const k = kindOf(c.kind);
+                        k && setConn({ view: c, kind: k });
+                      }}
+                      onChanged={(s) => {
+                        setView(s);
+                        onKittiesChanged();
+                      }}
+                    />
+                  ))}
+                  {view.connectors.length === 0 && (
+                    <p class="text-sm text-[var(--t4)]">None yet: pick a service below.</p>
+                  )}
+                </div>
+                {adding || view.connectors.length === 0 ? (
+                  <>
+                    <div class="section-title !mx-0 mt-5">Add a connection</div>
+                    <ServiceGrid
+                      catalog={view.connector_catalog}
+                      categories={view.connector_categories}
+                      onPick={(k) => setConn({ view: null, kind: k })}
+                    />
+                  </>
+                ) : (
+                  <button
+                    class="btn-outline mt-3 flex items-center gap-2 px-3 py-2 text-sm"
+                    onClick={() => setAdding(true)}
+                  >
+                    <IconPlus size={14} /> Add a connection
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
 
-        {tab === "notifications" && view && <NotifyForm view={view} onSaved={saved} />}
+        {tab === "notifications" && view && (
+          <NotifyForm view={view} onSaved={setView} onSetUp={setUpNtfy} />
+        )}
         {tab === "gateway" && <ConnectModal inline onClose={onClose} onDone={onClose} />}
       </div>
     </div>

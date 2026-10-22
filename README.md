@@ -108,8 +108,9 @@ as `ghcr.io/madkoding/kitties` with each release.
 that uses the Motita design system: dark ground, neon edges, cut corners, frosted panels,
 Sansation and JetBrains Mono. It talks to a gateway, local by default (the downloads carry one and start it for you), and
 needs no token on the machine the gateway runs on: the gateway leaves its token in `~/.kitties/gateway.token` and the
-app picks it up. **Settings** holds the models (AI profiles, with their keys kept on the gateway),
-the connectors and the gateway address.
+app picks it up. **Settings** holds the models (pick a provider, paste its key: it is tested on save), the
+connections (with the kitties that may use each one), notifications and the gateway address.
+A first run is a short checklist: a model, a kitty, a chat.
 
 ```sh
 make frontend     # builds the page (node 22)
@@ -126,6 +127,8 @@ cd desktop && wails dev   # live reload while working on it
 | ![Google Workspace: sign in with OAuth](docs/screenshots/18-connector-oauth.png) | ![A kitty's own display](docs/screenshots/13-tom-display.png) |
 | ![The library: skills](docs/screenshots/15-library-skills.png) | ![The library: artifacts](docs/screenshots/16-library-artifacts.png) |
 | ![New kitty: pick its pixel cat](docs/screenshots/07-new-kitty.png) | ![Light mode](docs/screenshots/11-light.png) |
+| ![A first run is a checklist](docs/screenshots/31-welcome.png) | ![Adding a model: pick the provider](docs/screenshots/32-pick-provider.png) |
+| ![Adding a model: the key and the suggested model](docs/screenshots/34-add-model.png) | ![A connection and the kitties that may use it](docs/screenshots/33-connection-form.png) |
 | ![A kitty posting through Slack: the chip carries the logo](docs/screenshots/19-connector-call.png) | ![The phone layout](docs/screenshots/12-phone.png) |
 
 More in [docs/screenshots](docs/screenshots): the new chat and new kitty dialogs, the gateway

@@ -303,6 +303,16 @@ export default function Conversation({ session, kitties, user, pending }: Props)
       class="flex-1 overflow-y-auto px-4 sm:px-8 py-5 flex flex-col gap-3 scroll-thin"
       role="log"
     >
+      {(session.turns || []).length === 0 && !pending && (
+        <div class="empty-card max-w-md mx-auto mt-10 p-5 text-center" data-testid="chat-empty">
+          <div class="text-2xl mb-1">👋</div>
+          <p class="text-sm text-[var(--t2)]">
+            {session.members.length > 1
+              ? "Say hello to the team, or give them a task. Write @name to pick who answers."
+              : "Say hello, ask a question, or give it a task to work on."}
+          </p>
+        </div>
+      )}
       {(session.turns || []).map((t, i, all) => (
         <TurnCard
           key={i}

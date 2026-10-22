@@ -190,6 +190,8 @@ export interface ProviderKind {
 }
 
 export interface ProviderView {
+  // used_by names the kitties that think with it.
+  used_by?: string[];
   name: string;
   kind: string;
   model: string;
@@ -205,6 +207,8 @@ export interface ProviderView {
 }
 
 export interface ConnectorView {
+  // used_by names the kitties allowed to use it.
+  used_by?: string[];
   name: string;
   kind: string;
   category: string;
@@ -513,10 +517,13 @@ export const api = {
     soul?: Kitty["soul"];
     desktop?: boolean;
     avatar?: Kitty["avatar"];
+    connectors?: string[];
   }) => request<{ kitty: Kitty; warning?: string }>("POST", "/v1/kitties", spec),
   editKitty: (
     ref: string,
     u: {
+      provider?: string;
+      connectors?: string[];
       avatar?: Kitty["avatar"];
       soul?: Kitty["soul"];
       limits?: Limits;
@@ -527,6 +534,11 @@ export const api = {
   startKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/start`),
   stopKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/stop`),
   removeKitty: (ref: string) => request("DELETE", `/v1/kitties/${ref}`),
+  // connectorNames are the connections a kitty may be given.
+  connectorNames: () =>
+    request<{ connectors: Record<string, string> }>("GET", "/v1/connectors").then((r) =>
+      Object.keys(r.connectors || {}).sort(),
+    ),
   providers: () =>
     request<{ providers: ProviderInfo[]; kinds: string[] }>("GET", "/v1/providers").then(
       (r) => r.providers || [],

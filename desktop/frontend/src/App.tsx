@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
-import type { Kitty, Session } from "./api";
+import type { Kitty, ProviderInfo, Session } from "./api";
 import { ApiError, api, cookieLogin, errText, inWails, watchChat } from "./api";
 import Login from "./Login";
+import Welcome from "./Welcome";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
 import { IconMenu, IconTrash, IconUsers } from "./icons";
@@ -22,6 +23,7 @@ type ModalKind =
   | "settings"
   | "connectors"
   | "connectors-add"
+  | "models-add"
   | "library"
   | "artifacts"
   | "connector"
@@ -36,10 +38,10 @@ function routeFromHash(): {
   connector: string;
 } {
   const m = location.hash.match(
-    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|connect|settings|library|artifacts|approvals|notifications))?/,
+    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications))?/,
   );
   const n = location.hash.match(
-    /^#new-(chat|kitty|connectors-add|connectors|connect|settings|library|artifacts|approvals|notifications)/,
+    /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications)/,
   );
   const c = location.hash.match(/^#connector\/([a-z0-9-]+)/);
   const modal = (c ? "connector" : m?.[3] || n?.[1] || "none") as ModalKind;
@@ -67,6 +69,9 @@ export default function App() {
   const [waiting, setWaiting] = useState<number | null>(null);
   // Whether this page holds a session that can be ended (a gateway served on a network).
   const [canSignOut, setCanSignOut] = useState(false);
+  // The models (to guide a first run) and whether the gateway can give kitties a desktop.
+  const [models, setModels] = useState<ProviderInfo[]>([]);
+  const [containers, setContainers] = useState(true);
 
   const user = "You";
 
@@ -76,6 +81,11 @@ export default function App() {
       setKitties(k);
       setChats(c);
       setVersion(h.version || "");
+      setContainers(h.containers !== false);
+      api
+        .providers()
+        .then(setModels)
+        .catch(() => {});
       setOnline(true);
       setError("");
       api
@@ -212,6 +222,22 @@ export default function App() {
     return set;
   }, [session]);
 
+  // go opens a route; the same route again still opens its dialog (no hashchange fires then).
+  const go = (hash: string) => {
+    if (location.hash === hash) {
+      setModal(routeFromHash().modal);
+    } else {
+      location.hash = hash;
+    }
+  };
+  // leave closes a dialog that came from a route, so the address no longer points at it.
+  const leave = () => {
+    setModal("none");
+    if (/^#(new-|connector\/)/.test(location.hash)) {
+      location.hash = current ? `#chat/${current}` : "";
+    }
+  };
+
   const openChat = (id: string) => {
     location.hash = `#chat/${id}`;
     setSidebar(false);
@@ -334,7 +360,20 @@ export default function App() {
             {error}
           </div>
         )}
-        <Conversation session={session} kitties={kitties} user={user} pending={pending} />
+        {current ? (
+          <Conversation session={session} kitties={kitties} user={user} pending={pending} />
+        ) : (
+          <Welcome
+            models={models}
+            kitties={kitties}
+            chats={chats}
+            onAddModel={() => go("#new-models-add")}
+            onNewKitty={() => setModal("kitty")}
+            onNewChat={() => setModal("chat")}
+            onConnections={() => go("#new-connectors-add")}
+            onNotifications={() => go("#new-notifications")}
+          />
+        )}
         {session && (
           <Composer
             disabled={pending !== null || working}
@@ -349,6 +388,7 @@ export default function App() {
       {modal === "chat" && (
         <NewChatModal
           kitties={kitties}
+          onNeedKitty={() => setModal("kitty")}
           onClose={() => setModal("none")}
           onCreated={(id) => {
             setModal("none");
@@ -359,6 +399,10 @@ export default function App() {
       )}
       {modal === "kitty" && (
         <NewKittyModal
+          containers={containers}
+          onNeedModel={() => {
+            go("#new-models-add");
+          }}
           onClose={() => setModal("none")}
           onCreated={() => {
             setModal("none");
@@ -383,21 +427,28 @@ export default function App() {
         />
       )}
       {(modal === "settings" ||
+        modal === "models-add" ||
         modal === "connectors" ||
         modal === "connectors-add" ||
         modal === "connector" ||
         modal === "notifications") && (
         <SettingsModal
           initial={
-            modal === "settings"
+            modal === "settings" || modal === "models-add"
               ? "models"
               : modal === "notifications"
                 ? "notifications"
                 : "connectors"
           }
+          addModel={modal === "models-add"}
           addConnector={modal === "connectors-add"}
           editConnector={modal === "connector" ? routeFromHash().connector : undefined}
-          onClose={() => setModal("none")}
+          kitties={kitties}
+          onKittiesChanged={refresh}
+          onClose={() => {
+            leave();
+            refresh();
+          }}
         />
       )}
       {modal === "login" && (

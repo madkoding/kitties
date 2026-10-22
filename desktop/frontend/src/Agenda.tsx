@@ -358,9 +358,8 @@ export function LimitsForm({
     <div>
       <div class="section-title !mx-0 mt-5">Limits & backup</div>
       <p class="text-xs text-[var(--t4)]">
-        What one task may spend before {kitty.name} stops and says so, and what it may spend in a
-        day: out of tokens it rests until tomorrow, past its actions each one waits for your yes. 0
-        takes the default (no daily limit).
+        How much one task may spend before {kitty.name} stops and says so, and how much it may spend
+        in a day. Leave a box empty for the default.
       </p>
       <div class="grid grid-cols-2 gap-x-3">
         {(
@@ -382,7 +381,8 @@ export function LimitsForm({
               class={`${INPUT} font-mono`}
               type="number"
               min={0}
-              value={limits[k] || 0}
+              value={limits[k] || ""}
+              placeholder={k.startsWith("day_") ? "no limit" : "default"}
               onInput={(e) => set(k, (e.target as HTMLInputElement).value)}
             />
           </div>

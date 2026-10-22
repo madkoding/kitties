@@ -96,28 +96,18 @@ test("new chat and new kitty: pick the members, pick the pixel cat", async ({ pa
   await shot(page, "07-new-kitty");
 });
 
-test("settings: models, connectors and the gateway", async ({ page }) => {
+test("settings: models, connections and the gateway", async ({ page }) => {
   await open(page, "#new-settings");
-  await expect(page.getByText("Models", { exact: true })).toBeVisible();
-  await expect(page.getByText("gpt-5.5").first()).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Models" })).toBeVisible();
+  // A model reads as its provider and its model, with who uses it.
+  const model = page.getByTestId("model-fast");
+  await expect(model).toContainText("OpenAI");
+  await expect(model).toContainText("gpt-5.5");
+  await expect(page.getByRole("button", { name: "Add a model" })).toBeVisible();
   await shot(page, "08-settings-models");
   await open(page, "#new-connectors");
-  // Every service in the catalogue is a button with its logo, grouped by category.
-  const buttons = page.locator(".service-btn");
-  expect(await buttons.count()).toBeGreaterThanOrEqual(30);
-  expect(await buttons.locator("svg.logo, .logo-fallback").count()).toBe(await buttons.count());
-  for (const cat of [
-    "messaging",
-    "social media",
-    "git",
-    "productivity",
-    "office",
-    "finance",
-    "drawing",
-    "generic",
-  ]) {
-    await expect(page.getByText(cat, { exact: true }).first()).toBeVisible();
-  }
+  // The connections come first, each saying which kitties may use it.
+  await expect(page.getByTestId("connection-team-slack")).toContainText("Slack");
   await expect(page.getByText("sign in needed")).toBeVisible();
   await shot(page, "09-settings-connectors");
   await open(page, "#new-connect");
@@ -142,16 +132,25 @@ test("the library: skills with a proposal, and the artifacts", async ({ page }) 
 
 test("picking a service opens its form; an OAuth kind offers the sign-in", async ({ page }) => {
   await open(page, "#new-connectors-add");
-  await expect(page.getByText("Pick the service to connect.")).toBeVisible();
+  // Every service in the catalogue is a button with its logo; a search and categories narrow it.
+  const buttons = page.locator(".service-btn");
+  expect(await buttons.count()).toBeGreaterThanOrEqual(30);
+  expect(await buttons.locator("svg.logo, .logo-fallback").count()).toBe(await buttons.count());
+  for (const cat of ["Chat & messages", "Social media", "Code", "Office & files", "Finance"]) {
+    await expect(page.locator(".chip", { hasText: cat })).toBeVisible();
+  }
   await shot(page, "17-connector-catalogue");
+  await page.getByLabel("Search services").fill("google");
+  await expect(page.locator(".service-btn", { hasText: "Slack" })).toHaveCount(0);
   await page.locator(".service-btn", { hasText: "Google Workspace" }).click();
   await expect(page.getByText("Gmail, Calendar, Drive, Sheets and Docs").first()).toBeVisible();
   await expect(page.getByText("OAuth client id")).toBeVisible();
-  await expect(page.getByText("Save first, then sign in")).toBeVisible();
+  await expect(page.getByText("Save, then sign in with the button")).toBeVisible();
   // GitHub takes a token or a sign-in.
-  await page.getByText("change service").click();
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("github");
   await page.locator(".service-btn", { hasText: "GitHub" }).click();
-  await expect(page.getByText("Paste a token below, or save first")).toBeVisible();
+  await expect(page.getByText("Paste a token below, or save and then sign in")).toBeVisible();
   // The saved Google connector shows the sign-in button, which asks the gateway for a consent URL.
   await open(page, "#connector/workspace");
   const signIn = page.getByRole("button", { name: "Sign in with Google" });
@@ -324,11 +323,67 @@ test("the catalogue marks what asks first, and the new services are there", asyn
     await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
   }
   await page.locator(".service-btn", { hasText: "Stripe" }).click();
-  await expect(
-    page.getByText("refund(payment (pi_…), amount (cents, optional)) [always asks you]"),
-  ).toBeVisible();
-  await expect(page.getByText("send_invoice(id (in_…)) [asks you first]")).toBeVisible();
+  await page.getByText("What the kitties can do with it").click();
+  await expect(page.locator("li", { hasText: "Refund" })).toContainText("always asks you");
+  await expect(page.locator("li", { hasText: "Send invoice" })).toContainText("asks you first");
   await shot(page, "28-stripe");
+});
+
+test("a connection says which kitties may use it", async ({ page }) => {
+  await open(page, "#connector/team-slack");
+  const form = page.getByTestId("connection-form");
+  await expect(form).toBeVisible();
+  const who = page.getByTestId("connection-kitties");
+  // The kitties of the demo may use every connection.
+  for (const name of ["mimi", "tom", "luna"]) {
+    await expect(who.locator(".chip", { hasText: name })).toHaveClass(/on/);
+  }
+  await shot(page, "33-connection-form");
+});
+
+test("adding a model: pick the provider, paste the key, keep the suggested model", async ({
+  page,
+}) => {
+  await open(page, "#new-models-add");
+  await expect(page.getByTestId("provider-picker")).toBeVisible();
+  await shot(page, "32-pick-provider");
+  await page.getByRole("button", { name: /^Anthropic Claude/ }).click();
+  const form = page.getByTestId("model-form");
+  await expect(form.getByText("Get a key from Anthropic Claude")).toBeVisible();
+  await expect(page.getByLabel("Model")).toHaveValue("claude-sonnet-5-5");
+  // Without a key there is nothing to save yet.
+  await expect(page.getByRole("button", { name: "Save and test" })).toBeDisabled();
+  await page.getByLabel("API key").fill("sk-ant-demo");
+  await expect(page.getByRole("button", { name: "Save and test" })).toBeEnabled();
+  await shot(page, "34-add-model");
+});
+
+test("a first run is a checklist, and nothing can be made out of order", async ({ page }) => {
+  // A gateway with no model and no kitty yet.
+  await page.route("**/v1/kitties", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ json: { kitties: [] } })
+      : route.continue(),
+  );
+  await page.route("**/v1/chats", (route) =>
+    route.request().method() === "GET" ? route.fulfill({ json: { chats: [] } }) : route.continue(),
+  );
+  await page.route("**/v1/providers", (route) =>
+    route.fulfill({ json: { providers: [], kinds: [] } }),
+  );
+  await page.goto(`/${Q}`);
+  const welcome = page.getByTestId("welcome");
+  await expect(welcome).toContainText("Welcome to Kitties");
+  await expect(welcome).toContainText("3 steps");
+  await expect(welcome.getByRole("button", { name: "Create a kitty" })).toBeDisabled();
+  await shot(page, "31-welcome");
+  // A chat needs a kitty, and a kitty needs a model: each says so and leads to the next step.
+  await page.locator("aside").getByRole("button", { name: "New chat" }).click();
+  await expect(page.getByTestId("chat-needs-kitty")).toBeVisible();
+  await page.locator("[data-modal]").getByRole("button", { name: "Create a kitty" }).click();
+  await expect(page.getByTestId("kitty-needs-model")).toBeVisible();
+  await page.locator("[data-modal]").getByRole("button", { name: "Add a model" }).click();
+  await expect(page.getByTestId("provider-picker")).toBeVisible();
 });
 
 test("a kitty hands a subtask to another and the chip leads to their thread", async ({ page }) => {
@@ -344,6 +399,13 @@ test("a kitty hands a subtask to another and the chip leads to their thread", as
 
 test("the kitty's drawer: goals, the journal, limits and the backup", async ({ page }) => {
   await open(page, `#kitty/${ids.mimi}`);
+  // Its brain, who it is and what it may use are edited right here.
+  const basics = page.getByTestId("kitty-basics");
+  await expect(basics.getByLabel("Brain")).toHaveValue("strong");
+  await expect(basics.getByLabel("Who is it?")).toHaveValue(/patient researcher/);
+  await expect(page.getByTestId("kitty-connections").locator(".chip.on").first()).toContainText(
+    "All, new ones too",
+  );
   const goals = page.getByTestId("goals");
   await expect(goals.getByText("Inbox check")).toBeVisible();
   await expect(goals.getByText("Triage new issues")).toBeVisible();
@@ -401,10 +463,10 @@ test("settings still draw against an older gateway that leaves fields out", asyn
     });
   });
   await open(page, "#new-settings");
-  await expect(page.getByText("No profile yet")).toBeVisible();
-  await page.getByRole("button", { name: "Connectors" }).click();
-  await expect(page.getByText("0 services in 0 categories")).toBeVisible();
-  await page.getByRole("button", { name: "Notifications" }).click();
+  await expect(page.getByText("No model yet")).toBeVisible();
+  await page.getByRole("tab", { name: "Connections" }).click();
+  await expect(page.getByText("None yet: pick a service below.")).toBeVisible();
+  await page.getByRole("tab", { name: "Notifications" }).click();
   await expect(page.getByTestId("notify")).toBeVisible();
   await expect(page.getByText("Settings could not be drawn")).toHaveCount(0);
 });
