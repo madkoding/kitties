@@ -4,7 +4,7 @@
 #   dmgbuild -s desktop/dmg/settings.py -D app=path/Kitties.app -D background=bg.tiff \
 #            -D icon=path/iconfile.icns Kitties Kitties.dmg   (from the repository root)
 #
-# The window is 660x400: the app on the left, the Applications shortcut on the right with an
+# The picture is 660x440: the app on the left, the Applications shortcut on the right with an
 # arrow between them (drawn in the background), and the note about the first open underneath.
 import os
 
@@ -24,18 +24,20 @@ background = defines.get("background")  # noqa: F821
 if defines.get("icon"):  # noqa: F821
     icon = defines["icon"]  # noqa: F821
 
-window_rect = ((200, 120), (660, 400))
+# The window's height counts the title bar (28 to 36pt, by macOS version), so 472 leaves about
+# 436 to 444 of the 660x460 picture visible: everything that matters sits above y=430.
+window_rect = ((200, 120), (660, 468))
 default_view = "icon-view"
 show_status_bar = False
 show_tab_view = False
 show_toolbar = False
 show_pathbar = False
 show_sidebar = False
-icon_size = 112
+icon_size = 96
 text_size = 13
 arrange_by = None
 icon_locations = {
-    name: (170, 190),
-    "Applications": (490, 190),
-    readme: (330, 330),
+    name: (170, 165),
+    "Applications": (490, 165),
+    readme: (330, 345),
 }
