@@ -360,6 +360,36 @@ export function cookieLogin(): boolean {
   return !inWails() && !c.url && !c.token;
 }
 
+// fixSettings fills what an older gateway leaves out of the settings (or sends as null), so a
+// page newer than its gateway shows empty lists instead of failing to draw.
+function fixSettings<T>(path: string, data: T): T {
+  if (
+    !path.startsWith("/v1/settings") ||
+    !data ||
+    typeof data !== "object" ||
+    !("providers" in data)
+  ) {
+    return data;
+  }
+  const v = data as unknown as Record<string, unknown>;
+  for (const k of [
+    "providers",
+    "connectors",
+    "kinds",
+    "connector_kinds",
+    "connector_catalog",
+    "connector_categories",
+    "notify_events",
+  ]) {
+    if (!Array.isArray(v[k])) {
+      v[k] = [];
+    }
+  }
+  const n = (v.notify || {}) as { connector?: string; on?: string[] };
+  v.notify = { ...n, connector: n.connector || "", on: Array.isArray(n.on) ? n.on : [] };
+  return data;
+}
+
 // request performs one API call and returns its JSON.
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const app = window.go?.main?.App;
@@ -370,7 +400,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
     if (parsed.status >= 400) {
       throw new ApiError(parsed.status, data.error || `HTTP ${parsed.status}`);
     }
-    return data as T;
+    return fixSettings(path, data as T);
   }
   let conn = savedConnection();
   if (!conn.token) {
@@ -402,7 +432,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   if (!res.ok) {
     throw new ApiError(res.status, data.error || res.statusText);
   }
-  return data as T;
+  return fixSettings(path, data as T);
 }
 
 // fetchLocalToken asks the gateway for its token, which it hands out only to this machine, and

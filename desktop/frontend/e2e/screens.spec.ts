@@ -367,3 +367,44 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   await expect(page.getByText("Checked Inbox check").first()).toBeVisible();
   await shot(page, "22-goal-chat");
 });
+
+test("in the macOS app the top bars leave room for the window buttons and drag the window", async ({
+  page,
+}) => {
+  await open(page, "");
+  // The Wails app adds this class on macOS, where the title bar is hidden and the red, yellow
+  // and green buttons float over the page; a browser never has it.
+  await page.evaluate(() => document.documentElement.classList.add("mac-inset"));
+  const bar = page.locator("aside .titlebar");
+  await expect(bar).toHaveCSS("padding-left", "88px");
+  await expect(bar).toHaveCSS("--wails-draggable", "drag");
+  await expect(page.locator("header.titlebar")).toHaveCSS("--wails-draggable", "drag");
+  // What is on a bar stays clickable.
+  await expect(page.getByRole("button", { name: "Theme" })).not.toHaveCSS(
+    "--wails-draggable",
+    "drag",
+  );
+  // The logo and the name start to the right of the buttons (about 76px wide).
+  const logo = await page.locator("aside .titlebar span").first().boundingBox();
+  expect(logo!.x).toBeGreaterThan(80);
+  await page.screenshot({
+    path: "e2e/test-results/mac-inset.png",
+    clip: { x: 0, y: 0, width: 600, height: 120 },
+  });
+});
+
+test("settings still draw against an older gateway that leaves fields out", async ({ page }) => {
+  // A gateway from before the catalogue and the notifications: the lists are missing or null.
+  await page.route("**/v1/settings", async (route) => {
+    await route.fulfill({
+      json: { providers: null, connectors: null, default_provider: "", kinds: null },
+    });
+  });
+  await open(page, "#new-settings");
+  await expect(page.getByText("No profile yet")).toBeVisible();
+  await page.getByRole("button", { name: "Connectors" }).click();
+  await expect(page.getByText("0 services in 0 categories")).toBeVisible();
+  await page.getByRole("button", { name: "Notifications" }).click();
+  await expect(page.getByTestId("notify")).toBeVisible();
+  await expect(page.getByText("Settings could not be drawn")).toHaveCount(0);
+});

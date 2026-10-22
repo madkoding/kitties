@@ -61,7 +61,7 @@ export default function Sidebar(p: Props) {
       <aside
         class={`sidebar fixed md:relative inset-y-0 left-0 w-72 max-w-[85vw] z-30 flex flex-col ${p.open ? "" : "max-md:hidden"}`}
       >
-        <div class="flex items-center gap-2 px-4 py-3 border-b border-white/5 flex-none">
+        <div class="titlebar flex items-center gap-2 px-4 py-3 border-b border-white/5 flex-none">
           <span class="text-accent text-lg">🐱</span>
           <h1 class="text-base font-semibold tracking-wide">Kitties</h1>
           <span class="text-[10px] text-[var(--t4)] font-mono mt-0.5">{p.version}</span>

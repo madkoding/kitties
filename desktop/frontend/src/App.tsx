@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import type { Kitty, Session } from "./api";
-import { ApiError, api, cookieLogin, watchChat } from "./api";
+import { ApiError, api, cookieLogin, inWails, watchChat } from "./api";
 import Login from "./Login";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
@@ -103,6 +103,14 @@ export default function App() {
       setSession(await api.chat(id));
     } catch (e) {
       setError((e as Error).message);
+    }
+  }, []);
+
+  // Inside the macOS app the title bar is hidden and the window's buttons float over the page:
+  // the CSS leaves room for them (see .mac-inset) and lets the top bars drag the window.
+  useEffect(() => {
+    if (inWails() && /Mac/i.test(navigator.userAgent)) {
+      document.documentElement.classList.add("mac-inset");
     }
   }, []);
 
@@ -263,7 +271,7 @@ export default function App() {
         onSignOut={canSignOut ? signOut : undefined}
       />
       <div class="flex-1 flex flex-col min-w-0">
-        <header class="frosted flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-white/5 flex-none z-10">
+        <header class="titlebar frosted flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-white/5 flex-none z-10">
           <button class="plain p-1.5 md:hidden" onClick={() => setSidebar(true)} aria-label="Menu">
             <IconMenu />
           </button>

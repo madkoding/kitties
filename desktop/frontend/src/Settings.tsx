@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useErrorBoundary, useState } from "preact/hooks";
 import type { ConnectorKind, ConnectorView, ProviderKind, ProviderView, SettingsView } from "./api";
 import { api } from "./api";
 import { IconPlus, IconTrash, IconX } from "./icons";
@@ -672,6 +672,8 @@ export default function SettingsModal({
   const [tab, setTab] = useState<Tab>(initial || "models");
   const [view, setView] = useState<SettingsView | null>(null);
   const [err, setErr] = useState("");
+  // A page that cannot draw a tab says why, instead of leaving it blank.
+  const [crash] = useErrorBoundary();
   const [editing, setEditing] = useState<ProviderView | null>(null);
   const [editingC, setEditingC] = useState<ConnectorView | null>(
     addConnector ? NEW_CONNECTOR : null,
@@ -745,6 +747,13 @@ export default function SettingsModal({
           ))}
         </div>
         {err && <p class="text-sm text-[var(--c-red)] mb-2">{err}</p>}
+        {crash && (
+          <p class="text-sm text-[var(--c-red)] mb-2" role="alert">
+            Settings could not be drawn: {crash.message}. The gateway may be older than this app:
+            update it (kitties version) and reopen.
+          </p>
+        )}
+        {!view && !err && !crash && <p class="text-sm text-[var(--t4)]">Loading…</p>}
 
         {tab === "models" && view && (
           <div>
