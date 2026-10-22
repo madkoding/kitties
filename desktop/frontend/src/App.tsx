@@ -7,19 +7,46 @@ import { IconMenu, IconTrash, IconUsers } from "./icons";
 import { ConnectModal, KittyDrawer, NewChatModal, NewKittyModal } from "./Modals";
 import SettingsModal from "./Settings";
 import LibraryModal from "./Library";
+import ApprovalsModal from "./Approvals";
 import Sidebar, { moodOf } from "./Sidebar";
 import PixelCat from "./PixelCat";
 import { cycleMode } from "./theme";
 
-type ModalKind = "none" | "chat" | "kitty" | "connect" | "settings" | "connectors" | "connectors-add" | "library" | "artifacts" | "connector";
+type ModalKind =
+  | "none"
+  | "chat"
+  | "kitty"
+  | "connect"
+  | "settings"
+  | "connectors"
+  | "connectors-add"
+  | "library"
+  | "artifacts"
+  | "connector"
+  | "approvals"
+  | "notifications";
 
 // The route is the hash: #chat/<id> or #kitty/<id>, so a view can be linked and reloaded.
-function routeFromHash(): { chat: string | null; kitty: string | null; modal: ModalKind; connector: string } {
-  const m = location.hash.match(/^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|connect|settings|library|artifacts))?/);
-  const n = location.hash.match(/^#new-(chat|kitty|connectors-add|connectors|connect|settings|library|artifacts)/);
+function routeFromHash(): {
+  chat: string | null;
+  kitty: string | null;
+  modal: ModalKind;
+  connector: string;
+} {
+  const m = location.hash.match(
+    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|connect|settings|library|artifacts|approvals|notifications))?/,
+  );
+  const n = location.hash.match(
+    /^#new-(chat|kitty|connectors-add|connectors|connect|settings|library|artifacts|approvals|notifications)/,
+  );
   const c = location.hash.match(/^#connector\/([a-z0-9-]+)/);
   const modal = (c ? "connector" : m?.[3] || n?.[1] || "none") as ModalKind;
-  return { chat: m?.[1] === "chat" ? m[2] : null, kitty: m?.[1] === "kitty" ? m[2] : null, modal, connector: c?.[1] || "" };
+  return {
+    chat: m?.[1] === "chat" ? m[2] : null,
+    kitty: m?.[1] === "kitty" ? m[2] : null,
+    modal,
+    connector: c?.[1] || "",
+  };
 }
 
 export default function App() {
@@ -34,6 +61,8 @@ export default function App() {
   const [version, setVersion] = useState("");
   const [sidebar, setSidebar] = useState(false);
   const [online, setOnline] = useState<boolean | null>(null);
+  // How many actions wait for a yes; null when this gateway holds none back.
+  const [waiting, setWaiting] = useState<number | null>(null);
 
   const user = "You";
 
@@ -45,6 +74,10 @@ export default function App() {
       setVersion(h.version || "");
       setOnline(true);
       setError("");
+      api
+        .approvals("pending")
+        .then((l) => setWaiting(l.length))
+        .catch(() => setWaiting(null));
     } catch (e) {
       setOnline(false);
       if (e instanceof ApiError && e.status === 401) {
@@ -178,8 +211,12 @@ export default function App() {
     }
   };
 
-  const members = session ? session.members.map((id) => kitties.find((k) => k.id === id)).filter(Boolean) : [];
-  const kitty = kittyOpen ? kitties.find((k) => k.id === kittyOpen || k.name === kittyOpen) : undefined;
+  const members = session
+    ? session.members.map((id) => kitties.find((k) => k.id === id)).filter(Boolean)
+    : [];
+  const kitty = kittyOpen
+    ? kitties.find((k) => k.id === kittyOpen || k.name === kittyOpen)
+    : undefined;
 
   return (
     <div class="app-bg h-full flex overflow-hidden">
@@ -198,6 +235,10 @@ export default function App() {
         onNewKitty={() => setModal("kitty")}
         onSettings={() => setModal("settings")}
         onLibrary={() => setModal("library")}
+        onApprovals={() => {
+          location.hash = "#new-approvals";
+        }}
+        approvals={waiting}
         onTheme={cycleMode}
       />
       <div class="flex-1 flex flex-col min-w-0">
@@ -205,7 +246,9 @@ export default function App() {
           <button class="plain p-1.5 md:hidden" onClick={() => setSidebar(true)} aria-label="Menu">
             <IconMenu />
           </button>
-          <h1 class="text-sm sm:text-base font-semibold tracking-wide truncate min-w-0 flex-1">{session ? session.title : "Kitties"}</h1>
+          <h1 class="text-sm sm:text-base font-semibold tracking-wide truncate min-w-0 flex-1">
+            {session ? session.title : "Kitties"}
+          </h1>
           {session && session.members.length > 1 && (
             <span class="tag tag-accent">
               <IconUsers size={10} /> group
@@ -213,10 +256,18 @@ export default function App() {
           )}
           {members.map((k) => (
             <span key={k!.id} class="hidden sm:inline-flex tag items-center">
-              <PixelCat breed={k!.avatar?.breed} color={k!.avatar?.color} mood={workingKitties.has(k!.id) ? "working" : pending ? "thinking" : moodOf(k!)} size={18} /> {k!.name}
+              <PixelCat
+                breed={k!.avatar?.breed}
+                color={k!.avatar?.color}
+                mood={workingKitties.has(k!.id) ? "working" : pending ? "thinking" : moodOf(k!)}
+                size={18}
+              />{" "}
+              {k!.name}
             </span>
           ))}
-          <span class={`state-pill ${working ? "is-working" : online === false ? "is-off" : "is-ok"}`}>
+          <span
+            class={`state-pill ${working ? "is-working" : online === false ? "is-off" : "is-ok"}`}
+          >
             {working && <span class="spinner" />}
             {working ? "working" : online === false ? "offline" : "connected"}
           </span>
@@ -226,9 +277,21 @@ export default function App() {
             </button>
           )}
         </header>
-        {error && <div class="px-4 py-2 text-sm bg-[rgba(255,107,107,0.12)] text-[var(--c-red)] border-b border-[rgba(255,107,107,0.3)]">{error}</div>}
+        {error && (
+          <div class="px-4 py-2 text-sm bg-[rgba(255,107,107,0.12)] text-[var(--c-red)] border-b border-[rgba(255,107,107,0.3)]">
+            {error}
+          </div>
+        )}
         <Conversation session={session} kitties={kitties} user={user} pending={pending} />
-        {session && <Composer disabled={pending !== null || working} working={working} group={session.members.length > 1} onSend={send} onCancel={cancel} />}
+        {session && (
+          <Composer
+            disabled={pending !== null || working}
+            working={working}
+            group={session.members.length > 1}
+            onSend={send}
+            onCancel={cancel}
+          />
+        )}
       </div>
 
       {modal === "chat" && (
@@ -251,10 +314,35 @@ export default function App() {
           }}
         />
       )}
-      {(modal === "library" || modal === "artifacts") && <LibraryModal initial={modal === "artifacts" ? "artifacts" : "skills"} onClose={() => setModal("none")} />}
-      {(modal === "settings" || modal === "connectors" || modal === "connectors-add" || modal === "connector") && (
+      {(modal === "library" || modal === "artifacts") && (
+        <LibraryModal
+          initial={modal === "artifacts" ? "artifacts" : "skills"}
+          onClose={() => setModal("none")}
+        />
+      )}
+      {modal === "approvals" && (
+        <ApprovalsModal
+          kitties={kitties}
+          onClose={() => {
+            location.hash = current ? `#chat/${current}` : "";
+          }}
+          onChanged={refresh}
+          onOpenChat={openChat}
+        />
+      )}
+      {(modal === "settings" ||
+        modal === "connectors" ||
+        modal === "connectors-add" ||
+        modal === "connector" ||
+        modal === "notifications") && (
         <SettingsModal
-          initial={modal === "settings" ? "models" : "connectors"}
+          initial={
+            modal === "settings"
+              ? "models"
+              : modal === "notifications"
+                ? "notifications"
+                : "connectors"
+          }
           addConnector={modal === "connectors-add"}
           editConnector={modal === "connector" ? routeFromHash().connector : undefined}
           onClose={() => setModal("none")}

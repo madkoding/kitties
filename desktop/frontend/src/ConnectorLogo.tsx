@@ -20,11 +20,14 @@ import {
   siMermaid,
   siNextcloud,
   siNotion,
+  siNtfy,
+  siStripe,
   siTelegram,
   siTodoist,
   siTrello,
   siWhatsapp,
   siX,
+  siZendesk,
   type SimpleIcon,
 } from "simple-icons";
 
@@ -90,6 +93,9 @@ const MARKS: Record<string, Mark> = {
   webhook: WEBHOOK,
   http: HTTP,
   shell: SHELL,
+  stripe: brand(siStripe),
+  zendesk: brand(siZendesk),
+  ntfy: brand(siNtfy),
 };
 
 // Some brand marks are black and would vanish on the dark ground: they take the text colour.

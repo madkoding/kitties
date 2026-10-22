@@ -335,6 +335,7 @@ export function LimitsForm({
     retries: l.retries || 0,
   });
   const [backup, setBackup] = useState(kitty.backup || "");
+  const [approvals, setApprovals] = useState(kitty.approvals || "ask");
   const [err, setErr] = useState("");
   const [saved, setSaved] = useState(false);
   const set = (k: keyof Limits, v: string) =>
@@ -342,7 +343,7 @@ export function LimitsForm({
   const save = async () => {
     setErr("");
     try {
-      await api.editKitty(kitty.id, { limits, backup });
+      await api.editKitty(kitty.id, { limits, backup, approvals });
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
       onChanged();
@@ -396,6 +397,18 @@ export function LimitsForm({
             {k.name}
           </option>
         ))}
+      </select>
+      <label class={LABEL} for="limit-approvals">
+        When it wants to publish, send or spend
+      </label>
+      <select
+        id="limit-approvals"
+        class={INPUT}
+        value={approvals}
+        onChange={(e) => setApprovals((e.target as HTMLSelectElement).value as "ask" | "auto")}
+      >
+        <option value="ask">ask me first (until I trust it with that)</option>
+        <option value="auto">act without asking (refunds and the like are still asked)</option>
       </select>
       <div class="flex items-center gap-2 mt-3">
         <button class="btn-outline px-3 py-1.5 text-xs" onClick={save}>

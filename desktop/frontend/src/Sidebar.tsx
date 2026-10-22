@@ -1,5 +1,15 @@
 import type { Kitty, Session } from "./api";
-import { IconBook, IconBrain, IconMonitor, IconPlus, IconSettings, IconSun, IconUsers, IconX } from "./icons";
+import {
+  IconBook,
+  IconBrain,
+  IconMonitor,
+  IconPlus,
+  IconSettings,
+  IconSun,
+  IconUsers,
+  IconX,
+  IconShield,
+} from "./icons";
 import PixelCat, { type Mood } from "./PixelCat";
 
 // moodOf is how a kitty looks in a list, from its state.
@@ -32,6 +42,9 @@ interface Props {
   onNewKitty: () => void;
   onSettings: () => void;
   onLibrary: () => void;
+  onApprovals: () => void;
+  // approvals is how many actions wait for a yes; null when this gateway holds none back.
+  approvals: number | null;
   onTheme: () => void;
 }
 
@@ -39,7 +52,9 @@ export default function Sidebar(p: Props) {
   const byId = new Map(p.kitties.map((k) => [k.id, k]));
   return (
     <>
-      {p.open && <div class="fixed inset-0 bg-black/50 z-20 md:hidden backdrop" onClick={p.onClose} />}
+      {p.open && (
+        <div class="fixed inset-0 bg-black/50 z-20 md:hidden backdrop" onClick={p.onClose} />
+      )}
       <aside
         class={`sidebar fixed md:relative inset-y-0 left-0 w-72 max-w-[85vw] z-30 flex flex-col ${p.open ? "" : "max-md:hidden"}`}
       >
@@ -65,7 +80,15 @@ export default function Sidebar(p: Props) {
               <span class="flex -space-x-2">
                 {c.members.slice(0, 3).map((id) => {
                   const k = byId.get(id);
-                  return k ? <PixelCat key={id} breed={k.avatar?.breed} color={k.avatar?.color} mood={p.workingChats.has(c.id) ? "working" : moodOf(k)} size={22} /> : null;
+                  return k ? (
+                    <PixelCat
+                      key={id}
+                      breed={k.avatar?.breed}
+                      color={k.avatar?.color}
+                      mood={p.workingChats.has(c.id) ? "working" : moodOf(k)}
+                      size={22}
+                    />
+                  ) : null;
                 })}
               </span>
               <span class="flex-1 min-w-0 truncate text-sm">{c.title}</span>
@@ -77,19 +100,31 @@ export default function Sidebar(p: Props) {
               </span>
             </div>
           ))}
-          <button class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm" onClick={p.onNewChat}>
+          <button
+            class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm"
+            onClick={p.onNewChat}
+          >
             <IconPlus size={14} /> New chat
           </button>
 
           <div class="section-title">Kitties</div>
-          {p.kitties.length === 0 && <div class="px-3 text-xs text-[var(--t4)]">No kitties yet.</div>}
+          {p.kitties.length === 0 && (
+            <div class="px-3 text-xs text-[var(--t4)]">No kitties yet.</div>
+          )}
           {p.kitties.map((k, i) => (
             <div key={k.id} class="row" style={`animation-delay: ${Math.min(i, 10) * 30}ms`}>
               <button class="row-hit" onClick={() => p.onOpenKitty(k.id)} aria-label={k.name} />
-              <PixelCat breed={k.avatar?.breed} color={k.avatar?.color} mood={moodOf(k, p.workingKitties.has(k.id))} size={26} />
+              <PixelCat
+                breed={k.avatar?.breed}
+                color={k.avatar?.color}
+                mood={moodOf(k, p.workingKitties.has(k.id))}
+                size={26}
+              />
               <span class={`dot ${k.status}`} />
               <span class="flex-1 min-w-0 truncate text-sm">{k.name}</span>
-              <span class="text-[10px] font-mono text-[var(--t4)] truncate max-w-[70px]">{k.provider}</span>
+              <span class="text-[10px] font-mono text-[var(--t4)] truncate max-w-[70px]">
+                {k.provider}
+              </span>
               {k.desktop ? (
                 <IconMonitor size={12} class="text-accent/70" />
               ) : (
@@ -97,16 +132,37 @@ export default function Sidebar(p: Props) {
               )}
             </div>
           ))}
-          <button class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm" onClick={p.onNewKitty}>
+          <button
+            class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm"
+            onClick={p.onNewKitty}
+          >
             <IconPlus size={14} /> New kitty
           </button>
         </div>
 
+        {p.approvals !== null && (
+          <div class="px-3 pt-2 flex-none">
+            <button
+              class={`${p.approvals > 0 ? "btn-outline" : "btn-ghost"} w-full flex items-center gap-2 px-3 py-2 text-xs`}
+              onClick={p.onApprovals}
+              data-testid="approvals-button"
+            >
+              <IconShield size={14} /> Approvals
+              {p.approvals > 0 && <span class="tag tag-amber ml-auto">{p.approvals} waiting</span>}
+            </button>
+          </div>
+        )}
         <div class="px-3 py-2 border-t border-white/5 flex-none flex gap-1">
-          <button class="btn-ghost flex-1 flex items-center gap-2 px-3 py-2 text-xs" onClick={p.onLibrary}>
+          <button
+            class="btn-ghost flex-1 flex items-center gap-2 px-3 py-2 text-xs"
+            onClick={p.onLibrary}
+          >
             <IconBook size={14} /> Library
           </button>
-          <button class="btn-ghost flex-1 flex items-center gap-2 px-3 py-2 text-xs" onClick={p.onSettings}>
+          <button
+            class="btn-ghost flex-1 flex items-center gap-2 px-3 py-2 text-xs"
+            onClick={p.onSettings}
+          >
             <IconSettings size={14} /> Settings
           </button>
           <button class="btn-ghost px-3 py-2 text-xs" onClick={p.onTheme} aria-label="Theme">

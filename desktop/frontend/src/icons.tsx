@@ -111,3 +111,52 @@ export const IconTarget = ({ size = 16 }: { size?: number }) => (
     <circle cx="12" cy="12" r="1.5" fill="currentColor" />
   </svg>
 );
+
+export const IconThumbUp = ({ size = 16 }: { size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M7 10v11H3V10z" />
+    <path d="M7 10l4-8a2.5 2.5 0 0 1 2.5 2.5V9h5.8a2 2 0 0 1 2 2.3l-1.3 8A2 2 0 0 1 18 21H7" />
+  </svg>
+);
+export const IconThumbDown = ({ size = 16 }: { size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M17 14V3h4v11z" />
+    <path d="M17 14l-4 8a2.5 2.5 0 0 1-2.5-2.5V15H4.7a2 2 0 0 1-2-2.3l1.3-8A2 2 0 0 1 6 3h11" />
+  </svg>
+);
+export const IconShield = ({ size = 16 }: { size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    stroke-width="2"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    aria-hidden="true"
+  >
+    <path d="M12 3l8 3v6c0 4.5-3.2 8-8 9-4.8-1-8-4.5-8-9V6z" />
+    <path d="M9 12l2 2 4-4" />
+  </svg>
+);

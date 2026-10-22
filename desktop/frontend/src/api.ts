@@ -18,6 +18,67 @@ export interface Kitty {
   // Limits bound one task; zero fields take the defaults. Backup takes over a task this kitty gives up on.
   limits?: Limits;
   backup?: string;
+  // approvals is "ask" (the default: an action that reaches other people waits for a yes until
+  // the kitty is trusted with it) or "auto".
+  approvals?: "ask" | "auto" | "";
+}
+
+// Approval is an action a kitty wants to take and is waiting to be allowed.
+export interface Approval {
+  id: string;
+  kitty: string;
+  kitty_name: string;
+  connector: string;
+  kind: string;
+  action: string;
+  args: Record<string, unknown>;
+  summary: string;
+  risk: "ask" | "always";
+  chat?: string;
+  status: "pending" | "approved" | "rejected";
+  reason?: string;
+  always?: boolean;
+  at: string;
+  decided_at?: string;
+  result?: string;
+  error?: string;
+}
+
+// ApprovalRule is what the person allowed for good.
+export interface ApprovalRule {
+  id: string;
+  kitty: string;
+  kitty_name?: string;
+  connector: string;
+  action: string;
+  mode: "auto" | "ask";
+  created: string;
+}
+
+export interface MemoryNote {
+  id: string;
+  scope: string;
+  text: string;
+  strength: number;
+  source: string;
+  pinned?: boolean;
+  updated: string;
+}
+
+export interface MemoryProfile {
+  demand: number;
+  auto: boolean;
+  up: number;
+  down: number;
+  pending: number;
+}
+
+// MemoryView is what a kitty knows about the person and how demanding they are.
+export interface MemoryView {
+  notes: MemoryNote[];
+  profile: MemoryProfile;
+  level: string;
+  trust?: Record<string, { streak: number; needs: number }>;
 }
 
 export interface Limits {
@@ -50,7 +111,16 @@ export interface Goal {
 export interface JournalEntry {
   at: string;
   kitty: string;
-  kind: "run" | "done" | "blocked" | "retry" | "escalated" | "delegated" | "recovered" | "skipped" | "event";
+  kind:
+    | "run"
+    | "done"
+    | "blocked"
+    | "retry"
+    | "escalated"
+    | "delegated"
+    | "recovered"
+    | "skipped"
+    | "event";
   text: string;
   goal?: string;
   chat?: string;
@@ -87,6 +157,8 @@ export interface Turn {
   working?: boolean;
   needs_help?: boolean;
   delegations?: Delegation[];
+  approvals?: { id: string; connector: string; action: string; summary: string }[];
+  feedback?: "up" | "down" | "";
   usage?: { input: number; output: number };
 }
 
@@ -168,7 +240,7 @@ export interface ConnectorKind {
   label: string;
   help: string;
   fields: ConnectorField[];
-  actions: { name: string; help: string; args?: string[] }[];
+  actions: { name: string; help: string; args?: string[]; risk?: "ask" | "always" }[];
   oauth?: string;
   inbound?: boolean;
 }
@@ -182,6 +254,8 @@ export interface SettingsView {
   connector_catalog: ConnectorKind[];
   connector_categories: string[];
   motita_url?: string;
+  notify: { connector: string; on: string[] };
+  notify_events: string[];
 }
 
 export interface Skill {
@@ -364,11 +438,25 @@ export async function shotData(path: string): Promise<string> {
 export const api = {
   health: () => request<{ ok: boolean; version: string; containers: boolean }>("GET", "/v1/health"),
   kitties: () => request<{ kitties: Kitty[] }>("GET", "/v1/kitties").then((r) => r.kitties || []),
-  kitty: (ref: string) => request<{ kitty: Kitty }>("GET", `/v1/kitties/${ref}`).then((r) => r.kitty),
-  createKitty: (spec: { name: string; provider?: string; soul?: Kitty["soul"]; desktop?: boolean; avatar?: Kitty["avatar"] }) =>
-    request<{ kitty: Kitty; warning?: string }>("POST", "/v1/kitties", spec),
-  editKitty: (ref: string, u: { avatar?: Kitty["avatar"]; soul?: Kitty["soul"]; limits?: Limits; backup?: string }) =>
-    request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
+  kitty: (ref: string) =>
+    request<{ kitty: Kitty }>("GET", `/v1/kitties/${ref}`).then((r) => r.kitty),
+  createKitty: (spec: {
+    name: string;
+    provider?: string;
+    soul?: Kitty["soul"];
+    desktop?: boolean;
+    avatar?: Kitty["avatar"];
+  }) => request<{ kitty: Kitty; warning?: string }>("POST", "/v1/kitties", spec),
+  editKitty: (
+    ref: string,
+    u: {
+      avatar?: Kitty["avatar"];
+      soul?: Kitty["soul"];
+      limits?: Limits;
+      backup?: string;
+      approvals?: string;
+    },
+  ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
   startKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/start`),
   stopKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/stop`),
   removeKitty: (ref: string) => request("DELETE", `/v1/kitties/${ref}`),
@@ -384,38 +472,103 @@ export const api = {
   addMembers: (id: string, members: string[]) =>
     request<{ chat: Session }>("POST", `/v1/chats/${id}/members`, { members }).then((r) => r.chat),
   send: (id: string, text: string) =>
-    request<{ turns: Turn[] }>("POST", `/v1/chats/${id}/messages`, { text }).then((r) => r.turns || []),
+    request<{ turns: Turn[] }>("POST", `/v1/chats/${id}/messages`, { text }).then(
+      (r) => r.turns || [],
+    ),
   cancel: (id: string) => request("POST", `/v1/chats/${id}/cancel`),
   settings: () => request<SettingsView>("GET", "/v1/settings"),
   setProvider: (name: string, p: Record<string, unknown>) =>
     request<SettingsView>("PUT", `/v1/settings/providers/${name}`, p),
-  removeProvider: (name: string) => request<SettingsView>("DELETE", `/v1/settings/providers/${name}`),
+  removeProvider: (name: string) =>
+    request<SettingsView>("DELETE", `/v1/settings/providers/${name}`),
   testProvider: (name: string) =>
-    request<{ ok: boolean; reply?: string; error?: string }>("POST", `/v1/settings/providers/${name}/test`),
+    request<{ ok: boolean; reply?: string; error?: string }>(
+      "POST",
+      `/v1/settings/providers/${name}/test`,
+    ),
   setDefaultProvider: (name: string) =>
     request<SettingsView>("PUT", "/v1/settings/default-provider", { name }),
   setConnector: (name: string, c: Record<string, unknown>) =>
     request<SettingsView>("PUT", `/v1/settings/connectors/${name}`, c),
-  removeConnector: (name: string) => request<SettingsView>("DELETE", `/v1/settings/connectors/${name}`),
+  removeConnector: (name: string) =>
+    request<SettingsView>("DELETE", `/v1/settings/connectors/${name}`),
   skills: () => request<{ skills: Skill[] }>("GET", "/v1/skills").then((r) => r.skills || []),
-  skill: (name: string) => request<{ skill: Skill }>("GET", `/v1/skills/${name}`).then((r) => r.skill),
-  saveSkill: (name: string, body: string) => request<{ skill: Skill }>("PUT", `/v1/skills/${name}`, { body }).then((r) => r.skill),
+  skill: (name: string) =>
+    request<{ skill: Skill }>("GET", `/v1/skills/${name}`).then((r) => r.skill),
+  saveSkill: (name: string, body: string) =>
+    request<{ skill: Skill }>("PUT", `/v1/skills/${name}`, { body }).then((r) => r.skill),
   deleteSkill: (name: string) => request("DELETE", `/v1/skills/${name}`),
-  acceptSkill: (name: string) => request<{ skill: Skill }>("POST", `/v1/skills/${name}/accept`).then((r) => r.skill),
-  artifacts: () => request<{ artifacts: ArtifactInfo[] }>("GET", "/v1/artifacts").then((r) => r.artifacts || []),
+  acceptSkill: (name: string) =>
+    request<{ skill: Skill }>("POST", `/v1/skills/${name}/accept`).then((r) => r.skill),
+  artifacts: () =>
+    request<{ artifacts: ArtifactInfo[] }>("GET", "/v1/artifacts").then((r) => r.artifacts || []),
   deleteArtifact: (name: string) => request("DELETE", `/v1/artifacts/${encodeURIComponent(name)}`),
-  goals: (kitty?: string) => request<{ goals: Goal[] }>("GET", "/v1/goals" + (kitty ? "?kitty=" + encodeURIComponent(kitty) : "")).then((r) => r.goals || []),
-  addGoal: (g: { kitty: string; title: string; text?: string; every?: string; on?: string[]; enabled?: boolean }) =>
-    request<{ goal: Goal }>("POST", "/v1/goals", g).then((r) => r.goal),
-  updateGoal: (id: string, g: { title: string; text?: string; every?: string; on?: string[]; enabled?: boolean }) =>
-    request<{ goal: Goal }>("PUT", `/v1/goals/${id}`, g).then((r) => r.goal),
+  goals: (kitty?: string) =>
+    request<{ goals: Goal[] }>(
+      "GET",
+      "/v1/goals" + (kitty ? "?kitty=" + encodeURIComponent(kitty) : ""),
+    ).then((r) => r.goals || []),
+  addGoal: (g: {
+    kitty: string;
+    title: string;
+    text?: string;
+    every?: string;
+    on?: string[];
+    enabled?: boolean;
+  }) => request<{ goal: Goal }>("POST", "/v1/goals", g).then((r) => r.goal),
+  updateGoal: (
+    id: string,
+    g: { title: string; text?: string; every?: string; on?: string[]; enabled?: boolean },
+  ) => request<{ goal: Goal }>("PUT", `/v1/goals/${id}`, g).then((r) => r.goal),
   removeGoal: (id: string) => request("DELETE", `/v1/goals/${id}`),
-  runGoal: (id: string) => request<{ ok: boolean; chat: string }>("POST", `/v1/goals/${id}/run`).then((r) => r.chat),
-  journal: (kitty: string, n = 50) => request<{ journal: JournalEntry[] }>("GET", `/v1/kitties/${kitty}/journal?n=${n}`).then((r) => r.journal || []),
+  runGoal: (id: string) =>
+    request<{ ok: boolean; chat: string }>("POST", `/v1/goals/${id}/run`).then((r) => r.chat),
+  approvals: (status = "") =>
+    request<{ approvals: Approval[] }>(
+      "GET",
+      "/v1/approvals" + (status ? "?status=" + status : ""),
+    ).then((r) => r.approvals || []),
+  approve: (id: string, always = false) =>
+    request<{ approval: Approval }>("POST", `/v1/approvals/${id}/approve`, { always }).then(
+      (r) => r.approval,
+    ),
+  reject: (id: string, reason = "") =>
+    request<{ approval: Approval }>("POST", `/v1/approvals/${id}/reject`, { reason }).then(
+      (r) => r.approval,
+    ),
+  approvalRules: () =>
+    request<{ rules: ApprovalRule[] }>("GET", "/v1/approvals/rules").then((r) => r.rules || []),
+  removeRule: (id: string) => request("DELETE", `/v1/approvals/rules/${id}`),
+  memory: (kitty: string) => request<MemoryView>("GET", `/v1/kitties/${kitty}/memory`),
+  remember: (kitty: string, text: string, scope = "user") =>
+    request<{ note: MemoryNote }>("POST", `/v1/kitties/${kitty}/memory`, { text, scope }).then(
+      (r) => r.note,
+    ),
+  forgetNote: (kitty: string, id: string) => request("DELETE", `/v1/kitties/${kitty}/memory/${id}`),
+  setProfile: (kitty: string, demand: number, auto: boolean) =>
+    request<{ profile: MemoryProfile }>("PUT", `/v1/kitties/${kitty}/memory/profile`, {
+      demand,
+      auto,
+    }).then((r) => r.profile),
+  distill: (kitty: string) =>
+    request<{ notes: MemoryNote[] }>("POST", `/v1/kitties/${kitty}/memory/distill`).then(
+      (r) => r.notes,
+    ),
+  feedback: (chat: string, index: number, rating: "up" | "down" | "", note = "") =>
+    request("POST", `/v1/chats/${chat}/turns/${index}/feedback`, { rating, note }),
+  setNotify: (c: { connector: string; on: string[] }) =>
+    request<SettingsView>("PUT", "/v1/settings/notify", c),
+  testNotify: (connector = "") =>
+    request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),
+  journal: (kitty: string, n = 50) =>
+    request<{ journal: JournalEntry[] }>("GET", `/v1/kitties/${kitty}/journal?n=${n}`).then(
+      (r) => r.journal || [],
+    ),
 };
 
 // oauthStart asks the gateway for the consent URL of a connector's sign-in.
-export const oauthStart = (name: string) => request<{ url: string }>("POST", `/v1/oauth/${name}/start`).then((r) => r.url);
+export const oauthStart = (name: string) =>
+  request<{ url: string }>("POST", `/v1/oauth/${name}/start`).then((r) => r.url);
 
 // openExternal opens a URL in the person's browser: through Wails when inside it.
 export function openExternal(url: string): void {
@@ -432,7 +585,11 @@ export function openExternal(url: string): void {
 // function that stops watching.
 export function watchChat(id: string, onEvent: (e: ChatEvent) => void): () => void {
   const app = window.go?.main?.App;
-  const rt = (window as unknown as { runtime?: { EventsOn?: (name: string, cb: (data: unknown) => void) => () => void } }).runtime;
+  const rt = (
+    window as unknown as {
+      runtime?: { EventsOn?: (name: string, cb: (data: unknown) => void) => () => void };
+    }
+  ).runtime;
   if (app && (app as unknown as { Watch?: (id: string) => Promise<void> }).Watch && rt?.EventsOn) {
     const off = rt.EventsOn("kitties:chat:" + id, (data) => onEvent(data as ChatEvent));
     void (app as unknown as { Watch: (id: string) => Promise<void> }).Watch(id);
