@@ -10,6 +10,7 @@ type Tab = "skills" | "artifacts";
 // propose) and the artifacts (files they saved for later).
 export default function LibraryModal({ onClose, initial }: { onClose: () => void; initial?: Tab }) {
   const [tab, setTab] = useState<Tab>(initial || "skills");
+  useEffect(() => setTab(initial || "skills"), [initial]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [arts, setArts] = useState<ArtifactInfo[]>([]);
   const [open, setOpen] = useState<Skill | null>(null);

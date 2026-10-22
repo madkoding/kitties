@@ -42,6 +42,8 @@ type Result struct {
 	File *File `json:"-"`
 	// Artifact is the name the file was kept under, once saved.
 	Artifact string `json:"artifact,omitempty"`
+	// Kind is the connector's kind in the catalogue, for its logo.
+	Kind string `json:"kind,omitempty"`
 }
 
 // File is a connector's binary answer.
@@ -134,6 +136,9 @@ func (r *Registry) Call(ctx context.Context, call Call, allow []string) Result {
 	if !ok {
 		res.Err = fmt.Sprintf("unknown connector %q (available: %s)", call.Name, strings.Join(r.Names(), ", "))
 		return res
+	}
+	if k, ok := c.(Kinder); ok {
+		res.Kind = k.Kind()
 	}
 	ctx, cancel := context.WithTimeout(ctx, callTimeout)
 	defer cancel()

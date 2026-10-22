@@ -175,6 +175,9 @@ function ServiceGrid({ catalog, categories, picked, onPick }: { catalog: Connect
   );
 }
 
+// OAUTH_LABEL names the identity services a connector can sign in with.
+const OAUTH_LABEL: Record<string, string> = { google: "Google", microsoft: "Microsoft", slack: "Slack", github: "GitHub" };
+
 // OAuthButton signs a connector in: it asks the gateway for the consent URL and opens it.
 function OAuthButton({ view, onDone }: { view: ConnectorView; onDone: () => void }) {
   const [msg, setMsg] = useState("");
@@ -193,7 +196,7 @@ function OAuthButton({ view, onDone }: { view: ConnectorView; onDone: () => void
     <div class="mt-1 mb-3 flex items-center gap-3 flex-wrap">
       <button type="button" class={`${view.signed_in ? "btn-ghost" : "btn-accent"} px-4 py-2 text-sm flex items-center gap-2`} onClick={go}>
         <ConnectorLogo kind={view.kind} size={16} mono />
-        {view.signed_in ? "Sign in again" : `Sign in with ${view.oauth === "google" ? "Google" : "Microsoft"}`}
+        {view.signed_in ? "Sign in again" : `Sign in with ${OAUTH_LABEL[view.oauth || ""] || view.oauth}`}
       </button>
       {view.signed_in && <span class="tag tag-green">signed in{view.account ? " · " + view.account : ""}</span>}
       {msg && <span class="text-xs text-[var(--t3)]">{msg}</span>}
@@ -267,7 +270,11 @@ function ConnectorForm({ view, catalog, categories, motitaURL, onSaved, onClose 
         )}
       </div>
       {def?.oauth && view.name && <OAuthButton view={view} onDone={() => api.settings().then(onSaved).catch(() => {})} />}
-      {def?.oauth && !view.name && <p class="text-xs text-[var(--t3)] mb-2">Save first, then sign in with the button that appears here.</p>}
+      {def?.oauth && !view.name && (
+        <p class="text-xs text-[var(--t3)] mb-2">
+          {def.fields.some((f) => f.name === "token") ? "Paste a token below, or save first and sign in with the button that appears here." : "Save first, then sign in with the button that appears here."}
+        </p>
+      )}
       <div class="grid sm:grid-cols-2 gap-x-4">
         <div class="sm:col-span-2">
           <label class={LABEL}>Name</label>
@@ -317,6 +324,12 @@ export default function SettingsModal({ onClose, initial, addConnector, editConn
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState<ProviderView | null>(null);
   const [editingC, setEditingC] = useState<ConnectorView | null>(addConnector ? NEW_CONNECTOR : null);
+  // The route decides the tab and the form while the modal stays open (#new-settings to
+  // #new-connectors-add is one page, not a reload).
+  useEffect(() => {
+    setTab(initial || "models");
+    setEditingC(addConnector ? NEW_CONNECTOR : null);
+  }, [initial, addConnector]);
   useEffect(() => {
     api
       .settings()
@@ -411,7 +424,8 @@ export default function SettingsModal({ onClose, initial, addConnector, editConn
                       <span class="tag">{c.category}</span>
                       {c.from_file && <span class="tag">yaml</span>}
                       {c.secrets_set?.length > 0 && <span class="tag tag-green">secrets set</span>}
-                      {c.oauth && <span class={`tag ${c.signed_in ? "tag-green" : "tag-amber"}`}>{c.signed_in ? "signed in" : "sign in needed"}</span>}
+                      {c.signed_in && <span class="tag tag-green">signed in{c.account ? " · " + c.account : ""}</span>}
+                      {c.needs_sign_in && <span class="tag tag-amber">sign in needed</span>}
                     </div>
                     <div class="text-xs text-[var(--t3)] truncate">{c.description || c.url || c.command || c.kind}</div>
                   </div>

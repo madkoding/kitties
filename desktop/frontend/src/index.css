@@ -857,3 +857,14 @@ html[data-motion="off"] .cat-spark {
   border: 1.5px solid currentColor;
   border-radius: 4px;
 }
+
+/* A chip with the logo of the service a kitty used. */
+.tag-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.tag-logo .logo,
+.tag-logo .logo-fallback {
+  color: currentColor;
+}

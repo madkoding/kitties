@@ -3,6 +3,7 @@ import type { Kitty, Session, Step, Turn } from "./api";
 import { shotData, shotURL } from "./api";
 import { inline, stepArgs, when } from "./format";
 import PixelCat, { type Mood } from "./PixelCat";
+import ConnectorLogo from "./ConnectorLogo";
 
 function Text({ text }: { text: string }) {
   return (
@@ -107,7 +108,8 @@ function TurnCard({ turn, chat, user, kitty, latest, onOpen }: { turn: Turn; cha
         <div class="meta">
           <span>{when(turn.at)}</span>
           {turn.calls?.map((c, i) => (
-            <span key={i} class={`tag ${c.error ? "tag-red" : "tag-accent"}`}>
+            <span key={i} class={`tag tag-logo ${c.error ? "tag-red" : "tag-accent"}`} title={c.error || c.output}>
+              {c.kind && <ConnectorLogo kind={c.kind} size={12} mono />}
               {c.name}
             </span>
           ))}

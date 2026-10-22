@@ -31,7 +31,7 @@ export interface Turn {
   from: string;
   kitty?: string;
   text: string;
-  calls?: { name: string; output?: string; error?: string; artifact?: string }[];
+  calls?: { name: string; kind?: string; output?: string; error?: string; artifact?: string }[];
   steps?: Step[];
   artifacts?: string[];
   skills?: string[];
@@ -87,6 +87,7 @@ export interface ConnectorView {
   from_file: boolean;
   oauth?: string;
   signed_in?: boolean;
+  needs_sign_in?: boolean;
   account?: string;
 }
 

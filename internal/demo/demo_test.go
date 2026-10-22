@@ -34,6 +34,29 @@ func TestBrain(t *testing.T) {
 	if got := ask(t, b, "You are Tom", "[Pat]: open the site"); strings.Contains(got, "@tool") {
 		t.Error("no desktop, no tools: " + got)
 	}
+	// With a connector listed, a request to post goes through it; the answer reads the result.
+	withSlack := "You are Mimi, a kitty.\nYou can use these external services by writing a line of the form @connector <name> <json arguments> on its own; the result comes back to you as a message:\n- team-slack: posts to #launch\n- wiki: the team wiki\n"
+	if got := ask(t, b, withSlack, "[Pat]: please post the announcement"); !strings.Contains(got, `@connector team-slack {"text":`) {
+		t.Error(got)
+	}
+	if got := ask(t, b, desk, "[Pat]: please post the announcement"); strings.Contains(got, "@connector") {
+		t.Error("no connector listed: " + got)
+	}
+	if got := ask(t, b, withSlack, "Results of your actions:\n- @connector team-slack {\"text\": \"x\"}: ok\n  ok\n\nContinue, and answer the person."); !strings.Contains(got, "Posted!") {
+		t.Error(got)
+	}
+	if got := ask(t, b, withSlack, "Results of your actions:\n- @connector team-slack {\"text\": \"x\"}: failed: boom\n\nContinue, and answer the person."); !strings.Contains(got, "refused") {
+		t.Error(got)
+	}
+	if got := ask(t, b, desk, "Results of your actions:\n- @skill read report-findings: ok\n  # Report\n- @artifact save {\"name\": \"launch-plan.md\"}: ok\n\nContinue, and answer the person."); !strings.Contains(got, "launch-plan.md") || strings.Contains(got, "@tool") {
+		t.Error("library results end the turn: " + got)
+	}
+	if firstConnector("x @connector <name> y\n\nno list") != "" || firstConnector("nothing") != "" {
+		t.Error("firstConnector without a list")
+	}
+	if firstConnector("@connector <name> y\n- coder: runs code\n- team-slack: posts to #launch\n") != "team-slack" || firstConnector("@connector <name> y\n- coder: runs code\n- wiki: notes\n") != "coder" {
+		t.Error("firstConnector prefers a messaging service, else the first")
+	}
 	if got := ask(t, b, desk, "[Pat]: plan the launch"); !strings.Contains(got, "1. Research") || !strings.Contains(got, "@artifact save") {
 		t.Error(got)
 	}

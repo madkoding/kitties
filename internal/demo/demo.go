@@ -52,8 +52,20 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	lower := strings.ToLower(last)
 	usage := provider.Usage{Input: len(system) / 4, Output: 40}
 	switch {
+	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "- @connector "):
+		// The service answered: say so, in the connector's own words.
+		if strings.Contains(last, "failed:") {
+			return provider.Reply{Content: "I tried to post it but the service refused; the error is in the step above. Want me to try another channel?", Usage: usage}, nil
+		}
+		return provider.Reply{Content: "Posted! The announcement is out, with the three points we agreed on. I will watch for replies.", Usage: usage}, nil
+	case strings.HasPrefix(last, "Results of your actions") && !strings.Contains(last, "- @tool ") && (strings.Contains(last, "- @skill ") || strings.Contains(last, "- @artifact ")):
+		// The library answered: the plan was saved, the procedure read.
+		return provider.Reply{Content: "Saved the plan to the library as **launch-plan.md** so the team can pick it up, and I followed the report-findings skill for the format.", Usage: usage}, nil
 	case strings.HasPrefix(last, "Results of your actions") || strings.HasPrefix(last, "[desktop] Results"):
 		return provider.Reply{Content: b.nextRound(last), Usage: usage}, nil
+	case firstConnector(system) != "" && (strings.Contains(lower, "post ") || strings.Contains(lower, "announce") || strings.Contains(lower, "publica") || strings.Contains(lower, "share ")):
+		name := firstConnector(system)
+		return provider.Reply{Content: fmt.Sprintf("Sure, I will post it through %s.\n@connector %s {\"text\": \"Kitties launches next week: autonomous kitties with their own desktops, a connector for every service and a library of skills.\"}", name, name), Usage: usage}, nil
 	case desktop && (strings.Contains(lower, "open") || strings.Contains(lower, "abre") || strings.Contains(lower, "browse") || strings.Contains(lower, "visit")):
 		url := "https://example.com"
 		for _, w := range strings.Fields(last) {
@@ -75,6 +87,37 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	default:
 		return provider.Reply{Content: fmt.Sprintf("Good question. In short: %s. Tell me if you want me to dig deeper or try it on my desktop.", summarise(last)), Usage: usage}, nil
 	}
+}
+
+// firstConnector is the service the system prompt lists ("- name: what it does") to post
+// through: one for messages (slack, discord...) when there is one, the first otherwise; "".
+func firstConnector(system string) string {
+	i := strings.Index(system, "@connector <name>")
+	if i < 0 {
+		return ""
+	}
+	first := ""
+	for _, line := range strings.Split(system[i:], "\n")[1:] {
+		if !strings.HasPrefix(line, "- ") {
+			if strings.TrimSpace(line) != "" && !strings.Contains(line, "@connector") {
+				break
+			}
+			continue
+		}
+		j := strings.Index(line, ":")
+		if j <= 2 {
+			continue
+		}
+		name := line[2:j]
+		if first == "" {
+			first = name
+		}
+		lower := strings.ToLower(line)
+		if strings.Contains(lower, "slack") || strings.Contains(lower, "discord") || strings.Contains(lower, "telegram") || strings.Contains(lower, "channel") {
+			return name
+		}
+	}
+	return first
 }
 
 // nextRound scripts the desktop task: a click, then done.
