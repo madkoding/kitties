@@ -242,9 +242,32 @@ func TestOAuthStore(t *testing.T) {
 	if _, _, _, err := m.OAuthApp("zz"); err == nil {
 		t.Error("unknown connector")
 	}
-	if _, _, _, err := m.OAuthApp("sl"); err == nil {
-		t.Error("slack does not sign in")
+	if _, _, _, err := m.OAuthApp("dc"); err == nil {
+		t.Error("discord does not sign in")
 	}
+	if prov, _, _, err := m.OAuthApp("sl"); err != nil || prov != "slack" {
+		t.Errorf("slack signs in too: %s %v", prov, err)
+	}
+	if names := m.OAuthConnectors(); strings.Join(names, ",") != "gw,sl" {
+		t.Errorf("OAuthConnectors = %v", names)
+	}
+	// The slack connector has a webhook of its own: no sign-in needed; the google one has none.
+	views := map[string]ConnectorView{}
+	for _, v := range m.Settings().Connectors {
+		views[v.Name] = v
+	}
+	if views["sl"].NeedsSignIn || !views["gw"].NeedsSignIn || views["gw"].SignedIn {
+		t.Errorf("needs_sign_in: sl=%+v gw=%+v", views["sl"], views["gw"])
+	}
+	// The refresh loop runs until its context ends, and asks nothing when nothing is due.
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		m.KeepTokensFresh(ctx, func(string, ...any) { t.Error("nothing to warn about") })
+		close(done)
+	}()
+	cancel()
+	<-done
 	if c, err := m.OAuthCredentials("gw"); err != nil || c.SignedIn() {
 		t.Errorf("not signed in yet: %+v %v", c, err)
 	}

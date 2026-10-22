@@ -45,8 +45,9 @@ type Kind struct {
 	Help     string   `json:"help"`
 	Fields   []Field  `json:"fields"`
 	Actions  []Action `json:"actions"`
-	// OAuth names the identity service the kind signs in with ("google", "microsoft"), empty
-	// for a kind that takes a key or a token.
+	// OAuth names the identity service the kind signs in with ("google", "microsoft", "slack",
+	// "github"), empty for a kind that only takes a key or a token. A kind with a token field
+	// takes either: the token when typed, the sign-in otherwise.
 	OAuth string `json:"oauth,omitempty"`
 	// make builds the connector; nil for the kinds built elsewhere (shell, motita, webhook).
 	make  func(s Settings) Connector
@@ -93,9 +94,10 @@ func init() {
 func catalog() []Kind {
 	return []Kind{
 		// ── messaging ──────────────────────────────────────────────────────────────────────────
-		{Name: "slack", Category: CatMessaging, Label: "Slack", Help: "posts messages to a Slack channel",
-			Fields:  []Field{f("url", "Incoming webhook URL", "from Slack's app settings", false, true), f("token", "Bot token", "xoxb-…, instead of a webhook", false, true), f("channel", "Channel", "#general, used with a bot token", false, false)},
-			Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeSlack},
+		{Name: "slack", Category: CatMessaging, Label: "Slack", Help: "posts messages to a Slack channel, through a webhook, a bot token or a sign-in",
+			Fields: []Field{f("url", "Incoming webhook URL", "from Slack's app settings", false, true), f("token", "Bot token", "xoxb-…, instead of a webhook", false, true), f("channel", "Channel", "#general, used with a bot token or a sign-in", false, false),
+				f("client_id", "OAuth client id", "to sign in instead of pasting a token: a Slack app of your own", false, false), f("client_secret", "OAuth client secret", "", false, true)},
+			Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeSlack, oauth: "slack"},
 		{Name: "discord", Category: CatMessaging, Label: "Discord", Help: "posts messages to a Discord channel",
 			Fields: []Field{f("url", "Webhook URL", "", true, true)}, Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeDiscord},
 		{Name: "telegram", Category: CatMessaging, Label: "Telegram", Help: "sends messages through a bot",
@@ -124,14 +126,15 @@ func catalog() []Kind {
 			Fields:  []Field{fToken, f("author", "Author URN", "urn:li:person:…", true, false)},
 			Actions: []Action{{Name: "post", Help: "share a post", Args: []string{fText}}}, make: makeLinkedIn},
 		// ── git ────────────────────────────────────────────────────────────────────────────────
-		{Name: "github", Category: CatGit, Label: "GitHub", Help: "issues, pull requests and files on GitHub",
-			Fields: []Field{f("token", "Token", "a fine-grained or classic token", true, true), f("repo", "Default repository", "owner/name", false, false)},
+		{Name: "github", Category: CatGit, Label: "GitHub", Help: "issues, pull requests and files on GitHub, with a token or a sign-in",
+			Fields: []Field{f("token", "Token", "a fine-grained or classic token; leave empty to sign in", false, true), f("repo", "Default repository", "owner/name", false, false),
+				f("client_id", "OAuth client id", "to sign in instead of pasting a token: an OAuth app of your own", false, false), f("client_secret", "OAuth client secret", "", false, true)},
 			Actions: []Action{
 				{Name: "create_issue", Help: "open an issue", Args: []string{fRepo, fTitle, fBody}},
 				{Name: "comment", Help: "comment on an issue or pull request", Args: []string{fRepo, "number", fText}},
 				{Name: "create_pr", Help: "open a pull request", Args: []string{fRepo, fTitle, "head", "base", fBody}},
 				{Name: "get_file", Help: "read a file of the repository", Args: []string{fRepo, "path", "ref (optional)"}},
-			}, make: makeGitHub},
+			}, make: makeGitHub, oauth: "github"},
 		{Name: "gitlab", Category: CatGit, Label: "GitLab", Help: "issues and merge requests on GitLab",
 			Fields: []Field{f("url", "Instance", "https://gitlab.com when empty", false, false), f("token", "Token", "", true, true), f("project", "Default project", "group/name", false, false)},
 			Actions: []Action{
@@ -297,11 +300,27 @@ func (k Kind) Validate(s Settings) error {
 			return fmt.Errorf("%s needs %s", k.Name, strings.ToLower(fl.Label))
 		}
 	}
-	// A Slack connector takes a webhook or a bot token with a channel.
-	if k.Name == "slack" && s["url"] == "" && (s["token"] == "" || s["channel"] == "") {
-		return errors.New("slack needs a webhook url, or a bot token and a channel")
+	// A Slack connector takes a webhook, or a channel to post to with a bot token or a sign-in.
+	if k.Name == "slack" && s["url"] == "" && s["channel"] == "" {
+		return errors.New("slack needs a webhook url, or a channel with a bot token or a sign-in")
 	}
 	return nil
+}
+
+// TokenSet reports whether the settings carry a token or webhook of their own, so an OAuth
+// kind with one works without a sign-in.
+func (k Kind) TokenSet(s Settings) bool {
+	for _, f := range k.Fields {
+		if (f.Name == "token" || f.Name == "url") && strings.TrimSpace(s[f.Name]) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// Kinder is a connector that knows its kind in the catalogue (the page shows its logo).
+type Kinder interface {
+	Kind() string
 }
 
 // Build creates the connector of a kind from its settings. shell, motita and webhook are built
@@ -314,13 +333,17 @@ func Build(kind string, s Settings, description string) (Connector, error) {
 	if err := k.Validate(s); err != nil {
 		return nil, err
 	}
+	var plain Connector
 	switch kind {
 	case "shell":
-		return Shell{Command: s["command"], Description: description}, nil
+		plain = Shell{Command: s["command"], Description: description}
 	case "motita":
-		return Motita{URL: s["url"], Token: s["token"], Description: description}, nil
+		plain = Motita{URL: s["url"], Token: s["token"], Description: description}
 	case "webhook":
-		return Webhook{URL: s["url"], Headers: parseHeaders(s["headers"]), Description: description}, nil
+		plain = Webhook{URL: s["url"], Headers: parseHeaders(s["headers"]), Description: description}
+	}
+	if plain != nil {
+		return described{Connector: plain, text: plain.Describe(), kind: kind}, nil
 	}
 	src := tokenSourceOf(s)
 	c := k.make(s)
@@ -328,18 +351,22 @@ func Build(kind string, s Settings, description string) (Connector, error) {
 		a.token = src
 	}
 	if description != "" {
-		return described{Connector: c, text: description + " " + actionsHelp(k)}, nil
+		return described{Connector: c, text: description + " " + actionsHelp(k), kind: kind}, nil
 	}
-	return described{Connector: c, text: k.Help + " " + actionsHelp(k)}, nil
+	return described{Connector: c, text: k.Help + " " + actionsHelp(k), kind: kind}, nil
 }
 
-// described wraps a connector with the text the model reads.
+// described wraps a connector with the text the model reads and its kind.
 type described struct {
 	Connector
 	text string
+	kind string
 }
 
 func (d described) Describe() string { return d.text }
+
+// Kind implements Kinder.
+func (d described) Kind() string { return d.kind }
 
 // CallFile forwards to the wrapped connector's file answer, or its plain one.
 func (d described) CallFile(ctx context.Context, args map[string]any) (string, string, []byte, error) {
@@ -386,6 +413,8 @@ type request struct {
 	basic [2]string
 	// file names the answer as a file for the artifacts (the answer's bytes are the file).
 	file string
+	// plain marks a request that takes no account token (a webhook): an OAuth kind leaves it.
+	plain bool
 }
 
 type actionFn func(s Settings, args map[string]any) (request, error)
@@ -434,7 +463,9 @@ func (a *api) call(ctx context.Context, args map[string]any) (text, name string,
 	if err != nil {
 		return "", "", nil, err
 	}
-	if a.kind.oauth != "" {
+	// An OAuth kind signs the request with the account's token, unless the request is plain
+	// (a webhook) or already carries a token the person typed.
+	if a.kind.oauth != "" && !req.plain && strings.TrimSpace(strings.TrimPrefix(req.headers["Authorization"], "Bearer")) == "" {
 		if a.token == nil {
 			return "", "", nil, errors.New("not signed in: connect the account from Settings")
 		}
@@ -587,7 +618,7 @@ func makeSlack(s Settings) Connector {
 			return request{}, err
 		}
 		if s["url"] != "" {
-			return request{method: "POST", url: s["url"], body: map[string]any{"text": text}}, nil
+			return request{method: "POST", url: s["url"], body: map[string]any{"text": text}, plain: true}, nil
 		}
 		return request{method: "POST", url: "https://slack.com/api/chat.postMessage", headers: bearer(s["token"]),
 			body: map[string]any{"channel": pick(a, s, "channel"), "text": text}}, nil

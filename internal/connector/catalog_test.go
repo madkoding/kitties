@@ -41,11 +41,20 @@ func TestCatalogShape(t *testing.T) {
 	if _, err := Build("nope", nil, ""); err == nil {
 		t.Error("Build unknown")
 	}
-	if _, err := Build("github", Settings{}, ""); err == nil || !strings.Contains(err.Error(), "needs token") {
+	if _, err := Build("telegram", Settings{}, ""); err == nil || !strings.Contains(err.Error(), "needs bot token") {
 		t.Errorf("Build validates: %v", err)
 	}
 	if _, err := Build("slack", Settings{"token": "t"}, ""); err == nil {
 		t.Error("slack needs a channel with a token")
+	}
+	if c, err := Build("slack", Settings{"channel": "#x"}, ""); err != nil || c.(Kinder).Kind() != "slack" {
+		t.Errorf("slack with a channel signs in later: %v", err)
+	}
+	if c, err := Build("github", Settings{}, ""); err != nil || c.(Kinder).Kind() != "github" {
+		t.Errorf("github without a token signs in later: %v", err)
+	}
+	if c, _ := Build("shell", Settings{"command": "ls"}, "d"); c.(Kinder).Kind() != "shell" || c.Describe() == "" {
+		t.Error("shell is described and knows its kind")
 	}
 	c, err := Build("github", Settings{"token": "t"}, "my repos")
 	if err != nil || !strings.HasPrefix(c.Describe(), "my repos (actions") || !strings.Contains(c.Describe(), "create_issue(") {
@@ -61,7 +70,7 @@ func TestCatalogShape(t *testing.T) {
 		}
 	}
 	w, _ := Build("webhook", Settings{"url": "u", "headers": "A: 1"}, "")
-	if w.(Webhook).Headers["A"] != "1" {
+	if w.(described).Connector.(Webhook).Headers["A"] != "1" {
 		t.Error("webhook headers")
 	}
 	if str(map[string]any{"n": 2.0}, "n") != "2" || str(map[string]any{"b": true}, "b") != "true" || str(map[string]any{"x": ""}, "x", "y") != "" {
@@ -405,11 +414,48 @@ func TestEmail(t *testing.T) {
 }
 
 func TestOAuthKinds(t *testing.T) {
-	for _, name := range []string{"google-workspace", "microsoft-365"} {
+	for _, name := range []string{"google-workspace", "microsoft-365", "slack", "github"} {
 		k, ok := LookupKind(name)
 		if !ok || k.OAuth == "" {
 			t.Errorf("%s has an OAuth flow", name)
 		}
+	}
+	gh, _ := LookupKind("github")
+	sl, _ := LookupKind("slack")
+	gw, _ := LookupKind("google-workspace")
+	if !gh.TokenSet(Settings{"token": "t"}) || gh.TokenSet(Settings{}) || !sl.TokenSet(Settings{"url": "u"}) || gw.TokenSet(Settings{"token": "t"}) {
+		t.Error("TokenSet: a token or webhook of the kind's own")
+	}
+	// A kind with a token field: the typed token wins, a webhook needs no account, and
+	// without either the sign-in's token signs the request.
+	src := func(context.Context) (string, error) { return "tok", nil }
+	for _, tc := range []struct {
+		kind string
+		s    Settings
+		args map[string]any
+		auth string
+	}{
+		{"github", Settings{"token": "ghp"}, map[string]any{"repo": "a/b", "title": "T"}, "Bearer ghp"},
+		{"github", Settings{}, map[string]any{"repo": "a/b", "title": "T"}, "Bearer tok"},
+		{"slack", Settings{"url": "https://hooks.slack.com/x"}, map[string]any{"text": "hi"}, ""},
+		{"slack", Settings{"channel": "#c"}, map[string]any{"text": "hi"}, "Bearer tok"},
+		{"slack", Settings{"channel": "#c", "token": "xoxb"}, map[string]any{"text": "hi"}, "Bearer xoxb"},
+	} {
+		cap := &capture{}
+		cap.install(t)
+		c, err := Build(tc.kind, WithTokenSource(tc.s, src), "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.Call(context.Background(), tc.args); err != nil || len(cap.reqs) != 1 || cap.reqs[0].Header.Get("Authorization") != tc.auth {
+			t.Errorf("%s %v: %v auth=%q", tc.kind, tc.s, err, cap.reqs[0].Header.Get("Authorization"))
+		}
+	}
+	cap := &capture{}
+	cap.install(t)
+	c, _ := Build("github", Settings{}, "")
+	if _, err := c.Call(context.Background(), map[string]any{"repo": "a/b", "title": "T"}); err == nil || !strings.Contains(err.Error(), "not signed in") {
+		t.Errorf("github without token nor sign-in: %v", err)
 	}
 	found := false
 	for _, k := range Kinds() {
@@ -419,7 +465,7 @@ func TestOAuthKinds(t *testing.T) {
 		t.Error("Kinds carries the oauth field")
 	}
 	// Without a token source the connector refuses before any request.
-	cap := &capture{}
+	cap = &capture{}
 	cap.install(t)
 	c, err := Build("google-workspace", Settings{"client_id": "cid"}, "")
 	if err != nil {
@@ -429,7 +475,6 @@ func TestOAuthKinds(t *testing.T) {
 		t.Errorf("no token source: %v", err)
 	}
 	// With one, every request carries the bearer token.
-	src := func(context.Context) (string, error) { return "tok", nil }
 	c, _ = Build("google-workspace", WithTokenSource(Settings{"client_id": "cid"}, src), "")
 	cases := []call{
 		{"google-workspace", nil, map[string]any{"to": "a@x", "subject": "S", "text": "hi"}, "POST", "gmail/v1/users/me/messages/send", `"raw":"`, [2]string{"Authorization", "Bearer tok"}},

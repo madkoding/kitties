@@ -3,16 +3,19 @@ package oauth
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
 type memStore struct {
 	provider, id, secret string
+	mu                   sync.Mutex
 	creds                Credentials
 	appErr, saveErr      error
 }
@@ -20,10 +23,21 @@ type memStore struct {
 func (m *memStore) OAuthApp(string) (string, string, string, error) {
 	return m.provider, m.id, m.secret, m.appErr
 }
-func (m *memStore) OAuthCredentials(string) (Credentials, error) { return m.creds, m.appErr }
+func (m *memStore) OAuthCredentials(string) (Credentials, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.creds, m.appErr
+}
 func (m *memStore) SaveOAuthCredentials(_ string, c Credentials) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.creds = c
 	return m.saveErr
+}
+func (m *memStore) token() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.creds.AccessToken
 }
 
 type answer struct {
@@ -169,5 +183,93 @@ func TestFailures(t *testing.T) {
 	}
 	if _, err := m.token(context.Background(), Provider{TokenURL: "::bad"}, url.Values{}); err == nil {
 		t.Error("bad token url")
+	}
+}
+
+func TestSlackAndGitHub(t *testing.T) {
+	// Slack: comma-joined scopes, a token that never expires, the workspace as the account.
+	st := &memStore{provider: "slack", id: "cid", secret: "sec"}
+	a := &answer{code: 200, body: `{"ok":true,"access_token":"xoxb-1","team":{"name":"Acme"}}`}
+	m := manager(st, a)
+	link, err := m.Start("sl", "r")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(link)
+	if u.Host != "slack.com" || u.Query().Get("scope") != "chat:write,chat:write.public,channels:read" {
+		t.Errorf("link = %s", link)
+	}
+	if _, err := m.Exchange(context.Background(), strings.Repeat("s", 24), "c"); err != nil {
+		t.Fatal(err)
+	}
+	if st.creds.AccessToken != "xoxb-1" || st.creds.Account != "Acme" || !st.creds.SignedIn() || st.creds.Expiry.Before(m.now().Add(forever-time.Hour)) {
+		t.Errorf("creds = %+v", st.creds)
+	}
+	if a.req.Header.Get("Accept") != "application/json" {
+		t.Error("the token request asks for JSON")
+	}
+	// Without a refresh token nothing is due, and Token serves the stored one.
+	if m.Due("sl") {
+		t.Error("a token for good is never due")
+	}
+	if tok, err := m.Token(context.Background(), "sl"); err != nil || tok != "xoxb-1" {
+		t.Errorf("Token = %q %v", tok, err)
+	}
+	// GitHub: an OAuth app token without expires_in is kept for good too; a GitHub App's
+	// user token comes with expires_in and a refresh token and is refreshed like any other.
+	st = &memStore{provider: "github", id: "cid", secret: "sec"}
+	m = manager(st, &answer{code: 200, body: `{"access_token":"gho_1","token_type":"bearer","scope":"repo"}`})
+	if link, _ := m.Start("gh", "r"); !strings.Contains(link, "github.com/login/oauth/authorize") || !strings.Contains(link, "scope=repo") {
+		t.Errorf("link = %s", link)
+	}
+	if _, err := m.Exchange(context.Background(), strings.Repeat("s", 24), "c"); err != nil || st.creds.AccessToken != "gho_1" || !st.creds.SignedIn() {
+		t.Fatalf("github exchange: %v %+v", err, st.creds)
+	}
+	// Slack's own failure shape.
+	m = manager(&memStore{provider: "slack", id: "cid"}, &answer{code: 200, body: `{"ok":false,"error":"invalid_code"}`})
+	m.Start("sl", "r")
+	if _, err := m.Exchange(context.Background(), strings.Repeat("s", 24), "c"); err == nil || !strings.Contains(err.Error(), "invalid_code") {
+		t.Errorf("slack failure: %v", err)
+	}
+}
+
+func TestKeepFresh(t *testing.T) {
+	st := &memStore{provider: "google", id: "cid", creds: Credentials{AccessToken: "old", RefreshToken: "rt"}}
+	refresh := &answer{code: 200, body: `{"access_token":"new","expires_in":3600}`}
+	m := manager(st, refresh)
+	st.creds.Expiry = m.now().Add(5 * time.Minute) // within refreshAhead
+	if !m.Due("gw") {
+		t.Fatal("a token expiring in five minutes is due")
+	}
+	var warned []string
+	warn := func(f string, a ...any) { warned = append(warned, fmt.Sprintf(f, a...)) }
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		m.KeepFresh(ctx, time.Hour, func() []string { return []string{"gw", "none"} }, warn)
+	}()
+	// The first round runs at once; wait for it to land, then stop.
+	deadline := time.Now().Add(5 * time.Second)
+	for st.token() != "new" && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if st.creds.AccessToken != "new" || len(warned) != 0 {
+		t.Errorf("refreshed = %+v warned = %v", st.creds, warned)
+	}
+	if m.Due("gw") {
+		t.Error("fresh for an hour: not due")
+	}
+	// A refresh that fails is warned about, not fatal; a store that errors is not due.
+	st.creds.Expiry = m.now()
+	m2 := manager(st)
+	m2.refreshDue(context.Background(), []string{"gw"}, warn)
+	if len(warned) != 1 || !strings.Contains(warned[0], "oauth: gw") {
+		t.Errorf("warned = %v", warned)
+	}
+	if New(&memStore{appErr: errors.New("x")}).Due("gw") {
+		t.Error("a failing store is not due")
 	}
 }

@@ -266,9 +266,12 @@ func (a *app) cmdGateway(ctx context.Context) error {
 		fmt.Fprintf(a.out, "  %-16s %-8s %s\n", k.Name, k.Status, k.Provider)
 	}
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts)
-	return srv.Listen(ctx, a.cfg.Gateway.Listen, func(format string, args ...any) {
+	logf := func(format string, args ...any) {
 		fmt.Fprintf(a.out, format+"\n", args...)
-	})
+	}
+	// The signed-in connectors keep their tokens fresh in the background.
+	go a.fleet.KeepTokensFresh(ctx, logf)
+	return srv.Listen(ctx, a.cfg.Gateway.Listen, logf)
 }
 
 func (a *app) cmdList() error {

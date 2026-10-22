@@ -65,8 +65,8 @@ func TestValidation(t *testing.T) {
 		{base + "connectors:\n  w:\n    kind: telegram\n", "needs bot token"},
 		{base + "connectors:\n  w:\n    kind: shell\n", "needs command"},
 		{base + "connectors:\n  w:\n    kind: motita\n", "needs a url"},
-		{base + "connectors:\n  w:\n    kind: slack\n    token: t\n", "webhook url, or a bot token"},
-		{base + "connectors:\n  w:\n    kind: github\n    settings:\n      repo: a/b\n", "needs token"},
+		{base + "connectors:\n  w:\n    kind: slack\n    token: t\n", "webhook url, or a channel"},
+		{base + "connectors:\n  w:\n    kind: telegram\n    settings:\n      chat_id: \"1\"\n", "needs bot token"},
 		{base + "connectors:\n  w:\n    kind: fax\n", "is not one of"},
 	}
 	for _, tc := range cases {

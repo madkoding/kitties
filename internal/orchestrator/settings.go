@@ -130,10 +130,12 @@ type ConnectorView struct {
 	Settings    map[string]string `json:"settings"`
 	SecretsSet  []string          `json:"secrets_set"`
 	FromFile    bool              `json:"from_file"`
-	// OAuth is the identity service of the kind, and SignedIn/Account say whether a sign-in is there.
-	OAuth    string `json:"oauth,omitempty"`
-	SignedIn bool   `json:"signed_in,omitempty"`
-	Account  string `json:"account,omitempty"`
+	// OAuth is the identity service of the kind, and SignedIn/Account say whether a sign-in is
+	// there. NeedsSignIn is set when the connector has neither a sign-in nor a token of its own.
+	OAuth       string `json:"oauth,omitempty"`
+	SignedIn    bool   `json:"signed_in,omitempty"`
+	NeedsSignIn bool   `json:"needs_sign_in,omitempty"`
+	Account     string `json:"account,omitempty"`
 }
 
 // connectorView masks the secrets of one connector.
@@ -161,7 +163,7 @@ func connectorView(name string, c config.Connector, fromFile bool) ConnectorView
 	creds := oauth.FromSettings(all)
 	return ConnectorView{Name: name, Kind: c.Kind, Category: kind.Category, Label: kind.Label, Description: c.Description, URL: shown["url"],
 		TokenSet: c.Token != "" || all["token"] != "", ChatID: c.ChatID, Command: c.Command, Settings: shown, SecretsSet: secrets, FromFile: fromFile,
-		OAuth: kind.OAuth, SignedIn: kind.OAuth != "" && creds.SignedIn(), Account: creds.Account}
+		OAuth: kind.OAuth, SignedIn: kind.OAuth != "" && creds.SignedIn(), NeedsSignIn: kind.OAuth != "" && !creds.SignedIn() && !kind.TokenSet(all), Account: creds.Account}
 }
 
 // SettingsView is the settings page.

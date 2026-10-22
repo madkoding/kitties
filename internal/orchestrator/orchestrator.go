@@ -147,6 +147,30 @@ func (m *Manager) OAuthApp(name string) (string, string, string, error) {
 	return kind.OAuth, s["client_id"], s["client_secret"], nil
 }
 
+// OAuthConnectors lists the connectors that sign in with OAuth, for the token refresh loop.
+func (m *Manager) OAuthConnectors() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	var names []string
+	for name, c := range m.cfg.Connectors {
+		if kind, ok := connector.LookupKind(c.Kind); ok && kind.OAuth != "" {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// tokenRefreshEvery is how often the signed-in connectors are checked for a token about to expire.
+const tokenRefreshEvery = 5 * time.Minute
+
+// KeepTokensFresh refreshes the OAuth tokens ahead of their expiry until ctx ends, so a
+// kitty's first call after a quiet hour does not wait for a refresh or fail on a stale token.
+// It runs in the caller's goroutine; warn hears about a refresh that failed.
+func (m *Manager) KeepTokensFresh(ctx context.Context, warn func(format string, args ...any)) {
+	m.oauth.KeepFresh(ctx, tokenRefreshEvery, m.OAuthConnectors, warn)
+}
+
 // OAuthCredentials implements oauth.Store.
 func (m *Manager) OAuthCredentials(name string) (oauth.Credentials, error) {
 	m.mu.RLock()
