@@ -19,7 +19,9 @@ coverage*.html
 # The desktop app: installed packages, the built page (embedded at build time) and Wails output
 desktop/frontend/node_modules/
 desktop/frontend/dist/
-desktop/build/
+desktop/build/*
+!desktop/build/appicon.png
+!desktop/build/appicon.svg
 
 # The end-to-end run: its data, state and reports
 desktop/frontend/e2e/.data/

@@ -10,7 +10,8 @@
     "typecheck": "tsc --noEmit -p .",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
-    "e2e": "playwright test -c e2e/playwright.config.ts"
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "icon": "node scripts/appicon.mjs"
   },
   "dependencies": {
     "preact": "^11.0.0",

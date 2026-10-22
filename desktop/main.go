@@ -22,6 +22,12 @@ import (
 //go:embed all:frontend/dist
 var assets embed.FS
 
+// icon is the pixel cat of the application, also the window's icon on Linux (macOS and Windows
+// take theirs from the same file when wails builds: see frontend/scripts/appicon.mjs).
+//
+//go:embed build/appicon.png
+var icon []byte
+
 func main() {
 	app := NewApp()
 	err := wails.Run(&options.App{
@@ -37,7 +43,7 @@ func main() {
 		Bind:             []any{app},
 		Mac:              &mac.Options{TitleBar: mac.TitleBarHiddenInset(), Appearance: mac.NSAppearanceNameDarkAqua},
 		Windows:          &windows.Options{WebviewIsTransparent: false, Theme: windows.Dark},
-		Linux:            &linux.Options{WindowIsTranslucent: false, WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand},
+		Linux:            &linux.Options{Icon: icon, ProgramName: "Kitties", WindowIsTranslucent: false, WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand},
 	})
 	if err != nil {
 		panic(err)

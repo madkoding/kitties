@@ -173,7 +173,7 @@ jobs:
             name: kitties-desktop-windows-amd64.exe
           - os: macos-latest
             out: build/bin/kitties-desktop.app
-            name: kitties-desktop-macos.app
+            name: kitties-desktop-macos-arm64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
@@ -199,11 +199,17 @@ jobs:
         run: |
           mkdir -p out
           ls -la desktop/build/bin
-          # On macOS Wails names the bundle after the product ("Kitties.app"), not after the
+          # On macOS Wails names the bundle after the product (Kitties.app), not after the
           # output file: take whatever .app it made.
           app="$(find desktop/build/bin -maxdepth 1 -name '*.app' -type d | head -n 1)"
           if [ -n "$app" ]; then
-            (cd desktop/build/bin && zip -qr "../../../out/${{ matrix.name }}.zip" "$(basename "$app")")
+            # An arm64 program must carry a signature to run at all; sign the finished bundle
+            # (ad hoc: no Apple account needed), then check it and zip it the way macOS does, so
+            # the executable bit and the bundle's seal survive.
+            codesign --force --deep --sign - "$app"
+            codesign --verify --deep --strict "$app"
+            ls -la "$app/Contents/MacOS"
+            ditto -c -k --keepParent "$app" "out/${{ matrix.name }}.zip"
           else
             cp "desktop/${{ matrix.out }}" "out/${{ matrix.name }}"
           fi

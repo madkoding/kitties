@@ -52,7 +52,7 @@ came through a browser ("Apple could not verify..."). It is the quarantine flag,
 ```sh
 sha256sum -c SHA256SUMS --ignore-missing      # shasum -a 256 -c on macOS
 xattr -d com.apple.quarantine kitties-darwin-arm64 && chmod +x kitties-darwin-arm64
-xattr -dr com.apple.quarantine Kitties.app    # the desktop app
+unzip kitties-desktop-macos-arm64.zip && xattr -dr com.apple.quarantine Kitties.app   # the desktop app
 ```
 
 On Windows, SmartScreen asks once: *More info* then *Run anyway*.
@@ -112,6 +112,7 @@ the connectors and the gateway address.
 ```sh
 make frontend     # builds the page (node 22)
 make desktop      # wails build, with the Wails CLI installed
+(cd desktop/frontend && npm run icon)   # redraw the app icon (the tabby kitty) in desktop/build
 cd desktop && wails dev   # live reload while working on it
 ```
 
