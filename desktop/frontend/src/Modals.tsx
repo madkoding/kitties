@@ -3,6 +3,7 @@ import type { Kitty, ProviderInfo } from "./api";
 import { api, inWails, saveConnection, savedConnection } from "./api";
 import { Shot } from "./Conversation";
 import { IconCamera, IconPlay, IconStop, IconTrash, IconX } from "./icons";
+import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import PixelCat, { BREEDS, CatPicker, COLORS, MOODS, type Mood } from "./PixelCat";
 
 // suggestAvatar picks a cat from the name, the way the gateway does when none is chosen.
@@ -153,7 +154,7 @@ export function NewKittyModal({ onClose, onCreated }: { onClose: () => void; onC
   );
 }
 
-export function KittyDrawer({ kitty, onClose, onChanged, onChat }: { kitty: Kitty; onClose: () => void; onChanged: () => void; onChat: () => void }) {
+export function KittyDrawer({ kitty, kitties, onClose, onChanged, onChat, onOpenChat }: { kitty: Kitty; kitties: Kitty[]; onClose: () => void; onChanged: () => void; onChat: () => void; onOpenChat: (id: string) => void }) {
   const [tick, setTick] = useState(0);
   const [err, setErr] = useState("");
   const [mood, setMood] = useState<Mood>("happy");
@@ -186,7 +187,7 @@ export function KittyDrawer({ kitty, onClose, onChanged, onChat }: { kitty: Kitt
   return (
     <Modal title={kitty.name} onClose={onClose} wide>
       <div class="grid md:grid-cols-[1.4fr_1fr] gap-5">
-        <div>
+        <div class="min-w-0">
           <div class="avatar-stage mb-3">
             <PixelCat breed={kitty.avatar?.breed} color={kitty.avatar?.color} mood={mood} size={112} />
           </div>
@@ -222,6 +223,8 @@ export function KittyDrawer({ kitty, onClose, onChanged, onChat }: { kitty: Kitt
             )}
           </div>
           {kitty.error && <p class="text-sm text-[var(--c-red)] mt-2">{kitty.error}</p>}
+          <GoalsPanel kitty={kitty} onOpenChat={onOpenChat} />
+          <JournalPanel kitty={kitty} onOpenChat={onOpenChat} />
         </div>
         <div class="text-sm">
           <div class="section-title !mx-0">Soul</div>
@@ -275,6 +278,7 @@ export function KittyDrawer({ kitty, onClose, onChanged, onChat }: { kitty: Kitt
             </button>
           </div>
           {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
+          <LimitsForm kitty={kitty} kitties={kitties} onChanged={onChanged} />
         </div>
       </div>
     </Modal>

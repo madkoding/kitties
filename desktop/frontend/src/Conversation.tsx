@@ -4,6 +4,7 @@ import { shotData, shotURL } from "./api";
 import { inline, stepArgs, when } from "./format";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
+import { IconHand } from "./icons";
 
 function Text({ text }: { text: string }) {
   return (
@@ -84,12 +85,19 @@ function turnMood(turn: Turn, latest: boolean): Mood {
 
 function TurnCard({ turn, chat, user, kitty, latest, onOpen }: { turn: Turn; chat: string; user: string; kitty?: Kitty; latest: boolean; onOpen: (src: string) => void }) {
   const mine = turn.from === "user";
+  // The scheduler's wake-up call reads like the person's side, with a clock instead of a cat.
+  const scheduler = turn.from === "scheduler";
   return (
-    <div class={`msg ${mine ? "user" : "agent"} ${turn.working ? "working" : ""}`} data-who={mine ? user : turn.from}>
-      {!mine && (
+    <div class={`msg ${mine || scheduler ? "user" : "agent"} ${scheduler ? "scheduler" : ""} ${turn.working ? "working" : ""} ${turn.needs_help ? "needs-help" : ""}`} data-who={mine ? user : scheduler ? "scheduler" : turn.from}>
+      {!mine && !scheduler && (
         <span class="msg-cat">
-          <PixelCat breed={kitty?.avatar?.breed} color={kitty?.avatar?.color} mood={turnMood(turn, latest)} size={40} />
+          <PixelCat breed={kitty?.avatar?.breed} color={kitty?.avatar?.color} mood={turn.needs_help ? "error" : turnMood(turn, latest)} size={40} />
         </span>
+      )}
+      {turn.needs_help && (
+        <div class="help-line">
+          <IconHand size={14} /> {turn.from} needs your help with this one.
+        </div>
       )}
       {turn.text && <Text text={turn.text} />}
       {turn.steps && turn.steps.length > 0 && (
@@ -112,6 +120,11 @@ function TurnCard({ turn, chat, user, kitty, latest, onOpen }: { turn: Turn; cha
               {c.kind && <ConnectorLogo kind={c.kind} size={12} mono />}
               {c.name}
             </span>
+          ))}
+          {turn.delegations?.map((d, i) => (
+            <a key={"d" + i} class={`tag ${d.error ? "tag-red" : "tag-magenta"}`} href={`#chat/${d.chat}`} title={d.error || d.result || d.task}>
+              → {d.kitty}
+            </a>
           ))}
           {turn.skills?.map((n) => (
             <span key={"s" + n} class="tag tag-amber">

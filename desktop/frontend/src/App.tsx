@@ -273,6 +273,8 @@ export default function App() {
       {kitty && (
         <KittyDrawer
           kitty={kitty}
+          kitties={kitties}
+          onOpenChat={openChat}
           onClose={() => {
             location.hash = current ? `#chat/${current}` : "";
           }}

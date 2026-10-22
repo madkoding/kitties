@@ -15,6 +15,55 @@ export interface Kitty {
   connectors?: string[];
   soul: { name?: string; persona?: string; tone?: string; traits?: string[]; skills?: string[] };
   avatar: { breed: string; color: string };
+  // Limits bound one task; zero fields take the defaults. Backup takes over a task this kitty gives up on.
+  limits?: Limits;
+  backup?: string;
+}
+
+export interface Limits {
+  max_tokens?: number;
+  max_seconds?: number;
+  max_rounds?: number;
+  retries?: number;
+}
+
+// Goal is something a kitty pursues on its own: on a schedule (every, a cron expression),
+// when a connector reports an event (on), or when a person runs it.
+export interface Goal {
+  id: string;
+  kitty: string;
+  title: string;
+  text: string;
+  every?: string;
+  on?: string[];
+  enabled: boolean;
+  chat?: string;
+  created_at: string;
+  last_run?: string;
+  next_run?: string;
+  runs: number;
+  last_result?: string;
+  from_file?: boolean;
+}
+
+// JournalEntry is one line of a kitty's journal: what it did and where it got stuck.
+export interface JournalEntry {
+  at: string;
+  kitty: string;
+  kind: "run" | "done" | "blocked" | "retry" | "escalated" | "delegated" | "recovered" | "skipped" | "event";
+  text: string;
+  goal?: string;
+  chat?: string;
+}
+
+// Delegation is a subtask one kitty handed to another.
+export interface Delegation {
+  kitty: string;
+  kitty_id: string;
+  chat: string;
+  task: string;
+  result?: string;
+  error?: string;
 }
 
 export interface Step {
@@ -36,6 +85,8 @@ export interface Turn {
   artifacts?: string[];
   skills?: string[];
   working?: boolean;
+  needs_help?: boolean;
+  delegations?: Delegation[];
   usage?: { input: number; output: number };
 }
 
@@ -46,6 +97,10 @@ export interface Session {
   turns?: Turn[];
   created_at: string;
   updated_at: string;
+  goal?: string;
+  owner?: string;
+  depth?: number;
+  needs_help?: boolean;
 }
 
 export interface ProviderKind {
@@ -115,6 +170,7 @@ export interface ConnectorKind {
   fields: ConnectorField[];
   actions: { name: string; help: string; args?: string[] }[];
   oauth?: string;
+  inbound?: boolean;
 }
 
 export interface SettingsView {
@@ -311,7 +367,7 @@ export const api = {
   kitty: (ref: string) => request<{ kitty: Kitty }>("GET", `/v1/kitties/${ref}`).then((r) => r.kitty),
   createKitty: (spec: { name: string; provider?: string; soul?: Kitty["soul"]; desktop?: boolean; avatar?: Kitty["avatar"] }) =>
     request<{ kitty: Kitty; warning?: string }>("POST", "/v1/kitties", spec),
-  editKitty: (ref: string, u: { avatar?: Kitty["avatar"]; soul?: Kitty["soul"] }) =>
+  editKitty: (ref: string, u: { avatar?: Kitty["avatar"]; soul?: Kitty["soul"]; limits?: Limits; backup?: string }) =>
     request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
   startKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/start`),
   stopKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/stop`),
@@ -348,6 +404,14 @@ export const api = {
   acceptSkill: (name: string) => request<{ skill: Skill }>("POST", `/v1/skills/${name}/accept`).then((r) => r.skill),
   artifacts: () => request<{ artifacts: ArtifactInfo[] }>("GET", "/v1/artifacts").then((r) => r.artifacts || []),
   deleteArtifact: (name: string) => request("DELETE", `/v1/artifacts/${encodeURIComponent(name)}`),
+  goals: (kitty?: string) => request<{ goals: Goal[] }>("GET", "/v1/goals" + (kitty ? "?kitty=" + encodeURIComponent(kitty) : "")).then((r) => r.goals || []),
+  addGoal: (g: { kitty: string; title: string; text?: string; every?: string; on?: string[]; enabled?: boolean }) =>
+    request<{ goal: Goal }>("POST", "/v1/goals", g).then((r) => r.goal),
+  updateGoal: (id: string, g: { title: string; text?: string; every?: string; on?: string[]; enabled?: boolean }) =>
+    request<{ goal: Goal }>("PUT", `/v1/goals/${id}`, g).then((r) => r.goal),
+  removeGoal: (id: string) => request("DELETE", `/v1/goals/${id}`),
+  runGoal: (id: string) => request<{ ok: boolean; chat: string }>("POST", `/v1/goals/${id}/run`).then((r) => r.chat),
+  journal: (kitty: string, n = 50) => request<{ journal: JournalEntry[] }>("GET", `/v1/kitties/${kitty}/journal?n=${n}`).then((r) => r.journal || []),
 };
 
 // oauthStart asks the gateway for the consent URL of a connector's sign-in.

@@ -69,6 +69,8 @@ export default function Sidebar(p: Props) {
                 })}
               </span>
               <span class="flex-1 min-w-0 truncate text-sm">{c.title}</span>
+              {c.needs_help && <span class="tag tag-amber">help</span>}
+              {c.goal && !c.needs_help && <span class="tag tag-magenta">goal</span>}
               <span class="tag">
                 {c.members.length > 1 ? <IconUsers size={10} /> : null}
                 {c.members.length > 1 ? c.members.length : (byId.get(c.members[0])?.name ?? "1")}

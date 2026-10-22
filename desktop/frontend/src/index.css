@@ -868,3 +868,45 @@ html[data-motion="off"] .cat-spark {
 .tag-logo .logo-fallback {
   color: currentColor;
 }
+
+/* ─── The agenda: goals, the journal, a kitty asking for help ─────────────────────────────── */
+.goal {
+  padding: 8px 10px;
+  border: 1px solid rgb(var(--ov-rgb) / 0.08);
+  background: rgb(var(--ov-rgb) / 0.03);
+  font-size: 0.85rem;
+}
+.goal.off {
+  opacity: 0.6;
+}
+.journal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.8rem;
+  min-width: 0;
+}
+.journal-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.msg.scheduler {
+  border-left-color: #ff8de6;
+}
+.msg.needs-help {
+  border-color: rgb(255 191 71 / 0.6);
+  box-shadow: 0 0 0 1px rgb(255 191 71 / 0.25);
+}
+.help-line {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--c-amber);
+  font-size: 12px;
+  margin-bottom: 6px;
+  font-family: var(--font-mono);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
