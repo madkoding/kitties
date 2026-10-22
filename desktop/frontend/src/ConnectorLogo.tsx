@@ -2,6 +2,14 @@
 // mark otherwise, so the catalogue reads as a row of buttons rather than a list of names.
 import {
   siAirtable,
+  siClaude,
+  siDeepseek,
+  siGithubcopilot,
+  siGooglegemini,
+  siMistralai,
+  siOllama,
+  siOpenrouter,
+  siQwen,
   siBluesky,
   siDiscord,
   siExcalidraw,
@@ -123,6 +131,64 @@ export default function ConnectorLogo({ kind, size = 24, mono }: { kind: string;
   return (
     <svg width={size} height={size} viewBox={m.viewBox || "0 0 24 24"} role="img" aria-label={kind} class="logo">
       <path d={m.path} fill={fill} />
+    </svg>
+  );
+}
+
+// ─── The providers of the models ──────────────────────────────────────────────────────────────
+// Their marks from simple-icons where it carries them. OpenAI and Groq are not there: they get a
+// plain mark of their own (a knot, a ring with a tail), and "another server" the globe.
+const PROVIDER_MARKS: Record<string, Mark> = {
+  anthropic: brand(siClaude),
+  gemini: brand(siGooglegemini),
+  ollama: brand(siOllama),
+  "ollama-cloud": brand(siOllama),
+  openrouter: brand(siOpenrouter),
+  deepseek: brand(siDeepseek),
+  mistral: brand(siMistralai),
+  qwen: brand(siQwen),
+  copilot: brand(siGithubcopilot),
+  custom: HTTP,
+};
+
+const dark = (hex: string) => {
+  const n = parseInt(hex, 16);
+  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 < 0.2;
+};
+
+export function ProviderLogo({ kind, size = 24 }: { kind: string; size?: number }) {
+  if (kind === "openai" || kind === "codex") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={kind} class="logo">
+        <g fill="none" stroke="currentColor" stroke-width="1.7">
+          {[0, 60, 120, 180, 240, 300].map((a) => (
+            <rect key={a} x="9" y="2.5" width="6" height="11" rx="3" transform={`rotate(${a} 12 12)`} />
+          ))}
+        </g>
+      </svg>
+    );
+  }
+  if (kind === "groq") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={kind} class="logo">
+        <g fill="none" stroke="#F55036" stroke-width="2.6" stroke-linecap="round">
+          <circle cx="11.5" cy="10" r="5.5" />
+          <path d="M17 10v7.5a3.5 3.5 0 0 1-3.5 3.5H11" />
+        </g>
+      </svg>
+    );
+  }
+  const m = PROVIDER_MARKS[kind];
+  if (!m) {
+    return (
+      <span class="logo-fallback" style={`width:${size}px;height:${size}px;font-size:${size * 0.5}px`} aria-hidden="true">
+        {kind.slice(0, 2).toUpperCase()}
+      </span>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox={m.viewBox || "0 0 24 24"} role="img" aria-label={kind} class="logo">
+      <path d={m.path} fill={dark(m.hex) ? "currentColor" : "#" + m.hex} />
     </svg>
   );
 }

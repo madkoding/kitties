@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
 import { api, errText, inWails, saveConnection, savedConnection } from "./api";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
+import { ProviderLogo } from "./ConnectorLogo";
 import { Shot } from "./Conversation";
 import { IconCamera, IconPlay, IconStop, IconTrash, IconX } from "./icons";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
@@ -397,25 +398,33 @@ function KittyBasics({
   return (
     <div data-testid="kitty-basics">
       <div class="section-title !mx-0">Brain</div>
-      <select
-        class={INPUT}
-        aria-label="Brain"
-        value={kitty.provider}
-        onChange={(e) => {
-          const v = (e.target as HTMLSelectElement).value;
-          const p = models.find((m) => m.name === v);
-          save({ provider: v }, `${kitty.name} now thinks with ${p ? modelLabel(p) : v}.`);
-        }}
-      >
-        {!models.some((m) => m.name === kitty.provider) && (
-          <option value={kitty.provider}>{kitty.provider || "no model"}</option>
-        )}
-        {models.map((p) => (
-          <option key={p.name} value={p.name}>
-            {modelLabel(p)}
-          </option>
-        ))}
-      </select>
+      <div class="flex items-center gap-2">
+        <span class="provider-badge">
+          <ProviderLogo
+            kind={models.find((m) => m.name === kitty.provider)?.kind || ""}
+            size={22}
+          />
+        </span>
+        <select
+          class={INPUT}
+          aria-label="Brain"
+          value={kitty.provider}
+          onChange={(e) => {
+            const v = (e.target as HTMLSelectElement).value;
+            const p = models.find((m) => m.name === v);
+            save({ provider: v }, `${kitty.name} now thinks with ${p ? modelLabel(p) : v}.`);
+          }}
+        >
+          {!models.some((m) => m.name === kitty.provider) && (
+            <option value={kitty.provider}>{kitty.provider || "no model"}</option>
+          )}
+          {models.map((p) => (
+            <option key={p.name} value={p.name}>
+              {modelLabel(p)}
+            </option>
+          ))}
+        </select>
+      </div>
       <div class="section-title !mx-0 mt-4">Personality</div>
       <label class="block text-xs text-[var(--t4)] mb-1" for="drawer-persona">
         Who is it?

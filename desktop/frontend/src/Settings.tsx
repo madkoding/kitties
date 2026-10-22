@@ -9,7 +9,7 @@ import type {
   SettingsView,
 } from "./api";
 import { api, errText, inWails, oauthStart, openExternal } from "./api";
-import ConnectorLogo, { logoColor } from "./ConnectorLogo";
+import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,
   PROVIDERS,
@@ -86,9 +86,20 @@ function ProviderPicker({ kinds, onPick }: { kinds: ProviderKind[]; onPick: (k: 
   return (
     <div class="grid sm:grid-cols-2 gap-2 mt-2" data-testid="provider-picker">
       {order.map((n) => (
-        <button key={n} type="button" class="plain pick-card" onClick={() => onPick(n)}>
-          <span class="font-semibold text-sm">{providerLabel(n)}</span>
-          <span class="text-xs text-[var(--t3)]">{PROVIDERS[n]?.blurb || n}</span>
+        <button
+          key={n}
+          type="button"
+          class="plain pick-card"
+          onClick={() => onPick(n)}
+          aria-label={`${providerLabel(n)}: ${PROVIDERS[n]?.blurb || n}`}
+        >
+          <span class="provider-badge">
+            <ProviderLogo kind={n} size={22} />
+          </span>
+          <span class="flex flex-col min-w-0">
+            <span class="font-semibold text-sm">{providerLabel(n)}</span>
+            <span class="text-xs text-[var(--t3)]">{PROVIDERS[n]?.blurb || n}</span>
+          </span>
         </button>
       ))}
     </div>
@@ -176,6 +187,9 @@ function ModelForm({
   return (
     <div class="form-card" data-testid="model-form">
       <div class="flex items-start gap-3">
+        <span class="provider-badge">
+          <ProviderLogo kind={kind} size={26} />
+        </span>
         <div class="flex-1 min-w-0">
           <div class="font-semibold">{meta.label}</div>
           <div class="text-xs text-[var(--t3)]">{meta.blurb}</div>
@@ -384,7 +398,10 @@ function ModelRow({
   const users = p.used_by || [];
   return (
     <div class="item" data-testid={`model-${p.name}`}>
-      <span class={`dot ${p.error ? "error" : "running"}`} />
+      <span class="provider-badge">
+        <ProviderLogo kind={p.kind} size={22} />
+        <span class={`dot ${p.error ? "error" : "running"} provider-dot`} />
+      </span>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
           <span class="text-sm font-semibold">{label}</span>
