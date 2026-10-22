@@ -93,13 +93,33 @@ holds no token.
 
 ## OAuth (`internal/oauth`)
 
-Google Workspace and Microsoft 365 sign in with the person's own OAuth app (client id, optional
-secret) through the authorization-code flow with PKCE: `POST /v1/oauth/{connector}/start`
-returns the consent URL, the browser lands on `GET /v1/oauth/callback` (open, tied to the flow
-by its state), the code is exchanged and the tokens are written into the connector's settings
-(`oauth_*` keys, never returned by the API). The connector's requests take their bearer token
-from a token source bound to the connector's name, which refreshes it a minute before expiry
-and saves the new one.
+Google Workspace, Microsoft 365, Slack and GitHub sign in with the person's own OAuth app
+(client id, optional secret) through the authorization-code flow with PKCE: `POST
+/v1/oauth/{connector}/start` returns the consent URL, the browser lands on `GET
+/v1/oauth/callback` (open, tied to the flow by its state), the code is exchanged and the tokens
+are written into the connector's settings (`oauth_*` keys, never returned by the API). Slack
+and GitHub keep their token field too: a typed token wins, a webhook needs no account, and
+without either the sign-in's token signs the request (`needs_sign_in` in the settings view says
+when a connector has neither). Slack and GitHub OAuth-app tokens last until revoked, so an
+answer without `expires_in` is kept for good.
+
+The connector's requests take their bearer token from a token source bound to the connector's
+name, which refreshes it a minute before expiry and saves the new one. The gateway also runs
+`Manager.KeepFresh` in the background (every five minutes, through the orchestrator's
+`KeepTokensFresh`): a signed-in connector whose token expires within ten minutes is refreshed
+ahead of time, so the first call after a quiet hour neither waits nor fails; a refresh that
+fails is logged and tried again next round, and the on-use refresh still stands behind it.
+
+## End to end (`desktop/frontend/e2e`)
+
+Playwright drives the built page against a demo gateway (`kitties -demo`, ports 7498/4199 so
+a gateway a person runs is left alone). The global setup seeds models, connectors (a Slack
+webhook pointed at a stub of its own, so the post lands), a skill, an artifact, a proposed
+skill and four chats through the API, waits for the scripted brain to answer, then each test
+checks one screen (the catalogue has a logo on every button, the OAuth form offers the
+sign-in and the consent URL comes back, the chip of a connector call carries its logo) and
+photographs it into `docs/screenshots` under the README's names. `make e2e` runs it; CI runs it
+on every push and uploads the screenshots and the report.
 
 ## Run-time settings (`internal/orchestrator/settings.go`)
 

@@ -67,9 +67,19 @@ motita:
 # External services. A kitty calls one by writing `@connector <name> {...}` in a reply.
 connectors:
   team-slack:
-    kind: slack                  # webhook | slack | discord | telegram | shell | motita
+    kind: slack                  # any kind of the catalogue (kitties connectors lists them)
     description: posts a message to the team channel
     url: https://hooks.slack.com/services/XXX/YYY/ZZZ
+    # Or a channel with a bot token, or a channel plus a Slack app of your own to sign in
+    # from Settings (Sign in with Slack): settings: {channel: "#launch", client_id: ..., client_secret: ...}
+  repo:
+    kind: github
+    description: issues and pull requests of the project
+    settings:
+      repo: madkoding/kitties
+      token: ""                  # a token here, or leave it empty and sign in with GitHub
+      client_id: Iv1.abc         # the OAuth app to sign in with (optional with a token)
+      client_secret: ""
   coder:
     kind: motita
     description: runs a coding task in motita and returns its result
