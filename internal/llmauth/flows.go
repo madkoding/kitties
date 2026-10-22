@@ -61,7 +61,12 @@ func (m *Manager) startCodex() (Flow, error) {
 	paste := make(chan string, 1)
 	return m.track(Flow{Kind: "codex", Method: "browser", URL: link, Paste: true}, paste, func(ctx context.Context) (Credential, error) {
 		if srv != nil {
-			defer srv.Close()
+			// Shutdown, not Close: the page the browser is being sent finishes first.
+			defer func() {
+				stop, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+				defer cancel()
+				_ = srv.Shutdown(stop)
+			}()
 		}
 		code, err := waitCode(ctx, p.state, callbacks, paste)
 		if err != nil {
