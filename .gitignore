@@ -30,3 +30,4 @@ desktop/frontend/e2e/report/
 # The web interface copied into the binary's embed folder by `make web`
 internal/web/dist/*
 !internal/web/dist/placeholder.txt
+desktop/frontend/e2e/.hooks.log

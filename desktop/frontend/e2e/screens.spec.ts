@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
-import { GATEWAY, SHOTS, STATE } from "./playwright.config";
+import { GATEWAY, HOOK_LOG, SHOTS, STATE } from "./playwright.config";
 
 // Every screen of the desktop app, checked and photographed. The pictures go to
 // docs/screenshots under the names the README uses, so the documentation is never stale.
@@ -112,6 +112,7 @@ test("settings: models, connectors and the gateway", async ({ page }) => {
     "git",
     "productivity",
     "office",
+    "finance",
     "drawing",
     "generic",
   ]) {
@@ -163,13 +164,159 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   expect(((await res.json()) as { url: string }).url).toContain("accounts.google.com");
 });
 
-test("a kitty posting through a connector shows the service's logo", async ({ page }) => {
+// hooked is what the outside world (the Slack webhook, the ntfy topic) has received so far.
+const hooked = () => fs.readFileSync(HOOK_LOG, "utf8");
+
+test("an action that reaches other people waits for a yes, and runs when it is approved", async ({
+  page,
+}) => {
   await open(page, `#chat/${ids.post}`);
-  await expect(page.getByText("Posted!").first()).toBeVisible();
-  const chip = page.locator(".tag-logo", { hasText: "team-slack" }).first();
-  await expect(chip).toBeVisible();
-  await expect(chip.locator("svg.logo")).toBeVisible();
+  await expect(page.getByText("That needs your yes first").first()).toBeVisible();
+  await expect(page.getByText("waiting for your yes · team-slack.send")).toBeVisible();
+  await expect(page.getByTestId("approvals-button")).toContainText("1 waiting");
+  expect(hooked()).not.toContain("Kitties launches next week");
+  await shot(page, "23-waiting-for-a-yes");
+
+  await open(page, "#new-approvals");
+  const card = page.getByTestId("approval").first();
+  await expect(card).toContainText("mimi wants to team-slack.send");
+  await expect(card).toContainText("Kitties launches next week");
+  await expect(card.getByText("asks first")).toBeVisible();
+  await shot(page, "24-approvals");
+  await card.getByRole("button", { name: "Approve", exact: true }).click();
+  await expect(page.getByText("Nothing is waiting.")).toBeVisible();
+  await expect(page.getByTestId("decided")).toContainText("approved");
+  await expect.poll(hooked).toContain("Kitties launches next week");
+
+  // The result is in the thread, with the service's logo.
+  await open(page, `#chat/${ids.post}`);
+  const turn = page.locator(".msg.approval-turn").first();
+  await expect(turn).toContainText("Approved and done: team-slack.send");
+  await expect(turn.locator(".tag-logo svg.logo")).toBeVisible();
+  await expect(page.getByTestId("approvals-button")).not.toContainText("waiting");
   await shot(page, "19-connector-call");
+});
+
+test("a no with a reason goes to the kitty, which keeps it as a correction", async ({ page }) => {
+  // Mimi is asked to post again; this time the person says no.
+  const headers = { Authorization: "Bearer e2e-token" };
+  const created = await page.request.post(`${GATEWAY}/v1/chats`, {
+    headers,
+    data: { members: ["mimi"], title: "Second announcement" },
+  });
+  const chat = ((await created.json()) as { chat: { id: string } }).chat.id;
+  const sent = await page.request.post(`${GATEWAY}/v1/chats/${chat}/messages`, {
+    headers,
+    data: { text: "Mimi, post the announcement to the team again." },
+  });
+  expect(sent.ok()).toBeTruthy();
+  await open(page, "#new-approvals");
+  const card = page.getByTestId("approval").first();
+  await expect(card).toBeVisible();
+  await card.getByRole("button", { name: "Reject…" }).click();
+  await card.getByLabel(/Why not/).fill("too informal for the team channel");
+  await card.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(page.getByText("Nothing is waiting.")).toBeVisible();
+  await expect(page.getByTestId("decided").first()).toContainText("rejected");
+  await open(page, `#chat/${chat}`);
+  await expect(page.locator(".msg.approval-turn").first()).toContainText(
+    "Reason: too informal for the team channel",
+  );
+  expect(hooked().match(/Kitties launches next week/g)?.length).toBe(1);
+});
+
+test("the thumbs under an answer teach the kitty", async ({ page }) => {
+  await open(page, `#chat/${ids.single}`);
+  // What was said about these turns is kept: a thumb down on the first answer.
+  const first = page.locator(".msg.agent").first();
+  await expect(first.getByLabel("Not good")).toHaveAttribute("aria-pressed", "true");
+  // A new verdict on a group chat: up on one answer, down with a word on another.
+  await open(page, `#chat/${ids.group}`);
+  const answers = page.locator(".msg.agent");
+  await answers.nth(0).getByLabel("Good answer").click();
+  await expect(answers.nth(0).getByLabel("Good answer")).toHaveAttribute("aria-pressed", "true");
+  await answers.nth(1).getByLabel("Not good").click();
+  await answers.nth(1).getByLabel("What was wrong").fill("a little wordy");
+  await answers.nth(1).getByLabel("What was wrong").press("Enter");
+  await expect(answers.nth(1).getByLabel("Not good")).toHaveAttribute("aria-pressed", "true");
+  await shot(page, "25-feedback");
+});
+
+test("what a kitty knows about you: its level of demand, its notes and how far it is trusted", async ({
+  page,
+}) => {
+  await open(page, `#kitty/${ids.mimi}`);
+  const memory = page.getByTestId("memory");
+  await expect(memory).toBeVisible();
+  // Four thumbs down with a word moved the level from balanced to demanding.
+  await expect(memory.getByRole("button", { name: "4 · demanding" })).toBeVisible();
+  await expect(page.getByTestId("level")).toContainText("They are demanding");
+  const notes = page.getByTestId("notes");
+  await expect(notes).toContainText("Answer in Spanish when I write in Spanish");
+  await expect(notes.locator(".tag", { hasText: "yours" })).toHaveCount(1);
+  await expect(notes).toContainText("Correction: Too long: two lines at most");
+  await expect(notes).toContainText("I prefer short answers");
+  // The yes it gave to Slack is on its way to being trusted: twelve in a row for a demanding person.
+  await expect(page.getByTestId("trust")).toContainText("team-slack.send");
+  await expect(page.getByTestId("trust")).toContainText("of 12 yeses in a row");
+  await expect(page.getByLabel("When it wants to publish, send or spend")).toHaveValue("ask");
+  await memory.scrollIntoViewIfNeeded();
+  await shot(page, "26-memory");
+  // The person can write a note, correct the level and forget a note.
+  await page.getByLabel("A note for it to keep").fill("Sign off with my first name");
+  await memory.getByRole("button", { name: "Add note" }).click();
+  await expect(notes).toContainText("Sign off with my first name");
+  await memory.getByRole("button", { name: "Forget: Sign off with my first name" }).click();
+  await expect(notes).not.toContainText("Sign off with my first name");
+  await memory.getByRole("button", { name: "2 · easygoing" }).click();
+  await expect(page.getByTestId("level")).toContainText("They are easygoing");
+  await memory.getByRole("button", { name: "4 · demanding" }).click();
+  await expect(page.getByTestId("level")).toContainText("They are demanding");
+});
+
+test("notifications: pick a channel, send a test and be told when something waits", async ({
+  page,
+}) => {
+  await open(page, "#new-notifications");
+  const form = page.getByTestId("notify");
+  await expect(form).toBeVisible();
+  await form.getByLabel("Send through").selectOption("phone");
+  await expect(form.getByLabel("A kitty gave up and needs my help")).toBeChecked();
+  await expect(form.getByLabel("An action is waiting for my yes")).toBeChecked();
+  await expect(form.getByLabel("A goal finished")).not.toBeChecked();
+  await shot(page, "27-notifications");
+  await form.getByRole("button", { name: "Save" }).click();
+  await expect(form.getByText("Saved.")).toBeVisible();
+  await form.getByRole("button", { name: "Send a test" }).click();
+  await expect(form.getByText("Sent: look at your phone or channel.")).toBeVisible();
+  await expect.poll(hooked).toContain('"topic":"kitties-e2e"');
+  await expect.poll(hooked).toContain("Notifications work");
+  // An action that waits for the person now reaches their phone, with a link to the thread.
+  const headers = { Authorization: "Bearer e2e-token" };
+  const created = await page.request.post(`${GATEWAY}/v1/chats`, {
+    headers,
+    data: { members: ["mimi"], title: "Third announcement" },
+  });
+  const chat = ((await created.json()) as { chat: { id: string } }).chat.id;
+  await page.request.post(`${GATEWAY}/v1/chats/${chat}/messages`, {
+    headers,
+    data: { text: "Mimi, post the announcement to the team once more." },
+  });
+  await expect.poll(hooked, { timeout: 20_000 }).toContain("mimi: needs your approval");
+  await expect.poll(hooked).toContain(`#chat/${chat}`);
+});
+
+test("the catalogue marks what asks first, and the new services are there", async ({ page }) => {
+  await open(page, "#new-connectors-add");
+  for (const name of ["Stripe", "Zendesk", "ntfy (push)"]) {
+    await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
+  }
+  await page.locator(".service-btn", { hasText: "Stripe" }).click();
+  await expect(
+    page.getByText("refund(payment (pi_…), amount (cents, optional)) [always asks you]"),
+  ).toBeVisible();
+  await expect(page.getByText("send_invoice(id (in_…)) [asks you first]")).toBeVisible();
+  await shot(page, "28-stripe");
 });
 
 test("a kitty hands a subtask to another and the chip leads to their thread", async ({ page }) => {

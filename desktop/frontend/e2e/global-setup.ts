@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
-import { GATEWAY, ROOT, STATE, WEBHOOK_PORT } from "./playwright.config";
+import { GATEWAY, HOOK_LOG, ROOT, STATE, WEBHOOK_PORT } from "./playwright.config";
 
 // The seed: what the screens show. Connectors and models through the settings API, a skill, an
 // artifact, a proposed skill as a file, and four chats whose turns the scripted brain answers.
@@ -57,8 +57,13 @@ async function say(chat: string, text: string): Promise<void> {
 function webhookStub(): Promise<http.Server> {
   return new Promise((resolve) => {
     const srv = http.createServer((req, res) => {
-      req.resume();
+      const chunks: Buffer[] = [];
+      req.on("data", (c: Buffer) => chunks.push(c));
       req.on("end", () => {
+        fs.appendFileSync(
+          HOOK_LOG,
+          `${req.method} ${req.url} ${Buffer.concat(chunks).toString("utf8")}\n`,
+        );
         res.writeHead(200, { "Content-Type": "text/plain" });
         res.end("ok");
       });
@@ -68,6 +73,7 @@ function webhookStub(): Promise<http.Server> {
 }
 
 export default async function globalSetup(): Promise<() => Promise<void>> {
+  fs.writeFileSync(HOOK_LOG, "");
   const stub = await webhookStub();
   const dataDir = path.join(ROOT, "desktop/frontend/e2e/.data/demo");
 
@@ -129,9 +135,37 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   const tom = (await api<{ kitty: { id: string } }>("GET", "/v1/kitties/tom")).kitty.id;
   const mimi = (await api<{ kitty: { id: string } }>("GET", "/v1/kitties/mimi")).kitty.id;
 
+  // What mimi has learned about the person: a note of the person's own, one she took herself,
+  // and four thumbs down (with a word) that make the person look more demanding to her.
+  await api("POST", "/v1/kitties/mimi/memory", {
+    text: "Answer in Spanish when I write in Spanish",
+    scope: "user",
+  });
+  const memo = await newChat(["mimi"], "Preferences");
+  await say(memo, "Mimi, remember that I prefer short answers.");
+  await api("POST", `/v1/chats/${single}/turns/1/feedback`, {
+    rating: "down",
+    note: "Too long: two lines at most",
+  });
+  await api("POST", `/v1/chats/${single}/turns/3/feedback`, {
+    rating: "down",
+    note: "Use a table for plans",
+  });
+  await api("POST", `/v1/chats/${post}/turns/1/feedback`, {
+    rating: "down",
+    note: "Never post without showing me a draft",
+  });
+
   // Delegation: mimi hands a subtask to luna and reports back.
   const delegated = await newChat(["mimi"], "Plan review");
   await say(delegated, "Mimi, ask luna to summarise the launch plan in three lines.");
+  await api("POST", `/v1/chats/${delegated}/turns/1/feedback`, { rating: "down", note: "" });
+  // A push channel (an ntfy topic on the stub) for the notifications the tests set up.
+  await api("PUT", "/v1/settings/connectors/phone", {
+    kind: "ntfy",
+    description: "push notifications to my phone",
+    settings: { topic: "kitties-e2e", url: `http://127.0.0.1:${WEBHOOK_PORT}` },
+  });
 
   // Autonomy: mimi has a goal on a schedule and one on GitHub's events; the person runs the
   // first now, and GitHub posts an issue for the second. Limits and a backup are set too.

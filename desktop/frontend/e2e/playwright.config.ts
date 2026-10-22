@@ -13,6 +13,8 @@ export const WEBHOOK_PORT = 7499;
 export const ROOT = path.resolve(here, "../../..");
 export const SHOTS = path.join(ROOT, "docs/screenshots");
 export const STATE = path.join(here, ".state.json");
+// What the stub of the outside world (a Slack webhook, an ntfy server) received, one line each.
+export const HOOK_LOG = path.join(here, ".hooks.log");
 
 export default defineConfig({
   testDir: here,
