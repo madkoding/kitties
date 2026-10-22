@@ -63,7 +63,7 @@ On Windows, SmartScreen asks once: *More info* then *Run anyway*.
 
 ```sh
 kitties init                 # writes kitties.yaml and souls/tom.yaml
-export ANTHROPIC_API_KEY=... # or OPENAI_API_KEY, GEMINI_API_KEY, GROQ_API_KEY... (or type keys in Settings)
+export ANTHROPIC_API_KEY=... # or OPENAI_API_KEY, GEMINI_API_KEY... (or a key or a subscription in Settings)
 make image                   # builds the kitty-desktop image (needs Docker or Podman)
 kitties gateway              # creates the kitties of the file, starts them, serves the API
 ```
@@ -129,6 +129,7 @@ cd desktop && wails dev   # live reload while working on it
 | ![New kitty: pick its pixel cat](docs/screenshots/07-new-kitty.png) | ![Light mode](docs/screenshots/11-light.png) |
 | ![A first run is a checklist](docs/screenshots/31-welcome.png) | ![Adding a model: pick the provider](docs/screenshots/32-pick-provider.png) |
 | ![Adding a model: the key and the suggested model](docs/screenshots/34-add-model.png) | ![A connection and the kitties that may use it](docs/screenshots/33-connection-form.png) |
+| ![A Claude subscription, through Claude Code](docs/screenshots/35-claude-subscription.png) | ![GitHub Copilot: sign in with a code](docs/screenshots/36-copilot-code.png) |
 | ![A kitty posting through Slack: the chip carries the logo](docs/screenshots/19-connector-call.png) | ![The phone layout](docs/screenshots/12-phone.png) |
 
 More in [docs/screenshots](docs/screenshots): the new chat and new kitty dialogs, the gateway
@@ -361,6 +362,22 @@ Keys come from the provider's usual variable (`OPENAI_API_KEY`, `ANTHROPIC_API_K
 `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`,
 `MISTRAL_API_KEY`, `OLLAMA_API_KEY`) unless `api_key` or `api_key_env` says otherwise.
 
+### A subscription instead of a key
+
+Under **Settings → Models**, a provider that has one offers *API key* or the subscription you
+already pay for:
+
+| Subscription | How it signs in | Saved as |
+| --- | --- | --- |
+| Claude (Pro, Max) | Anthropic only allows it through Claude Code: install it, run `claude auth login` once, and Kitties runs the `claude` program for each answer (tools as text, no API key passed to it) | `kind: claude-code` |
+| ChatGPT (Plus, Pro, Business) | *Sign in with ChatGPT* in the browser; the callback lands on `localhost:1455`, or paste its address back when the gateway runs elsewhere | `kind: codex, auth: login` |
+| GitHub Copilot | a code typed on github.com/login/device | `kind: copilot, auth: login` |
+| Google (Gemini) | the login of gcloud (`gcloud auth application-default login`) and a Cloud project | `kind: gemini, auth: login` |
+| Qwen | ended by Qwen on 2026-04-15: a DashScope key is the way in | — |
+
+The tokens are kept in `data_dir/accounts` (one file per account, readable by you only) and
+renewed before they expire.
+
 ## The API
 
 | Method and path                           | What it does                                   |
@@ -388,6 +405,7 @@ Keys come from the provider's usual variable (`OPENAI_API_KEY`, `ANTHROPIC_API_K
 | `GET/POST /v1/kitties/{ref}/memory` · `DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes, its picture of you, and a distillation now |
 | `POST /v1/chats/{id}/turns/{index}/feedback` `{rating, note}` | a thumb under an answer |
 | `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` · `POST …/notify/digest` | where and when kitties tell you; a test; the daily summary now |
+| `POST /v1/settings/accounts/{kind}/login` · `GET/DELETE /v1/settings/logins/{id}` · `POST …/paste` · `DELETE /v1/settings/accounts/{kind}` | sign a model in with a subscription, follow it, paste the browser's address, sign out |
 
 Every other call needs `Authorization: Bearer <token>`; `/` and `/v1/health` are open.
 
