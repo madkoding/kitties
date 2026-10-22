@@ -127,9 +127,17 @@ the thread as an `approval` turn. *Approve and stop asking* writes a rule that
 `DELETE /v1/approvals/rules/{id}` removes. Pending requests, rules and a bounded history live in
 `approvals.json`.
 
+**Daily budget** (`internal/budget`, `chat/budget.go`). `Limits.DayTokens` and `DayActions`
+cap a kitty's day. `budget.Store` counts tokens (every model reply in `answer` and in a desktop
+task's rounds) and actions (a gated action that runs, or is approved) per kitty and day in
+`budget.json`, keeping a fortnight. Out of tokens, `answer` and `attempt` refuse before asking
+the model, and the `budget` notification goes out once a day. Past the actions, `gate` turns an
+allowed action into a held one (even in `approvals: auto`), marked in its summary; the person's
+yes runs it and counts it. `MemoryView.Spent` shows today's counts in the kitty's drawer.
+
 **Notifications** (`internal/notify`). A `Notifier` sends through any connector that can send a
 message (ntfy preferred, with a click link to the page), for the events `help`, `approval`,
-`goal_done`, `goal_blocked` and `recovered`. Events of the same kind within ten minutes fold into
+`goal_done`, `goal_blocked`, `recovered` and `budget`. Events of the same kind within ten minutes fold into
 one message. The choice is kept in `settings.json` over the YAML's `notify`; deleting the
 connector clears it.
 

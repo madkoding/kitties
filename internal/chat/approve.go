@@ -89,7 +89,12 @@ func (s *Service) gate(id string, k *kitty.Kitty, a action, turn *Turn) (outcome
 	action := connector.ActionOf(kind, a.args)
 	summary := approvals.Summarise(a.name, action, a.args)
 	verdict := s.approvals.Check(k.ID, a.name, action, risk.String(), k.Approvals, s.demandOf(k))
+	if verdict.Run && s.overActions(k) {
+		verdict = approvals.Verdict{Why: "over the day's actions"}
+		summary = fmt.Sprintf("(over today's %d actions) %s", k.Limits.Or(s.DefaultLimits).DayActions, summary)
+	}
 	if verdict.Run {
+		s.spendAction(k)
 		s.note(k, agenda.KindApproval, s.goalOf(id), id, "went ahead on its own ("+verdict.Why+"): "+summary)
 		return outcome{}, false
 	}
@@ -146,6 +151,7 @@ func (s *Service) DecideApproval(ctx context.Context, id string, approve bool, r
 		}
 		res := s.fleet.Connectors().Call(ctx, connector.Call{Name: ap.Connector, Args: ap.Args}, allow)
 		if k != nil {
+			s.spendAction(k)
 			s.keepFiles([]connector.Result{res}, k, &turn)
 		}
 		s.approvals.Done(id, res.Output, res.Err)

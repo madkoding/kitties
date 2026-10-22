@@ -107,7 +107,9 @@ A kitty is not only something you talk to. Each one has an agenda:
   connector run with the event.
 - **Limits.** Per kitty: tokens, seconds and rounds per task, and how many times a failed
   attempt is tried another way. A task that hits a limit stops and says so instead of running
-  on.
+  on. A **daily budget** caps what a kitty spends around the clock: out of tokens it rests until
+  tomorrow (and tells you once); past its actions for the day, every post, reply or refund waits
+  for your yes even if it normally acts alone.
 - **Recovery.** A failed attempt is retried with a different approach. When a kitty gives up,
   its **backup** kitty takes the task over; without one, the kitty asks you (the chat is
   marked *help* until you answer). A watchdog brings a stopped container back and retries a
@@ -128,7 +130,7 @@ In the YAML, under a kitty:
 ```yaml
   - name: mimi
     backup: luna                 # takes over what mimi gives up on
-    limits: {max_tokens: 200000, max_seconds: 900, retries: 2}
+    limits: {max_tokens: 200000, max_seconds: 900, retries: 2, day_tokens: 2000000, day_actions: 20}
     goals:
       - title: Inbox check
         text: Look at the inbox and answer what is easy.

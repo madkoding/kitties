@@ -333,6 +333,8 @@ export function LimitsForm({
     max_seconds: l.max_seconds || 0,
     max_rounds: l.max_rounds || 0,
     retries: l.retries || 0,
+    day_tokens: l.day_tokens || 0,
+    day_actions: l.day_actions || 0,
   });
   const [backup, setBackup] = useState(kitty.backup || "");
   const [approvals, setApprovals] = useState(kitty.approvals || "ask");
@@ -356,7 +358,9 @@ export function LimitsForm({
     <div>
       <div class="section-title !mx-0 mt-5">Limits & backup</div>
       <p class="text-xs text-[var(--t4)]">
-        What one task may spend before {kitty.name} stops and says so. 0 takes the default.
+        What one task may spend before {kitty.name} stops and says so, and what it may spend in a
+        day: out of tokens it rests until tomorrow, past its actions each one waits for your yes. 0
+        takes the default (no daily limit).
       </p>
       <div class="grid grid-cols-2 gap-x-3">
         {(
@@ -365,6 +369,8 @@ export function LimitsForm({
             ["max_seconds", "Seconds per task"],
             ["max_rounds", "Rounds per task"],
             ["retries", "Retries (another way)"],
+            ["day_tokens", "Tokens per day"],
+            ["day_actions", "Actions per day"],
           ] as [keyof Limits, string][]
         ).map(([k, label]) => (
           <div key={k}>

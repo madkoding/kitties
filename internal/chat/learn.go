@@ -119,6 +119,8 @@ type MemoryView struct {
 	Profile memory.Profile   `json:"profile"`
 	Level   string           `json:"level"`
 	Trust   map[string]Trust `json:"trust,omitempty"`
+	// Spent is today's tokens and actions against the kitty's daily limits.
+	Spent Spent `json:"spent"`
 }
 
 // Trust is how far a kind of action of the kitty is on the way to being done unasked.
@@ -138,7 +140,7 @@ func (s *Service) MemoryOf(ref string) (*MemoryView, error) {
 		return nil, err
 	}
 	p := s.memory.Profile(k.ID)
-	view := &MemoryView{Notes: s.memory.Notes(k.ID, ""), Profile: p, Level: memory.LevelText(p.Demand)}
+	view := &MemoryView{Notes: s.memory.Notes(k.ID, ""), Profile: p, Level: memory.LevelText(p.Demand), Spent: s.SpentBy(k)}
 	if view.Notes == nil {
 		view.Notes = []memory.Note{}
 	}

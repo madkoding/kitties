@@ -279,6 +279,7 @@ const NOTIFY_LABELS: Record<string, string> = {
   goal_done: "A goal finished",
   goal_blocked: "A goal could not finish",
   recovered: "A kitty's container was brought back",
+  budget: "A kitty spent its day's tokens",
 };
 
 // NotifyForm chooses where the kitties tell you what happened while you were away (a push to

@@ -59,11 +59,17 @@ type Limits struct {
 	MaxRounds int `json:"max_rounds,omitempty" yaml:"max_rounds"`
 	// Retries is how many times a failed task is tried another way before giving up.
 	Retries int `json:"retries,omitempty" yaml:"retries"`
+	// DayTokens is the input plus output tokens the kitty may use in a day, over all its work;
+	// when they are spent it stops until tomorrow. Zero means no daily limit.
+	DayTokens int `json:"day_tokens,omitempty" yaml:"day_tokens"`
+	// DayActions is how many actions that reach other people (posts, replies, mail, refunds) it
+	// may take in a day; past it each one waits for the person even when the kitty acts alone.
+	DayActions int `json:"day_actions,omitempty" yaml:"day_actions"`
 }
 
 // Validate refuses a negative limit.
 func (l Limits) Validate() error {
-	if l.MaxTokens < 0 || l.MaxSeconds < 0 || l.MaxRounds < 0 || l.Retries < 0 {
+	if l.MaxTokens < 0 || l.MaxSeconds < 0 || l.MaxRounds < 0 || l.Retries < 0 || l.DayTokens < 0 || l.DayActions < 0 {
 		return errors.New("limits cannot be negative")
 	}
 	if l.Retries > 10 {
@@ -85,6 +91,12 @@ func (l Limits) Or(d Limits) Limits {
 	}
 	if l.Retries == 0 {
 		l.Retries = d.Retries
+	}
+	if l.DayTokens == 0 {
+		l.DayTokens = d.DayTokens
+	}
+	if l.DayActions == 0 {
+		l.DayActions = d.DayActions
 	}
 	return l
 }

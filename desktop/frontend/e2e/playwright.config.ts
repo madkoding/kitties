@@ -38,7 +38,8 @@ export default defineConfig({
   },
   webServer: [
     {
-      command: "go run ./cmd/kitties -demo -config desktop/frontend/e2e/kitties.yaml gateway",
+      command:
+        "rm -rf desktop/frontend/e2e/.data && go run ./cmd/kitties -demo -config desktop/frontend/e2e/kitties.yaml gateway",
       cwd: ROOT,
       url: GATEWAY + "/v1/health",
       reuseExistingServer: false,

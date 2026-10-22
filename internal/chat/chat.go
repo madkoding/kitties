@@ -24,6 +24,7 @@ import (
 	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
+	"github.com/madkoding/kitties/internal/budget"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
@@ -181,6 +182,7 @@ type Service struct {
 	goals   Reporter
 	// approvals holds the actions waiting for a yes, nil when nothing is held back.
 	approvals *approvals.Store
+	budget    *budget.Store
 	// demand is how demanding a kitty's person is (1 relaxed to 5 strict); 3 when unset.
 	demand func(kittyID string) int
 	// notifier tells the person what happened outside the interface, nil when it does not.
@@ -847,10 +849,14 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	turn := Turn{From: k.Name, Kitty: k.ID}
 	var parts []string
 	for round := 0; round < s.MaxRounds; round++ {
+		if err := s.overTokens(k); err != nil {
+			return Turn{}, nil, err
+		}
 		reply, err := ask(ctx, brain, native, messages, tools)
 		if err != nil {
 			return Turn{}, nil, err
 		}
+		s.spendTokens(k, reply.Usage)
 		turn.Usage.Input += reply.Usage.Input
 		turn.Usage.Output += reply.Usage.Output
 		var actions []action
@@ -1063,6 +1069,9 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		if len(st.messages) > s.MaxTurns*2 {
 			st.messages = append(st.messages[:1], st.messages[len(st.messages)-s.MaxTurns*2:]...)
 		}
+		if err := s.overTokens(k); err != nil {
+			return "stopped: " + err.Error(), false
+		}
 		answer, err := ask(ctx, p.brain, p.native, st.messages, p.tools)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -1070,6 +1079,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			}
 			return err.Error(), true
 		}
+		s.spendTokens(k, answer.Usage)
 		s.addUsage(id, index, answer.Usage)
 		st.tokens += answer.Usage.Input + answer.Usage.Output
 		if limits.MaxTokens > 0 && st.tokens > limits.MaxTokens {

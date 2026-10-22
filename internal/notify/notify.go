@@ -24,10 +24,11 @@ const (
 	GoalDone    Event = "goal_done"    // a goal's run finished
 	GoalBlocked Event = "goal_blocked" // a goal's run could not finish
 	Recovered   Event = "recovered"    // a container was brought back
+	Budget      Event = "budget"       // a kitty spent its day's tokens
 )
 
 // Events lists them in order, for the page.
-var Events = []Event{Help, Approval, GoalDone, GoalBlocked, Recovered}
+var Events = []Event{Help, Approval, GoalDone, GoalBlocked, Recovered, Budget}
 
 // Default is what is sent when the person chose nothing: the two that need them.
 var Default = []Event{Help, Approval}

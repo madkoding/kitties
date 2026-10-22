@@ -79,6 +79,8 @@ export interface MemoryView {
   profile: MemoryProfile;
   level: string;
   trust?: Record<string, { streak: number; needs: number }>;
+  // What it used today against its daily limits (a limit of 0 is none).
+  spent?: { tokens: number; actions: number; day_tokens: number; day_actions: number };
 }
 
 export interface Limits {
@@ -86,6 +88,9 @@ export interface Limits {
   max_seconds?: number;
   max_rounds?: number;
   retries?: number;
+  // The day's ceiling over all its work: tokens, and actions that reach other people.
+  day_tokens?: number;
+  day_actions?: number;
 }
 
 // Goal is something a kitty pursues on its own: on a schedule (every, a cron expression),

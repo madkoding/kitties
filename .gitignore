@@ -31,3 +31,4 @@ desktop/frontend/e2e/report/
 internal/web/dist/*
 !internal/web/dist/placeholder.txt
 desktop/frontend/e2e/.hooks.log
+desktop/frontend/test-results/

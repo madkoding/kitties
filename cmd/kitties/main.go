@@ -20,6 +20,7 @@ import (
 	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
+	"github.com/madkoding/kitties/internal/budget"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/container"
@@ -79,6 +80,7 @@ type app struct {
 	// approvals hold the actions that wait for a yes; memory is what the kitties know of the
 	// person; notifier tells the person outside the interface.
 	approvals *approvals.Store
+	budget    *budget.Store
 	memory    *memory.Store
 	notifier  *notify.Notifier
 	skills    *skills.Library
@@ -213,7 +215,11 @@ func (a *app) open(cmd string) error {
 	if a.approvals, err = approvals.Open(filepath.Join(dataDir, "approvals.json")); err != nil {
 		return err
 	}
+	if a.budget, err = budget.Open(filepath.Join(dataDir, "budget.json")); err != nil {
+		return err
+	}
 	a.memory = memory.Open(filepath.Join(dataDir, "memory"))
+	chats.SetBudget(a.budget)
 	chats.SetApprovals(a.approvals)
 	chats.SetMemory(a.memory)
 	g := a.cfg.Gateway
@@ -225,7 +231,7 @@ func (a *app) open(cmd string) error {
 	}, nil)
 	chats.SetNotifier(a.notifier)
 	// A removed kitty takes its held actions and its memory along.
-	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty)
+	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget)
 	a.fleet, a.chats = fleet, chats
 	return nil
 }

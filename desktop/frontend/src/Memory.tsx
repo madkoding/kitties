@@ -94,6 +94,27 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
           </div>
         </>
       )}
+      {view.spent && (
+        <>
+          <label class={LABEL}>Today</label>
+          <div class="flex flex-col gap-1 text-xs" data-testid="spent">
+            {(
+              [
+                ["tokens", view.spent.tokens, view.spent.day_tokens],
+                ["actions", view.spent.actions, view.spent.day_actions],
+              ] as [string, number, number][]
+            ).map(([name, used, max]) => (
+              <div key={name} class="flex items-center gap-2">
+                <span class="flex-1">{name}</span>
+                <span class={max > 0 && used >= max ? "text-[var(--c-red)]" : "text-[var(--t3)]"}>
+                  {used.toLocaleString("en-US")}
+                  {max > 0 ? ` of ${max.toLocaleString("en-US")}` : " (no limit)"}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
       <label class={LABEL}>Notes</label>
       {view.notes.length === 0 && (
         <p class="text-xs text-[var(--t4)]">

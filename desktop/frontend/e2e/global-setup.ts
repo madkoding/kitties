@@ -170,7 +170,13 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   // Autonomy: mimi has a goal on a schedule and one on GitHub's events; the person runs the
   // first now, and GitHub posts an issue for the second. Limits and a backup are set too.
   await api("PATCH", `/v1/kitties/${mimi}`, {
-    limits: { max_tokens: 20000, max_seconds: 600, retries: 2 },
+    limits: {
+      max_tokens: 20000,
+      max_seconds: 600,
+      retries: 2,
+      day_tokens: 5000000,
+      day_actions: 5,
+    },
     backup: "luna",
   });
   await api("PUT", "/v1/settings/connectors/github", {

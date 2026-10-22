@@ -260,6 +260,9 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   await expect(page.getByTestId("trust")).toContainText("team-slack.send");
   await expect(page.getByTestId("trust")).toContainText("of 12 yeses in a row");
   await expect(page.getByLabel("When it wants to publish, send or spend")).toHaveValue("ask");
+  // Today's spending against the daily limits.
+  await expect(page.getByTestId("spent")).toContainText("of 5,000,000");
+  await expect(page.getByTestId("spent")).toContainText("of 5");
   await memory.scrollIntoViewIfNeeded();
   await shot(page, "26-memory");
   // The person can write a note, correct the level and forget a note.
@@ -344,6 +347,8 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   await expect(journal.locator(".tag", { hasText: "delegated" }).first()).toBeVisible();
   await expect(page.getByLabel("Backup (takes over a task mimi gives up on)")).toHaveValue("luna");
   await expect(page.getByLabel("Retries (another way)")).toHaveValue("2");
+  await expect(page.getByLabel("Tokens per day")).toHaveValue("5000000");
+  await expect(page.getByLabel("Actions per day")).toHaveValue("5");
   await goals.scrollIntoViewIfNeeded();
   await shot(page, "21-goals-journal");
   // The sidebar marks the goal chats, and a goal's chat shows the scheduler's call.

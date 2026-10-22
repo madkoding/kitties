@@ -45,6 +45,8 @@ kitties:
       max_seconds: 900
       max_rounds: 25
       retries: 2                 # failed attempts tried another way
+      day_tokens: 2000000        # all its work in a day; spent, it rests until tomorrow (0: no limit)
+      day_actions: 20            # posts, replies, mail, refunds in a day; past it each one waits for a yes
     goals:                       # standing tasks, worked in a thread of their own
       - title: Inbox check
         text: Look at the inbox and answer what is easy.
