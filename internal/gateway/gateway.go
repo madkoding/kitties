@@ -101,6 +101,7 @@ type Server struct {
 	memories Memories
 	// notifier tests notifications, nil when the gateway sends none.
 	notifier NotifyTester
+	digester Digester
 }
 
 // WithLibrary serves the skills and the artifacts.

@@ -141,6 +141,13 @@ message (ntfy preferred, with a click link to the page), for the events `help`, 
 one message. The choice is kept in `settings.json` over the YAML's `notify`; deleting the
 connector clears it.
 
+**Daily summary** (`internal/digest`). `Reporter` builds one message from the journal (what each
+kitty finished, blocked, handed over, learned in the last 24 hours), today's spending and the
+actions waiting for a yes, and sends it through `Notifier.Deliver` when the clock passes
+`notify.digest` (gateway time) and today's was not sent; the day it last sent is kept in
+`digest.json`, and a summary is only sent within 90 minutes of its time. `POST
+/v1/settings/notify/digest` sends one now.
+
 **Reading connectors** (`internal/connector/reads.go`). Kinds gain read, reply and like actions
 (Mastodon, Bluesky, Gmail, Outlook, Slack, Telegram) and new kinds (Stripe, Zendesk, ntfy).
 `listing` renders JSON arrays as one short line per item; `request.follow` lets one action

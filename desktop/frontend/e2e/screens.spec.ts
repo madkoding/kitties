@@ -294,6 +294,15 @@ test("notifications: pick a channel, send a test and be told when something wait
   await expect(form.getByText("Sent: look at your phone or channel.")).toBeVisible();
   await expect.poll(hooked).toContain('"topic":"kitties-e2e"');
   await expect.poll(hooked).toContain("Notifications work");
+  // A daily summary at a time of the person's choice, and one on demand.
+  await form.getByLabel("A summary of the last day, every day at").fill("08:30");
+  await form.getByRole("button", { name: "Save" }).click();
+  await expect(form.getByText("Saved.")).toBeVisible();
+  await form.getByTestId("send-digest").click();
+  await expect(form.getByText("Summary sent.")).toBeVisible();
+  await expect.poll(hooked).toContain("Your kitties, last 24 hours");
+  await expect.poll(hooked).toContain("mimi:");
+  await shot(page, "29-daily-summary");
   // An action that waits for the person now reaches their phone, with a link to the thread.
   const headers = { Authorization: "Bearer e2e-token" };
   const created = await page.request.post(`${GATEWAY}/v1/chats`, {

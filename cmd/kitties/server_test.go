@@ -262,5 +262,30 @@ func TestGatewayServesApprovalsMemoryAndNotifications(t *testing.T) {
 	if code, body := get("/v1/settings"); code != 200 || !strings.Contains(body, `"notify":{"connector":"","on":[]}`) || !strings.Contains(body, `"notify_events"`) {
 		t.Errorf("settings = %d %s", code, body)
 	}
+	// The daily summary is built from the journal, the approvals and the budget, and sent through
+	// the channel: a webhook cannot carry a notification, so the failure comes back as the answer.
+	put := func(method, path, body string) (int, string) {
+		req, _ := http.NewRequest(method, "http://"+addr+path, strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer "+tok)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(resp.Body)
+		return resp.StatusCode, string(data)
+	}
+	if code, body := put("POST", "/v1/settings/notify/digest", ""); code != 200 || !strings.Contains(body, "choose a notification channel") {
+		t.Errorf("digest without a channel = %d %s", code, body)
+	}
+	if code, body := put("PUT", "/v1/settings/connectors/hook", `{"kind":"webhook","url":"http://127.0.0.1:1/x"}`); code != 200 {
+		t.Fatalf("connector = %d %s", code, body)
+	}
+	if code, body := put("PUT", "/v1/settings/notify", `{"connector":"hook","digest":"08:30"}`); code != 200 || !strings.Contains(body, `"digest":"08:30"`) {
+		t.Fatalf("notify = %d %s", code, body)
+	}
+	if code, body := put("POST", "/v1/settings/notify/digest", ""); code != 200 || !strings.Contains(body, "cannot carry a notification") {
+		t.Errorf("digest = %d %s", code, body)
+	}
 	stop()
 }

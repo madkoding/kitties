@@ -259,7 +259,7 @@ export interface SettingsView {
   connector_catalog: ConnectorKind[];
   connector_categories: string[];
   motita_url?: string;
-  notify: { connector: string; on: string[] };
+  notify: { connector: string; on: string[]; digest?: string };
   notify_events: string[];
 }
 
@@ -561,10 +561,11 @@ export const api = {
     ),
   feedback: (chat: string, index: number, rating: "up" | "down" | "", note = "") =>
     request("POST", `/v1/chats/${chat}/turns/${index}/feedback`, { rating, note }),
-  setNotify: (c: { connector: string; on: string[] }) =>
+  setNotify: (c: { connector: string; on: string[]; digest?: string }) =>
     request<SettingsView>("PUT", "/v1/settings/notify", c),
   testNotify: (connector = "") =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),
+  sendDigest: () => request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/digest"),
   journal: (kitty: string, n = 50) =>
     request<{ journal: JournalEntry[] }>("GET", `/v1/kitties/${kitty}/journal?n=${n}`).then(
       (r) => r.journal || [],

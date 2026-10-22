@@ -25,6 +25,9 @@ const (
 	GoalBlocked Event = "goal_blocked" // a goal's run could not finish
 	Recovered   Event = "recovered"    // a container was brought back
 	Budget      Event = "budget"       // a kitty spent its day's tokens
+	// Digest is the daily summary. It is not one of Events: the person turns it on by giving
+	// Config.Digest a time of day.
+	Digest Event = "digest"
 )
 
 // Events lists them in order, for the page.
@@ -55,12 +58,31 @@ type Config struct {
 	Connector string `json:"connector" yaml:"connector"`
 	// On lists the events to send; empty means Default.
 	On []string `json:"on" yaml:"on"`
+	// Digest is the time of day ("09:00", the gateway's clock) a summary of the last day is
+	// sent; empty sends none.
+	Digest string `json:"digest,omitempty" yaml:"digest"`
+}
+
+// DigestAt parses Digest into hour and minute; ok is false when none is set.
+func (c Config) DigestAt() (hour, minute int, ok bool) {
+	if c.Digest == "" {
+		return 0, 0, false
+	}
+	t, err := time.Parse("15:04", c.Digest)
+	if err != nil {
+		return 0, 0, false
+	}
+	return t.Hour(), t.Minute(), true
 }
 
 // Wants reports whether the config sends an event.
 func (c Config) Wants(e Event) bool {
 	if c.Connector == "" {
 		return false
+	}
+	if e == Digest {
+		_, _, ok := c.DigestAt()
+		return ok
 	}
 	on := c.On
 	if len(on) == 0 {
@@ -88,6 +110,14 @@ func (c Config) Validate(reg *connector.Registry) error {
 		}
 		if !known {
 			return fmt.Errorf("notify.on: %q is not one of %s", o, eventList())
+		}
+	}
+	if c.Digest != "" {
+		if _, _, ok := c.DigestAt(); !ok {
+			return fmt.Errorf("notify.digest: %q is not a time of day like 09:00", c.Digest)
+		}
+		if c.Connector == "" {
+			return fmt.Errorf("notify.digest: choose a connector to send it through")
 		}
 	}
 	if c.Connector != "" && reg != nil {
@@ -179,6 +209,17 @@ func (n *Notifier) Notify(note Notification) {
 			n.logf("notify: %s: %v", cfg.Connector, err)
 		}
 	}()
+}
+
+// Deliver sends a notification through the configured connector now and says how it went. It
+// ignores the choice of events and the quiet time: a summary the person asked for is not a
+// repeat.
+func (n *Notifier) Deliver(ctx context.Context, note Notification) error {
+	name := n.cfg().Connector
+	if name == "" {
+		return fmt.Errorf("no notification channel is set")
+	}
+	return n.call(ctx, name, note)
 }
 
 // Wait blocks until the notifications in flight have gone out.

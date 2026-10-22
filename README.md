@@ -159,7 +159,9 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
 - **Notifications.** A kitty that needs you does not wait for you to open the app: through any
   messaging connector (an [ntfy](https://ntfy.sh) topic pushes to your phone) it tells you when it
   needs help, when an action waits for a yes, and optionally when a goal finishes, gets blocked or
-  a container recovers. Bursts are folded into one message every ten minutes.
+  a container recovers or a kitty spends its day's tokens. Bursts are folded into one message every
+  ten minutes. Optionally a **daily summary** arrives at the hour you choose: what each kitty did
+  in the last day, what it spent and what waits for your yes.
 - **Community manager, support, finance.** Besides writing, connectors read and answer: Mastodon
   and Bluesky timelines, mentions, replies and likes; Gmail and Outlook inboxes; Slack and
   Telegram messages; Stripe balance, invoices and payments; Zendesk tickets. Results come back as
@@ -174,6 +176,7 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
 | ![An action waits for a yes](docs/screenshots/23-waiting-for-a-yes.png) | ![The Approvals screen](docs/screenshots/24-approvals.png) |
 | ![Thumbs under the answers](docs/screenshots/25-feedback.png) | ![What a kitty knows about you](docs/screenshots/26-memory.png) |
 | ![Notifications: a phone channel and its events](docs/screenshots/27-notifications.png) | ![Stripe: invoices and payments as one line each](docs/screenshots/28-stripe.png) |
+| ![The daily summary, sent on demand](docs/screenshots/29-daily-summary.png) | |
 
 In the YAML:
 
@@ -183,7 +186,8 @@ kitties:
     approvals: ask               # ask (default) | auto
 notify:
   connector: phone               # any messaging connector; ntfy pushes to your phone
-  on: [help, approval, goal_done, goal_blocked, recovered]   # default: help, approval
+  on: [help, approval, goal_done, goal_blocked, recovered, budget]   # default: help, approval
+  digest: "08:30"                # a summary of the last day, every day (gateway's clock); empty: none
 connectors:
   phone: { kind: ntfy, settings: { topic: my-kitties } }
 ```
@@ -343,7 +347,7 @@ Keys come from the provider's usual variable (`OPENAI_API_KEY`, `ANTHROPIC_API_K
 | `GET /v1/approvals/rules` · `DELETE /v1/approvals/rules/{id}` | what kitties may do alone, and taking it back |
 | `GET/POST /v1/kitties/{ref}/memory` · `DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes, its picture of you, and a distillation now |
 | `POST /v1/chats/{id}/turns/{index}/feedback` `{rating, note}` | a thumb under an answer |
-| `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` | where and when kitties tell you |
+| `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` · `POST …/notify/digest` | where and when kitties tell you; a test; the daily summary now |
 
 Every other call needs `Authorization: Bearer <token>`; `/` and `/v1/health` are open.
 

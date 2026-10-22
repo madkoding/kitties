@@ -32,6 +32,17 @@ func (s *Server) WithMemory(m Memories) *Server {
 	return s
 }
 
+// Digester sends the summary of the day now.
+type Digester interface {
+	SendNow(ctx context.Context) error
+}
+
+// WithDigest serves the button that sends the daily summary at once.
+func (s *Server) WithDigest(d Digester) *Server {
+	s.digester = d
+	return s
+}
+
 // WithNotifier serves the test of a notification.
 func (s *Server) WithNotifier(n NotifyTester) *Server {
 	s.notifier = n
@@ -48,6 +59,7 @@ func (s *Server) memoryRoutes() {
 	s.mux.Handle("POST /v1/chats/{id}/turns/{index}/feedback", api(s.handleFeedback))
 	s.mux.Handle("PUT /v1/settings/notify", api(s.handleSetNotify))
 	s.mux.Handle("POST /v1/settings/notify/test", api(s.handleTestNotify))
+	s.mux.Handle("POST /v1/settings/notify/digest", api(s.handleSendDigest))
 }
 
 var errNoMemory = errors.New("this gateway keeps no memory of the person")
@@ -198,6 +210,18 @@ func (s *Server) handleTestNotify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.notifier.Test(r.Context(), body.Connector); err != nil {
+		reply(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleSendDigest(w http.ResponseWriter, r *http.Request) {
+	if s.digester == nil {
+		fail(w, http.StatusNotFound, errors.New("this gateway sends no daily summary"))
+		return
+	}
+	if err := s.digester.SendNow(r.Context()); err != nil {
 		reply(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
 		return
 	}

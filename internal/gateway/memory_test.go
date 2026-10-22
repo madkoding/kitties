@@ -196,3 +196,29 @@ func TestNotifySettingsAPI(t *testing.T) {
 		t.Error("no notifier")
 	}
 }
+
+type fakeDigest struct {
+	sent int
+	err  error
+}
+
+func (f *fakeDigest) SendNow(context.Context) error { f.sent++; return f.err }
+
+func TestSendDigestNow(t *testing.T) {
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": {ID: "a1", Name: "ana"}}}
+	d := &fakeDigest{}
+	srv := httptest.NewServer(New(f, &fakeChats{}, "tok", "").WithDigest(d))
+	defer srv.Close()
+	if code, m, _ := call(t, srv, "POST", "/v1/settings/notify/digest", "tok", nil); code != 200 || m["ok"] != true || d.sent != 1 {
+		t.Errorf("send = %d %v", code, m)
+	}
+	d.err = errors.New("ntfy is down")
+	if code, m, _ := call(t, srv, "POST", "/v1/settings/notify/digest", "tok", nil); code != 200 || m["ok"] != false || m["error"] != "ntfy is down" {
+		t.Errorf("a failure is reported = %d %v", code, m)
+	}
+	none := httptest.NewServer(New(f, &fakeChats{}, "tok", ""))
+	defer none.Close()
+	if code, _, _ := call(t, none, "POST", "/v1/settings/notify/digest", "tok", nil); code != 404 {
+		t.Error("no digest")
+	}
+}

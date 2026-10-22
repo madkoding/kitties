@@ -84,7 +84,8 @@ motita:
 # an ntfy topic pushes to your phone.
 notify:
   connector: phone
-  on: [help, approval]           # help | approval | goal_done | goal_blocked | recovered
+  on: [help, approval]           # help | approval | goal_done | goal_blocked | recovered | budget
+  digest: "08:30"                # a summary of the last day, every day at this time (empty: none)
 
 # External services. A kitty calls one by writing `@connector <name> {...}` in a reply.
 connectors:

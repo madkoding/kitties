@@ -179,3 +179,36 @@ func TestQuietFailuresAndTest(t *testing.T) {
 		t.Error("no public address, no link")
 	}
 }
+
+func TestDigestSettingAndDelivery(t *testing.T) {
+	c := Config{Connector: "push", Digest: "07:30"}
+	if h, m, ok := c.DigestAt(); !ok || h != 7 || m != 30 {
+		t.Errorf("DigestAt = %d:%d %v", h, m, ok)
+	}
+	for _, bad := range []string{"", "9am", "25:00"} {
+		if _, _, ok := (Config{Digest: bad}).DigestAt(); ok {
+			t.Errorf("%q is not a time", bad)
+		}
+	}
+	if !c.Wants(Digest) || (Config{Connector: "push"}).Wants(Digest) || (Config{Digest: "07:30"}).Wants(Digest) {
+		t.Error("the digest is wanted with a time and a channel, and without events listed")
+	}
+	if err := (Config{Connector: "push", Digest: "soon"}).Validate(nil); err == nil || !strings.Contains(err.Error(), "09:00") {
+		t.Errorf("bad time: %v", err)
+	}
+	if err := (Config{Digest: "09:00"}).Validate(nil); err == nil {
+		t.Error("a digest needs a channel")
+	}
+	if err := c.Validate(nil); err != nil {
+		t.Error(err)
+	}
+	// Deliver sends through the configured channel whatever the events, and says when there is none.
+	n, sk := setup(c, "ntfy")
+	if err := n.Deliver(context.Background(), Notification{Event: Digest, Title: "Summary", Body: "all quiet"}); err != nil || sk.count() != 1 {
+		t.Fatalf("deliver: %v", err)
+	}
+	none, _ := setup(Config{}, "ntfy")
+	if err := none.Deliver(context.Background(), Notification{}); err == nil {
+		t.Error("no channel, no delivery")
+	}
+}

@@ -290,6 +290,7 @@ function NotifyForm({ view, onSaved }: { view: SettingsView; onSaved: (s: Settin
   const [on, setOn] = useState<string[]>(
     view.notify?.on?.length ? view.notify.on : ["help", "approval"],
   );
+  const [digest, setDigest] = useState(view.notify?.digest || "");
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const toggle = (e: string) => setOn(on.includes(e) ? on.filter((x) => x !== e) : [...on, e]);
@@ -297,7 +298,7 @@ function NotifyForm({ view, onSaved }: { view: SettingsView; onSaved: (s: Settin
     setErr("");
     setMsg("");
     try {
-      onSaved(await api.setNotify({ connector, on }));
+      onSaved(await api.setNotify({ connector, on, digest }));
       setMsg("Saved.");
     } catch (e) {
       setErr((e as Error).message);
@@ -307,12 +308,27 @@ function NotifyForm({ view, onSaved }: { view: SettingsView; onSaved: (s: Settin
     setErr("");
     setMsg("");
     try {
-      await api.setNotify({ connector, on });
+      await api.setNotify({ connector, on, digest });
       const r = await api.testNotify(connector);
       if (r.ok) {
         setMsg("Sent: look at your phone or channel.");
       } else {
         setErr(r.error || "The test did not go through.");
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+  const sendDigest = async () => {
+    setErr("");
+    setMsg("");
+    try {
+      await api.setNotify({ connector, on, digest });
+      const r = await api.sendDigest();
+      if (r.ok) {
+        setMsg("Summary sent.");
+      } else {
+        setErr(r.error || "The summary did not go through.");
       }
     } catch (e) {
       setErr((e as Error).message);
@@ -356,6 +372,35 @@ function NotifyForm({ view, onSaved }: { view: SettingsView; onSaved: (s: Settin
           </label>
         ))}
       </div>
+      <label class={LABEL} for="notify-digest">
+        A summary of the last day, every day at
+      </label>
+      <div class="flex items-center gap-2">
+        <input
+          id="notify-digest"
+          class={`${INPUT} !w-32 font-mono`}
+          type="time"
+          value={digest}
+          onInput={(e) => setDigest((e.target as HTMLInputElement).value)}
+        />
+        {digest && (
+          <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setDigest("")}>
+            none
+          </button>
+        )}
+        <button
+          class="btn-ghost px-3 py-1.5 text-xs"
+          disabled={!connector}
+          onClick={sendDigest}
+          data-testid="send-digest"
+        >
+          Send one now
+        </button>
+      </div>
+      <p class="text-xs text-[var(--t4)] mt-1">
+        What each kitty did, what it spent, and what waits for your yes. The time is the gateway's
+        clock. Leave it empty for no summary.
+      </p>
       <div class="flex items-center gap-2 mt-4">
         <button class="btn-accent px-4 py-2 text-sm" onClick={save}>
           Save

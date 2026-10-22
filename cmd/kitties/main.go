@@ -25,6 +25,7 @@ import (
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/demo"
+	"github.com/madkoding/kitties/internal/digest"
 	"github.com/madkoding/kitties/internal/gateway"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/memory"
@@ -81,6 +82,7 @@ type app struct {
 	// person; notifier tells the person outside the interface.
 	approvals *approvals.Store
 	budget    *budget.Store
+	digest    *digest.Reporter
 	memory    *memory.Store
 	notifier  *notify.Notifier
 	skills    *skills.Library
@@ -230,6 +232,26 @@ func (a *app) open(cmd string) error {
 		return "http://" + g.Listen
 	}, nil)
 	chats.SetNotifier(a.notifier)
+	a.digest = digest.New(digest.Source{
+		Kitties: func() []digest.Kitty {
+			var out []digest.Kitty
+			for _, k := range fleet.List() {
+				out = append(out, digest.Kitty{ID: k.ID, Name: k.Name})
+			}
+			return out
+		},
+		Journal: ag.Journal.Recent,
+		Waiting: func() []string {
+			var out []string
+			for _, p := range a.approvals.List(approvals.Pending, 50) {
+				out = append(out, p.KittyName+": "+p.Summary)
+			}
+			return out
+		},
+		Today:   a.budget.Today,
+		Config:  fleet.Notify,
+		Deliver: a.notifier.Deliver,
+	}, filepath.Join(dataDir, "digest.json"))
 	// A removed kitty takes its held actions and its memory along.
 	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget)
 	a.fleet, a.chats = fleet, chats
@@ -361,7 +383,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	}
 	g := a.cfg.Gateway
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
-		WithApprovals(a.chats).WithMemory(a.chats).WithNotifier(a.notifier).
+		WithApprovals(a.chats).WithMemory(a.chats).WithNotifier(a.notifier).WithDigest(a.digest).
 		WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
 	if site, ok := webFS(); ok {
 		srv.WithWeb(site)
@@ -377,6 +399,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	a.agenda.Scheduler.SetLog(logf)
 	a.notifier.SetLog(logf)
 	go a.agenda.Run(ctx)
+	go a.digest.Run(ctx, logf)
 	go a.fleet.Watch(ctx, watchEvery, func(k *kitty.Kitty, what string) {
 		logf("watchdog: %s is back (%s)", k.Name, what)
 		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindRecovered, Text: what})
