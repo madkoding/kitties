@@ -17,7 +17,9 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
 | Identity   | `internal/soul`      | The soul: persona, tone, traits, skills, language, instructions. Rendered to the system prompt with the context of the conversation (desktop or not, group members, connectors). |
 | Brain      | `internal/provider`  | A client for one AI profile. Four API families cover every provider: chat completions, responses, Anthropic messages, Gemini. Retries on 429/5xx with backoff. |
 | Body       | `internal/container` | One container from `docker/kitty-desktop`: Xvfb on `:99`, Chromium, xdotool, scrot. No port is published; the orchestrator uses `exec`. `kitty-shot` prints a PNG of the display, `kitty-open <url>` opens the browser. |
-| Hands      | `internal/connector` | External services: `webhook`, `slack`, `discord`, `telegram`, `shell` (a fixed command chosen by the operator), `motita` (opens a session on a motita gateway, posts the task, reads the event stream to its `done`). |
+| Hands      | `internal/connector` | External services from a catalogue (`catalog.go`): messaging, social media, git, productivity, office, drawing and generic kinds, each with its fields and actions. Most are tables of HTTP actions over one generic client; email is `net/smtp`; `shell` runs a fixed program; `motita` opens a session on a motita gateway, posts the task and reads the event stream to its `done`. A connector may answer with a file (`Filer`), which the chat keeps as an artifact. |
+| Looks      | `internal/kitty`     | The avatar: a breed and a coat, picked from the name when none is chosen; the page draws and animates it (`desktop/frontend/src/PixelCat.tsx`). |
+| Memory     | `internal/skills`, `internal/artifacts` | The library. Skills: markdown procedures (built-in ones embedded, the person's own in `<data_dir>/skills`, proposals in `skills/proposed`), listed in every prompt by name and summary, read and proposed with `@skill` lines. Artifacts: files in `<data_dir>/artifacts`, shared by the fleet, saved and read with `@artifact` lines and from the page. |
 
 The kitty itself (`internal/kitty`) is a record: id, name, provider name, soul, connectors,
 container name, status.
@@ -48,19 +50,63 @@ Each responder answers in turn:
 1. The transcript is rendered for that kitty: its own turns as `assistant`, everything else
    (the person and the other kitties) as `user` turns labelled `[name]: text`, so a kitty builds
    on what a teammate just said instead of repeating it.
-2. The brain answers. Lines of the form `@connector <name> <json>` are parsed out and run (only
-   the connectors the kitty is allowed), their results are fed back as a message and the brain is
-   asked again, up to `MaxRounds` times.
+2. The brain answers. Lines of the form `@connector <name> <json>`, `@skill <verb> …` and
+   `@artifact <verb> …` are parsed out and run (only the connectors the kitty is allowed), their
+   results are fed back as a message and the brain is asked again, up to `MaxRounds` times. A
+   file a connector answered with is saved to the artifacts and named on the turn.
 3. The turn is saved with the connector results and the token usage.
 
 Turns of one session are serialised; different sessions run in parallel.
 
+## Desktop tasks (`internal/desktop`)
+
+A kitty with a container has, in its system prompt, a catalogue of tools: `screenshot`, `click`,
+`double_click`, `move`, `type`, `key`, `scroll`, `open`, `run`, `wait`, `done`. It asks for them
+with `@tool <name> <json>` lines. When a reply carries such lines:
+
+1. `Send` returns at once with the turn marked `working`, and the loop continues in a goroutine
+   (`chat.Service.runTask`), so the person keeps the interface and can cancel.
+2. Each action becomes an argv (`xdotool mousemove x y click 1`, `kitty-open <url>`, the program
+   of `run` as a list, never a shell) executed with `docker exec` in the kitty's container.
+3. After the batch a screenshot is taken, saved under the chat's folder, attached to the turn's
+   last step and shown to the model as an image together with the results. Every provider
+   family carries images (data URLs for chat completions and responses, base64 blocks for
+   Anthropic and Gemini).
+4. The model continues, up to `MaxSteps` rounds, until it writes `@tool done` or stops asking
+   for tools. The final words are appended to the same turn.
+
+The demo (`internal/demo`) implements the same `Runner` with an in-memory desktop that draws its
+screenshots, which is what the documentation's pictures show.
+
+## Run-time settings (`internal/orchestrator/settings.go`)
+
+The page edits models (provider profiles) and connectors. They are kept in
+`<data_dir>/settings.json` and merged over the YAML at start: an entry edited on the page
+shadows the file's, one deleted on the page stays deleted. Keys are stored there and never
+returned by the API, which only says whether one is set. A profile that cannot be built (no key)
+stays on the page with the reason instead of stopping the fleet.
+
 ## The gateway (`internal/gateway`)
 
-A `net/http` server with a bearer token (generated and printed when the configuration has none).
-It exposes the fleet and the chats as JSON, serves screenshots as PNG, and ships a single-page
-browser client at `/`. It binds to `127.0.0.1:7488` unless told otherwise and warns when it opens
+A `net/http` server with a bearer token (generated when the configuration has none). It exposes
+the fleet, the chats and the settings as JSON, serves screenshots as PNG, and ships a small
+browser page at `/`. It binds to `127.0.0.1:7488` unless told otherwise and warns when it opens
 on the network.
+
+A local program never types the token: the gateway writes it to `<data_dir>/gateway.token`
+(mode 0600), which the desktop app reads, and `GET /v1/local-token` hands it to a loopback client
+whose request is not a cross-origin fetch (no `Origin` header, or the gateway's own). A page of
+another site cannot read it, and a network peer gets 403.
+
+## The desktop app (`desktop/`)
+
+A Wails v2 application in its own Go module, so the framework's dependencies never reach the
+CLI. The Go side (`app.go`) owns the connection and proxies the API (`App.Request`), so the page
+never holds the token; the page (`desktop/frontend`, Vite + Preact + Tailwind) works both inside
+Wails and in a browser against the gateway, with the Motita design system's tokens, fonts and
+components (`src/index.css`, `src/themes.css`). Deep links: `#chat/<id>`, `#kitty/<id>`,
+`#new-chat`, `#new-kitty`, `#new-settings`, `#new-connectors`; `?theme=light|dark` and
+`?motion=off` for screenshots.
 
 ## Platforms
 
