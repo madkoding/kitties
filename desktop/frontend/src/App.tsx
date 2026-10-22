@@ -62,6 +62,8 @@ export default function App() {
   const [modal, setModal] = useState<ModalKind>(routeFromHash().modal);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState("");
+  // note is something to know that is not a failure of the page (a desktop that did not start).
+  const [note, setNote] = useState("");
   const [version, setVersion] = useState("");
   const [sidebar, setSidebar] = useState(false);
   const [online, setOnline] = useState<boolean | null>(null);
@@ -360,6 +362,22 @@ export default function App() {
             {error}
           </div>
         )}
+        {note && (
+          <div
+            class="callout callout-warn !border-x-0 !border-t-0 flex items-start gap-2"
+            role="status"
+            data-testid="note"
+          >
+            <span class="flex-1">{note}</span>
+            <button
+              class="plain text-xs text-[var(--t3)]"
+              onClick={() => setNote("")}
+              aria-label="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
+        )}
         {current ? (
           <Conversation session={session} kitties={kitties} user={user} pending={pending} />
         ) : (
@@ -404,9 +422,10 @@ export default function App() {
             go("#new-models-add");
           }}
           onClose={() => setModal("none")}
-          onCreated={() => {
+          onCreated={(note) => {
             setModal("none");
             refresh();
+            setNote(note || "");
           }}
         />
       )}

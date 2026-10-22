@@ -173,7 +173,9 @@ export function NewKittyModal({
   containers = true,
 }: {
   onClose: () => void;
-  onCreated: () => void;
+  // onCreated gets what the person should know about the new kitty (a desktop that could not
+  // start), if anything: the kitty exists either way.
+  onCreated: (note?: string) => void;
   onNeedModel?: () => void;
   containers?: boolean;
 }) {
@@ -233,12 +235,11 @@ export function NewKittyModal({
         avatar: look,
         connectors: useAll ? [] : [NONE],
       });
-      if (r.warning) {
-        setErr(r.warning);
-        setBusy(false);
-        return;
-      }
-      onCreated();
+      onCreated(
+        r.warning
+          ? `${name} was created, but ${r.warning.replace(/^created but /, "")}`
+          : undefined,
+      );
     } catch (e) {
       setErr(errText(e));
       setBusy(false);

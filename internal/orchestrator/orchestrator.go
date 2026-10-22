@@ -246,6 +246,10 @@ func (m *Manager) load() error {
 		return fmt.Errorf("the kitties file is damaged (%s): %w", m.path, err)
 	}
 	for _, k := range list {
+		// A desktop that was still coming up when the gateway stopped is started again.
+		if k.Status == kitty.StatusStarting {
+			k.Status = kitty.StatusRunning
+		}
 		m.kitties[k.ID] = k
 	}
 	return nil
@@ -384,13 +388,16 @@ func (m *Manager) byNameLocked(name string) (*kitty.Kitty, bool) {
 func (m *Manager) Get(ref string) (*kitty.Kitty, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	if k, ok := m.kitties[ref]; ok {
-		return k, nil
+	k, ok := m.kitties[ref]
+	if !ok {
+		k, ok = m.byNameLocked(ref)
 	}
-	if k, ok := m.byNameLocked(ref); ok {
-		return k, nil
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrNotFound, ref)
 	}
-	return nil, fmt.Errorf("%w: %q", ErrNotFound, ref)
+	// A copy: a desktop starting in the background changes the kitty while it is read.
+	c := *k
+	return &c, nil
 }
 
 // List returns every kitty, by name.
@@ -475,6 +482,35 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 		}
 	}
 	return m.setStatus(k.ID, kitty.StatusRunning, "")
+}
+
+// startTimeout is how long a desktop may take to come up in the background: the first start
+// downloads its image.
+var startTimeout = 20 * time.Minute
+
+// StartInBackground starts a kitty without making the caller wait for its desktop: a kitty with
+// one is marked starting and comes up (or fails, with the reason on the kitty) on its own; one
+// without is started at once.
+func (m *Manager) StartInBackground(ref string) (*kitty.Kitty, error) {
+	k, err := m.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	if !k.Desktop {
+		if err := m.Start(context.Background(), k.ID); err != nil {
+			return nil, err
+		}
+		return m.Get(k.ID)
+	}
+	if err := m.setStatus(k.ID, kitty.StatusStarting, ""); err != nil {
+		return nil, err
+	}
+	go func(id string) {
+		ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
+		defer cancel()
+		_ = m.Start(ctx, id)
+	}(k.ID)
+	return m.Get(k.ID)
 }
 
 func (m *Manager) containerState(ctx context.Context, name string) (exists, running bool, err error) {
@@ -676,6 +712,11 @@ func (m *Manager) Edit(ref string, u Update) (*kitty.Kitty, error) {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	// Get handed a copy: the change is made to the kitty itself.
+	k, ok := m.kitties[k.ID]
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", ErrNotFound, ref)
+	}
 	if u.Provider != nil {
 		k.Provider = *u.Provider
 	}

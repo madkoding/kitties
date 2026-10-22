@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/container"
@@ -415,5 +416,67 @@ func TestBootstrapAndScale(t *testing.T) {
 	m3, _ := New(bad, WithContainers(f, nil), WithProviders(provider.NewRegistry()))
 	if err := m3.Scale(ctx, "fails", 1); err == nil {
 		t.Error("a create failure stops the scale")
+	}
+}
+
+func TestStartInBackground(t *testing.T) {
+	cfg := testConfig(t)
+	f := newFake()
+	m, err := New(cfg, WithContainers(f, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	brain, _ := m.Create(context.Background(), Spec{Name: "brain", Desktop: new(bool)})
+	if k, err := m.StartInBackground(brain.ID); err != nil || k.Status != kitty.StatusRunning {
+		t.Errorf("a kitty without a desktop starts at once: %+v %v", k, err)
+	}
+	desk, _ := m.Create(context.Background(), Spec{Name: "desk"})
+	k, err := m.StartInBackground(desk.Name)
+	if err != nil || k.Status != kitty.StatusStarting {
+		t.Fatalf("a desktop comes up in the background: %+v %v", k, err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if k, _ := m.Get(desk.ID); k.Status == kitty.StatusRunning {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the desktop never came up")
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if _, err := m.StartInBackground("nobody"); err == nil {
+		t.Error("an unknown kitty fails")
+	}
+	// A desktop still starting when the gateway stopped is started again on the next run.
+	_ = m.setStatus(desk.ID, kitty.StatusStarting, "")
+	m2, err := New(cfg, WithContainers(f, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k, _ := m2.Get(desk.ID); k.Status != kitty.StatusRunning {
+		t.Errorf("reloaded = %s", k.Status)
+	}
+}
+
+func TestEditKeepsTheChange(t *testing.T) {
+	m, err := New(testConfig(t), WithContainers(newFake(), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := m.Create(context.Background(), Spec{Name: "ana"})
+	_, _ = m.Create(context.Background(), Spec{Name: "bo"})
+	backup, tone := "bo", "dry"
+	if _, err := m.Edit("ana", Update{Backup: &backup, Soul: &soul.Soul{Tone: tone}}); err != nil {
+		t.Fatal(err)
+	}
+	k, _ := m.Get(a.ID)
+	if k.Backup != "bo" || k.Soul.Tone != "dry" {
+		t.Errorf("the edit was lost: %+v", k)
+	}
+	// What Get hands out is a copy: changing it changes nothing.
+	k.Backup = "x"
+	if again, _ := m.Get(a.ID); again.Backup != "bo" {
+		t.Error("Get handed out the kitty itself")
 	}
 }

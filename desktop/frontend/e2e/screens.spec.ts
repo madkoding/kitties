@@ -593,3 +593,37 @@ test("Facebook and Instagram: a Page or a professional account, and what waits f
   await expect(page.locator("li", { hasText: /^Post/ }).first()).toContainText("asks you first");
   await shot(page, "39-instagram");
 });
+
+test("creating a kitty closes the dialog at once, and a desktop that cannot start is only a note", async ({
+  page,
+}) => {
+  await open(page, "");
+  await page.locator("aside").getByRole("button", { name: "New kitty" }).click();
+  await page.getByLabel("Name").fill("Nube");
+  // The brain picker is drawn like the other fields, not as the system's button.
+  const brain = page.locator("#kitty-brain");
+  await expect(brain).toHaveCSS("appearance", "none");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.locator("#kitty-name")).toHaveCount(0);
+  await expect(kittyRow(page, "nube")).toBeAttached();
+
+  // A gateway whose desktop could not start: the kitty exists, the page says why and moves on.
+  await page.route("**/v1/kitties", (route) =>
+    route.request().method() === "POST"
+      ? route.fulfill({
+          status: 201,
+          json: {
+            kitty: { id: "x1", name: "bruma", status: "error" },
+            warning: "created but not started: docker is not running",
+          },
+        })
+      : route.continue(),
+  );
+  await page.locator("aside").getByRole("button", { name: "New kitty" }).click();
+  await page.getByLabel("Name").fill("bruma");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.locator("#kitty-name")).toHaveCount(0);
+  await expect(page.getByTestId("note")).toContainText(
+    "bruma was created, but not started: docker is not running",
+  );
+});

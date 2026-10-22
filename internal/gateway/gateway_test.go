@@ -97,6 +97,12 @@ func (f *fakeFleet) op(name, ref string, status string) error {
 func (f *fakeFleet) Start(_ context.Context, ref string) error {
 	return f.op("start", ref, kitty.StatusRunning)
 }
+func (f *fakeFleet) StartInBackground(ref string) (*kitty.Kitty, error) {
+	if err := f.op("start", ref, kitty.StatusRunning); err != nil {
+		return nil, err
+	}
+	return f.Get(ref)
+}
 func (f *fakeFleet) Stop(_ context.Context, ref string) error {
 	return f.op("stop", ref, kitty.StatusStopped)
 }
@@ -449,6 +455,9 @@ func TestKittyRoutes(t *testing.T) {
 type startFails struct{ *fakeFleet }
 
 func (s *startFails) Start(context.Context, string) error { return errors.New("no runtime") }
+func (s *startFails) StartInBackground(string) (*kitty.Kitty, error) {
+	return nil, errors.New("no runtime")
+}
 
 func TestChatRoutes(t *testing.T) {
 	srv, _, c := setup(t)

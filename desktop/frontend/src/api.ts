@@ -10,7 +10,8 @@ export interface Kitty {
   provider: string;
   desktop: boolean;
   container?: string;
-  status: "created" | "running" | "stopped" | "error";
+  // starting: its desktop is coming up (the first time, its image downloads).
+  status: "created" | "starting" | "running" | "stopped" | "error";
   error?: string;
   connectors?: string[];
   soul: { name?: string; persona?: string; tone?: string; traits?: string[]; skills?: string[] };

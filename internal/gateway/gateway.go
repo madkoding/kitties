@@ -38,6 +38,8 @@ type Fleet interface {
 	Create(ctx context.Context, s orchestrator.Spec) (*kitty.Kitty, error)
 	Edit(ref string, u orchestrator.Update) (*kitty.Kitty, error)
 	Start(ctx context.Context, ref string) error
+	// StartInBackground starts a kitty without waiting for its desktop (an image may download).
+	StartInBackground(ref string) (*kitty.Kitty, error)
 	Stop(ctx context.Context, ref string) error
 	Remove(ctx context.Context, ref string) error
 	Scale(ctx context.Context, name string, n int) error
@@ -544,12 +546,14 @@ func (s *Server) handleCreateKitty(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if spec.Start == nil || *spec.Start {
-		if err := s.fleet.Start(r.Context(), k.ID); err != nil {
+		// The answer does not wait for a desktop: its first start downloads an image.
+		started, err := s.fleet.StartInBackground(k.ID)
+		if err != nil {
 			k, _ = s.fleet.Get(k.ID)
 			reply(w, http.StatusCreated, map[string]any{"kitty": k, "warning": "created but not started: " + err.Error()})
 			return
 		}
-		k, _ = s.fleet.Get(k.ID)
+		k = started
 	}
 	reply(w, http.StatusCreated, map[string]any{"kitty": k})
 }

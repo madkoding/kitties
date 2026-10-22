@@ -12,8 +12,10 @@ import (
 const (
 	StatusCreated = "created" // known, container not started
 	StatusRunning = "running"
-	StatusStopped = "stopped"
-	StatusError   = "error"
+	// StatusStarting is a desktop coming up: its image may be downloading for minutes.
+	StatusStarting = "starting"
+	StatusStopped  = "stopped"
+	StatusError    = "error"
 )
 
 // Kitty is one bot.
