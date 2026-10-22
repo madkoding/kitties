@@ -19,7 +19,7 @@ PLATFORMS := linux/amd64 linux/arm64 linux/arm android/arm64 \
              windows/amd64 windows/arm64 darwin/amd64 darwin/arm64
 
 .DEFAULT_GOAL := help
-.PHONY: help build dist test vet fmt fmt-check check cover image run clean frontend web desktop desktop-check e2e demo
+.PHONY: help build dist test vet fmt fmt-check check cover image run clean frontend web desktop desktop-check e2e demo android
 
 help: ## Show this list of commands
 	@printf '\nkitties: what you can run here\n\n'
@@ -76,6 +76,9 @@ desktop-check: frontend ## Vet and test the Wails app (needs the page built)
 
 e2e: frontend ## Drive the desktop app end to end in a browser and rewrite docs/screenshots
 	@cd desktop/frontend && npm run e2e
+
+android: frontend ## Build the Android app (android/app/build/outputs/apk/release), with the Android SDK
+	@cd android && ./gradlew --no-daemon assembleRelease
 
 desktop: frontend ## Build the native app with the Wails CLI (wails build)
 	@cd desktop && wails build

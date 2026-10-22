@@ -127,10 +127,37 @@ func New(fleet Fleet, chats Chats, token, version string) *Server {
 	return s
 }
 
+// AppOrigin is where the Android app's page comes from (its own files, served inside the app).
+// The app talks to the API from there with the token; no cookie ever crosses.
+const AppOrigin = "https://appassets.androidplatform.net"
+
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.secure(w, r)
+	if s.appRequest(w, r) {
+		return
+	}
 	s.mux.ServeHTTP(w, r)
+}
+
+// appRequest lets the Android app read the API's answers: its origin is allowed for /v1, without
+// credentials (the token travels in the Authorization header or the query). It answers the
+// browser's preflight itself and reports whether it did.
+func (s *Server) appRequest(w http.ResponseWriter, r *http.Request) bool {
+	if r.Header.Get("Origin") != AppOrigin || !strings.HasPrefix(r.URL.Path, "/v1/") || r.URL.Path == "/v1/local-token" {
+		return false
+	}
+	h := w.Header()
+	h.Set("Access-Control-Allow-Origin", AppOrigin)
+	h.Add("Vary", "Origin")
+	if r.Method != http.MethodOptions {
+		return false
+	}
+	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+	h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
+	h.Set("Access-Control-Max-Age", "600")
+	w.WriteHeader(http.StatusNoContent)
+	return true
 }
 
 func (s *Server) routes() {

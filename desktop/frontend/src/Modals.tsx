@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
-import { api, errText, inWails, saveConnection, savedConnection } from "./api";
+import { api, errText, inAndroid, inWails, saveConnection, savedConnection } from "./api";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
 import { ProviderLogo } from "./ConnectorLogo";
 import { Shot } from "./Conversation";
@@ -679,7 +679,9 @@ export function ConnectModal({
   const saved = savedConnection();
   const [url, setUrl] = useState(saved.url || (inWails() ? "http://127.0.0.1:7488" : ""));
   const [token, setToken] = useState(saved.token);
-  const [err, setErr] = useState(reason || "");
+  // The app's first start has nothing to complain about yet: it only asks.
+  const firstStart = inAndroid() && !saved.url;
+  const [err, setErr] = useState(firstStart ? "" : reason || "");
   const [busy, setBusy] = useState(false);
   useEffect(() => {
     const app = window.go?.main?.App;
@@ -707,27 +709,57 @@ export function ConnectModal({
       setBusy(false);
     }
   };
+  const android = inAndroid();
   const body = (
     <>
-      <p class="text-sm text-[var(--t3)]">
-        The address of the kitties gateway. On this machine the token is found on its own (the
-        gateway leaves it in <code class="font-mono">~/.kitties/gateway.token</code>); a remote
-        gateway needs the token it printed when it started.
-        {!inWails() && " Leave the address empty when this page is served by the gateway itself."}
-      </p>
+      {android ? (
+        <div class="text-sm text-[var(--t3)]" data-testid="android-connect">
+          <p>
+            The app is a remote for the Kitties gateway running on your computer or server. Type its
+            address on the network and its token.
+          </p>
+          <ol class="steps text-xs mt-2">
+            <li>
+              Let the gateway listen on the network, not only on the computer:{" "}
+              <code class="font-mono">KITTIES_LISTEN=0.0.0.0:7488 kitties gateway</code> (or a
+              server with HTTPS, see DEPLOY.md).
+            </li>
+            <li>
+              The address is the computer's, like{" "}
+              <code class="font-mono">http://192.168.1.20:7488</code>.
+            </li>
+            <li>
+              The token is in <code class="font-mono">~/.kitties/gateway.token</code> on that
+              computer.
+            </li>
+          </ol>
+        </div>
+      ) : (
+        <p class="text-sm text-[var(--t3)]">
+          The address of the kitties gateway. On this machine the token is found on its own (the
+          gateway leaves it in <code class="font-mono">~/.kitties/gateway.token</code>); a remote
+          gateway needs the token it printed when it started.
+          {!inWails() && " Leave the address empty when this page is served by the gateway itself."}
+        </p>
+      )}
       <label class={LABEL}>Address</label>
       <input
         class={INPUT}
         value={url}
         onInput={(e) => setUrl((e.target as HTMLInputElement).value)}
-        placeholder="http://127.0.0.1:7488"
+        placeholder={android ? "http://192.168.1.20:7488" : "http://127.0.0.1:7488"}
+        inputMode="url"
+        autocapitalize="off"
+        aria-label="Address"
       />
-      <label class={LABEL}>Token (remote gateways only)</label>
+      <label class={LABEL}>{android ? "Token" : "Token (remote gateways only)"}</label>
       <input
         class={`${INPUT} font-mono`}
         value={token}
         onInput={(e) => setToken((e.target as HTMLInputElement).value)}
-        placeholder="found on this machine when empty"
+        placeholder={android ? "paste the gateway's token" : "found on this machine when empty"}
+        autocapitalize="off"
+        aria-label="Token"
       />
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
       <div class="flex justify-end gap-2 mt-5">

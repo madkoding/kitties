@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -64,5 +65,45 @@ func TestAccountCodexFlow(t *testing.T) {
 	// A code for another sign-in fails the flow, and the page reads why.
 	if code, got, _ := call(t, srv, "POST", "/v1/settings/logins/"+id+"/paste", "tok", map[string]string{"code": "c#other"}); code != 200 || got["id"] != id {
 		t.Errorf("paste = %d %v", code, got)
+	}
+}
+
+func TestAndroidAppOrigin(t *testing.T) {
+	srv, _, _ := setup(t)
+	pre, _ := http.NewRequest(http.MethodOptions, srv.URL+"/v1/kitties", nil)
+	pre.Header.Set("Origin", AppOrigin)
+	pre.Header.Set("Access-Control-Request-Method", "POST")
+	resp, err := http.DefaultClient.Do(pre)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusNoContent || resp.Header.Get("Access-Control-Allow-Origin") != AppOrigin ||
+		!strings.Contains(resp.Header.Get("Access-Control-Allow-Headers"), "Authorization") || resp.Header.Get("Access-Control-Allow-Credentials") != "" {
+		t.Errorf("preflight = %d %v", resp.StatusCode, resp.Header)
+	}
+	get, _ := http.NewRequest(http.MethodGet, srv.URL+"/v1/kitties", nil)
+	get.Header.Set("Origin", AppOrigin)
+	get.Header.Set("Authorization", "Bearer tok")
+	resp, err = http.DefaultClient.Do(get)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != 200 || resp.Header.Get("Access-Control-Allow-Origin") != AppOrigin {
+		t.Errorf("get = %d %v", resp.StatusCode, resp.Header)
+	}
+	// Any other site, and the local token, stay closed to the app's origin rule.
+	for _, c := range []struct{ origin, path string }{{"https://evil.example", "/v1/kitties"}, {AppOrigin, "/v1/local-token"}, {AppOrigin, "/"}} {
+		r, _ := http.NewRequest(http.MethodGet, srv.URL+c.path, nil)
+		r.Header.Set("Origin", c.origin)
+		resp, err := http.DefaultClient.Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		if resp.Header.Get("Access-Control-Allow-Origin") != "" {
+			t.Errorf("%s %s is allowed", c.origin, c.path)
+		}
 	}
 }

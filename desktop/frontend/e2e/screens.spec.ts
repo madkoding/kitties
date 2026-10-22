@@ -546,3 +546,35 @@ test("a model can think on a subscription: Claude through Claude Code, Copilot w
   await form.getByRole("radio", { name: /qwen.ai account/ }).click();
   await expect(form.getByTestId("sign-in")).toContainText("DashScope");
 });
+
+test("the Android app asks for the gateway first, then works as a remote", async ({
+  page,
+  request,
+}) => {
+  // The app is this page in a WebView with a bridge; it has no gateway of its own.
+  await page.addInitScript(() => {
+    (window as unknown as { KittiesAndroid: { open(u: string): void } }).KittiesAndroid = {
+      open: (u: string) => ((window as unknown as { opened: string }).opened = u),
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/${Q}`);
+  const connect = page.getByTestId("android-connect");
+  await expect(connect).toContainText("KITTIES_LISTEN=0.0.0.0:7488");
+  await expect(page.getByLabel("Address")).toHaveAttribute(
+    "placeholder",
+    "http://192.168.1.20:7488",
+  );
+  await shot(page, "37-android-connect");
+  const { token } = (await (await request.get(`${GATEWAY}/v1/local-token`)).json()) as {
+    token: string;
+  };
+  await page.getByLabel("Address").fill(new URL(page.url()).origin);
+  await page.getByLabel("Token").fill(token);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByRole("banner").getByText("connected")).toBeVisible();
+  // The kitties are a tap away, in the menu.
+  await page.getByRole("button", { name: "Menu" }).click();
+  await expect(kittyRow(page, "mimi")).toBeVisible();
+  await shot(page, "38-android-app");
+});

@@ -335,6 +335,16 @@ declare global {
 
 export const inWails = (): boolean => Boolean(window.go?.main?.App);
 
+// The Android app is this same page inside a WebView; it adds a bridge to open links outside.
+interface AndroidBridge {
+  open(url: string): void;
+}
+
+export const androidBridge = (): AndroidBridge | undefined =>
+  (window as unknown as { KittiesAndroid?: AndroidBridge }).KittiesAndroid;
+
+export const inAndroid = (): boolean => Boolean(androidBridge());
+
 // errText is the words of whatever was thrown: Wails rejects with a plain string.
 export function errText(e: unknown): string {
   return e instanceof Error ? e.message : String(e);
@@ -395,7 +405,7 @@ export function saveConnection(c: Connection): void {
 // itself (or a proxy in front of it), not inside Wails and not pointed at another address.
 export function cookieLogin(): boolean {
   const c = savedConnection();
-  return !inWails() && !c.url && !c.token;
+  return !inWails() && !inAndroid() && !c.url && !c.token;
 }
 
 // fixSettings fills what an older gateway leaves out of the settings (or sends as null), so a
@@ -461,6 +471,10 @@ export async function request<T>(method: string, path: string, body?: unknown): 
     return fixSettings(path, data as T);
   }
   let conn = savedConnection();
+  if (inAndroid() && (!conn.url || !conn.token)) {
+    // The app has no gateway of its own: it asks for the address and the token first.
+    throw new ApiError(401, "Connect the app to your Kitties gateway: its address and token.");
+  }
   if (!conn.token) {
     conn = await fetchLocalToken(conn);
   }
@@ -692,6 +706,11 @@ export const oauthStart = (name: string) =>
 
 // openExternal opens a URL in the person's browser: through Wails when inside it.
 export function openExternal(url: string): void {
+  const android = androidBridge();
+  if (android) {
+    android.open(url);
+    return;
+  }
   const rt = (window as unknown as { runtime?: { BrowserOpenURL?: (u: string) => void } }).runtime;
   if (rt?.BrowserOpenURL) {
     rt.BrowserOpenURL(url);
