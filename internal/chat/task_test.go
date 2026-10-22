@@ -98,7 +98,7 @@ func TestDesktopTaskRunsInBackground(t *testing.T) {
 	}
 	second := sa.seen[1]
 	last := second[len(second)-1]
-	if !strings.Contains(last.Content, "[desktop] Results") || !strings.Contains(last.Content, "@tool open") || len(last.Images) != 1 || string(last.Images[0].Data) != "PNGDATA" {
+	if !strings.Contains(last.Content, "Results of your actions") || !strings.Contains(last.Content, "@tool open") || len(last.Images) != 1 || string(last.Images[0].Data) != "PNGDATA" {
 		t.Errorf("results turn = %+v", last)
 	}
 	if second[len(second)-2].Role != "assistant" || !strings.Contains(second[len(second)-2].Content, "@tool open") {

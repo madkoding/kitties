@@ -118,6 +118,10 @@ type Service struct {
 	arts   *artifacts.Store
 	// tasks are the background desktop tasks in flight, by session id.
 	tasks map[string]*task
+	// watchers are the subscribers of each session.
+	watchers map[string]map[chan Event]struct{}
+	// nativeTools lets a kitty call tools in its provider's own format when it can.
+	nativeTools bool
 	// wg counts the background tasks, so a test (or a shutdown) can wait for them.
 	wg sync.WaitGroup
 }
@@ -127,10 +131,53 @@ type task struct {
 	cancel context.CancelFunc
 }
 
+// Event is what a watcher of a session is told.
+type Event struct {
+	Type    string `json:"type"` // turn | update | done | deleted
+	Session string `json:"session"`
+	Index   int    `json:"index"`
+	Turn    *Turn  `json:"turn,omitempty"`
+}
+
+// Subscribe watches a session: every new or changed turn arrives on the channel until unsubscribe.
+func (s *Service) Subscribe(id string) (<-chan Event, func()) {
+	ch := make(chan Event, 64)
+	s.mu.Lock()
+	if s.watchers == nil {
+		s.watchers = map[string]map[chan Event]struct{}{}
+	}
+	if s.watchers[id] == nil {
+		s.watchers[id] = map[chan Event]struct{}{}
+	}
+	s.watchers[id][ch] = struct{}{}
+	s.mu.Unlock()
+	return ch, func() {
+		s.mu.Lock()
+		if set := s.watchers[id]; set != nil {
+			delete(set, ch)
+		}
+		s.mu.Unlock()
+	}
+}
+
+// emitLocked tells the watchers of a session; the caller holds the lock. A slow watcher loses
+// the event rather than holding everyone else.
+func (s *Service) emitLocked(ev Event) {
+	for ch := range s.watchers[ev.Session] {
+		select {
+		case ch <- ev:
+		default:
+		}
+	}
+}
+
+// SetNativeTools is whether kitties call tools natively when their provider can (on by default).
+func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
+
 // New creates the service, loading the sessions kept in dir.
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
-		now: time.Now, newID: randomID, MaxRounds: 4, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}}
+		now: time.Now, newID: randomID, MaxRounds: 4, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
@@ -462,6 +509,7 @@ func (s *Service) Delete(id string) error {
 		t.cancel()
 	}
 	delete(s.sessions, id)
+	s.emitLocked(Event{Type: "deleted", Session: id})
 	_ = os.RemoveAll(filepath.Join(s.dir, id))
 	err := os.Remove(filepath.Join(s.dir, id+".json"))
 	if errors.Is(err, os.ErrNotExist) {
@@ -505,6 +553,7 @@ func (s *Service) Send(ctx context.Context, id, text string) ([]Turn, error) {
 	sess.UpdatedAt = s.now()
 	members := append([]string(nil), sess.Members...)
 	err := s.save(sess)
+	s.emitLocked(Event{Type: "turn", Session: id, Index: len(sess.Turns) - 1, Turn: &sess.Turns[len(sess.Turns)-1]})
 	s.mu.Unlock()
 	if err != nil {
 		return nil, err
@@ -533,6 +582,7 @@ func (s *Service) Send(ctx context.Context, id, text string) ([]Turn, error) {
 		index := len(sess.Turns) - 1
 		sess.UpdatedAt = s.now()
 		saveErr := s.save(sess)
+		s.emitLocked(Event{Type: "turn", Session: id, Index: index, Turn: &sess.Turns[index]})
 		s.mu.Unlock()
 		if saveErr != nil {
 			return replies, saveErr
@@ -624,8 +674,25 @@ func containsKitty(list []*kitty.Kitty, k *kitty.Kitty) bool {
 type pendingTask struct {
 	brain    provider.Client
 	messages []provider.Message
-	reply    string
-	actions  []desktop.Action
+	tools    []provider.Tool
+	native   bool
+	reply    provider.Reply
+	text     string
+	actions  []action
+	allowed  map[string]string
+	// pre are the outcomes of the batch's connector and library actions, already run in the
+	// call that answered the person, by their index in actions.
+	pre map[int]outcome
+}
+
+// ask asks the brain, with the tools when native.
+func ask(ctx context.Context, brain provider.Client, native bool, messages []provider.Message, tools []provider.Tool) (provider.Reply, error) {
+	if native {
+		if tc, ok := brain.(provider.ToolClient); ok {
+			return tc.CompleteTools(ctx, messages, tools)
+		}
+	}
+	return brain.Complete(ctx, messages)
 }
 
 // answer asks one kitty for its turn, running the connectors it calls. When the kitty asks to
@@ -657,64 +724,60 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	}
 	messages := s.transcript(system, sess.Turns, k)
 
+	native := false
+	var tools []provider.Tool
+	if tc, ok := brain.(provider.ToolClient); ok && s.nativeTools && tc.SupportsTools() {
+		tools = s.toolSet(k, allowed)
+		native = len(tools) > 0
+	}
 	turn := Turn{From: k.Name, Kitty: k.ID}
 	var parts []string
 	for round := 0; round < s.MaxRounds; round++ {
-		reply, err := brain.Complete(ctx, messages)
+		reply, err := ask(ctx, brain, native, messages, tools)
 		if err != nil {
 			return Turn{}, nil, err
 		}
 		turn.Usage.Input += reply.Usage.Input
 		turn.Usage.Output += reply.Usage.Output
-		actions, content := desktop.Parse(reply.Content)
-		directives, content := parseDirectives(content)
-		if k.Desktop && len(actions) > 0 {
-			calls, text := connector.Parse(content)
-			if text != "" {
-				parts = append(parts, text)
+		var actions []action
+		text := reply.Content
+		if native && len(reply.Calls) > 0 {
+			actions = fromCalls(reply.Calls)
+		} else {
+			actions, text = fromText(reply.Content)
+		}
+		if text = strings.TrimSpace(text); text != "" {
+			parts = append(parts, text)
+		}
+		// Without a display a desktop tool is just words, and without connectors a connector
+		// call is too: both are dropped rather than answered.
+		kept := actions[:0]
+		for _, a := range actions {
+			if (a.kind == "tool" && !k.Desktop) || (a.kind == "connector" && len(allowed) == 0) {
+				continue
 			}
-			if len(calls) > 0 && len(allowed) > 0 {
-				var results []connector.Result
-				for _, c := range calls {
-					results = append(results, s.fleet.Connectors().Call(ctx, c, k.Connectors))
+			kept = append(kept, a)
+		}
+		actions = kept
+		if len(actions) == 0 {
+			break
+		}
+		if hasDesktopAction(actions) {
+			// Connector and library actions run first, in this call; the display's go on in
+			// the background with everything the model needs to continue.
+			pre := map[int]outcome{}
+			for i, a := range actions {
+				if a.kind != "tool" {
+					pre[i] = s.runNonDesktop(ctx, []action{a}, k, allowed, &turn)[0]
 				}
-				s.keepFiles(results, k, &turn)
-				turn.Calls = append(turn.Calls, results...)
-			}
-			for _, d := range directives {
-				s.runDirective(d, k, &turn)
 			}
 			turn.At = s.now()
 			turn.Text = strings.TrimSpace(strings.Join(parts, "\n\n"))
 			turn.Working = true
-			return turn, &pendingTask{brain: brain, messages: messages, reply: reply.Content, actions: actions}, nil
+			return turn, &pendingTask{brain: brain, messages: messages, tools: tools, native: native, reply: reply, text: reply.Content, actions: actions, allowed: allowed, pre: pre}, nil
 		}
-		calls, text := connector.Parse(content)
-		if text != "" {
-			parts = append(parts, text)
-		}
-		if len(allowed) == 0 {
-			calls = nil
-		}
-		if len(calls) == 0 && len(directives) == 0 {
-			break
-		}
-		var feedback []string
-		if len(calls) > 0 {
-			var results []connector.Result
-			for _, c := range calls {
-				results = append(results, s.fleet.Connectors().Call(ctx, c, k.Connectors))
-			}
-			s.keepFiles(results, k, &turn)
-			turn.Calls = append(turn.Calls, results...)
-			feedback = append(feedback, connector.Format(results))
-		}
-		for _, d := range directives {
-			feedback = append(feedback, s.runDirective(d, k, &turn))
-		}
-		messages = append(messages,
-			provider.Message{Role: "assistant", Content: reply.Content},
-			provider.Message{Role: "user", Content: strings.Join(feedback, "\n\n") + "\n\nContinue, and answer the person."})
+		outs := s.runNonDesktop(ctx, actions, k, allowed, &turn)
+		messages = append(messages, feedback(native, reply, reply.Content, outs, nil)...)
 	}
 	turn.At = s.now()
 	turn.Text = strings.TrimSpace(strings.Join(parts, "\n\n"))
@@ -753,6 +816,7 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 	messages := p.messages
 	actions := p.actions
 	reply := p.reply
+	replyText := p.text
 	var parts []string
 	final := ""
 	fail := ""
@@ -765,27 +829,40 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 			fail = fmt.Sprintf("stopped after %d rounds without finishing", s.MaxSteps)
 			break
 		}
-		var results []string
+		var outs []outcome
 		done := false
-		for _, a := range actions {
-			if summary, ok := a.Done(); ok {
+		for i, a := range actions {
+			if a.kind != "tool" {
+				if o, ok := p.pre[i]; ok && round == 0 {
+					outs = append(outs, o)
+					continue
+				}
+				// A library or connector action in a later round runs here.
+				var turn Turn
+				o := s.runNonDesktop(ctx, []action{a}, k, p.allowed, &turn)
+				s.edit(id, index, func(t *Turn) {
+					t.Calls = append(t.Calls, turn.Calls...)
+					t.Artifacts = append(t.Artifacts, turn.Artifacts...)
+					t.Skills = append(t.Skills, turn.Skills...)
+				})
+				outs = append(outs, o...)
+				continue
+			}
+			da := desktop.Action{Name: a.name, Args: a.args, Raw: a.raw}
+			if summary, ok := da.Done(); ok {
 				final, done = summary, true
-				s.appendStep(id, index, Step{At: s.now(), Action: a.Name, Args: a.Args, Result: summary})
+				s.appendStep(id, index, Step{At: s.now(), Action: a.name, Args: a.args, Result: summary})
+				outs = append(outs, outcome{action: a, text: "finished"})
 				break
 			}
-			out, err := desktop.Run(ctx, runner, k.ID, a)
-			step := Step{At: s.now(), Action: a.Name, Args: a.Args, Result: out}
-			line := "- " + a.Raw + ": "
+			out, err := desktop.Run(ctx, runner, k.ID, da)
+			step := Step{At: s.now(), Action: a.name, Args: a.args, Result: out}
+			o := outcome{action: a, text: out}
 			if err != nil {
 				step.Error = err.Error()
-				line += "failed: " + err.Error()
-			} else {
-				line += "ok"
+				o.err = err.Error()
 			}
-			if out != "" {
-				line += "\n  " + strings.ReplaceAll(out, "\n", "\n  ")
-			}
-			results = append(results, line)
+			outs = append(outs, o)
 			s.appendStep(id, index, step)
 			if ctx.Err() != nil {
 				break
@@ -799,30 +876,32 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 			break
 		}
 		png, err := runner.Screenshot(ctx, k.ID)
-		var images []provider.Image
+		extra := provider.Message{Role: "user", Content: "Here is the screenshot of your display now. Continue with your next actions, or call done when the task is finished."}
 		if err != nil {
-			results = append(results, "- screenshot failed: "+err.Error())
+			extra.Content = "The screenshot failed: " + err.Error() + ". Continue with your next actions, or call done when the task is finished."
 		} else if name, err := s.saveShot(id, index, png); err == nil {
 			s.markShot(id, index, name)
-			images = []provider.Image{{MIME: "image/png", Data: png}}
+			extra.Images = []provider.Image{{MIME: "image/png", Data: png}}
 		}
-		messages = append(messages,
-			provider.Message{Role: "assistant", Content: reply},
-			provider.Message{Role: "user", Content: "[desktop] Results of your actions:\n" + strings.Join(results, "\n") +
-				"\n\nHere is the screenshot of your display now. Continue with the next @tool lines, or " +
-				"write `@tool done {\"summary\": \"...\"}` when the task is finished.", Images: images})
+		messages = append(messages, feedback(p.native, reply, replyText, outs, &extra)...)
 		if len(messages) > s.MaxTurns*2 {
 			messages = append(messages[:1], messages[len(messages)-s.MaxTurns*2:]...)
 		}
-		answer, err := p.brain.Complete(ctx, messages)
+		answer, err := ask(ctx, p.brain, p.native, messages, p.tools)
 		if err != nil {
 			fail = err.Error()
 			break
 		}
 		s.addUsage(id, index, answer.Usage)
-		reply = answer.Content
-		actions, _ = desktop.Parse(reply)
-		if text := strings.TrimSpace(stripTools(reply)); text != "" {
+		reply = answer
+		replyText = answer.Content
+		var text string
+		if p.native && len(answer.Calls) > 0 {
+			actions, text = fromCalls(answer.Calls), answer.Content
+		} else {
+			actions, text = fromText(answer.Content)
+		}
+		if text = strings.TrimSpace(text); text != "" {
 			parts = append(parts, text)
 		}
 		if len(actions) == 0 {
@@ -838,11 +917,6 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 	s.finishTurn(id, index, strings.TrimSpace(strings.Join(parts, "\n\n")))
 }
 
-func stripTools(text string) string {
-	_, rest := desktop.Parse(text)
-	return rest
-}
-
 // edit changes one turn of a session under the lock and saves it.
 func (s *Service) edit(id string, index int, fn func(*Turn)) {
 	s.mu.Lock()
@@ -854,6 +928,11 @@ func (s *Service) edit(id string, index int, fn func(*Turn)) {
 	fn(&sess.Turns[index])
 	sess.UpdatedAt = s.now()
 	_ = s.save(sess)
+	kind := "update"
+	if !sess.Turns[index].Working {
+		kind = "done"
+	}
+	s.emitLocked(Event{Type: kind, Session: id, Index: index, Turn: &sess.Turns[index]})
 }
 
 func (s *Service) appendStep(id string, index int, step Step) {

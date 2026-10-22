@@ -17,6 +17,7 @@ providers:
     kind: openai
     model: gpt-5.5
     temperature: 0.7
+    tools: native              # native (the provider's own tool calls) | text (@tool lines in the prompt)
   local:
     kind: ollama
     model: qwen3:8b
@@ -72,3 +73,9 @@ connectors:
   coder:
     kind: motita
     description: runs a coding task in motita and returns its result
+  workspace:
+    kind: google-workspace     # signs in with OAuth from Settings (Sign in with Google)
+    description: mail, calendar and drive of the team account
+    settings:
+      client_id: 1234-abc.apps.googleusercontent.com
+      client_secret: ""        # a Desktop client needs none

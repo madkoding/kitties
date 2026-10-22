@@ -48,7 +48,7 @@ func TestBrain(t *testing.T) {
 	}
 	seen := []string{}
 	for i := 0; i < 3; i++ {
-		seen = append(seen, ask(t, b, desk, "[desktop] Results of your actions:\n- ok"))
+		seen = append(seen, ask(t, b, desk, "Results of your actions:\n- ok"))
 	}
 	if !strings.Contains(seen[0], "@tool click") || !strings.Contains(seen[1], "@tool scroll") || !strings.Contains(seen[2], "@tool done") {
 		t.Errorf("rounds = %v", seen)

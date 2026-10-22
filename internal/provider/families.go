@@ -14,7 +14,14 @@ import (
 type chatResponse struct {
 	Choices []struct {
 		Message struct {
-			Content string `json:"content"`
+			Content   string `json:"content"`
+			ToolCalls []struct {
+				ID       string `json:"id"`
+				Function struct {
+					Name      string `json:"name"`
+					Arguments string `json:"arguments"`
+				} `json:"function"`
+			} `json:"tool_calls"`
 		} `json:"message"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
@@ -27,12 +34,19 @@ type chatResponse struct {
 	} `json:"error"`
 }
 
-func (c *HTTPClient) callChat(ctx context.Context, messages []Message) (Reply, error) {
+func (c *HTTPClient) callChat(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
 	body := map[string]any{
 		"model":       c.opts.Model,
 		"messages":    chatMessages(messages),
 		"max_tokens":  c.opts.MaxTokens,
 		"temperature": c.temperature(0.7),
+	}
+	if len(tools) > 0 {
+		defs := make([]map[string]any, 0, len(tools))
+		for _, t := range tools {
+			defs = append(defs, map[string]any{"type": "function", "function": map[string]any{"name": t.Name, "description": t.Description, "parameters": t.Parameters}})
+		}
+		body["tools"] = defs
 	}
 	data, err := c.post(ctx, "/chat/completions", body)
 	if err != nil {
@@ -49,10 +63,17 @@ func (c *HTTPClient) callChat(ctx context.Context, messages []Message) (Reply, e
 		return Reply{}, errors.New("the provider returned no choices")
 	}
 	reply := Reply{Content: strings.TrimSpace(resp.Choices[0].Message.Content)}
+	for i, tc := range resp.Choices[0].Message.ToolCalls {
+		id := tc.ID
+		if id == "" {
+			id = fmt.Sprintf("call_%d", i)
+		}
+		reply.Calls = append(reply.Calls, ToolCall{ID: id, Name: tc.Function.Name, Args: argsOf(tc.Function.Arguments)})
+	}
 	if resp.Usage != nil {
 		reply.Usage = Usage{Input: resp.Usage.Prompt, Output: resp.Usage.Completion}
 	}
-	if reply.Content == "" {
+	if emptyReply(reply) {
 		return Reply{}, fmt.Errorf("the provider returned an empty answer (finish_reason=%q)", resp.Choices[0].FinishReason)
 	}
 	return reply, nil
@@ -63,6 +84,18 @@ func (c *HTTPClient) callChat(ctx context.Context, messages []Message) (Reply, e
 func chatMessages(messages []Message) []map[string]any {
 	out := make([]map[string]any, 0, len(messages))
 	for _, m := range messages {
+		if m.Role == "tool" {
+			out = append(out, map[string]any{"role": "tool", "tool_call_id": m.ToolCallID, "content": m.Content})
+			continue
+		}
+		if len(m.ToolCalls) > 0 {
+			calls := make([]map[string]any, 0, len(m.ToolCalls))
+			for _, tc := range m.ToolCalls {
+				calls = append(calls, map[string]any{"id": tc.ID, "type": "function", "function": map[string]any{"name": tc.Name, "arguments": argsJSON(tc.Args)}})
+			}
+			out = append(out, map[string]any{"role": "assistant", "content": m.Content, "tool_calls": calls})
+			continue
+		}
 		if len(m.Images) == 0 {
 			out = append(out, map[string]any{"role": m.Role, "content": m.Content})
 			continue
@@ -85,6 +118,9 @@ type responsesResponse struct {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		} `json:"content"`
+		CallID    string `json:"call_id"`
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
 	} `json:"output"`
 	Usage *struct {
 		Input  int `json:"input_tokens"`
@@ -95,10 +131,23 @@ type responsesResponse struct {
 	} `json:"error"`
 }
 
-func (c *HTTPClient) callResponses(ctx context.Context, messages []Message) (Reply, error) {
+func (c *HTTPClient) callResponses(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
 	input := make([]map[string]any, 0, len(rest))
 	for _, m := range rest {
+		if m.Role == "tool" {
+			input = append(input, map[string]any{"type": "function_call_output", "call_id": m.ToolCallID, "output": m.Content})
+			continue
+		}
+		if len(m.ToolCalls) > 0 {
+			if m.Content != "" {
+				input = append(input, map[string]any{"role": "assistant", "content": m.Content})
+			}
+			for _, tc := range m.ToolCalls {
+				input = append(input, map[string]any{"type": "function_call", "call_id": tc.ID, "name": tc.Name, "arguments": argsJSON(tc.Args)})
+			}
+			continue
+		}
 		if len(m.Images) == 0 {
 			input = append(input, map[string]any{"role": m.Role, "content": m.Content})
 			continue
@@ -117,6 +166,13 @@ func (c *HTTPClient) callResponses(ctx context.Context, messages []Message) (Rep
 	if system != "" {
 		body["instructions"] = system
 	}
+	if len(tools) > 0 {
+		defs := make([]map[string]any, 0, len(tools))
+		for _, t := range tools {
+			defs = append(defs, map[string]any{"type": "function", "name": t.Name, "description": t.Description, "parameters": t.Parameters})
+		}
+		body["tools"] = defs
+	}
 	data, err := c.post(ctx, "/responses", body)
 	if err != nil {
 		return Reply{}, err
@@ -129,21 +185,28 @@ func (c *HTTPClient) callResponses(ctx context.Context, messages []Message) (Rep
 		return Reply{}, &HTTPError{Code: 400, Body: resp.Error.Message}
 	}
 	var sb strings.Builder
-	for _, item := range resp.Output {
-		if item.Type != "message" {
-			continue
-		}
-		for _, part := range item.Content {
-			if part.Type == "output_text" {
-				sb.WriteString(part.Text)
+	var calls []ToolCall
+	for i, item := range resp.Output {
+		switch item.Type {
+		case "message":
+			for _, part := range item.Content {
+				if part.Type == "output_text" {
+					sb.WriteString(part.Text)
+				}
 			}
+		case "function_call":
+			id := item.CallID
+			if id == "" {
+				id = fmt.Sprintf("call_%d", i)
+			}
+			calls = append(calls, ToolCall{ID: id, Name: item.Name, Args: argsOf(item.Arguments)})
 		}
 	}
-	reply := Reply{Content: strings.TrimSpace(sb.String())}
+	reply := Reply{Content: strings.TrimSpace(sb.String()), Calls: calls}
 	if resp.Usage != nil {
 		reply.Usage = Usage{Input: resp.Usage.Input, Output: resp.Usage.Output}
 	}
-	if reply.Content == "" {
+	if emptyReply(reply) {
 		return Reply{}, errors.New("the provider returned no text")
 	}
 	return reply, nil
@@ -153,8 +216,11 @@ func (c *HTTPClient) callResponses(ctx context.Context, messages []Message) (Rep
 
 type anthropicResponse struct {
 	Content []struct {
-		Type string `json:"type"`
-		Text string `json:"text"`
+		Type  string         `json:"type"`
+		Text  string         `json:"text"`
+		ID    string         `json:"id"`
+		Name  string         `json:"name"`
+		Input map[string]any `json:"input"`
 	} `json:"content"`
 	Usage *struct {
 		Input  int `json:"input_tokens"`
@@ -165,7 +231,7 @@ type anthropicResponse struct {
 	} `json:"error"`
 }
 
-func (c *HTTPClient) callAnthropic(ctx context.Context, messages []Message) (Reply, error) {
+func (c *HTTPClient) callAnthropic(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
 	conversation := make([]map[string]any, 0, len(rest))
 	for _, m := range rest {
@@ -173,10 +239,40 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, messages []Message) (Rep
 		if m.Role == "assistant" {
 			role = "assistant"
 		}
-		blocks := []map[string]any{{"type": "text", "text": m.Content}}
+		var blocks []map[string]any
+		switch {
+		case m.Role == "tool":
+			content := m.Content
+			if content == "" {
+				content = "done"
+			}
+			blocks = append(blocks, map[string]any{"type": "tool_result", "tool_use_id": m.ToolCallID, "content": content})
+		default:
+			if m.Content != "" || len(m.ToolCalls) == 0 {
+				text := m.Content
+				if text == "" {
+					text = "(continue)"
+				}
+				blocks = append(blocks, map[string]any{"type": "text", "text": text})
+			}
+			for _, tc := range m.ToolCalls {
+				args := tc.Args
+				if args == nil {
+					args = map[string]any{}
+				}
+				blocks = append(blocks, map[string]any{"type": "tool_use", "id": tc.ID, "name": tc.Name, "input": args})
+			}
+		}
 		for _, img := range m.Images {
 			blocks = append(blocks, map[string]any{"type": "image", "source": map[string]any{
 				"type": "base64", "media_type": img.MIME, "data": base64.StdEncoding.EncodeToString(img.Data)}})
+		}
+		// Consecutive tool results share one user turn, which the API requires.
+		if n := len(conversation); m.Role == "tool" && n > 0 && conversation[n-1]["role"] == "user" {
+			if prev, ok := conversation[n-1]["content"].([]map[string]any); ok && len(prev) > 0 && prev[0]["type"] == "tool_result" {
+				conversation[n-1]["content"] = append(prev, blocks...)
+				continue
+			}
 		}
 		conversation = append(conversation, map[string]any{"role": role, "content": blocks})
 	}
@@ -184,6 +280,13 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, messages []Message) (Rep
 		"model":      c.opts.Model,
 		"messages":   conversation,
 		"max_tokens": c.opts.MaxTokens,
+	}
+	if len(tools) > 0 {
+		defs := make([]map[string]any, 0, len(tools))
+		for _, t := range tools {
+			defs = append(defs, map[string]any{"name": t.Name, "description": t.Description, "input_schema": t.Parameters})
+		}
+		body["tools"] = defs
 	}
 	if c.opts.Temperature != nil {
 		body["temperature"] = *c.opts.Temperature
@@ -203,16 +306,28 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, messages []Message) (Rep
 		return Reply{}, &HTTPError{Code: 400, Body: resp.Error.Message}
 	}
 	var sb strings.Builder
-	for _, block := range resp.Content {
-		if block.Type == "text" {
+	var calls []ToolCall
+	for i, block := range resp.Content {
+		switch block.Type {
+		case "text":
 			sb.WriteString(block.Text)
+		case "tool_use":
+			id := block.ID
+			if id == "" {
+				id = fmt.Sprintf("toolu_%d", i)
+			}
+			args := block.Input
+			if args == nil {
+				args = map[string]any{}
+			}
+			calls = append(calls, ToolCall{ID: id, Name: block.Name, Args: args})
 		}
 	}
-	reply := Reply{Content: strings.TrimSpace(sb.String())}
+	reply := Reply{Content: strings.TrimSpace(sb.String()), Calls: calls}
 	if resp.Usage != nil {
 		reply.Usage = Usage{Input: resp.Usage.Input, Output: resp.Usage.Output}
 	}
-	if reply.Content == "" {
+	if emptyReply(reply) {
 		return Reply{}, errors.New("anthropic returned a response with no text")
 	}
 	return reply, nil
@@ -224,8 +339,12 @@ type geminiResponse struct {
 	Candidates []struct {
 		Content struct {
 			Parts []struct {
-				Text    string `json:"text"`
-				Thought bool   `json:"thought"`
+				Text         string `json:"text"`
+				Thought      bool   `json:"thought"`
+				FunctionCall *struct {
+					Name string         `json:"name"`
+					Args map[string]any `json:"args"`
+				} `json:"functionCall"`
 			} `json:"parts"`
 		} `json:"content"`
 		FinishReason string `json:"finishReason"`
@@ -239,7 +358,7 @@ type geminiResponse struct {
 	} `json:"error"`
 }
 
-func (c *HTTPClient) callGemini(ctx context.Context, messages []Message) (Reply, error) {
+func (c *HTTPClient) callGemini(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
 	contents := make([]map[string]any, 0, len(rest))
 	for _, m := range rest {
@@ -247,7 +366,26 @@ func (c *HTTPClient) callGemini(ctx context.Context, messages []Message) (Reply,
 		if m.Role == "assistant" {
 			role = "model"
 		}
-		parts := []map[string]any{{"text": m.Content}}
+		var parts []map[string]any
+		switch {
+		case m.Role == "tool":
+			name := m.ToolName
+			if name == "" {
+				name = m.ToolCallID
+			}
+			parts = append(parts, map[string]any{"functionResponse": map[string]any{"name": name, "response": map[string]any{"result": m.Content}}})
+		default:
+			if m.Content != "" || len(m.ToolCalls) == 0 {
+				parts = append(parts, map[string]any{"text": m.Content})
+			}
+			for _, tc := range m.ToolCalls {
+				args := tc.Args
+				if args == nil {
+					args = map[string]any{}
+				}
+				parts = append(parts, map[string]any{"functionCall": map[string]any{"name": tc.Name, "args": args}})
+			}
+		}
 		for _, img := range m.Images {
 			parts = append(parts, map[string]any{"inlineData": map[string]any{
 				"mimeType": img.MIME, "data": base64.StdEncoding.EncodeToString(img.Data)}})
@@ -264,6 +402,13 @@ func (c *HTTPClient) callGemini(ctx context.Context, messages []Message) (Reply,
 	if system != "" {
 		body["systemInstruction"] = map[string]any{"parts": []map[string]any{{"text": system}}}
 	}
+	if len(tools) > 0 {
+		defs := make([]map[string]any, 0, len(tools))
+		for _, t := range tools {
+			defs = append(defs, map[string]any{"name": t.Name, "description": t.Description, "parameters": t.Parameters})
+		}
+		body["tools"] = []map[string]any{{"functionDeclarations": defs}}
+	}
 	data, err := c.post(ctx, "/v1beta/models/"+c.opts.Model+":generateContent", body)
 	if err != nil {
 		return Reply{}, err
@@ -279,16 +424,26 @@ func (c *HTTPClient) callGemini(ctx context.Context, messages []Message) (Reply,
 		return Reply{}, errors.New("gemini returned no candidates (safety block?)")
 	}
 	var sb strings.Builder
-	for _, part := range resp.Candidates[0].Content.Parts {
+	var calls []ToolCall
+	for i, part := range resp.Candidates[0].Content.Parts {
+		if part.FunctionCall != nil {
+			args := part.FunctionCall.Args
+			if args == nil {
+				args = map[string]any{}
+			}
+			// Gemini has no call ids: the name is the id, which its response format matches by.
+			calls = append(calls, ToolCall{ID: fmt.Sprintf("%s#%d", part.FunctionCall.Name, i), Name: part.FunctionCall.Name, Args: args})
+			continue
+		}
 		if !part.Thought {
 			sb.WriteString(part.Text)
 		}
 	}
-	reply := Reply{Content: strings.TrimSpace(sb.String())}
+	reply := Reply{Content: strings.TrimSpace(sb.String()), Calls: calls}
 	if resp.UsageMetadata != nil {
 		reply.Usage = Usage{Input: resp.UsageMetadata.Prompt, Output: resp.UsageMetadata.Candidates}
 	}
-	if reply.Content == "" {
+	if emptyReply(reply) {
 		return Reply{}, fmt.Errorf("gemini returned an empty answer (finishReason=%q)", resp.Candidates[0].FinishReason)
 	}
 	return reply, nil

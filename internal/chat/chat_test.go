@@ -198,7 +198,7 @@ func TestSendSingle(t *testing.T) {
 		t.Errorf("user turn = %+v", first[1])
 	}
 	second := sa.seen[1]
-	if second[len(second)-1].Role != "user" || !strings.Contains(second[len(second)-1].Content, "[connector echo]\nechoed") {
+	if second[len(second)-1].Role != "user" || !strings.Contains(second[len(second)-1].Content, "@connector echo") || !strings.Contains(second[len(second)-1].Content, "echoed") {
 		t.Errorf("connector results go back: %+v", second[len(second)-1])
 	}
 	got, _ := s.Get(sess.ID)

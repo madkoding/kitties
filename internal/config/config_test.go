@@ -53,6 +53,8 @@ func TestValidation(t *testing.T) {
 		{base + "  q:\n    kind: ollama\nkitties:\n  - name: a\n", "no default_provider"},
 		{base + "kitties:\n  - name: a\n    replicas: 1000\n", "between 0 and 999"},
 		{base + "kitties:\n  - name: a\n    avatar:\n      breed: lion\n", "avatar.breed"},
+		{"providers:\n  p:\n    kind: ollama\n    tools: magic\n", "not native or text"},
+		{"providers:\n  p:\n    kind: ollama\n    tools: magic\n", "not native or text"},
 		{base + "kitties:\n  - name: a\n    connectors: [x]\n", "not a configured connector"},
 		{base + "containers:\n  runtime: lxc\n", "not auto, docker or podman"},
 		{base + "containers:\n  image: ''\n", "image cannot be empty"},

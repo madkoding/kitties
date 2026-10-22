@@ -51,6 +51,8 @@ type Provider struct {
 	Timeout     time.Duration     `yaml:"timeout" json:"timeout,omitempty"`
 	MaxAttempts int               `yaml:"max_attempts" json:"max_attempts,omitempty"`
 	Headers     map[string]string `yaml:"headers" json:"headers,omitempty"`
+	// Tools is native (the provider's own calls, the default) or text (lines in the prompt).
+	Tools string `yaml:"tools" json:"tools,omitempty"`
 }
 
 // Options converts the profile into what the provider package takes.
@@ -61,7 +63,7 @@ func (p Provider) Options() provider.Options {
 	}
 	return provider.Options{
 		Kind: p.Kind, Model: p.Model, APIKey: key, BaseURL: p.BaseURL, MaxTokens: p.MaxTokens,
-		Temperature: p.Temperature, Timeout: p.Timeout, MaxAttempts: p.MaxAttempts, Headers: p.Headers,
+		Temperature: p.Temperature, Timeout: p.Timeout, MaxAttempts: p.MaxAttempts, Headers: p.Headers, Tools: p.Tools,
 	}
 }
 
@@ -171,6 +173,9 @@ func ValidateProvider(name string, p Provider) error {
 	}
 	if p.APIKey != "" && strings.HasPrefix(strings.ToLower(p.BaseURL), "http://") && !isLocal(p.BaseURL) {
 		return fmt.Errorf("providers.%s.base_url: plain http to a remote host would send the key in clear text", name)
+	}
+	if p.Tools != "" && p.Tools != "native" && p.Tools != "text" {
+		return fmt.Errorf("providers.%s.tools: %q is not native or text", name, p.Tools)
 	}
 	return nil
 }

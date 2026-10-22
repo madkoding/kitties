@@ -52,7 +52,7 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	lower := strings.ToLower(last)
 	usage := provider.Usage{Input: len(system) / 4, Output: 40}
 	switch {
-	case strings.HasPrefix(last, "[desktop] Results"):
+	case strings.HasPrefix(last, "Results of your actions") || strings.HasPrefix(last, "[desktop] Results"):
 		return provider.Reply{Content: b.nextRound(last), Usage: usage}, nil
 	case desktop && (strings.Contains(lower, "open") || strings.Contains(lower, "abre") || strings.Contains(lower, "browse") || strings.Contains(lower, "visit")):
 		url := "https://example.com"

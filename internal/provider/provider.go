@@ -92,14 +92,46 @@ type Options struct {
 	Backoff     time.Duration
 	// Headers are extra headers sent with every request (a gateway's own token, say).
 	Headers map[string]string
+	// Tools is how the model is given tools: "native" (the provider's own calls, the default)
+	// or "text" (described in the prompt, called with @tool lines; for a server that has no
+	// tool support).
+	Tools string
 }
 
 // Message is one turn of a conversation.
 type Message struct {
-	Role    string `json:"role"` // system | user | assistant
+	Role    string `json:"role"` // system | user | assistant | tool
 	Content string `json:"content"`
 	// Images are pictures a user turn shows the model (a screenshot of the kitty's display).
 	Images []Image `json:"images,omitempty"`
+	// ToolCalls are the calls an assistant turn made, when the model called tools natively.
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	// ToolCallID names the call a tool turn answers.
+	ToolCallID string `json:"tool_call_id,omitempty"`
+	// ToolName is the name of the call a tool turn answers (Gemini matches by name).
+	ToolName string `json:"tool_name,omitempty"`
+}
+
+// Tool is one function the model may call natively.
+type Tool struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	Parameters  map[string]any `json:"parameters"` // a JSON schema object
+}
+
+// ToolCall is one call the model made.
+type ToolCall struct {
+	ID   string         `json:"id"`
+	Name string         `json:"name"`
+	Args map[string]any `json:"args"`
+}
+
+// ToolClient is a client that can call tools natively, in the provider's own format.
+type ToolClient interface {
+	Client
+	CompleteTools(ctx context.Context, messages []Message, tools []Tool) (Reply, error)
+	// SupportsTools reports whether native calls are on for this client.
+	SupportsTools() bool
 }
 
 // Image is one picture attached to a turn.
@@ -123,6 +155,8 @@ type Usage struct {
 type Reply struct {
 	Content string `json:"content"`
 	Usage   Usage  `json:"usage"`
+	// Calls are the tools the model asked for, when it called them natively.
+	Calls []ToolCall `json:"calls,omitempty"`
 }
 
 // Client is anything that can answer a conversation. The HTTP client below is the real one;
@@ -218,12 +252,20 @@ func (c *HTTPClient) Describe() string {
 // Model is the configured model.
 func (c *HTTPClient) Model() string { return c.opts.Model }
 
+// SupportsTools reports whether this client calls tools natively.
+func (c *HTTPClient) SupportsTools() bool { return c.opts.Tools != "text" }
+
 // Complete sends the conversation and returns the answer, retrying what is worth retrying.
 func (c *HTTPClient) Complete(ctx context.Context, messages []Message) (Reply, error) {
+	return c.CompleteTools(ctx, messages, nil)
+}
+
+// CompleteTools sends the conversation with the tools the model may call.
+func (c *HTTPClient) CompleteTools(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
 	var last error
 	wait := c.opts.Backoff
 	for attempt := 1; attempt <= c.opts.MaxAttempts; attempt++ {
-		reply, err := c.once(ctx, messages)
+		reply, err := c.once(ctx, messages, tools)
 		if err == nil {
 			return reply, nil
 		}
@@ -243,18 +285,46 @@ func (c *HTTPClient) Complete(ctx context.Context, messages []Message) (Reply, e
 	return Reply{}, fmt.Errorf("%s: %w", c.Describe(), last)
 }
 
-func (c *HTTPClient) once(ctx context.Context, messages []Message) (Reply, error) {
+func (c *HTTPClient) once(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
 	switch c.kind.Family {
 	case FamilyAnthropic:
-		return c.callAnthropic(ctx, messages)
+		return c.callAnthropic(ctx, messages, tools)
 	case FamilyGemini:
-		return c.callGemini(ctx, messages)
+		return c.callGemini(ctx, messages, tools)
 	case FamilyResponses:
-		return c.callResponses(ctx, messages)
+		return c.callResponses(ctx, messages, tools)
 	default:
-		return c.callChat(ctx, messages)
+		return c.callChat(ctx, messages, tools)
 	}
 }
+
+// argsOf decodes a call's arguments, which arrive as a JSON string or an object.
+func argsOf(raw any) map[string]any {
+	switch v := raw.(type) {
+	case map[string]any:
+		return v
+	case string:
+		var m map[string]any
+		if json.Unmarshal([]byte(v), &m) == nil && m != nil {
+			return m
+		}
+		if strings.TrimSpace(v) != "" {
+			return map[string]any{"text": v}
+		}
+	}
+	return map[string]any{}
+}
+
+func argsJSON(args map[string]any) string {
+	if args == nil {
+		args = map[string]any{}
+	}
+	data, _ := json.Marshal(args)
+	return string(data)
+}
+
+// emptyReply reports a reply with neither text nor calls.
+func emptyReply(r Reply) bool { return r.Content == "" && len(r.Calls) == 0 }
 
 // post sends a JSON body and returns the answer's bytes.
 func (c *HTTPClient) post(ctx context.Context, path string, body any) ([]byte, error) {

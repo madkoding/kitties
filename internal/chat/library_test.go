@@ -74,13 +74,13 @@ func TestLibraryInChat(t *testing.T) {
 		t.Errorf("the prompt lists the library: %s", sb.seen[0][0].Content)
 	}
 	fb := func(i int) string { m := sb.seen[i]; return m[len(m)-1].Content }
-	if !strings.Contains(fb(1), "[skill browse-a-site]\n# Browse") || !strings.Contains(fb(1), "[artifacts]\n(none yet)") || !strings.Contains(fb(1), "[skills]\n- browse-a-site") {
+	if !strings.Contains(fb(1), "[skill browse-a-site]") || !strings.Contains(fb(1), "# Browse a site") || !strings.Contains(fb(1), "(none yet)") || !strings.Contains(fb(1), "- browse-a-site: How to") {
 		t.Errorf("round 1 feedback = %s", fb(1))
 	}
 	if !strings.Contains(fb(2), "[artifact plan.md] saved (text/markdown") || !strings.Contains(fb(2), "[skill launch-day] proposed") {
 		t.Errorf("round 2 feedback = %s", fb(2))
 	}
-	if !strings.Contains(fb(3), "[artifact plan.md]\n# Plan") || !strings.Contains(fb(3), "[artifact missing.md] no such artifact") || !strings.Contains(fb(3), "[skill nope] no such skill") || !strings.Contains(fb(3), "unknown verb fly") || !strings.Contains(fb(3), "[artifact save] ") {
+	if !strings.Contains(fb(3), "[artifact plan.md]") || !strings.Contains(fb(3), "# Plan") || !strings.Contains(fb(3), "failed: [artifact missing.md] no such artifact") || !strings.Contains(fb(3), "failed: [skill nope] no such skill") || !strings.Contains(fb(3), "unknown verb fly") || !strings.Contains(fb(3), "[artifact save] ") {
 		t.Errorf("round 3 feedback = %s", fb(3))
 	}
 	list, _ := sk.List()
