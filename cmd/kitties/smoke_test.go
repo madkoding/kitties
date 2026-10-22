@@ -85,8 +85,16 @@ func (o *outside) pushHandler(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write([]byte(`{"id":"1"}`))
 }
 
-func (o *outside) sawHook() []string { o.mu.Lock(); defer o.mu.Unlock(); return append([]string(nil), o.hook...) }
-func (o *outside) sawPush() []string { o.mu.Lock(); defer o.mu.Unlock(); return append([]string(nil), o.push...) }
+func (o *outside) sawHook() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]string(nil), o.hook...)
+}
+func (o *outside) sawPush() []string {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return append([]string(nil), o.push...)
+}
 
 func TestSmokeAKittyAsksBeforePostingAndTellsThePerson(t *testing.T) {
 	withRuntime(t, false)
