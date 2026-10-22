@@ -34,7 +34,7 @@ type chatResponse struct {
 	} `json:"error"`
 }
 
-func (c *HTTPClient) callChat(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
+func (c *HTTPClient) callChat(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
 	body := map[string]any{
 		"model":       c.opts.Model,
 		"messages":    chatMessages(messages),
@@ -48,7 +48,7 @@ func (c *HTTPClient) callChat(ctx context.Context, messages []Message, tools []T
 		}
 		body["tools"] = defs
 	}
-	data, err := c.post(ctx, "/chat/completions", body)
+	data, err := c.post(ctx, t, "/chat/completions", body)
 	if err != nil {
 		return Reply{}, err
 	}
@@ -131,7 +131,7 @@ type responsesResponse struct {
 	} `json:"error"`
 }
 
-func (c *HTTPClient) callResponses(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
+func (c *HTTPClient) callResponses(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
 	input := make([]map[string]any, 0, len(rest))
 	for _, m := range rest {
@@ -141,30 +141,34 @@ func (c *HTTPClient) callResponses(ctx context.Context, messages []Message, tool
 		}
 		if len(m.ToolCalls) > 0 {
 			if m.Content != "" {
-				input = append(input, map[string]any{"role": "assistant", "content": m.Content})
+				input = append(input, responsesText("assistant", m.Content))
 			}
 			for _, tc := range m.ToolCalls {
 				input = append(input, map[string]any{"type": "function_call", "call_id": tc.ID, "name": tc.Name, "arguments": argsJSON(tc.Args)})
 			}
 			continue
 		}
-		if len(m.Images) == 0 {
-			input = append(input, map[string]any{"role": m.Role, "content": m.Content})
-			continue
-		}
-		parts := []map[string]any{{"type": "input_text", "text": m.Content}}
+		item := responsesText(m.Role, m.Content)
 		for _, img := range m.Images {
-			parts = append(parts, map[string]any{"type": "input_image", "image_url": img.dataURL()})
+			item["content"] = append(item["content"].([]map[string]any), map[string]any{"type": "input_image", "image_url": img.dataURL()})
 		}
-		input = append(input, map[string]any{"role": m.Role, "content": parts})
+		input = append(input, item)
 	}
 	body := map[string]any{
-		"model":             c.opts.Model,
-		"input":             input,
-		"max_output_tokens": c.opts.MaxTokens,
+		"model": c.opts.Model,
+		"input": input,
 	}
 	if system != "" {
 		body["instructions"] = system
+	}
+	if t.chatgpt {
+		// The ChatGPT backend wants the request streamed and not stored, with instructions
+		// always present and no output cap.
+		body["instructions"] = system
+		body["stream"] = true
+		body["store"] = false
+	} else {
+		body["max_output_tokens"] = c.opts.MaxTokens
 	}
 	if len(tools) > 0 {
 		defs := make([]map[string]any, 0, len(tools))
@@ -173,9 +177,12 @@ func (c *HTTPClient) callResponses(ctx context.Context, messages []Message, tool
 		}
 		body["tools"] = defs
 	}
-	data, err := c.post(ctx, "/responses", body)
+	data, err := c.post(ctx, t, "/responses", body)
 	if err != nil {
 		return Reply{}, err
+	}
+	if t.chatgpt {
+		return readResponsesStream(data)
 	}
 	var resp responsesResponse
 	if err := json.Unmarshal(data, &resp); err != nil {
@@ -212,6 +219,91 @@ func (c *HTTPClient) callResponses(ctx context.Context, messages []Message, tool
 	return reply, nil
 }
 
+// responsesText is one message item of a /responses input, in the typed form both the API and
+// the ChatGPT backend take.
+func responsesText(role, text string) map[string]any {
+	kind := "input_text"
+	if role == "assistant" {
+		kind = "output_text"
+	} else {
+		role = "user"
+	}
+	return map[string]any{"type": "message", "role": role, "content": []map[string]any{{"type": kind, "text": text}}}
+}
+
+// responsesEvent is one server-sent event of a streamed /responses answer.
+type responsesEvent struct {
+	Type    string `json:"type"`
+	Delta   string `json:"delta"`
+	Message string `json:"message"`
+	Item    struct {
+		Type      string `json:"type"`
+		CallID    string `json:"call_id"`
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	} `json:"item"`
+	Response struct {
+		Usage *struct {
+			Input  int `json:"input_tokens"`
+			Output int `json:"output_tokens"`
+		} `json:"usage"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	} `json:"response"`
+}
+
+// readResponsesStream reads a streamed /responses answer (the ChatGPT backend's) to its end: the
+// text deltas, the finished function calls and the usage of the completed response.
+func readResponsesStream(data []byte) (Reply, error) {
+	var sb strings.Builder
+	var reply Reply
+	done := false
+	for _, line := range strings.Split(string(data), "\n") {
+		payload, ok := strings.CutPrefix(strings.TrimSpace(line), "data:")
+		if !ok {
+			continue
+		}
+		var ev responsesEvent
+		if json.Unmarshal([]byte(strings.TrimSpace(payload)), &ev) != nil {
+			continue
+		}
+		switch ev.Type {
+		case "response.output_text.delta":
+			sb.WriteString(ev.Delta)
+		case "response.output_item.done":
+			if ev.Item.Type == "function_call" {
+				id := ev.Item.CallID
+				if id == "" {
+					id = fmt.Sprintf("call_%d", len(reply.Calls))
+				}
+				reply.Calls = append(reply.Calls, ToolCall{ID: id, Name: ev.Item.Name, Args: argsOf(ev.Item.Arguments)})
+			}
+		case "response.completed", "response.done", "response.incomplete":
+			done = true
+			if u := ev.Response.Usage; u != nil {
+				reply.Usage = Usage{Input: u.Input, Output: u.Output}
+			}
+		case "response.failed":
+			msg := "the response failed"
+			if ev.Response.Error != nil && ev.Response.Error.Message != "" {
+				msg = ev.Response.Error.Message
+			}
+			return Reply{}, &HTTPError{Code: 500, Body: msg}
+		case "error":
+			return Reply{}, &HTTPError{Code: 400, Body: ev.Message}
+		}
+	}
+	reply.Content = strings.TrimSpace(sb.String())
+	if emptyReply(reply) {
+		if !done {
+			return Reply{}, errors.New("the response stream ended before the answer")
+		}
+		return Reply{}, errors.New("the provider returned no text")
+	}
+	return reply, nil
+}
+
 // --- anthropic -----------------------------------------------------------------------------
 
 type anthropicResponse struct {
@@ -231,7 +323,7 @@ type anthropicResponse struct {
 	} `json:"error"`
 }
 
-func (c *HTTPClient) callAnthropic(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
+func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
 	conversation := make([]map[string]any, 0, len(rest))
 	for _, m := range rest {
@@ -294,7 +386,7 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, messages []Message, tool
 	if system != "" {
 		body["system"] = system
 	}
-	data, err := c.post(ctx, "/v1/messages", body)
+	data, err := c.post(ctx, t, "/v1/messages", body)
 	if err != nil {
 		return Reply{}, err
 	}
@@ -358,7 +450,7 @@ type geminiResponse struct {
 	} `json:"error"`
 }
 
-func (c *HTTPClient) callGemini(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
+func (c *HTTPClient) callGemini(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
 	contents := make([]map[string]any, 0, len(rest))
 	for _, m := range rest {
@@ -409,7 +501,7 @@ func (c *HTTPClient) callGemini(ctx context.Context, messages []Message, tools [
 		}
 		body["tools"] = []map[string]any{{"functionDeclarations": defs}}
 	}
-	data, err := c.post(ctx, "/v1beta/models/"+c.opts.Model+":generateContent", body)
+	data, err := c.post(ctx, t, "/v1beta/models/"+c.opts.Model+":generateContent", body)
 	if err != nil {
 		return Reply{}, err
 	}

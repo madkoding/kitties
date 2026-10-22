@@ -21,6 +21,7 @@ import (
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/llmauth"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/orchestrator"
@@ -33,6 +34,8 @@ type fakeFleet struct {
 	fail    error
 	calls   []string
 	notify  notify.Config
+	// accounts keeps the AI sign-ins in a folder of the test's own.
+	accounts *llmauth.Manager
 }
 
 func (f *fakeFleet) List() []*kitty.Kitty {
@@ -177,6 +180,13 @@ func (o *oauthStore) SaveOAuthCredentials(_ string, c oauth.Credentials) error {
 var sharedOAuth = oauth.New(&oauthStore{})
 
 func (f *fakeFleet) OAuth() *oauth.Manager { return sharedOAuth }
+func (f *fakeFleet) Accounts() *llmauth.Manager {
+	if f.accounts == nil {
+		dir, _ := os.MkdirTemp("", "kitties-accounts-")
+		f.accounts = llmauth.New(dir)
+	}
+	return f.accounts
+}
 func (f *fakeFleet) Notify() notify.Config { return f.notify }
 func (f *fakeFleet) SetNotify(c notify.Config) error {
 	if c.Connector == "bad" {

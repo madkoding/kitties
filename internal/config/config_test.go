@@ -12,7 +12,7 @@ func TestExampleParses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the shipped example must load: %v", err)
 	}
-	if len(cfg.Providers) != 3 || cfg.DefaultProvider != "strong" || len(cfg.Kitties) != 3 || cfg.Kitties[1].Replicas != 3 {
+	if len(cfg.Providers) != 5 || cfg.Providers["plan"].Auth != "login" || cfg.DefaultProvider != "strong" || len(cfg.Kitties) != 3 || cfg.Kitties[1].Replicas != 3 {
 		t.Errorf("config = %+v", cfg)
 	}
 	if cfg.ProviderFor(cfg.Kitties[0]) != "strong" || cfg.ProviderFor(Kitty{}) != "strong" {
@@ -54,7 +54,8 @@ func TestValidation(t *testing.T) {
 		{base + "kitties:\n  - name: a\n    replicas: 1000\n", "between 0 and 999"},
 		{base + "kitties:\n  - name: a\n    avatar:\n      breed: lion\n", "avatar.breed"},
 		{"providers:\n  p:\n    kind: ollama\n    tools: magic\n", "not native or text"},
-		{"providers:\n  p:\n    kind: ollama\n    tools: magic\n", "not native or text"},
+		{"providers:\n  p:\n    kind: codex\n    auth: oauth\n", "is not login"},
+		{"providers:\n  p:\n    kind: openai\n    auth: login\n", "takes an API key"},
 		{base + "kitties:\n  - name: a\n    connectors: [x]\n", "not a configured connector"},
 		{base + "containers:\n  runtime: lxc\n", "not auto, docker or podman"},
 		{base + "containers:\n  image: ''\n", "image cannot be empty"},

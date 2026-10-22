@@ -9,6 +9,11 @@
 //   - responses:  POST /responses (Bearer): codex
 //   - anthropic:  POST /v1/messages (x-api-key + anthropic-version)
 //   - gemini:     POST /v1beta/models/<model>:generateContent (x-goog-api-key)
+//   - cli:        the official `claude` program, on the person's own Claude subscription
+//
+// A profile signs in with a key, or with an account (Options.Auth "login"): a ChatGPT plan for
+// codex, GitHub Copilot, a Google login for gemini. The account's credentials come from
+// Options.Login on every request, so a token renewed in between is picked up.
 package provider
 
 import (
@@ -32,7 +37,11 @@ const (
 	FamilyResponses = "responses"
 	FamilyAnthropic = "anthropic"
 	FamilyGemini    = "gemini"
+	FamilyCLI       = "cli"
 )
+
+// AuthLogin is the Options.Auth of a profile that signs in with an account instead of a key.
+const AuthLogin = "login"
 
 // Kind describes one supported provider: its family, where it lives and which variable holds its key.
 type Kind struct {
@@ -44,22 +53,26 @@ type Kind struct {
 	NoKey bool
 	// DefaultModel is the model used when the profile names none.
 	DefaultModel string
+	// Login names the account a profile of this kind can sign in with instead of a key
+	// (chatgpt, github, google, qwen, claude); empty when only a key works.
+	Login string
 }
 
 // kinds is every provider the framework knows, keyed by name.
 var kinds = map[string]Kind{
 	"openai":       {Name: "openai", Family: FamilyChat, BaseURL: "https://api.openai.com/v1", KeyEnv: "OPENAI_API_KEY", DefaultModel: "gpt-5.5"},
-	"codex":        {Name: "codex", Family: FamilyResponses, BaseURL: "https://api.openai.com/v1", KeyEnv: "OPENAI_API_KEY", DefaultModel: "gpt-5.5-codex"},
+	"codex":        {Name: "codex", Family: FamilyResponses, BaseURL: "https://api.openai.com/v1", KeyEnv: "OPENAI_API_KEY", DefaultModel: "gpt-5.5-codex", Login: "chatgpt"},
 	"anthropic":    {Name: "anthropic", Family: FamilyAnthropic, BaseURL: "https://api.anthropic.com", KeyEnv: "ANTHROPIC_API_KEY", DefaultModel: "claude-sonnet-5-5"},
-	"gemini":       {Name: "gemini", Family: FamilyGemini, BaseURL: "https://generativelanguage.googleapis.com", KeyEnv: "GEMINI_API_KEY", DefaultModel: "gemini-2.5-flash"},
+	"claude-code":  {Name: "claude-code", Family: FamilyCLI, NoKey: true, DefaultModel: "sonnet", Login: "claude"},
+	"gemini":       {Name: "gemini", Family: FamilyGemini, BaseURL: "https://generativelanguage.googleapis.com", KeyEnv: "GEMINI_API_KEY", DefaultModel: "gemini-2.5-flash", Login: "google"},
 	"ollama":       {Name: "ollama", Family: FamilyChat, BaseURL: "http://127.0.0.1:11434/v1", KeyEnv: "OLLAMA_API_KEY", NoKey: true, DefaultModel: "qwen3:8b"},
 	"ollama-cloud": {Name: "ollama-cloud", Family: FamilyChat, BaseURL: "https://ollama.com/v1", KeyEnv: "OLLAMA_API_KEY", DefaultModel: "gpt-oss:120b"},
 	"groq":         {Name: "groq", Family: FamilyChat, BaseURL: "https://api.groq.com/openai/v1", KeyEnv: "GROQ_API_KEY", DefaultModel: "llama-3.3-70b-versatile"},
 	"openrouter":   {Name: "openrouter", Family: FamilyChat, BaseURL: "https://openrouter.ai/api/v1", KeyEnv: "OPENROUTER_API_KEY", DefaultModel: "openai/gpt-5.5"},
 	"deepseek":     {Name: "deepseek", Family: FamilyChat, BaseURL: "https://api.deepseek.com/v1", KeyEnv: "DEEPSEEK_API_KEY", DefaultModel: "deepseek-chat"},
-	"qwen":         {Name: "qwen", Family: FamilyChat, BaseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", KeyEnv: "DASHSCOPE_API_KEY", DefaultModel: "qwen-plus"},
+	"qwen":         {Name: "qwen", Family: FamilyChat, BaseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", KeyEnv: "DASHSCOPE_API_KEY", DefaultModel: "qwen-plus", Login: "qwen"},
 	"mistral":      {Name: "mistral", Family: FamilyChat, BaseURL: "https://api.mistral.ai/v1", KeyEnv: "MISTRAL_API_KEY", DefaultModel: "mistral-large-latest"},
-	"copilot":      {Name: "copilot", Family: FamilyChat, BaseURL: "https://api.githubcopilot.com", KeyEnv: "COPILOT_API_KEY", DefaultModel: "gpt-4.1"},
+	"copilot":      {Name: "copilot", Family: FamilyChat, BaseURL: "https://api.githubcopilot.com", KeyEnv: "COPILOT_API_KEY", DefaultModel: "gpt-4.1", Login: "github"},
 	"custom":       {Name: "custom", Family: FamilyChat, KeyEnv: "LLM_API_KEY", NoKey: true},
 }
 
@@ -96,7 +109,29 @@ type Options struct {
 	// or "text" (described in the prompt, called with @tool lines; for a server that has no
 	// tool support).
 	Tools string
+	// Auth is "" (a key) or AuthLogin (an account signed in from Settings).
+	Auth string
+	// Login gives the signed-in account's credentials for one request; the registry sets it
+	// for a profile whose Auth is AuthLogin.
+	Login LoginSource
 }
+
+// Account is what a signed-in account adds to a request: where it goes, when not the kind's
+// own address, and the headers that carry the credentials.
+type Account struct {
+	BaseURL string
+	Headers map[string]string
+	// ChatGPT marks a Codex request billed to a ChatGPT plan: the backend wants it streamed,
+	// not stored and without an output cap.
+	ChatGPT bool
+}
+
+// LoginSource returns the credentials of a signed-in account, renewed when they are about to
+// expire.
+type LoginSource func(ctx context.Context) (Account, error)
+
+// ErrNotSignedIn is returned when a profile signs in with an account and none is there.
+var ErrNotSignedIn = errors.New("not signed in")
 
 // Message is one turn of a conversation.
 type Message struct {
@@ -202,7 +237,16 @@ func New(opts Options) (*HTTPClient, error) {
 	if opts.APIKey == "" && kind.KeyEnv != "" {
 		opts.APIKey = os.Getenv(kind.KeyEnv)
 	}
-	if opts.APIKey == "" && !kind.NoKey {
+	switch {
+	case opts.Auth == AuthLogin:
+		if kind.Login == "" {
+			return nil, fmt.Errorf("%s has no account to sign in with: it takes an API key", kind.Name)
+		}
+		if opts.Login == nil {
+			return nil, fmt.Errorf("%w to %s: sign in from Settings", ErrNotSignedIn, kind.Name)
+		}
+		opts.APIKey = ""
+	case opts.APIKey == "" && !kind.NoKey:
 		return nil, fmt.Errorf("%w for %s: set %s", ErrNoKey, kind.Name, kind.KeyEnv)
 	}
 	if opts.BaseURL == "" {
@@ -286,16 +330,59 @@ func (c *HTTPClient) CompleteTools(ctx context.Context, messages []Message, tool
 }
 
 func (c *HTTPClient) once(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
+	t, err := c.target(ctx)
+	if err != nil {
+		return Reply{}, err
+	}
 	switch c.kind.Family {
 	case FamilyAnthropic:
-		return c.callAnthropic(ctx, messages, tools)
+		return c.callAnthropic(ctx, t, messages, tools)
 	case FamilyGemini:
-		return c.callGemini(ctx, messages, tools)
+		return c.callGemini(ctx, t, messages, tools)
 	case FamilyResponses:
-		return c.callResponses(ctx, messages, tools)
+		return c.callResponses(ctx, t, messages, tools)
 	default:
-		return c.callChat(ctx, messages, tools)
+		return c.callChat(ctx, t, messages, tools)
 	}
+}
+
+// target is where one request goes and the headers that carry its credentials.
+type target struct {
+	base    string
+	headers map[string]string
+	chatgpt bool
+}
+
+// target resolves the request's address and credentials: the key's headers, or the signed-in
+// account's. An account that cannot be used is answered as a 401, which is not retried.
+func (c *HTTPClient) target(ctx context.Context) (target, error) {
+	t := target{base: c.opts.BaseURL, headers: map[string]string{}}
+	if c.opts.Login != nil {
+		acc, err := c.opts.Login(ctx)
+		if err != nil {
+			return t, &HTTPError{Code: http.StatusUnauthorized, Body: err.Error()}
+		}
+		if acc.BaseURL != "" {
+			t.base = strings.TrimRight(acc.BaseURL, "/")
+		}
+		for k, v := range acc.Headers {
+			t.headers[k] = v
+		}
+		t.chatgpt = acc.ChatGPT
+		return t, nil
+	}
+	switch c.kind.Family {
+	case FamilyAnthropic:
+		t.headers["x-api-key"] = c.opts.APIKey
+		t.headers["anthropic-version"] = "2023-06-01"
+	case FamilyGemini:
+		t.headers["x-goog-api-key"] = c.opts.APIKey
+	default:
+		if c.opts.APIKey != "" {
+			t.headers["Authorization"] = "Bearer " + c.opts.APIKey
+		}
+	}
+	return t, nil
 }
 
 // argsOf decodes a call's arguments, which arrive as a JSON string or an object.
@@ -326,28 +413,20 @@ func argsJSON(args map[string]any) string {
 // emptyReply reports a reply with neither text nor calls.
 func emptyReply(r Reply) bool { return r.Content == "" && len(r.Calls) == 0 }
 
-// post sends a JSON body and returns the answer's bytes.
-func (c *HTTPClient) post(ctx context.Context, path string, body any) ([]byte, error) {
+// post sends a JSON body to t and returns the answer's bytes.
+func (c *HTTPClient) post(ctx context.Context, t target, path string, body any) ([]byte, error) {
 	var buf bytes.Buffer
 	if err := json.NewEncoder(&buf).Encode(body); err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.opts.BaseURL+path, &buf)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, t.base+path, &buf)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "kitties")
-	switch c.kind.Family {
-	case FamilyAnthropic:
-		req.Header.Set("x-api-key", c.opts.APIKey)
-		req.Header.Set("anthropic-version", "2023-06-01")
-	case FamilyGemini:
-		req.Header.Set("x-goog-api-key", c.opts.APIKey)
-	default:
-		if c.opts.APIKey != "" {
-			req.Header.Set("Authorization", "Bearer "+c.opts.APIKey)
-		}
+	for k, v := range t.headers {
+		req.Header.Set(k, v)
 	}
 	for k, v := range c.opts.Headers {
 		req.Header.Set(k, v)

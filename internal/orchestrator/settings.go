@@ -13,6 +13,7 @@ import (
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/llmauth"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/provider"
@@ -127,12 +128,14 @@ func without(list []string, name string) []string {
 
 // ProviderView is one AI profile as the page sees it: the key is never sent, only whether one is set.
 type ProviderView struct {
-	Name        string   `json:"name"`
-	Kind        string   `json:"kind"`
-	Model       string   `json:"model"`
-	BaseURL     string   `json:"base_url,omitempty"`
-	APIKeySet   bool     `json:"api_key_set"`
-	APIKeyEnv   string   `json:"api_key_env,omitempty"`
+	Name      string `json:"name"`
+	Kind      string `json:"kind"`
+	Model     string `json:"model"`
+	BaseURL   string `json:"base_url,omitempty"`
+	APIKeySet bool   `json:"api_key_set"`
+	APIKeyEnv string `json:"api_key_env,omitempty"`
+	// Auth is login when the profile thinks on a signed-in account instead of a key.
+	Auth        string   `json:"auth,omitempty"`
 	MaxTokens   int      `json:"max_tokens,omitempty"`
 	Temperature *float64 `json:"temperature,omitempty"`
 	Default     bool     `json:"default"`
@@ -223,6 +226,8 @@ type SettingsView struct {
 	// Notify is where the person is told outside the interface, and NotifyEvents what can be sent.
 	Notify       notify.Config `json:"notify"`
 	NotifyEvents []string      `json:"notify_events"`
+	// Accounts are the sign-ins a profile can think on instead of a key.
+	Accounts []llmauth.Account `json:"accounts"`
 }
 
 // Settings describes the profiles and connectors, secrets left out.
@@ -230,7 +235,7 @@ func (m *Manager) Settings() SettingsView {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	view := SettingsView{DefaultProvider: m.cfg.DefaultProvider, ConnectorKinds: config.ConnectorKinds, Catalog: connector.Kinds(),
-		Categories: connector.Categories, MotitaURL: m.cfg.Motita.URL, Notify: m.cfg.Notify}
+		Categories: connector.Categories, MotitaURL: m.cfg.Motita.URL, Notify: m.cfg.Notify, Accounts: m.accounts.Accounts()}
 	for _, e := range notify.Events {
 		view.NotifyEvents = append(view.NotifyEvents, string(e))
 	}
@@ -250,7 +255,7 @@ func (m *Manager) Settings() SettingsView {
 		p := m.cfg.Providers[n]
 		_, fromOverlay := m.overlay.Providers[n]
 		v := ProviderView{Name: n, Kind: p.Kind, Model: p.Model, BaseURL: p.BaseURL, APIKeySet: p.Options().APIKey != "",
-			APIKeyEnv: p.APIKeyEnv, MaxTokens: p.MaxTokens, Temperature: p.Temperature, Default: n == m.cfg.DefaultProvider, FromFile: !fromOverlay}
+			APIKeyEnv: p.APIKeyEnv, Auth: p.Auth, MaxTokens: p.MaxTokens, Temperature: p.Temperature, Default: n == m.cfg.DefaultProvider, FromFile: !fromOverlay}
 		if c, err := m.providers.Get(n); err == nil {
 			v.Describe = c.Describe()
 		} else {
@@ -290,7 +295,7 @@ func (m *Manager) SetProvider(name string, p config.Provider) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if p.APIKey == "" {
+	if p.APIKey == "" && p.Auth == "" {
 		if old, ok := m.cfg.Providers[name]; ok {
 			p.APIKey = old.APIKey
 		}

@@ -257,7 +257,7 @@ func TestExtraHeadersAndPostEncoding(t *testing.T) {
 	if r.heads[0].Get("X-Team") != "cats" || r.heads[0].Get("Authorization") != "" {
 		t.Errorf("headers = %v", r.heads[0])
 	}
-	if _, err := c.post(context.Background(), "/x", map[string]any{"f": func() {}}); err == nil {
+	if _, err := c.post(context.Background(), target{base: "http://x"}, "/x", map[string]any{"f": func() {}}); err == nil {
 		t.Error("an unencodable body fails")
 	}
 }

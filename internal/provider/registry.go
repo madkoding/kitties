@@ -13,6 +13,23 @@ type Registry struct {
 	mu      sync.RWMutex
 	clients map[string]Client
 	options map[string]Options
+	// login gives the account of a kind, for the profiles that sign in instead of using a key.
+	login func(kind string) LoginSource
+}
+
+// SetLogin sets where the profiles that sign in with an account get its credentials.
+func (r *Registry) SetLogin(fn func(kind string) LoginSource) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.login = fn
+}
+
+// Open builds the client for opts: the claude program for claude-code, HTTP for the rest.
+func Open(opts Options) (Client, error) {
+	if k, ok := Lookup(opts.Kind); ok && k.Family == FamilyCLI {
+		return NewClaude(opts)
+	}
+	return New(opts)
 }
 
 // NewRegistry creates an empty registry.
@@ -30,7 +47,13 @@ func (r *Registry) Add(name string, c Client, opts Options) {
 
 // Build creates the HTTP client for opts and registers it under name.
 func (r *Registry) Build(name string, opts Options) error {
-	c, err := New(opts)
+	r.mu.RLock()
+	login := r.login
+	r.mu.RUnlock()
+	if opts.Auth == AuthLogin && opts.Login == nil && login != nil {
+		opts.Login = login(opts.Kind)
+	}
+	c, err := Open(opts)
 	if err != nil {
 		return fmt.Errorf("provider %q: %w", name, err)
 	}

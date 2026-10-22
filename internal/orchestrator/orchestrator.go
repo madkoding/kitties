@@ -21,6 +21,7 @@ import (
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/llmauth"
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/soul"
@@ -56,8 +57,10 @@ type Manager struct {
 	buildErrors map[string]string
 	// oauth signs the Google and Microsoft connectors in and keeps their tokens fresh.
 	oauth *oauth.Manager
-	now   func() time.Time
-	newID func() string
+	// accounts are the AI sign-ins (ChatGPT, Copilot, Google) the profiles think on.
+	accounts *llmauth.Manager
+	now      func() time.Time
+	newID    func() string
 }
 
 // Option tunes a manager.
@@ -87,11 +90,13 @@ func New(cfg config.Config, opts ...Option) (*Manager, error) {
 		o(m)
 	}
 	m.oauth = oauth.New(m)
+	m.accounts = llmauth.New(filepath.Join(cfg.DataDirOr(), "accounts"))
 	if err := m.loadSettings(); err != nil {
 		return nil, err
 	}
 	if m.providers == nil {
 		m.providers = provider.NewRegistry()
+		m.providers.SetLogin(m.accounts.Source)
 		for name, p := range m.cfg.Providers {
 			if err := m.providers.Build(name, p.Options()); err != nil {
 				// A profile without its key is kept on the page, with the reason, instead of
@@ -99,6 +104,8 @@ func New(cfg config.Config, opts ...Option) (*Manager, error) {
 				m.buildErrors[name] = err.Error()
 			}
 		}
+	} else {
+		m.providers.SetLogin(m.accounts.Source)
 	}
 	for name, c := range m.cfg.Connectors {
 		m.connectors.Add(name, m.buildConnector(name, c))
@@ -127,6 +134,9 @@ func (m *Manager) buildConnector(name string, c config.Connector) connector.Conn
 	}
 	return built
 }
+
+// Accounts is the sign-in manager of the AI profiles.
+func (m *Manager) Accounts() *llmauth.Manager { return m.accounts }
 
 // OAuth is the sign-in manager of the connectors.
 func (m *Manager) OAuth() *oauth.Manager { return m.oauth }

@@ -23,6 +23,7 @@ import (
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/llmauth"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/orchestrator"
@@ -53,6 +54,8 @@ type Fleet interface {
 	SetConnector(name string, c config.Connector) error
 	RemoveConnector(name string) error
 	OAuth() *oauth.Manager
+	// Accounts are the AI sign-ins (ChatGPT, Copilot, Google, Claude) of the profiles.
+	Accounts() *llmauth.Manager
 	// InboundSecret is the secret a service presents to post events to a connector.
 	InboundSecret(name string) (string, error)
 	// Notify is where the person is told outside the interface; SetNotify changes it.
@@ -168,6 +171,7 @@ func (s *Server) routes() {
 	s.mux.Handle("DELETE /v1/settings/connectors/{name}", api(s.handleRemoveConnector))
 	s.mux.HandleFunc("GET /v1/local-token", s.handleLocalToken)
 	s.agendaRoutes()
+	s.accountRoutes()
 	s.approvalRoutes()
 	s.memoryRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))

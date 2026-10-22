@@ -60,6 +60,9 @@ type Provider struct {
 	Headers     map[string]string `yaml:"headers" json:"headers,omitempty"`
 	// Tools is native (the provider's own calls, the default) or text (lines in the prompt).
 	Tools string `yaml:"tools" json:"tools,omitempty"`
+	// Auth is empty for a key, or login for an account signed in from Settings (a ChatGPT plan
+	// for codex, GitHub Copilot, a Google login for gemini).
+	Auth string `yaml:"auth" json:"auth,omitempty"`
 }
 
 // Options converts the profile into what the provider package takes.
@@ -70,7 +73,7 @@ func (p Provider) Options() provider.Options {
 	}
 	return provider.Options{
 		Kind: p.Kind, Model: p.Model, APIKey: key, BaseURL: p.BaseURL, MaxTokens: p.MaxTokens,
-		Temperature: p.Temperature, Timeout: p.Timeout, MaxAttempts: p.MaxAttempts, Headers: p.Headers, Tools: p.Tools,
+		Temperature: p.Temperature, Timeout: p.Timeout, MaxAttempts: p.MaxAttempts, Headers: p.Headers, Tools: p.Tools, Auth: p.Auth,
 	}
 }
 
@@ -258,8 +261,15 @@ func ValidateProvider(name string, p Provider) error {
 	if !ValidName(name) {
 		return fmt.Errorf("providers.%s: a profile name is lowercase letters, digits and dashes", name)
 	}
-	if _, ok := provider.Lookup(p.Kind); !ok {
+	kind, ok := provider.Lookup(p.Kind)
+	if !ok {
 		return fmt.Errorf("providers.%s.kind: %q is not one of %s", name, p.Kind, strings.Join(provider.Kinds(), ", "))
+	}
+	switch {
+	case p.Auth != "" && p.Auth != provider.AuthLogin:
+		return fmt.Errorf("providers.%s.auth: %q is not login (or empty, for a key)", name, p.Auth)
+	case p.Auth == provider.AuthLogin && kind.Login == "":
+		return fmt.Errorf("providers.%s.auth: %s has no account to sign in with, it takes an API key", name, p.Kind)
 	}
 	if p.APIKey != "" && strings.HasPrefix(strings.ToLower(p.BaseURL), "http://") && !isLocal(p.BaseURL) {
 		return fmt.Errorf("providers.%s.base_url: plain http to a remote host would send the key in clear text", name)

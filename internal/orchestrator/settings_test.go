@@ -310,3 +310,23 @@ func TestOAuthStore(t *testing.T) {
 		t.Errorf("the token source is wired: %v", err)
 	}
 }
+
+func TestSettingsAccounts(t *testing.T) {
+	m, err := New(testConfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetProvider("plan", config.Provider{Kind: "codex", Auth: "login", APIKey: "sk-not-kept"}); err != nil {
+		t.Fatal(err)
+	}
+	v := find(m.Settings().Providers, "plan")
+	if v == nil || v.Auth != "login" || v.Error != "" || v.Describe != "codex/gpt-5.5-codex" {
+		t.Errorf("signed-in profile = %+v", v)
+	}
+	if len(m.Settings().Accounts) == 0 || m.Accounts() == nil {
+		t.Error("the page lists the accounts")
+	}
+	if _, err := m.TestProvider(context.Background(), "plan"); err == nil || !strings.Contains(err.Error(), "sign in from Settings") {
+		t.Errorf("a profile without its account = %v", err)
+	}
+}
