@@ -12,6 +12,7 @@ import (
 
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/provider"
 )
 
@@ -129,6 +130,10 @@ type ConnectorView struct {
 	Settings    map[string]string `json:"settings"`
 	SecretsSet  []string          `json:"secrets_set"`
 	FromFile    bool              `json:"from_file"`
+	// OAuth is the identity service of the kind, and SignedIn/Account say whether a sign-in is there.
+	OAuth    string `json:"oauth,omitempty"`
+	SignedIn bool   `json:"signed_in,omitempty"`
+	Account  string `json:"account,omitempty"`
 }
 
 // connectorView masks the secrets of one connector.
@@ -144,8 +149,8 @@ func connectorView(name string, c config.Connector, fromFile bool) ConnectorView
 		}
 	}
 	for k, v := range all {
-		if secret[k] {
-			if v != "" {
+		if secret[k] || strings.HasPrefix(k, "oauth_") {
+			if v != "" && secret[k] {
 				secrets = append(secrets, k)
 			}
 			continue
@@ -153,8 +158,10 @@ func connectorView(name string, c config.Connector, fromFile bool) ConnectorView
 		shown[k] = v
 	}
 	sort.Strings(secrets)
+	creds := oauth.FromSettings(all)
 	return ConnectorView{Name: name, Kind: c.Kind, Category: kind.Category, Label: kind.Label, Description: c.Description, URL: shown["url"],
-		TokenSet: c.Token != "" || all["token"] != "", ChatID: c.ChatID, Command: c.Command, Settings: shown, SecretsSet: secrets, FromFile: fromFile}
+		TokenSet: c.Token != "" || all["token"] != "", ChatID: c.ChatID, Command: c.Command, Settings: shown, SecretsSet: secrets, FromFile: fromFile,
+		OAuth: kind.OAuth, SignedIn: kind.OAuth != "" && creds.SignedIn(), Account: creds.Account}
 }
 
 // SettingsView is the settings page.
@@ -321,13 +328,22 @@ func (m *Manager) SetConnector(name string, c config.Connector) error {
 		}
 		kind, _ := connector.LookupKind(c.Kind)
 		oldS := old.ConnectorSettings()
-		for _, f := range kind.Fields {
-			if f.Secret && strings.TrimSpace(c.Settings[f.Name]) == "" && oldS[f.Name] != "" {
+		keep := func(key string) {
+			if strings.TrimSpace(c.Settings[key]) == "" && oldS[key] != "" {
 				if c.Settings == nil {
 					c.Settings = map[string]string{}
 				}
-				c.Settings[f.Name] = oldS[f.Name]
+				c.Settings[key] = oldS[key]
 			}
+		}
+		for _, f := range kind.Fields {
+			if f.Secret {
+				keep(f.Name)
+			}
+		}
+		// A sign-in survives an edit of the other fields.
+		for _, key := range []string{oauth.KeyAccess, oauth.KeyRefresh, oauth.KeyExpiry, oauth.KeyAccount} {
+			keep(key)
 		}
 	}
 	if err := config.ValidateConnector(name, c, m.cfg.Motita.URL); err != nil {
@@ -342,7 +358,7 @@ func (m *Manager) SetConnector(name string, c config.Connector) error {
 	m.overlay.Connectors[name] = c
 	m.overlay.Removed.Connectors = without(m.overlay.Removed.Connectors, name)
 	m.cfg.Connectors[name] = c
-	m.connectors.Add(name, buildConnector(c, m.cfg.Motita))
+	m.connectors.Add(name, m.buildConnector(name, c))
 	return m.saveSettings()
 }
 

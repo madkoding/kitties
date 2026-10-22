@@ -2,6 +2,7 @@ package connector
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -43,8 +45,12 @@ type Kind struct {
 	Help     string   `json:"help"`
 	Fields   []Field  `json:"fields"`
 	Actions  []Action `json:"actions"`
+	// OAuth names the identity service the kind signs in with ("google", "microsoft"), empty
+	// for a kind that takes a key or a token.
+	OAuth string `json:"oauth,omitempty"`
 	// make builds the connector; nil for the kinds built elsewhere (shell, motita, webhook).
-	make func(s Settings) Connector
+	make  func(s Settings) Connector
+	oauth string
 }
 
 // The categories, in the order the page shows them.
@@ -162,6 +168,22 @@ func catalog() []Kind {
 		{Name: "teams", Category: CatMessaging, Label: "Microsoft Teams", Help: "posts to a Teams channel through a workflow webhook",
 			Fields: []Field{f("url", "Webhook URL", "", true, true)}, Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeTeams},
 		// ── office ─────────────────────────────────────────────────────────────────────────────
+		{Name: "google-workspace", Category: CatOffice, Label: "Google Workspace", Help: "Gmail, Calendar, Drive, Sheets and Docs of a Google account, signed in with OAuth",
+			Fields: []Field{f("client_id", "OAuth client id", "a Desktop or Web client of your Google Cloud project", true, false), f("client_secret", "OAuth client secret", "", false, true)},
+			Actions: []Action{
+				{Name: "send_mail", Help: "send a mail from the account", Args: []string{"to", "subject", fText}},
+				{Name: "create_event", Help: "add a calendar event", Args: []string{"summary", "start (RFC 3339)", "end (RFC 3339)", "description (optional)"}},
+				{Name: "upload", Help: "create a text file in Drive", Args: []string{"name", fContent}},
+				{Name: "append_row", Help: "append a row to a spreadsheet", Args: []string{"spreadsheet (id)", "values (a list)", "range (optional, Sheet1!A1)"}},
+				{Name: "create_doc", Help: "create a document with text", Args: []string{fTitle, fText}},
+			}, make: makeGoogleWorkspace, oauth: "google"},
+		{Name: "microsoft-365", Category: CatOffice, Label: "Microsoft 365", Help: "Outlook mail, Calendar and OneDrive of a Microsoft account, signed in with OAuth",
+			Fields: []Field{f("client_id", "Application (client) id", "an app registration in Entra ID with a public client or a secret", true, false), f("client_secret", "Client secret", "", false, true)},
+			Actions: []Action{
+				{Name: "send_mail", Help: "send a mail from the account", Args: []string{"to", "subject", fText}},
+				{Name: "create_event", Help: "add a calendar event", Args: []string{"subject", "start (RFC 3339)", "end (RFC 3339)", "body (optional)"}},
+				{Name: "upload", Help: "create a text file in OneDrive", Args: []string{"name", fContent}},
+			}, make: makeMicrosoft365, oauth: "microsoft"},
 		{Name: "airtable", Category: CatOffice, Label: "Airtable", Help: "records in an Airtable table",
 			Fields:  []Field{f("token", "Personal access token", "", true, true), f("base", "Base id", "app…", true, false), f("table", "Table", "", true, false)},
 			Actions: []Action{{Name: "add_record", Help: "add a record", Args: []string{"fields (an object of column: value)"}}}, make: makeAirtable},
@@ -194,6 +216,9 @@ func catalog() []Kind {
 // Kinds lists the catalogue, by category then name.
 func Kinds() []Kind {
 	out := append([]Kind(nil), Catalog...)
+	for i := range out {
+		out[i].OAuth = out[i].oauth
+	}
 	sort.SliceStable(out, func(i, j int) bool {
 		ci, cj := indexOf(Categories, out[i].Category), indexOf(Categories, out[j].Category)
 		if ci != cj {
@@ -217,10 +242,52 @@ func indexOf(list []string, s string) int {
 func LookupKind(name string) (Kind, bool) {
 	for _, k := range Catalog {
 		if k.Name == name {
+			k.OAuth = k.oauth
 			return k, true
 		}
 	}
 	return Kind{}, false
+}
+
+// TokenSource hands a connector a valid bearer token for its account, refreshing it when needed.
+type TokenSource func(ctx context.Context) (string, error)
+
+// tokenKey is the settings entry a token source is passed through: not a setting a person
+// types, but what Build reads to wire OAuth kinds (see WithTokenSource).
+const tokenKey = "\x00token_source"
+
+// sources are the token sources handed to Build, by a key Build removes again.
+var (
+	sourcesMu sync.Mutex
+	sources   = map[string]TokenSource{}
+)
+
+// WithTokenSource returns settings that carry the token source for an OAuth kind.
+func WithTokenSource(s Settings, src TokenSource) Settings {
+	out := Settings{}
+	for k, v := range s {
+		out[k] = v
+	}
+	key := fmt.Sprintf("src-%p", &src)
+	sourcesMu.Lock()
+	sources[key] = src
+	sourcesMu.Unlock()
+	out[tokenKey] = key
+	return out
+}
+
+// tokenSourceOf takes the token source out of the settings, if one was given.
+func tokenSourceOf(s Settings) TokenSource {
+	key, ok := s[tokenKey]
+	if !ok {
+		return nil
+	}
+	delete(s, tokenKey)
+	sourcesMu.Lock()
+	defer sourcesMu.Unlock()
+	src := sources[key]
+	delete(sources, key)
+	return src
 }
 
 // Validate checks that the settings hold what the kind requires.
@@ -255,7 +322,11 @@ func Build(kind string, s Settings, description string) (Connector, error) {
 	case "webhook":
 		return Webhook{URL: s["url"], Headers: parseHeaders(s["headers"]), Description: description}, nil
 	}
+	src := tokenSourceOf(s)
 	c := k.make(s)
+	if a, ok := c.(*api); ok && src != nil {
+		a.token = src
+	}
 	if description != "" {
 		return described{Connector: c, text: description + " " + actionsHelp(k)}, nil
 	}
@@ -327,6 +398,8 @@ type api struct {
 	first   string
 	// render turns a successful answer into what the model reads.
 	render func(action string, data []byte) string
+	// token, when set, signs every request with the account's bearer token (OAuth kinds).
+	token TokenSource
 }
 
 func newAPI(kind string, s Settings, actions map[string]actionFn, first string) *api {
@@ -360,6 +433,19 @@ func (a *api) call(ctx context.Context, args map[string]any) (text, name string,
 	req, err := fn(a.s, args)
 	if err != nil {
 		return "", "", nil, err
+	}
+	if a.kind.oauth != "" {
+		if a.token == nil {
+			return "", "", nil, errors.New("not signed in: connect the account from Settings")
+		}
+		tok, err := a.token(ctx)
+		if err != nil {
+			return "", "", nil, err
+		}
+		if req.headers == nil {
+			req.headers = map[string]string{}
+		}
+		req.headers["Authorization"] = "Bearer " + tok
 	}
 	raw, err := do(ctx, req)
 	if err != nil {
@@ -981,6 +1067,133 @@ func makeSheets(s Settings) Connector {
 		}
 		return request{method: "POST", url: s["url"], body: map[string]any{"values": values}}, nil
 	}}, "append_row")
+}
+
+// mailRFC822 renders a plain mail for Gmail's raw send.
+func mailRFC822(from, to, subject, text string) string {
+	head := ""
+	if from != "" {
+		head += "From: " + from + "\r\n"
+	}
+	return head + "To: " + to + "\r\nSubject: " + subject + "\r\nContent-Type: text/plain; charset=utf-8\r\n\r\n" + text
+}
+
+func makeGoogleWorkspace(s Settings) Connector {
+	c := newAPI("google-workspace", s, map[string]actionFn{
+		"send_mail": func(s Settings, a map[string]any) (request, error) {
+			to, err := need(a, "to")
+			if err != nil {
+				return request{}, err
+			}
+			text, err := need(a, "text", "body")
+			if err != nil {
+				return request{}, err
+			}
+			raw := base64.RawURLEncoding.EncodeToString([]byte(mailRFC822("", to, str(a, "subject"), text)))
+			return request{method: "POST", url: "https://gmail.googleapis.com/gmail/v1/users/me/messages/send", body: map[string]any{"raw": raw}}, nil
+		},
+		"create_event": func(s Settings, a map[string]any) (request, error) {
+			summary, err := need(a, "summary", "title", "text")
+			if err != nil {
+				return request{}, err
+			}
+			start, err := need(a, "start")
+			if err != nil {
+				return request{}, err
+			}
+			end := str(a, "end")
+			if end == "" {
+				end = start
+			}
+			return request{method: "POST", url: "https://www.googleapis.com/calendar/v3/calendars/primary/events", body: map[string]any{
+				"summary": summary, "description": str(a, "description"), "start": map[string]any{"dateTime": start}, "end": map[string]any{"dateTime": end}}}, nil
+		},
+		"upload": func(s Settings, a map[string]any) (request, error) {
+			name, err := need(a, "name")
+			if err != nil {
+				return request{}, err
+			}
+			content := str(a, "content", "text")
+			meta, _ := json.Marshal(map[string]any{"name": name})
+			boundary := "kitties-boundary"
+			body := "--" + boundary + "\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n" + string(meta) +
+				"\r\n--" + boundary + "\r\nContent-Type: text/plain\r\n\r\n" + content + "\r\n--" + boundary + "--"
+			return request{method: "POST", url: "https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart", raw: []byte(body), ctype: "multipart/related; boundary=" + boundary}, nil
+		},
+		"append_row": func(s Settings, a map[string]any) (request, error) {
+			id, err := need(a, "spreadsheet", "id")
+			if err != nil {
+				return request{}, err
+			}
+			values, ok := a["values"].([]any)
+			if !ok || len(values) == 0 {
+				return request{}, errors.New("values is missing (a list)")
+			}
+			rng := str(a, "range")
+			if rng == "" {
+				rng = "Sheet1!A1"
+			}
+			return request{method: "POST", url: "https://sheets.googleapis.com/v4/spreadsheets/" + url.PathEscape(id) + "/values/" + url.PathEscape(rng) + ":append?valueInputOption=USER_ENTERED",
+				body: map[string]any{"values": []any{values}}}, nil
+		},
+		"create_doc": func(s Settings, a map[string]any) (request, error) {
+			title, err := need(a, "title", "name")
+			if err != nil {
+				return request{}, err
+			}
+			return request{method: "POST", url: "https://docs.googleapis.com/v1/documents", body: map[string]any{"title": title}}, nil
+		},
+	}, "send_mail")
+	return c
+}
+
+func makeMicrosoft365(s Settings) Connector {
+	return newAPI("microsoft-365", s, map[string]actionFn{
+		"send_mail": func(s Settings, a map[string]any) (request, error) {
+			to, err := need(a, "to")
+			if err != nil {
+				return request{}, err
+			}
+			text, err := need(a, "text", "body")
+			if err != nil {
+				return request{}, err
+			}
+			var recipients []map[string]any
+			for _, addr := range strings.Split(to, ",") {
+				recipients = append(recipients, map[string]any{"emailAddress": map[string]any{"address": strings.TrimSpace(addr)}})
+			}
+			return request{method: "POST", url: "https://graph.microsoft.com/v1.0/me/sendMail", body: map[string]any{"message": map[string]any{
+				"subject": str(a, "subject"), "body": map[string]any{"contentType": "Text", "content": text}, "toRecipients": recipients}}}, nil
+		},
+		"create_event": func(s Settings, a map[string]any) (request, error) {
+			subject, err := need(a, "subject", "summary", "title", "text")
+			if err != nil {
+				return request{}, err
+			}
+			start, err := need(a, "start")
+			if err != nil {
+				return request{}, err
+			}
+			end := str(a, "end")
+			if end == "" {
+				end = start
+			}
+			return request{method: "POST", url: "https://graph.microsoft.com/v1.0/me/events", body: map[string]any{
+				"subject": subject, "body": map[string]any{"contentType": "Text", "content": str(a, "body", "description")},
+				"start": map[string]any{"dateTime": start, "timeZone": "UTC"}, "end": map[string]any{"dateTime": end, "timeZone": "UTC"}}}, nil
+		},
+		"upload": func(s Settings, a map[string]any) (request, error) {
+			name, err := need(a, "name")
+			if err != nil {
+				return request{}, err
+			}
+			if strings.Contains(name, "..") || strings.Contains(name, "/") {
+				return request{}, errors.New("name is a plain file name")
+			}
+			return request{method: "PUT", url: "https://graph.microsoft.com/v1.0/me/drive/root:/Kitties/" + url.PathEscape(name) + ":/content",
+				raw: []byte(str(a, "content", "text")), ctype: "text/plain"}, nil
+		},
+	}, "send_mail")
 }
 
 // ── drawing ────────────────────────────────────────────────────────────────────────────────

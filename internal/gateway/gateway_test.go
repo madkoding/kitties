@@ -20,6 +20,7 @@ import (
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/skills"
@@ -155,6 +156,25 @@ func (f *fakeFleet) RemoveConnector(name string) error {
 	return nil
 }
 
+// oauthStore is a fleet's OAuth side for the tests: one connector "g" with a Google app.
+type oauthStore struct{ creds oauth.Credentials }
+
+func (o *oauthStore) OAuthApp(name string) (string, string, string, error) {
+	if name != "g" {
+		return "", "", "", errors.New("connector \"x\" does not sign in with OAuth")
+	}
+	return "google", "cid", "sec", nil
+}
+func (o *oauthStore) OAuthCredentials(string) (oauth.Credentials, error) { return o.creds, nil }
+func (o *oauthStore) SaveOAuthCredentials(_ string, c oauth.Credentials) error {
+	o.creds = c
+	return nil
+}
+
+var sharedOAuth = oauth.New(&oauthStore{})
+
+func (f *fakeFleet) OAuth() *oauth.Manager { return sharedOAuth }
+
 type fakeChats struct {
 	sessions map[string]*chat.Session
 	fail     error
@@ -206,6 +226,12 @@ func (c *fakeChats) RemoveMember(id, ref string) (*chat.Session, error) {
 	return s, nil
 }
 func (c *fakeChats) Cancel(id string) bool { return id == "c1" }
+func (c *fakeChats) Subscribe(id string) (<-chan chat.Event, func()) {
+	ch := make(chan chat.Event, 4)
+	ch <- chat.Event{Type: "turn", Session: id, Index: 0, Turn: &chat.Turn{From: "user", Text: "hi"}}
+	ch <- chat.Event{Type: "deleted", Session: id}
+	return ch, func() {}
+}
 func (c *fakeChats) Shot(id, name string) ([]byte, error) {
 	if id != "c1" || name != "1-1.png" {
 		return nil, errors.New("no such screenshot")
@@ -606,6 +632,61 @@ func TestLibraryRoutes(t *testing.T) {
 		t.Error("unreadable artifacts")
 	}
 }
+
+func TestEventsAndOAuth(t *testing.T) {
+	srv, _, c := setup(t)
+	c.sessions["c1"] = &chat.Session{ID: "c1", Members: []string{"a1"}}
+	code, _, data := call(t, srv, "GET", "/v1/chats/c1/events", "tok", nil)
+	text := string(data)
+	if code != 200 || !strings.HasPrefix(text, "event: hello") || !strings.Contains(text, "event: turn\ndata: {\"type\":\"turn\"") || !strings.Contains(text, "event: deleted") {
+		t.Errorf("events = %d %q", code, text)
+	}
+	if code, _, _ := call(t, srv, "GET", "/v1/chats/zz/events", "tok", nil); code != 404 {
+		t.Error("events of an unknown chat")
+	}
+	rec := httptest.NewRecorder()
+	// A writer that cannot flush is refused; the recorder flushes, so a plain writer stands in.
+	plain := &noFlush{ResponseWriter: rec}
+	r := httptest.NewRequest("GET", "/v1/chats/c1/events", nil)
+	r.Header.Set("Authorization", "Bearer tok")
+	New(&fakeFleet{kitties: map[string]*kitty.Kitty{}}, c, "tok", "").ServeHTTP(plain, r)
+	if rec.Code != 500 {
+		t.Errorf("no flusher = %d", rec.Code)
+	}
+	code, m, _ := call(t, srv, "POST", "/v1/oauth/g/start", "tok", nil)
+	if code != 200 || !strings.Contains(m["url"].(string), "accounts.google.com") || !strings.Contains(m["url"].(string), "redirect_uri=http%3A%2F%2F127.0.0.1") || !strings.HasSuffix(m["redirect"].(string), "/v1/oauth/callback") {
+		t.Errorf("oauth start = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/oauth/x/start", "tok", nil); code != 400 {
+		t.Error("a connector without OAuth")
+	}
+	if code, _, data := call(t, srv, "GET", "/v1/oauth/callback?error=access_denied&error_description=no", "", nil); code != 400 || !strings.Contains(string(data), "Sign-in refused") {
+		t.Errorf("callback error = %d %s", code, data)
+	}
+	if code, _, data := call(t, srv, "GET", "/v1/oauth/callback?state=nope&code=c", "", nil); code != 400 || !strings.Contains(string(data), "Sign-in failed") {
+		t.Errorf("callback unknown state = %d %s", code, data)
+	}
+	// A real exchange, against a token endpoint that answers.
+	token := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"access_token":"at","refresh_token":"rt","expires_in":3600}`))
+	}))
+	defer token.Close()
+	google := oauth.Providers["google"]
+	google.TokenURL = token.URL
+	oauth.Providers["google"] = google
+	defer func() {
+		google.TokenURL = "https://oauth2.googleapis.com/token"
+		oauth.Providers["google"] = google
+	}()
+	_, m, _ = call(t, srv, "POST", "/v1/oauth/g/start", "tok", nil)
+	u, _ := http.NewRequest("GET", m["url"].(string), nil)
+	state := u.URL.Query().Get("state")
+	if code, _, data := call(t, srv, "GET", "/v1/oauth/callback?state="+state+"&code=the-code", "", nil); code != 200 || !strings.Contains(string(data), "Connected") {
+		t.Errorf("callback = %d %s", code, data)
+	}
+}
+
+type noFlush struct{ http.ResponseWriter }
 
 func TestLocalToken(t *testing.T) {
 	srv, _, _ := setup(t)

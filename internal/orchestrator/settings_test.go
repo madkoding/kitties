@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/config"
+	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/provider"
 )
 
@@ -219,4 +221,69 @@ func findC(list []ConnectorView, name string) *ConnectorView {
 		}
 	}
 	return nil
+}
+
+func TestOAuthStore(t *testing.T) {
+	cfg := testConfig(t)
+	m, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if m.OAuth() == nil {
+		t.Fatal("the manager has an OAuth manager")
+	}
+	if err := m.SetConnector("gw", config.Connector{Kind: "google-workspace", Settings: map[string]string{"client_id": "cid", "client_secret": "sec"}}); err != nil {
+		t.Fatal(err)
+	}
+	prov, id, secret, err := m.OAuthApp("gw")
+	if err != nil || prov != "google" || id != "cid" || secret != "sec" {
+		t.Errorf("OAuthApp = %s %s %s %v", prov, id, secret, err)
+	}
+	if _, _, _, err := m.OAuthApp("zz"); err == nil {
+		t.Error("unknown connector")
+	}
+	if _, _, _, err := m.OAuthApp("sl"); err == nil {
+		t.Error("slack does not sign in")
+	}
+	if c, err := m.OAuthCredentials("gw"); err != nil || c.SignedIn() {
+		t.Errorf("not signed in yet: %+v %v", c, err)
+	}
+	if _, err := m.OAuthCredentials("zz"); err == nil {
+		t.Error("unknown connector credentials")
+	}
+	creds := oauth.Credentials{AccessToken: "at", RefreshToken: "rt", Expiry: time.Now().Add(time.Hour), Account: "me@x"}
+	if err := m.SaveOAuthCredentials("gw", creds); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SaveOAuthCredentials("zz", creds); err == nil {
+		t.Error("save for unknown connector")
+	}
+	v := findC(m.Settings().Connectors, "gw")
+	if v == nil || v.OAuth != "google" || !v.SignedIn || v.Account != "me@x" || v.Settings["oauth_access_token"] != "" || v.Settings["client_id"] != "cid" {
+		t.Errorf("view = %+v", v)
+	}
+	// An edit of the other fields keeps the sign-in; the token source reads it back.
+	if err := m.SetConnector("gw", config.Connector{Kind: "google-workspace", Description: "mail", Settings: map[string]string{"client_id": "cid2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if c, _ := m.OAuthCredentials("gw"); !c.SignedIn() || c.Account != "me@x" {
+		t.Errorf("sign-in survives an edit: %+v", c)
+	}
+	if _, _, secret, _ := m.OAuthApp("gw"); secret != "sec" {
+		t.Error("the secret survives an edit")
+	}
+	if tok, err := m.OAuth().Token(context.Background(), "gw"); err != nil || tok != "at" {
+		t.Errorf("Token = %q %v", tok, err)
+	}
+	again, _ := New(cfg)
+	if c, _ := again.OAuthCredentials("gw"); !c.SignedIn() {
+		t.Error("the sign-in survives a restart")
+	}
+	conn, ok := again.Connectors().Get("gw")
+	if !ok {
+		t.Fatal("connector built")
+	}
+	if _, err := conn.Call(context.Background(), map[string]any{"to": "a@x", "text": "hi"}); err == nil || strings.Contains(err.Error(), "not signed in") {
+		t.Errorf("the token source is wired: %v", err)
+	}
 }

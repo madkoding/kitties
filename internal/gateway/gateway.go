@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -22,6 +23,7 @@ import (
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/skills"
@@ -49,6 +51,7 @@ type Fleet interface {
 	TestProvider(ctx context.Context, name string) (string, error)
 	SetConnector(name string, c config.Connector) error
 	RemoveConnector(name string) error
+	OAuth() *oauth.Manager
 }
 
 // Chats is what the gateway needs from the chat service.
@@ -62,6 +65,7 @@ type Chats interface {
 	Send(ctx context.Context, id, text string) ([]chat.Turn, error)
 	Cancel(id string) bool
 	Shot(id, name string) ([]byte, error)
+	Subscribe(id string) (<-chan chat.Event, func())
 }
 
 // Server is the HTTP API.
@@ -133,6 +137,9 @@ func (s *Server) routes() {
 	s.mux.Handle("PUT /v1/settings/connectors/{name}", api(s.handleSetConnector))
 	s.mux.Handle("DELETE /v1/settings/connectors/{name}", api(s.handleRemoveConnector))
 	s.mux.HandleFunc("GET /v1/local-token", s.handleLocalToken)
+	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
+	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
+	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
 	s.mux.Handle("GET /v1/skills", api(s.handleSkills))
 	s.mux.Handle("GET /v1/skills/{name}", api(s.handleSkill))
 	s.mux.Handle("PUT /v1/skills/{name}", api(s.handleSaveSkill))
@@ -142,6 +149,86 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /v1/artifacts/{name}", api(s.handleArtifact))
 	s.mux.Handle("PUT /v1/artifacts/{name}", api(s.handlePutArtifact))
 	s.mux.Handle("DELETE /v1/artifacts/{name}", api(s.handleDeleteArtifact))
+}
+
+// handleEvents streams a chat's turns as they come (server-sent events): one event per new
+// turn, per step of a desktop task and when a turn finishes. A heartbeat keeps proxies awake.
+func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if _, err := s.chats.Get(id); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		fail(w, http.StatusInternalServerError, errors.New("streaming is not supported here"))
+		return
+	}
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	_, _ = io.WriteString(w, "event: hello\ndata: {}\n\n")
+	flusher.Flush()
+	events, cancel := s.chats.Subscribe(id)
+	defer cancel()
+	ticker := time.NewTicker(heartbeat)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			_, _ = io.WriteString(w, ": ping\n\n")
+			flusher.Flush()
+		case ev := <-events:
+			data, err := json.Marshal(ev)
+			if err != nil {
+				continue
+			}
+			_, _ = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", ev.Type, data)
+			flusher.Flush()
+			if ev.Type == "deleted" {
+				return
+			}
+		}
+	}
+}
+
+var heartbeat = 20 * time.Second
+
+// handleOAuthStart begins a connector's sign-in and returns the consent URL for the page to open.
+func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	redirect := scheme + "://" + r.Host + "/v1/oauth/callback"
+	link, err := s.fleet.OAuth().Start(r.PathValue("name"), redirect)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"url": link, "redirect": redirect})
+}
+
+// handleOAuthCallback is where the identity service sends the browser back; it is open, since
+// the browser carries no token, and the state ties it to a flow this gateway started.
+func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
+	q := r.URL.Query()
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if e := q.Get("error"); e != "" {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = fmt.Fprintf(w, oauth.CallbackHTML, "Sign-in refused", html.EscapeString(e+" "+q.Get("error_description")))
+		return
+	}
+	name, err := s.fleet.OAuth().Exchange(r.Context(), q.Get("state"), q.Get("code"))
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = fmt.Fprintf(w, oauth.CallbackHTML, "Sign-in failed", html.EscapeString(err.Error()))
+		return
+	}
+	_, _ = fmt.Fprintf(w, oauth.CallbackHTML, "Connected", "The connector "+html.EscapeString(name)+" is signed in. You can close this window.")
 }
 
 func (s *Server) noLibrary(w http.ResponseWriter) bool {
@@ -340,7 +427,8 @@ func codeFor(err error) int {
 		strings.Contains(msg, "needs a"), strings.Contains(msg, "profile name"), strings.Contains(msg, "connector name"),
 		strings.Contains(msg, "clear text"), strings.Contains(msg, ".kind:"), strings.HasPrefix(msg, "avatar."),
 		strings.Contains(msg, "too big"), strings.Contains(msg, "too long"), strings.Contains(msg, "is empty"), strings.Contains(msg, "needs a name"),
-		strings.Contains(msg, "built in"), strings.Contains(msg, "holds"), strings.Contains(msg, " needs "), strings.Contains(msg, "not a valid"):
+		strings.Contains(msg, "built in"), strings.Contains(msg, "holds"), strings.Contains(msg, " needs "), strings.Contains(msg, "not a valid"),
+		strings.Contains(msg, "does not sign in"), strings.Contains(msg, "no OAuth flow"), strings.Contains(msg, "not signed in"):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError

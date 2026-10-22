@@ -403,3 +403,91 @@ func TestEmail(t *testing.T) {
 		t.Error("Describe")
 	}
 }
+
+func TestOAuthKinds(t *testing.T) {
+	for _, name := range []string{"google-workspace", "microsoft-365"} {
+		k, ok := LookupKind(name)
+		if !ok || k.OAuth == "" {
+			t.Errorf("%s has an OAuth flow", name)
+		}
+	}
+	found := false
+	for _, k := range Kinds() {
+		found = found || (k.Name == "google-workspace" && k.OAuth == "google")
+	}
+	if !found {
+		t.Error("Kinds carries the oauth field")
+	}
+	// Without a token source the connector refuses before any request.
+	cap := &capture{}
+	cap.install(t)
+	c, err := Build("google-workspace", Settings{"client_id": "cid"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Call(context.Background(), map[string]any{"to": "a@x", "text": "hi"}); err == nil || !strings.Contains(err.Error(), "not signed in") || len(cap.reqs) != 0 {
+		t.Errorf("no token source: %v", err)
+	}
+	// With one, every request carries the bearer token.
+	src := func(context.Context) (string, error) { return "tok", nil }
+	c, _ = Build("google-workspace", WithTokenSource(Settings{"client_id": "cid"}, src), "")
+	cases := []call{
+		{"google-workspace", nil, map[string]any{"to": "a@x", "subject": "S", "text": "hi"}, "POST", "gmail/v1/users/me/messages/send", `"raw":"`, [2]string{"Authorization", "Bearer tok"}},
+		{"google-workspace", nil, map[string]any{"action": "create_event", "summary": "Meet", "start": "2026-01-01T10:00:00Z"}, "POST", "calendar/v3/calendars/primary/events", `"dateTime":"2026-01-01T10:00:00Z"`, [2]string{}},
+		{"google-workspace", nil, map[string]any{"action": "upload", "name": "a.txt", "content": "body"}, "POST", "upload/drive/v3/files?uploadType=multipart", "body", [2]string{}},
+		{"google-workspace", nil, map[string]any{"action": "append_row", "spreadsheet": "sid", "values": []any{"a", 1.0}}, "POST", "/spreadsheets/sid/values/Sheet1%21A1:append", `"values":[["a",1]]`, [2]string{}},
+		{"google-workspace", nil, map[string]any{"action": "create_doc", "title": "Doc"}, "POST", "docs.googleapis.com/v1/documents", `"title":"Doc"`, [2]string{}},
+	}
+	for _, tc := range cases {
+		cap = &capture{}
+		cap.install(t)
+		out, err := c.Call(context.Background(), tc.args)
+		if err != nil || out == "" || len(cap.reqs) != 1 {
+			t.Errorf("%v: %q %v reqs=%d", tc.args, out, err, len(cap.reqs))
+			continue
+		}
+		req := cap.reqs[0]
+		if req.Method != tc.method || !strings.Contains(req.URL.String(), tc.url) || !strings.Contains(cap.bodies[0], tc.body) || req.Header.Get("Authorization") != "Bearer tok" {
+			t.Errorf("%v: %s %s body=%s auth=%s", tc.args, req.Method, req.URL, cap.bodies[0], req.Header.Get("Authorization"))
+		}
+	}
+	for _, args := range []map[string]any{{}, {"to": "a"}, {"action": "create_event"}, {"action": "create_event", "summary": "x"}, {"action": "upload"}, {"action": "append_row"}, {"action": "append_row", "spreadsheet": "s"}, {"action": "create_doc"}} {
+		cap = &capture{}
+		cap.install(t)
+		if _, err := c.Call(context.Background(), args); err == nil || len(cap.reqs) != 0 {
+			t.Errorf("%v must be refused", args)
+		}
+	}
+	// A token source that fails stops the call.
+	failing, _ := Build("microsoft-365", WithTokenSource(Settings{"client_id": "cid"}, func(context.Context) (string, error) { return "", errors.New("expired") }), "")
+	if _, err := failing.Call(context.Background(), map[string]any{"to": "a@x", "text": "hi"}); err == nil || !strings.Contains(err.Error(), "expired") {
+		t.Errorf("token failure: %v", err)
+	}
+	ms, _ := Build("microsoft-365", WithTokenSource(Settings{"client_id": "cid"}, src), "")
+	msCases := []call{
+		{"microsoft-365", nil, map[string]any{"to": "a@x, b@x", "subject": "S", "text": "hi"}, "POST", "graph.microsoft.com/v1.0/me/sendMail", `"address":"b@x"`, [2]string{}},
+		{"microsoft-365", nil, map[string]any{"action": "create_event", "subject": "Meet", "start": "2026-01-01T10:00:00"}, "POST", "/v1.0/me/events", `"timeZone":"UTC"`, [2]string{}},
+		{"microsoft-365", nil, map[string]any{"action": "upload", "name": "a.txt", "content": "body"}, "PUT", "/me/drive/root:/Kitties/a.txt:/content", "body", [2]string{}},
+	}
+	for _, tc := range msCases {
+		cap = &capture{}
+		cap.install(t)
+		out, err := ms.Call(context.Background(), tc.args)
+		if err != nil || out == "" || len(cap.reqs) != 1 || cap.reqs[0].Method != tc.method || !strings.Contains(cap.reqs[0].URL.String(), tc.url) || !strings.Contains(cap.bodies[0], tc.body) {
+			t.Errorf("%v: %q %v", tc.args, out, err)
+		}
+	}
+	for _, args := range []map[string]any{{}, {"to": "a"}, {"action": "create_event"}, {"action": "create_event", "subject": "x"}, {"action": "upload"}, {"action": "upload", "name": "../x"}} {
+		cap = &capture{}
+		cap.install(t)
+		if _, err := ms.Call(context.Background(), args); err == nil || len(cap.reqs) != 0 {
+			t.Errorf("%v must be refused", args)
+		}
+	}
+	if tokenSourceOf(Settings{}) != nil {
+		t.Error("no source")
+	}
+	if mailRFC822("me@x", "a@x", "S", "t") != "From: me@x\r\nTo: a@x\r\nSubject: S\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nt" {
+		t.Error("mailRFC822")
+	}
+}

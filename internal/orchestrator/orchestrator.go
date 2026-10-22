@@ -21,6 +21,7 @@ import (
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/soul"
 )
@@ -53,8 +54,10 @@ type Manager struct {
 	// overlay is what the settings page changed; buildErrors says why a profile has no client.
 	overlay     Settings
 	buildErrors map[string]string
-	now         func() time.Time
-	newID       func() string
+	// oauth signs the Google and Microsoft connectors in and keeps their tokens fresh.
+	oauth *oauth.Manager
+	now   func() time.Time
+	newID func() string
 }
 
 // Option tunes a manager.
@@ -83,6 +86,7 @@ func New(cfg config.Config, opts ...Option) (*Manager, error) {
 	for _, o := range opts {
 		o(m)
 	}
+	m.oauth = oauth.New(m)
 	if err := m.loadSettings(); err != nil {
 		return nil, err
 	}
@@ -97,7 +101,7 @@ func New(cfg config.Config, opts ...Option) (*Manager, error) {
 		}
 	}
 	for name, c := range m.cfg.Connectors {
-		m.connectors.Add(name, buildConnector(c, m.cfg.Motita))
+		m.connectors.Add(name, m.buildConnector(name, c))
 	}
 	if err := m.load(); err != nil {
 		return nil, err
@@ -105,19 +109,74 @@ func New(cfg config.Config, opts ...Option) (*Manager, error) {
 	return m, nil
 }
 
-// buildConnector makes the connector of one configured entry through the catalogue. An entry
-// that does not validate (it was checked before) falls back to a webhook, which never happens
-// in practice.
-func buildConnector(c config.Connector, mt config.Motita) connector.Connector {
+// buildConnector makes the connector of one configured entry through the catalogue. An OAuth
+// kind gets a token source bound to its name, so a refreshed token lands back in the settings.
+// An entry that does not validate (it was checked before) falls back to a webhook, which never
+// happens in practice.
+func (m *Manager) buildConnector(name string, c config.Connector) connector.Connector {
 	s := c.ConnectorSettings()
 	if c.Kind == "motita" && s["url"] == "" {
-		s["url"], s["token"] = mt.URL, mt.Token
+		s["url"], s["token"] = m.cfg.Motita.URL, m.cfg.Motita.Token
+	}
+	if kind, ok := connector.LookupKind(c.Kind); ok && kind.OAuth != "" {
+		s = connector.WithTokenSource(s, func(ctx context.Context) (string, error) { return m.oauth.Token(ctx, name) })
 	}
 	built, err := connector.Build(c.Kind, s, c.Description)
 	if err != nil {
 		return connector.Webhook{URL: s["url"], Description: c.Description}
 	}
 	return built
+}
+
+// OAuth is the sign-in manager of the connectors.
+func (m *Manager) OAuth() *oauth.Manager { return m.oauth }
+
+// OAuthApp implements oauth.Store: the connector's identity service and OAuth app.
+func (m *Manager) OAuthApp(name string) (string, string, string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	c, ok := m.cfg.Connectors[name]
+	if !ok {
+		return "", "", "", fmt.Errorf("%w: connector %q", ErrNotFound, name)
+	}
+	kind, ok := connector.LookupKind(c.Kind)
+	if !ok || kind.OAuth == "" {
+		return "", "", "", fmt.Errorf("connector %q does not sign in with OAuth", name)
+	}
+	s := c.ConnectorSettings()
+	return kind.OAuth, s["client_id"], s["client_secret"], nil
+}
+
+// OAuthCredentials implements oauth.Store.
+func (m *Manager) OAuthCredentials(name string) (oauth.Credentials, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	c, ok := m.cfg.Connectors[name]
+	if !ok {
+		return oauth.Credentials{}, fmt.Errorf("%w: connector %q", ErrNotFound, name)
+	}
+	return oauth.FromSettings(c.ConnectorSettings()), nil
+}
+
+// SaveOAuthCredentials implements oauth.Store: the tokens go into the connector's settings.
+func (m *Manager) SaveOAuthCredentials(name string, creds oauth.Credentials) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.cfg.Connectors[name]
+	if !ok {
+		return fmt.Errorf("%w: connector %q", ErrNotFound, name)
+	}
+	if c.Settings == nil {
+		c.Settings = map[string]string{}
+	}
+	creds.ToSettings(c.Settings)
+	if m.overlay.Connectors == nil {
+		m.overlay.Connectors = map[string]config.Connector{}
+	}
+	m.overlay.Connectors[name] = c
+	m.cfg.Connectors[name] = c
+	m.connectors.Add(name, m.buildConnector(name, c))
+	return m.saveSettings()
 }
 
 func randomID() string {
