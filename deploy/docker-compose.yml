@@ -1,0 +1,53 @@
+# The gateway as a server, with Caddy in front for https:
+#
+#   sudo install -d -o 10001 /var/lib/kitties   # the gateway's state, owned by its user
+#   cp deploy/.env.example deploy/.env           # set the domain and the token
+#   docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+#
+# The gateway starts a container per kitty through the host's docker socket, so the socket is
+# mounted and the container joins its group (DOCKER_GID). That socket is root on the host: keep
+# the gateway behind its token, and read docs/DEPLOY.md before exposing it.
+
+services:
+  kitties:
+    image: ghcr.io/madkoding/kitties:latest
+    restart: unless-stopped
+    environment:
+      KITTIES_TOKEN: ${KITTIES_TOKEN:?set KITTIES_TOKEN in deploy/.env}
+      KITTIES_PUBLIC_URL: https://${KITTIES_DOMAIN:?set KITTIES_DOMAIN in deploy/.env}
+      KITTIES_TRUST_PROXY: "true"
+      # The kitties' containers mount their workspaces by host path, so the data lives at the
+      # same path inside and outside this container.
+      KITTIES_DATA_DIR: ${KITTIES_DATA:-/var/lib/kitties}
+      # Provider keys the models of your configuration read; add the ones you use.
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+    group_add:
+      - "${DOCKER_GID:-999}"
+    volumes:
+      - ${KITTIES_DATA:-/var/lib/kitties}:${KITTIES_DATA:-/var/lib/kitties}
+      - /var/run/docker.sock:/var/run/docker.sock
+    # Only Caddy reaches it; nothing is published on the host.
+    expose:
+      - "7488"
+    command: ["gateway"]
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - kitties
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      KITTIES_DOMAIN: ${KITTIES_DOMAIN}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

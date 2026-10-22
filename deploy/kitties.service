@@ -1,0 +1,37 @@
+# systemd unit for a gateway installed as a binary:
+#   sudo useradd --system --create-home --home-dir /var/lib/kitties --groups docker kitties
+#   sudo install -m 0755 kitties-linux-amd64 /usr/local/bin/kitties
+#   sudo install -d -m 0750 -o kitties /etc/kitties
+#   sudo install -m 0600 -o kitties deploy/kitties.env.example /etc/kitties/kitties.env   # then edit it
+#   sudo cp deploy/kitties.service /etc/systemd/system/ && sudo systemctl enable --now kitties
+[Unit]
+Description=Kitties gateway
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=kitties
+Group=kitties
+SupplementaryGroups=docker
+EnvironmentFile=/etc/kitties/kitties.env
+ExecStart=/usr/local/bin/kitties gateway
+Restart=on-failure
+RestartSec=5
+
+# What the gateway needs: its own state, and the network. Nothing else.
+StateDirectory=kitties
+Environment=KITTIES_DATA_DIR=/var/lib/kitties
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+ReadWritePaths=/var/lib/kitties
+
+[Install]
+WantedBy=multi-user.target

@@ -242,6 +242,19 @@ A local program never types the token: the gateway writes it to `<data_dir>/gate
 whose request is not a cross-origin fetch (no `Origin` header, or the gateway's own). A page of
 another site cannot read it, and a network peer gets 403.
 
+## Serving it (`deploy/`, `docker/gateway`)
+
+`docker/gateway/Dockerfile` builds the page, embeds it (`internal/web`) and ships the binary on
+Alpine with the docker client; the gateway starts the kitties' containers through the host's
+socket, so the data folder is mounted at the same path inside and outside (workspaces are
+mounted by host path). The page signs in with `POST /v1/login` (the token for a `HttpOnly`,
+`SameSite=Strict` session cookie, rate limited per address) and `GET /v1/session` tells it where
+it stands; `cookieLogin()` in `api.ts` says when a page uses the cookie (served by the gateway,
+not in Wails, no other address). The sign-in e2e (`login.spec.ts`) runs against a second demo
+gateway with `local_token: false` and a `public_url`, as it would sit behind a proxy.
+CI builds the image and checks its health and the 401 on every push, and publishes it on tags.
+[DEPLOY.md](DEPLOY.md) is the operator's guide.
+
 ## The desktop app (`desktop/`)
 
 A Wails v2 application in its own Go module, so the framework's dependencies never reach the

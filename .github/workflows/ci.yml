@@ -133,6 +133,28 @@ jobs:
           head -c 8 shot.png | od -An -c | grep -q 'P   N   G'
           docker rm -f kitty-ci
 
+  # The gateway as a server image: the web page and the binary inside. Built on every push, it
+  # proves the Dockerfile and that the container answers its health check.
+  gateway-image:
+    name: gateway image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: build the image
+        run: docker build -f docker/gateway/Dockerfile -t kitties:ci .
+      - name: it serves the page and asks for the token
+        run: |
+          docker run -d --name gw -p 7488:7488 -e KITTIES_TOKEN=ci-token kitties:ci
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:7488/v1/health >/dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:7488/v1/health
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:7488/v1/kitties)" = 401
+          curl -sf http://127.0.0.1:7488/ | grep -qi '<div id="root"'
+          docker rm -f gw
+      - name: the compose file is valid
+        run: |
+          KITTIES_DOMAIN=kitties.example.com KITTIES_TOKEN=x docker compose -f deploy/docker-compose.yml config -q
+
   # The desktop app for the three systems, built with the Wails CLI. Linux needs the webkit
   # headers; macOS and Windows build out of the box. Only on tags: a Wails build is slow.
   wails:
@@ -214,12 +236,41 @@ jobs:
             ghcr.io/${{ github.repository_owner }}/kitty-desktop:latest
             ghcr.io/${{ github.repository_owner }}/kitty-desktop:${{ github.ref_name }}
 
+  # The gateway image, published next to the kitty-desktop one on tags.
+  publish-gateway-image:
+    name: publish gateway image
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: [gateway-image, check]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: docker/gateway/Dockerfile
+          push: true
+          platforms: linux/amd64,linux/arm64
+          build-args: VERSION=${{ github.ref_name }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/kitties:latest
+            ghcr.io/${{ github.repository_owner }}/kitties:${{ github.ref_name }}
+
   # The only job that publishes a release, and it runs for a pushed tag and nothing else: not
   # for a branch, a pull request or a manual run. Everything else above only checks and builds.
   release:
     name: release
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: [check, build, wails, publish-image]
+    needs: [check, build, wails, publish-image, publish-gateway-image]
     runs-on: ubuntu-latest
     permissions:
       contents: write

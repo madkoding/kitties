@@ -1,0 +1,8 @@
+# https in front of the gateway; Caddy gets and renews the certificate by itself.
+{$KITTIES_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy kitties:7488 {
+		# Live chat events are a stream: send each chunk as it comes.
+		flush_interval -1
+	}
+}

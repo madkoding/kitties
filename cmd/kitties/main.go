@@ -63,8 +63,8 @@ and a drawn desktop) and is the quickest way to see the interface: kitties -demo
 
 Environment: KITTIES_CONFIG names the configuration file (default ./kitties.yaml or ~/.kitties/kitties.yaml).
 A gateway without a configuration file starts empty: add models and kitties from the web page.
-For a server, KITTIES_LISTEN, KITTIES_TOKEN, KITTIES_PUBLIC_URL and KITTIES_DATA_DIR override the
-gateway block, which is how a container is configured (see docs/DEPLOY.md).
+For a server, KITTIES_LISTEN, KITTIES_TOKEN, KITTIES_PUBLIC_URL, KITTIES_DATA_DIR and KITTIES_TRUST_PROXY
+override the gateway block, which is how a container is configured (see docs/DEPLOY.md).
 `
 
 func main() {

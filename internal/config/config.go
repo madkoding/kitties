@@ -175,7 +175,8 @@ func IsLoopbackAddr(addr string) bool {
 
 // ApplyEnv lets the environment override the gateway block, which is how a container is
 // configured without a file: KITTIES_LISTEN, KITTIES_TOKEN, KITTIES_PUBLIC_URL and
-// KITTIES_DATA_DIR. The result is validated again.
+// KITTIES_DATA_DIR, plus KITTIES_TRUST_PROXY (true) for a reverse proxy in front. The result is
+// validated again.
 func (c *Config) ApplyEnv(getenv func(string) string) error {
 	if v := getenv("KITTIES_LISTEN"); v != "" {
 		c.Gateway.Listen = v
@@ -188,6 +189,11 @@ func (c *Config) ApplyEnv(getenv func(string) string) error {
 	}
 	if v := getenv("KITTIES_DATA_DIR"); v != "" {
 		c.DataDir = v
+	}
+	// A reverse proxy in front (Caddy, nginx, a load balancer) whose X-Forwarded-* headers are true.
+	switch strings.ToLower(getenv("KITTIES_TRUST_PROXY")) {
+	case "1", "true", "yes":
+		c.Gateway.TrustProxy = true
 	}
 	return c.Validate()
 }

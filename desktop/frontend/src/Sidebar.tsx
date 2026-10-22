@@ -9,6 +9,7 @@ import {
   IconUsers,
   IconX,
   IconShield,
+  IconLogOut,
 } from "./icons";
 import PixelCat, { type Mood } from "./PixelCat";
 
@@ -46,6 +47,8 @@ interface Props {
   // approvals is how many actions wait for a yes; null when this gateway holds none back.
   approvals: number | null;
   onTheme: () => void;
+  // onSignOut ends the browser session; absent when there is none to end.
+  onSignOut?: () => void;
 }
 
 export default function Sidebar(p: Props) {
@@ -168,6 +171,16 @@ export default function Sidebar(p: Props) {
           <button class="btn-ghost px-3 py-2 text-xs" onClick={p.onTheme} aria-label="Theme">
             <IconSun size={14} />
           </button>
+          {p.onSignOut && (
+            <button
+              class="btn-ghost px-3 py-2 text-xs"
+              onClick={p.onSignOut}
+              aria-label="Sign out"
+              title="Sign out"
+            >
+              <IconLogOut size={14} />
+            </button>
+          )}
         </div>
       </aside>
     </>

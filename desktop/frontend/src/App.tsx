@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import type { Kitty, Session } from "./api";
-import { ApiError, api, watchChat } from "./api";
+import { ApiError, api, cookieLogin, watchChat } from "./api";
+import Login from "./Login";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
 import { IconMenu, IconTrash, IconUsers } from "./icons";
@@ -17,6 +18,7 @@ type ModalKind =
   | "chat"
   | "kitty"
   | "connect"
+  | "login"
   | "settings"
   | "connectors"
   | "connectors-add"
@@ -63,6 +65,8 @@ export default function App() {
   const [online, setOnline] = useState<boolean | null>(null);
   // How many actions wait for a yes; null when this gateway holds none back.
   const [waiting, setWaiting] = useState<number | null>(null);
+  // Whether this page holds a session that can be ended (a gateway served on a network).
+  const [canSignOut, setCanSignOut] = useState(false);
 
   const user = "You";
 
@@ -78,10 +82,16 @@ export default function App() {
         .approvals("pending")
         .then((l) => setWaiting(l.length))
         .catch(() => setWaiting(null));
+      if (cookieLogin()) {
+        api
+          .session()
+          .then((s) => setCanSignOut(s.signed_in && !s.local_token))
+          .catch(() => setCanSignOut(false));
+      }
     } catch (e) {
       setOnline(false);
       if (e instanceof ApiError && e.status === 401) {
-        setModal("connect");
+        setModal(cookieLogin() ? "login" : "connect");
       } else {
         setError((e as Error).message);
       }
@@ -180,6 +190,16 @@ export default function App() {
     setSidebar(false);
   };
 
+  const signOut = async () => {
+    await api.logout().catch(() => {});
+    setCanSignOut(false);
+    setSession(null);
+    setChats([]);
+    setKitties([]);
+    location.hash = "";
+    setModal("login");
+  };
+
   const send = async (text: string) => {
     if (!session) {
       return;
@@ -240,6 +260,7 @@ export default function App() {
         }}
         approvals={waiting}
         onTheme={cycleMode}
+        onSignOut={canSignOut ? signOut : undefined}
       />
       <div class="flex-1 flex flex-col min-w-0">
         <header class="frosted flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-white/5 flex-none z-10">
@@ -346,6 +367,14 @@ export default function App() {
           addConnector={modal === "connectors-add"}
           editConnector={modal === "connector" ? routeFromHash().connector : undefined}
           onClose={() => setModal("none")}
+        />
+      )}
+      {modal === "login" && (
+        <Login
+          onDone={() => {
+            setModal("none");
+            refresh();
+          }}
         />
       )}
       {modal === "connect" && (

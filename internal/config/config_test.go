@@ -199,6 +199,30 @@ func TestApplyEnv(t *testing.T) {
 	if cfg.Gateway.Listen != "0.0.0.0:9000" || cfg.Gateway.Token != "tok" || cfg.Gateway.PublicURL != "https://k.example" || cfg.DataDir != "/data" {
 		t.Errorf("env not applied: %+v", cfg)
 	}
+	// A proxy in front is said with KITTIES_TRUST_PROXY.
+	cfg = Defaults()
+	for _, v := range []string{"true", "1", "YES"} {
+		cfg = Defaults()
+		_ = cfg.ApplyEnv(func(k string) string {
+			if k == "KITTIES_TRUST_PROXY" {
+				return v
+			}
+			return ""
+		})
+		if !cfg.Gateway.TrustProxy {
+			t.Errorf("KITTIES_TRUST_PROXY=%s ignored", v)
+		}
+	}
+	cfg = Defaults()
+	_ = cfg.ApplyEnv(func(k string) string {
+		if k == "KITTIES_TRUST_PROXY" {
+			return "no"
+		}
+		return ""
+	})
+	if cfg.Gateway.TrustProxy {
+		t.Error("no is no")
+	}
 	// Nothing set: nothing changes. A bad value is refused.
 	cfg = Defaults()
 	if err := cfg.ApplyEnv(func(string) string { return "" }); err != nil || cfg.Gateway.Listen != "127.0.0.1:7488" {

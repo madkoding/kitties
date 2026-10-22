@@ -66,6 +66,26 @@ kitties shot mimi desk.png                  # what is on its display right now
 
 Without a container runtime the kitties still run, brain-only.
 
+## On a server
+
+The same gateway serves the web interface from a server: open it from any browser, sign in with
+the token (the browser keeps only a session cookie; *Sign out* ends it) and manage the whole fleet
+from there. It runs as a container with Caddy for https, or as a binary under systemd.
+
+```sh
+sudo install -d -o 10001 /var/lib/kitties
+cp deploy/.env.example deploy/.env      # your domain, a token and your keys
+docker compose -f deploy/docker-compose.yml --env-file deploy/.env up -d
+```
+
+| | |
+| --- | --- |
+| ![Signing in to a gateway on a network](docs/screenshots/30-sign-in.png) | |
+
+Compose, Caddy, nginx and systemd files are in [`deploy/`](deploy); the full guide, with what to
+protect and how to update and back up, is [docs/DEPLOY.md](docs/DEPLOY.md). The image is published
+as `ghcr.io/madkoding/kitties` with each release.
+
 ## The desktop app
 
 `desktop/` is a [Wails](https://wails.io) application (Linux, macOS, Windows) with a Preact page

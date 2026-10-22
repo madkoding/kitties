@@ -32,3 +32,4 @@ internal/web/dist/*
 !internal/web/dist/placeholder.txt
 desktop/frontend/e2e/.hooks.log
 desktop/frontend/test-results/
+desktop/frontend/e2e/.data-login/

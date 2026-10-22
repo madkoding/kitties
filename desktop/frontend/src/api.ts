@@ -353,6 +353,13 @@ export function saveConnection(c: Connection): void {
   }
 }
 
+// cookieLogin says whether this page signs in with a session cookie: served by the gateway
+// itself (or a proxy in front of it), not inside Wails and not pointed at another address.
+export function cookieLogin(): boolean {
+  const c = savedConnection();
+  return !inWails() && !c.url && !c.token;
+}
+
 // request performs one API call and returns its JSON.
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const app = window.go?.main?.App;
@@ -565,6 +572,10 @@ export const api = {
     request<SettingsView>("PUT", "/v1/settings/notify", c),
   testNotify: (connector = "") =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),
+  // The browser session of a gateway served on a network: who is signed in, and the way in and out.
+  session: () => request<{ signed_in: boolean; local_token: boolean }>("GET", "/v1/session"),
+  login: (token: string) => request<{ ok: boolean }>("POST", "/v1/login", { token: token.trim() }),
+  logout: () => request<{ ok: boolean }>("POST", "/v1/logout"),
   sendDigest: () => request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/digest"),
   journal: (kitty: string, n = 50) =>
     request<{ journal: JournalEntry[] }>("GET", `/v1/kitties/${kitty}/journal?n=${n}`).then(
