@@ -12,6 +12,7 @@ import (
 
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/provider"
@@ -138,6 +139,8 @@ type ProviderView struct {
 	Describe    string   `json:"describe"`
 	// FromFile is true when the profile comes from the YAML (an edit shadows it, a delete hides it).
 	FromFile bool `json:"from_file"`
+	// UsedBy names the kitties that think with it.
+	UsedBy []string `json:"used_by,omitempty"`
 	// Error says why the profile could not be built (a missing key), empty when it works.
 	Error string `json:"error,omitempty"`
 }
@@ -163,6 +166,8 @@ type ConnectorView struct {
 	SignedIn    bool   `json:"signed_in,omitempty"`
 	NeedsSignIn bool   `json:"needs_sign_in,omitempty"`
 	Account     string `json:"account,omitempty"`
+	// UsedBy names the kitties allowed to use it.
+	UsedBy []string `json:"used_by,omitempty"`
 }
 
 // connectorView masks the secrets of one connector.
@@ -191,6 +196,18 @@ func connectorView(name string, c config.Connector, fromFile bool) ConnectorView
 	return ConnectorView{Name: name, Kind: c.Kind, Category: kind.Category, Label: kind.Label, Description: c.Description, URL: shown["url"],
 		TokenSet: c.Token != "" || all["token"] != "", ChatID: c.ChatID, Command: c.Command, Settings: shown, SecretsSet: secrets, FromFile: fromFile,
 		OAuth: kind.OAuth, SignedIn: kind.OAuth != "" && creds.SignedIn(), NeedsSignIn: kind.OAuth != "" && !creds.SignedIn() && !kind.TokenSet(all), Account: creds.Account}
+}
+
+// usersLocked names, sorted, the kitties a test picks; callers hold the lock.
+func (m *Manager) usersLocked(pick func(*kitty.Kitty) bool) []string {
+	var names []string
+	for _, k := range m.kitties {
+		if pick(k) {
+			names = append(names, k.Name)
+		}
+	}
+	sort.Strings(names)
+	return names
 }
 
 // SettingsView is the settings page.
@@ -242,6 +259,7 @@ func (m *Manager) Settings() SettingsView {
 				v.Error = "not available"
 			}
 		}
+		v.UsedBy = m.usersLocked(func(k *kitty.Kitty) bool { return k.Provider == n })
 		view.Providers = append(view.Providers, v)
 	}
 	names = names[:0]
@@ -251,7 +269,9 @@ func (m *Manager) Settings() SettingsView {
 	sort.Strings(names)
 	for _, n := range names {
 		_, fromOverlay := m.overlay.Connectors[n]
-		view.Connectors = append(view.Connectors, connectorView(n, m.cfg.Connectors[n], !fromOverlay))
+		cv := connectorView(n, m.cfg.Connectors[n], !fromOverlay)
+		cv.UsedBy = m.usersLocked(func(k *kitty.Kitty) bool { return len(k.Connectors) == 0 || contains(k.Connectors, n) })
+		view.Connectors = append(view.Connectors, cv)
 	}
 	if view.Providers == nil {
 		view.Providers = []ProviderView{}
@@ -303,6 +323,44 @@ func (m *Manager) RemoveProvider(name string) error {
 	defer m.mu.Unlock()
 	if _, ok := m.cfg.Providers[name]; !ok {
 		return fmt.Errorf("%w: provider %q", ErrNotFound, name)
+	}
+	// The kitties that think with it move to another model; when there is none left, the
+	// model stays, since they would have no brain at all.
+	var users []*kitty.Kitty
+	for _, k := range m.kitties {
+		if k.Provider == name {
+			users = append(users, k)
+		}
+	}
+	other := ""
+	if m.cfg.DefaultProvider != "" && m.cfg.DefaultProvider != name {
+		if _, err := m.providers.Get(m.cfg.DefaultProvider); err == nil {
+			other = m.cfg.DefaultProvider
+		}
+	}
+	if other == "" {
+		for _, n := range m.providers.Names() {
+			if n != name {
+				other = n
+				break
+			}
+		}
+	}
+	if len(users) > 0 && other == "" {
+		names := make([]string, 0, len(users))
+		for _, k := range users {
+			names = append(names, k.Name)
+		}
+		sort.Strings(names)
+		return fmt.Errorf("%s still think with %q and it is the only model: add another model first, then remove this one", strings.Join(names, ", "), name)
+	}
+	for _, k := range users {
+		k.Provider = other
+	}
+	if len(users) > 0 {
+		if err := m.saveLocked(); err != nil {
+			return err
+		}
 	}
 	delete(m.cfg.Providers, name)
 	delete(m.overlay.Providers, name)
@@ -417,6 +475,29 @@ func (m *Manager) RemoveConnector(name string) error {
 	}
 	if !contains(m.overlay.Removed.Connectors, name) {
 		m.overlay.Removed.Connectors = append(m.overlay.Removed.Connectors, name)
+	}
+	// The kitties lose it too. A kitty whose list held only this one keeps none (an empty list
+	// would mean all of them).
+	changed := false
+	for _, k := range m.kitties {
+		if !contains(k.Connectors, name) {
+			continue
+		}
+		kept := make([]string, 0, len(k.Connectors))
+		for _, c := range k.Connectors {
+			if c != name {
+				kept = append(kept, c)
+			}
+		}
+		if len(kept) == 0 {
+			kept = []string{kitty.NoConnectors}
+		}
+		k.Connectors, changed = kept, true
+	}
+	if changed {
+		if err := m.saveLocked(); err != nil {
+			return err
+		}
 	}
 	return m.saveSettings()
 }

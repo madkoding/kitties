@@ -358,7 +358,7 @@ func TestOpenFailures(t *testing.T) {
 	if code, _, errOut := exec(t, "", "-config", cfg, "ls"); code != 0 || !strings.Contains(errOut, "API key") {
 		t.Errorf("a provider without a key is reported, the fleet still runs: %d %s", code, errOut)
 	}
-	if code, _, errOut := exec(t, "", "-config", cfg, "create", "x", "-no-desktop"); code != 1 || !strings.Contains(errOut, "unknown provider") {
+	if code, _, errOut := exec(t, "", "-config", cfg, "create", "x", "-no-desktop"); code != 1 || !strings.Contains(errOut, "cannot be used yet") {
 		t.Errorf("a kitty cannot use the keyless profile: %d %s", code, errOut)
 	}
 	if code, _, errOut := exec(t, "", "-config", cfg, "providers"); code != 0 || strings.Contains(errOut, "brain-only") {

@@ -552,6 +552,9 @@ func (s *Service) RemoveMember(id, ref string) (*Session, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(sess.Members) == 1 && sess.Members[0] == k.ID {
+		return nil, errors.New("a chat needs at least one kitty: delete the chat instead")
+	}
 	kept := sess.Members[:0]
 	for _, m := range sess.Members {
 		if m != k.ID {
@@ -561,6 +564,46 @@ func (s *Service) RemoveMember(id, ref string) (*Session, error) {
 	sess.Members = kept
 	sess.UpdatedAt = s.now()
 	return sess, s.save(sess)
+}
+
+// LeaveChats takes a removed kitty out of every chat, and deletes the chats it leaves with no
+// kitty at all: a chat with nobody to answer is not a chat.
+func (s *Service) LeaveChats(id string) error {
+	return s.Prune(func(member string) bool { return member != id })
+}
+
+// Prune keeps, in every chat, only the members that still exist, and deletes the chats left
+// with none (for instance the ones whose kitties were removed before chats were cleaned up).
+func (s *Service) Prune(exists func(id string) bool) error {
+	s.mu.Lock()
+	var empty []string
+	var firstErr error
+	for id, sess := range s.sessions {
+		kept := make([]string, 0, len(sess.Members))
+		for _, m := range sess.Members {
+			if exists(m) {
+				kept = append(kept, m)
+			}
+		}
+		if len(kept) == len(sess.Members) {
+			continue
+		}
+		if len(kept) == 0 {
+			empty = append(empty, id)
+			continue
+		}
+		sess.Members = kept
+		if err := s.save(sess); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	s.mu.Unlock()
+	for _, id := range empty {
+		if err := s.Delete(id); err != nil && firstErr == nil {
+			firstErr = err
+		}
+	}
+	return firstErr
 }
 
 // Get returns a copy of the session.

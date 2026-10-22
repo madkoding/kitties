@@ -253,7 +253,12 @@ func (a *app) open(cmd string) error {
 		Deliver: a.notifier.Deliver,
 	}, filepath.Join(dataDir, "digest.json"))
 	// A removed kitty takes its held actions and its memory along.
-	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget)
+	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget, chats.LeaveChats)
+	// Chats whose kitties were removed earlier have nobody to answer: take those kitties out,
+	// and drop the chats left empty.
+	if err := chats.Prune(func(id string) bool { _, err := fleet.Get(id); return err == nil }); err != nil {
+		fmt.Fprintf(a.err, "kitties: tidying the chats: %v\n", err)
+	}
 	a.fleet, a.chats = fleet, chats
 	return nil
 }

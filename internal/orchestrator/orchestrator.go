@@ -295,15 +295,15 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 	}
 	prov := s.Provider
 	if prov == "" {
+		m.mu.RLock()
 		prov = m.cfg.ProviderFor(config.Kitty{})
+		m.mu.RUnlock()
 	}
-	if _, err := m.providers.Get(prov); err != nil {
+	if err := m.usableModel(prov); err != nil {
 		return nil, err
 	}
-	for _, c := range s.Connectors {
-		if _, ok := m.connectors.Get(c); !ok {
-			return nil, fmt.Errorf("unknown connector %q", c)
-		}
+	if err := m.knownConnections(s.Connectors); err != nil {
+		return nil, err
 	}
 	avatar, err := s.Avatar.Normalize(s.Name)
 	if err != nil {
@@ -593,11 +593,55 @@ func (m *Manager) fail(id string, err error) error {
 	return err
 }
 
+// ErrNoModel is returned when a kitty needs a brain and none is set up.
+var ErrNoModel = errors.New("there is no model yet: add one in Settings, Models, so the kitty has a brain to think with")
+
+// usableModel says, in words a person can act on, why a kitty cannot think with the model
+// called name, or nil when it can.
+func (m *Manager) usableModel(name string) error {
+	if name == "" {
+		return ErrNoModel
+	}
+	if _, err := m.providers.Get(name); err != nil {
+		m.mu.RLock()
+		_, configured := m.cfg.Providers[name]
+		why := m.buildErrors[name]
+		m.mu.RUnlock()
+		if !configured {
+			return fmt.Errorf("there is no model called %q: pick one of Settings, Models", name)
+		}
+		if why == "" {
+			why = err.Error()
+		}
+		return fmt.Errorf("the model %q cannot be used yet (%s): fix it in Settings, Models", name, why)
+	}
+	return nil
+}
+
+// knownConnections checks a kitty's list of connections: every name exists, or the list is just
+// kitty.NoConnectors (none at all).
+func (m *Manager) knownConnections(list []string) error {
+	if len(list) == 1 && list[0] == kitty.NoConnectors {
+		return nil
+	}
+	for _, c := range list {
+		if _, ok := m.connectors.Get(c); !ok {
+			return fmt.Errorf("there is no connection called %q", c)
+		}
+	}
+	return nil
+}
+
 // Update is what can change on a kitty after it exists.
 type Update struct {
-	Avatar *kitty.Avatar `json:"avatar,omitempty"`
-	Soul   *soul.Soul    `json:"soul,omitempty"`
-	Limits *kitty.Limits `json:"limits,omitempty"`
+	// Provider is the model the kitty thinks with.
+	Provider *string `json:"provider,omitempty"`
+	// Connectors are the connections the kitty may use, replacing the old list: empty is all of
+	// them, [kitty.NoConnectors] is none.
+	Connectors *[]string     `json:"connectors,omitempty"`
+	Avatar     *kitty.Avatar `json:"avatar,omitempty"`
+	Soul       *soul.Soul    `json:"soul,omitempty"`
+	Limits     *kitty.Limits `json:"limits,omitempty"`
 	// Backup is the kitty to hand tasks to; an empty string, when set, clears it.
 	Backup *string `json:"backup,omitempty"`
 	// Approvals is ask or auto (empty is ask).
@@ -610,8 +654,24 @@ func (m *Manager) Edit(ref string, u Update) (*kitty.Kitty, error) {
 	if err != nil {
 		return nil, err
 	}
+	if u.Provider != nil {
+		if err := m.usableModel(*u.Provider); err != nil {
+			return nil, err
+		}
+	}
+	if u.Connectors != nil {
+		if err := m.knownConnections(*u.Connectors); err != nil {
+			return nil, err
+		}
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if u.Provider != nil {
+		k.Provider = *u.Provider
+	}
+	if u.Connectors != nil {
+		k.Connectors = append([]string{}, *u.Connectors...)
+	}
 	if u.Avatar != nil {
 		avatar, err := u.Avatar.Normalize(k.Name)
 		if err != nil {

@@ -46,6 +46,10 @@ type Kitty struct {
 	Approvals string `json:"approvals,omitempty"`
 }
 
+// NoConnectors, as a kitty's only connection, means it may use none: an empty list means all
+// of them (the configuration file's default), so "none" needs a name of its own.
+const NoConnectors = "-"
+
 // ValidApprovals reports whether s is a mode of approvals.
 func ValidApprovals(s string) bool { return s == "" || s == "ask" || s == "auto" }
 
