@@ -137,3 +137,79 @@ func TestPaths(t *testing.T) {
 		t.Error("no providers, no name")
 	}
 }
+
+func TestGatewayServerSettings(t *testing.T) {
+	base := "providers:\n  p:\n    kind: ollama\n"
+	cfg, err := Parse([]byte(base + "gateway:\n  listen: 0.0.0.0:7488\n  public_url: https://kitties.example.com\n  trust_proxy: true\n  tls_cert: c.pem\n  tls_key: k.pem\n  local_token: true\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	g := cfg.Gateway
+	if g.PublicURL != "https://kitties.example.com" || !g.TrustProxy || g.TLSCert != "c.pem" || g.LocalToken == nil || !g.LocalTokenAllowed() {
+		t.Errorf("gateway = %+v", g)
+	}
+	for _, bad := range []string{
+		"gateway:\n  tls_cert: c.pem\n",
+		"gateway:\n  tls_key: k.pem\n",
+		"gateway:\n  public_url: kitties.example.com\n",
+		"gateway:\n  public_url: ftp://x\n",
+		"gateway:\n  public_url: https://x/app\n",
+		"gateway:\n  public_url: https://x?y=1\n",
+	} {
+		if _, err := Parse([]byte(base + bad)); err == nil || !strings.Contains(err.Error(), "gateway.") {
+			t.Errorf("%q must be refused: %v", bad, err)
+		}
+	}
+	if _, err := Parse([]byte(base + "gateway:\n  public_url: https://x.example/\n")); err != nil {
+		t.Errorf("a trailing slash is fine: %v", err)
+	}
+}
+
+func TestLocalTokenAllowed(t *testing.T) {
+	no, yes := false, true
+	for _, tc := range []struct {
+		g    Gateway
+		want bool
+	}{
+		{Gateway{Listen: "127.0.0.1:7488"}, true},
+		{Gateway{Listen: "localhost:7488"}, true},
+		{Gateway{Listen: "[::1]:7488"}, true},
+		{Gateway{Listen: "0.0.0.0:7488"}, false},
+		{Gateway{Listen: ":7488"}, false},
+		{Gateway{Listen: "10.0.0.5:7488"}, false},
+		{Gateway{Listen: "127.0.0.1:7488", PublicURL: "https://k.example"}, false},
+		{Gateway{Listen: "127.0.0.1:7488", TrustProxy: true}, false},
+		{Gateway{Listen: "127.0.0.1:7488", TLSCert: "c", TLSKey: "k"}, false},
+		{Gateway{Listen: "127.0.0.1:7488", PublicURL: "https://k.example", LocalToken: &yes}, true},
+		{Gateway{Listen: "127.0.0.1:7488", LocalToken: &no}, false},
+		{Gateway{Listen: "nonsense"}, false},
+	} {
+		if got := tc.g.LocalTokenAllowed(); got != tc.want {
+			t.Errorf("%+v: %v, want %v", tc.g, got, tc.want)
+		}
+	}
+}
+
+func TestApplyEnv(t *testing.T) {
+	cfg := Defaults()
+	env := map[string]string{"KITTIES_LISTEN": "0.0.0.0:9000", "KITTIES_TOKEN": "tok", "KITTIES_PUBLIC_URL": "https://k.example", "KITTIES_DATA_DIR": "/data"}
+	if err := cfg.ApplyEnv(func(k string) string { return env[k] }); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Gateway.Listen != "0.0.0.0:9000" || cfg.Gateway.Token != "tok" || cfg.Gateway.PublicURL != "https://k.example" || cfg.DataDir != "/data" {
+		t.Errorf("env not applied: %+v", cfg)
+	}
+	// Nothing set: nothing changes. A bad value is refused.
+	cfg = Defaults()
+	if err := cfg.ApplyEnv(func(string) string { return "" }); err != nil || cfg.Gateway.Listen != "127.0.0.1:7488" {
+		t.Errorf("empty env: %v %+v", err, cfg.Gateway)
+	}
+	if err := cfg.ApplyEnv(func(k string) string {
+		if k == "KITTIES_PUBLIC_URL" {
+			return "nope"
+		}
+		return ""
+	}); err == nil {
+		t.Error("a bad public url is refused")
+	}
+}

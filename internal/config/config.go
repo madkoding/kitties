@@ -5,6 +5,8 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -102,10 +104,68 @@ type Containers struct {
 	Env map[string]string `yaml:"env"`
 }
 
-// Gateway is the HTTP API block.
+// Gateway is the HTTP API block. On a server it is also the web interface: the same address
+// serves the page and the API.
 type Gateway struct {
 	Listen string `yaml:"listen"`
 	Token  string `yaml:"token"`
+	// PublicURL is the address people reach the gateway at from outside (https://kitties.example.com).
+	// The OAuth sign-ins send the browser back to it, and its scheme tells the gateway it is
+	// served over https.
+	PublicURL string `yaml:"public_url"`
+	// TLSCert and TLSKey, both or neither, make the gateway serve https itself; a proxy that
+	// ends TLS (Caddy, nginx) is the other way.
+	TLSCert string `yaml:"tls_cert"`
+	TLSKey  string `yaml:"tls_key"`
+	// TrustProxy says a reverse proxy sits in front and its X-Forwarded-* headers are true: the
+	// client address (for the sign-in rate limit), the scheme and the host.
+	TrustProxy bool `yaml:"trust_proxy"`
+	// LocalToken says whether a client on this machine may fetch the token without typing it
+	// (the desktop app and a local browser do). Unset, it is allowed only while the gateway
+	// listens on this machine alone and no public_url or proxy is configured: a server never
+	// hands its token out.
+	LocalToken *bool `yaml:"local_token"`
+}
+
+// LocalTokenAllowed reports whether /v1/local-token may answer: the setting when given, else
+// only for a gateway that listens on loopback and has no public address or proxy.
+func (g Gateway) LocalTokenAllowed() bool {
+	if g.LocalToken != nil {
+		return *g.LocalToken
+	}
+	return IsLoopbackAddr(g.Listen) && g.PublicURL == "" && !g.TrustProxy && g.TLSCert == ""
+}
+
+// IsLoopbackAddr reports whether a listen address (host:port) is this machine alone.
+func IsLoopbackAddr(addr string) bool {
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
+	}
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// ApplyEnv lets the environment override the gateway block, which is how a container is
+// configured without a file: KITTIES_LISTEN, KITTIES_TOKEN, KITTIES_PUBLIC_URL and
+// KITTIES_DATA_DIR. The result is validated again.
+func (c *Config) ApplyEnv(getenv func(string) string) error {
+	if v := getenv("KITTIES_LISTEN"); v != "" {
+		c.Gateway.Listen = v
+	}
+	if v := getenv("KITTIES_TOKEN"); v != "" {
+		c.Gateway.Token = v
+	}
+	if v := getenv("KITTIES_PUBLIC_URL"); v != "" {
+		c.Gateway.PublicURL = v
+	}
+	if v := getenv("KITTIES_DATA_DIR"); v != "" {
+		c.DataDir = v
+	}
+	return c.Validate()
 }
 
 // Motita points at a motita gateway.
@@ -298,6 +358,15 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.Listen == "" {
 		return errors.New("gateway.listen cannot be empty")
+	}
+	if (c.Gateway.TLSCert == "") != (c.Gateway.TLSKey == "") {
+		return errors.New("gateway.tls_cert and gateway.tls_key go together")
+	}
+	if u := c.Gateway.PublicURL; u != "" {
+		parsed, err := url.Parse(u)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || (parsed.Path != "" && parsed.Path != "/") || parsed.RawQuery != "" {
+			return fmt.Errorf("gateway.public_url %q must be an address like https://kitties.example.com (no path)", u)
+		}
 	}
 	for name, cn := range c.Connectors {
 		if err := ValidateConnector(name, cn, c.Motita.URL); err != nil {
