@@ -719,6 +719,7 @@ func TestLocalToken(t *testing.T) {
 	none := New(&fakeFleet{kitties: map[string]*kitty.Kitty{}}, &fakeChats{}, "", "")
 	rec = httptest.NewRecorder()
 	r.RemoteAddr = "127.0.0.1:1"
+	r.Host = "127.0.0.1:7488"
 	none.ServeHTTP(rec, r)
 	if rec.Code != 404 {
 		t.Error("no token, nothing to hand out")

@@ -6,13 +6,13 @@ package gateway
 import (
 	"context"
 	"crypto/rand"
-	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"html"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"strings"
@@ -78,6 +78,15 @@ type Server struct {
 	mux     *http.ServeMux
 	skills  *skills.Library
 	arts    *artifacts.Store
+
+	// The web server side (serve.go).
+	web          fs.FS
+	publicURL    string
+	trustProxy   bool
+	noLocalToken bool
+	tlsCert      string
+	tlsKey       string
+	limit        *limiter
 }
 
 // WithLibrary serves the skills and the artifacts.
@@ -95,18 +104,24 @@ func NewToken() string {
 
 // New builds the server. An empty token refuses every API call.
 func New(fleet Fleet, chats Chats, token, version string) *Server {
-	s := &Server{fleet: fleet, chats: chats, token: token, version: version, started: time.Now(), mux: http.NewServeMux()}
+	s := &Server{fleet: fleet, chats: chats, token: token, version: version, started: time.Now(), mux: http.NewServeMux(), limit: newLimiter(10, time.Minute)}
 	s.routes()
 	return s
 }
 
 // ServeHTTP implements http.Handler.
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.mux.ServeHTTP(w, r) }
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.secure(w, r)
+	s.mux.ServeHTTP(w, r)
+}
 
 func (s *Server) routes() {
 	api := s.auth
 	s.mux.HandleFunc("GET /", s.handleIndex)
 	s.mux.HandleFunc("GET /v1/health", s.handleHealth)
+	s.mux.HandleFunc("GET /v1/session", s.handleSession)
+	s.mux.HandleFunc("POST /v1/login", s.handleLogin)
+	s.mux.HandleFunc("POST /v1/logout", s.handleLogout)
 	s.mux.Handle("GET /v1/providers", api(s.handleProviders))
 	s.mux.Handle("GET /v1/connectors", api(s.handleConnectors))
 	s.mux.Handle("GET /v1/kitties", api(s.handleListKitties))
@@ -199,11 +214,14 @@ var heartbeat = 20 * time.Second
 
 // handleOAuthStart begins a connector's sign-in and returns the consent URL for the page to open.
 func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
-	scheme := "http"
-	if r.TLS != nil {
-		scheme = "https"
+	redirect := s.publicURL + "/v1/oauth/callback"
+	if s.publicURL == "" {
+		scheme := "http"
+		if s.isHTTPS(r) {
+			scheme = "https"
+		}
+		redirect = scheme + "://" + s.requestHost(r) + "/v1/oauth/callback"
 	}
-	redirect := scheme + "://" + r.Host + "/v1/oauth/callback"
 	link, err := s.fleet.OAuth().Start(r.PathValue("name"), redirect)
 	if err != nil {
 		fail(w, codeFor(err), err)
@@ -362,20 +380,15 @@ func (s *Server) handleDeleteArtifact(w http.ResponseWriter, r *http.Request) {
 }
 
 // handleLocalToken hands the token to a client on this machine, so a local executable or the
-// gateway's own page needs no typing. Only a loopback peer gets it, and never a page of another
-// site: a cross-origin fetch carries an Origin header that is not this gateway's.
+// gateway's own page needs no typing (see localTokenOK for who counts as local). A server
+// never does: it turns this off and people sign in with the token.
 func (s *Server) handleLocalToken(w http.ResponseWriter, r *http.Request) {
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil || !net.ParseIP(host).IsLoopback() {
-		fail(w, http.StatusForbidden, errors.New("the token is only handed out on this machine"))
-		return
-	}
-	if origin := r.Header.Get("Origin"); origin != "" && !sameOrigin(origin, r.Host) {
-		fail(w, http.StatusForbidden, errors.New("the token is not handed to another site"))
-		return
-	}
-	if s.token == "" {
-		fail(w, http.StatusNotFound, errors.New("the gateway has no token"))
+	if err := s.localTokenOK(r); err != nil {
+		code := http.StatusForbidden
+		if err == errNoToken {
+			code = http.StatusNotFound
+		}
+		fail(w, code, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -386,21 +399,6 @@ func (s *Server) handleLocalToken(w http.ResponseWriter, r *http.Request) {
 func sameOrigin(origin, host string) bool {
 	o := strings.TrimPrefix(strings.TrimPrefix(origin, "http://"), "https://")
 	return strings.EqualFold(o, host)
-}
-
-// auth checks the bearer token (or the token query, for the page's screenshot links).
-func (s *Server) auth(next http.HandlerFunc) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if got == r.Header.Get("Authorization") {
-			got = r.URL.Query().Get("token")
-		}
-		if s.token == "" || subtle.ConstantTimeCompare([]byte(got), []byte(s.token)) != 1 {
-			fail(w, http.StatusUnauthorized, errors.New("a valid bearer token is required"))
-			return
-		}
-		next(w, r)
-	})
 }
 
 func reply(w http.ResponseWriter, code int, v any) {
@@ -758,6 +756,10 @@ func (s *Server) handleShot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
+	if s.web != nil {
+		s.handleStatic(w, r)
+		return
+	}
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
@@ -766,24 +768,43 @@ func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
 	_, _ = io.WriteString(w, indexHTML)
 }
 
-// Listen serves on addr until ctx ends, warning when the address is not loopback.
+// Listen serves on addr until ctx ends (https when a certificate was given). It says where the
+// page is, and warns when the token would cross a network in the clear.
 func (s *Server) Listen(ctx context.Context, addr string, logf func(string, ...any)) error {
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return fmt.Errorf("listen on %s: %w", addr, err)
 	}
-	if host, _, _ := net.SplitHostPort(addr); host != "127.0.0.1" && host != "localhost" && host != "::1" {
-		logf("warning: the gateway listens on %s, reachable from the network; the token is its only protection", addr)
+	tls := s.tlsCert != ""
+	if !config.IsLoopbackAddr(addr) && !tls && !s.trustProxy && !strings.HasPrefix(s.publicURL, "https://") {
+		logf("warning: the gateway listens on %s without https; the token and the chats cross the network in the clear. Set gateway.tls_cert and tls_key, or put it behind a TLS proxy (trust_proxy)", addr)
 	}
-	srv := &http.Server{Handler: s, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: s, ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
 	go func() {
 		<-ctx.Done()
 		shutdown, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdown)
 	}()
-	logf("gateway listening on http://%s", ln.Addr())
-	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+	scheme := "http"
+	if tls {
+		scheme = "https"
+	}
+	where := s.publicURL
+	if where == "" {
+		where = scheme + "://" + ln.Addr().String()
+	}
+	what := "gateway"
+	if s.web != nil {
+		what = "gateway and web interface"
+	}
+	logf("%s listening on %s", what, where)
+	if tls {
+		err = srv.ServeTLS(ln, s.tlsCert, s.tlsKey)
+	} else {
+		err = srv.Serve(ln)
+	}
+	if err != nil && !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
 	return nil

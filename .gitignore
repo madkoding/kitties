@@ -26,3 +26,7 @@ desktop/frontend/e2e/.data/
 desktop/frontend/e2e/.state.json
 desktop/frontend/e2e/test-results/
 desktop/frontend/e2e/report/
+
+# The web interface copied into the binary's embed folder by `make web`
+internal/web/dist/*
+!internal/web/dist/placeholder.txt
