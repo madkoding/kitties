@@ -159,7 +159,8 @@ jobs:
   # headers; macOS and Windows build out of the box. Only on tags: a Wails build is slow.
   wails:
     name: desktop app · ${{ matrix.os }}
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    # On tags, and by hand (Actions → ci → Run workflow) to try the packaging without a release.
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
     needs: [check, desktop]
     strategy:
       fail-fast: false
