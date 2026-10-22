@@ -61,7 +61,7 @@ export default defineConfig({
       stderr: "pipe",
     },
     {
-      command: "npx vite preview --port 4198 --strictPort",
+      command: "npx vite preview --host 127.0.0.1 --port 4198 --strictPort",
       cwd: path.resolve(here, ".."),
       url: LOGIN_PAGE,
       env: { KITTIES_GATEWAY: LOGIN_GATEWAY },
@@ -69,7 +69,7 @@ export default defineConfig({
       timeout: 60_000,
     },
     {
-      command: "npx vite preview --port 4199 --strictPort",
+      command: "npx vite preview --host 127.0.0.1 --port 4199 --strictPort",
       cwd: path.resolve(here, ".."),
       url: PAGE,
       env: { KITTIES_GATEWAY: GATEWAY },

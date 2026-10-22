@@ -198,8 +198,12 @@ jobs:
         shell: bash
         run: |
           mkdir -p out
-          if [ -d "desktop/${{ matrix.out }}" ]; then
-            (cd desktop/build/bin && zip -r "../../../out/${{ matrix.name }}.zip" "$(basename "${{ matrix.out }}")")
+          ls -la desktop/build/bin
+          # On macOS Wails names the bundle after the product ("Kitties.app"), not after the
+          # output file: take whatever .app it made.
+          app="$(find desktop/build/bin -maxdepth 1 -name '*.app' -type d | head -n 1)"
+          if [ -n "$app" ]; then
+            (cd desktop/build/bin && zip -qr "../../../out/${{ matrix.name }}.zip" "$(basename "$app")")
           else
             cp "desktop/${{ matrix.out }}" "out/${{ matrix.name }}"
           fi
