@@ -35,6 +35,10 @@ type Action struct {
 	Name string   `json:"name"`
 	Help string   `json:"help"`
 	Args []string `json:"args,omitempty"`
+	// Risk is "ask" for an action that reaches other people or spends money (the person
+	// approves it until trusted) or "always" for one that is never done unasked; empty for
+	// the ones that only read or touch the person's own tools.
+	Risk string `json:"risk,omitempty"`
 }
 
 // Kind describes one connector of the catalogue.
@@ -64,11 +68,12 @@ const (
 	CatProductivity = "productivity"
 	CatOffice       = "office"
 	CatDrawing      = "drawing"
+	CatFinance      = "finance"
 	CatGeneric      = "generic"
 )
 
 // Categories lists them in order.
-var Categories = []string{CatMessaging, CatSocial, CatGit, CatProductivity, CatOffice, CatDrawing, CatGeneric}
+var Categories = []string{CatMessaging, CatSocial, CatGit, CatProductivity, CatOffice, CatFinance, CatDrawing, CatGeneric}
 
 func f(name, label, help string, required, secret bool) Field {
 	return Field{Name: name, Label: label, Help: help, Required: required, Secret: secret}
@@ -94,7 +99,7 @@ func init() {
 }
 
 func catalog() []Kind {
-	kinds := withInbound([]Kind{
+	kinds := withReads(withInbound(append(moreKinds(), []Kind{
 		// ── messaging ──────────────────────────────────────────────────────────────────────────
 		{Name: "slack", Category: CatMessaging, Label: "Slack", Help: "posts messages to a Slack channel, through a webhook, a bot token or a sign-in",
 			Fields: []Field{f("url", "Incoming webhook URL", "from Slack's app settings", false, true), f("token", "Bot token", "xoxb-…, instead of a webhook", false, true), f("channel", "Channel", "#general, used with a bot token or a sign-in", false, false),
@@ -215,7 +220,21 @@ func catalog() []Kind {
 			Actions: []Action{{Name: "call", Help: "make a request", Args: []string{"method", "path", "body (optional JSON)"}}}, make: makeHTTP},
 		{Name: "shell", Category: CatGeneric, Label: "Program", Help: "runs a fixed program on the gateway's machine with the text as its argument",
 			Fields: []Field{f("command", "Command", "/usr/local/bin/notify", true, false)}, Actions: []Action{{Name: "run", Help: "run it", Args: []string{fText}}}},
-	})
+	}...)))
+	return kinds
+}
+
+// withReads adds to the kinds that wrote only the actions that read, reply and like.
+func withReads(kinds []Kind) []Kind {
+	for i := range kinds {
+		kinds[i].Actions = append(kinds[i].Actions, readActions(kinds[i].Name)...)
+		kinds[i].Fields = append(kinds[i].Fields, readFields(kinds[i].Name)...)
+		for j := range kinds[i].Actions {
+			if r := RiskOf(kinds[i].Name, kinds[i].Actions[j].Name); r != RiskNone {
+				kinds[i].Actions[j].Risk = r.String()
+			}
+		}
+	}
 	return kinds
 }
 
@@ -236,7 +255,7 @@ func withInbound(kinds []Kind) []Kind {
 var fInbound = f("inbound_secret", "Incoming events secret", "to receive events at /v1/hooks/<name>: GitHub's webhook secret, or any secret sent as X-Kitties-Secret", false, true)
 
 // inboundCategories are the categories whose services report events.
-var inboundCategories = map[string]bool{CatMessaging: true, CatGit: true, CatProductivity: true, CatGeneric: true}
+var inboundCategories = map[string]bool{CatMessaging: true, CatGit: true, CatProductivity: true, CatFinance: true, CatGeneric: true}
 
 // Kinds lists the catalogue, by category then name.
 func Kinds() []Kind {
@@ -406,7 +425,14 @@ func actionsHelp(k Kind) string {
 	}
 	parts := make([]string, 0, len(k.Actions))
 	for _, a := range k.Actions {
-		parts = append(parts, a.Name+"("+strings.Join(a.Args, ", ")+")")
+		part := a.Name + "(" + strings.Join(a.Args, ", ") + ")"
+		switch a.Risk {
+		case "ask":
+			part += " [the person approves it first]"
+		case "always":
+			part += " [always needs the person's approval]"
+		}
+		parts = append(parts, part)
 	}
 	return "(actions, chosen with \"action\": " + strings.Join(parts, "; ") + ")"
 }
@@ -437,6 +463,9 @@ type request struct {
 	file string
 	// plain marks a request that takes no account token (a webhook): an OAuth kind leaves it.
 	plain bool
+	// follow, when set, turns the answer into the text for the model, with more requests if it
+	// needs them (it gets the headers, the account's token included).
+	follow func(ctx context.Context, raw []byte, headers map[string]string) (string, error)
 }
 
 type actionFn func(s Settings, args map[string]any) (request, error)
@@ -455,6 +484,11 @@ type api struct {
 
 func newAPI(kind string, s Settings, actions map[string]actionFn, first string) *api {
 	k, _ := LookupKind(kind)
+	for name, fn := range extraActions(kind) {
+		if _, taken := actions[name]; !taken {
+			actions[name] = fn
+		}
+	}
 	return &api{kind: k, s: s, actions: actions, first: first}
 }
 
@@ -504,8 +538,18 @@ func (a *api) call(ctx context.Context, args map[string]any) (text, name string,
 	if err != nil {
 		return "", "", nil, err
 	}
+	if err := readCheck(a.kind.Name, raw); err != nil {
+		return "", "", nil, err
+	}
 	if req.file != "" {
 		return "saved as " + req.file, req.file, raw, nil
+	}
+	if req.follow != nil {
+		out, err := req.follow(ctx, raw, req.headers)
+		return out, "", nil, err
+	}
+	if out, ok := readRender(a.kind.Name, action, raw); ok {
+		return out, "", nil, nil
 	}
 	if a.render != nil {
 		return a.render(action, raw), "", nil, nil
@@ -766,7 +810,7 @@ func makeMastodon(s Settings) Connector {
 	}}, "post")
 }
 
-// bluesky posts in two steps: a session for the app password, then the record.
+// bluesky works in two steps: a session for the app password, then the call.
 type blueskyConnector struct{ s Settings }
 
 func makeBluesky(s Settings) Connector { return &blueskyConnector{s: s} }
@@ -776,30 +820,111 @@ func (b *blueskyConnector) Describe() string {
 	return k.Help + " " + actionsHelp(k)
 }
 
-func (b *blueskyConnector) Call(ctx context.Context, args map[string]any) (string, error) {
-	text, err := need(args, "text")
-	if err != nil {
-		return "", err
-	}
-	raw, err := do(ctx, request{method: "POST", url: "https://bsky.social/xrpc/com.atproto.server.createSession",
+const bsky = "https://bsky.social/xrpc/"
+
+// session opens a session with the app password and returns its token and the account's did.
+func (b *blueskyConnector) session(ctx context.Context) (jwt, did string, err error) {
+	raw, err := do(ctx, request{method: "POST", url: bsky + "com.atproto.server.createSession",
 		body: map[string]any{"identifier": b.s["handle"], "password": b.s["password"]}})
 	if err != nil {
-		return "", fmt.Errorf("bluesky login: %w", err)
+		return "", "", fmt.Errorf("bluesky login: %w", err)
 	}
 	var session struct {
 		Jwt string `json:"accessJwt"`
 		Did string `json:"did"`
 	}
 	if json.Unmarshal(raw, &session) != nil || session.Jwt == "" {
-		return "", errors.New("bluesky did not open a session")
+		return "", "", errors.New("bluesky did not open a session")
 	}
-	out, err := do(ctx, request{method: "POST", url: "https://bsky.social/xrpc/com.atproto.repo.createRecord", headers: bearer(session.Jwt),
-		body: map[string]any{"repo": session.Did, "collection": "app.bsky.feed.post",
-			"record": map[string]any{"$type": "app.bsky.feed.post", "text": text, "createdAt": time.Now().UTC().Format(time.RFC3339)}}})
+	return session.Jwt, session.Did, nil
+}
+
+func (b *blueskyConnector) Call(ctx context.Context, args map[string]any) (string, error) {
+	action := strings.ToLower(str(args, "action"))
+	if action == "" {
+		action = "post"
+	}
+	switch action {
+	case "post", "timeline", "notifications", "reply", "like":
+	default:
+		k, _ := LookupKind("bluesky")
+		return "", fmt.Errorf("bluesky has no action %q; %s", action, actionsHelp(k))
+	}
+	// Validate before logging in: a missing argument should not cost a session.
+	var text, uri string
+	var err error
+	switch action {
+	case "post":
+		text, err = need(args, "text")
+	case "reply":
+		if text, err = need(args, "text"); err == nil {
+			uri, err = need(args, "uri", "id", "to")
+		}
+	case "like":
+		uri, err = need(args, "uri", "id", "to")
+	}
 	if err != nil {
 		return "", err
 	}
-	return summary(out), nil
+	jwt, did, err := b.session(ctx)
+	if err != nil {
+		return "", err
+	}
+	auth := bearer(jwt)
+	now := time.Now().UTC().Format(time.RFC3339)
+	record := func(collection string, rec map[string]any) (string, error) {
+		out, err := do(ctx, request{method: "POST", url: bsky + "com.atproto.repo.createRecord", headers: auth,
+			body: map[string]any{"repo": did, "collection": collection, "record": rec}})
+		if err != nil {
+			return "", err
+		}
+		return summary(out), nil
+	}
+	switch action {
+	case "timeline":
+		out, err := do(ctx, request{method: "GET", url: bsky + "app.bsky.feed.getTimeline?limit=" + strconv.Itoa(limitOf(args)), headers: auth})
+		if err != nil {
+			return "", err
+		}
+		return listing(out, "feed", 20, "post.uri", "post.author.handle", "post.record.text"), nil
+	case "notifications":
+		out, err := do(ctx, request{method: "GET", url: bsky + "app.bsky.notification.listNotifications?limit=" + strconv.Itoa(limitOf(args)), headers: auth})
+		if err != nil {
+			return "", err
+		}
+		return listing(out, "notifications", 20, "uri", "reason", "author.handle", "record.text"), nil
+	case "post":
+		return record("app.bsky.feed.post", map[string]any{"$type": "app.bsky.feed.post", "text": text, "createdAt": now})
+	}
+	// A reply and a like point at a post: its uri and its cid, which only the service knows.
+	out, err := do(ctx, request{method: "GET", url: bsky + "app.bsky.feed.getPosts?uris=" + url.QueryEscape(uri), headers: auth})
+	if err != nil {
+		return "", err
+	}
+	var posts struct {
+		Posts []struct {
+			URI    string `json:"uri"`
+			CID    string `json:"cid"`
+			Record struct {
+				Reply *struct {
+					Root struct{ URI, CID string } `json:"root"`
+				} `json:"reply"`
+			} `json:"record"`
+		} `json:"posts"`
+	}
+	if json.Unmarshal(out, &posts) != nil || len(posts.Posts) == 0 {
+		return "", fmt.Errorf("no such post %q", uri)
+	}
+	target := posts.Posts[0]
+	ref := map[string]any{"uri": target.URI, "cid": target.CID}
+	if action == "like" {
+		return record("app.bsky.feed.like", map[string]any{"$type": "app.bsky.feed.like", "subject": ref, "createdAt": now})
+	}
+	root := ref
+	if target.Record.Reply != nil {
+		root = map[string]any{"uri": target.Record.Reply.Root.URI, "cid": target.Record.Reply.Root.CID}
+	}
+	return record("app.bsky.feed.post", map[string]any{"$type": "app.bsky.feed.post", "text": text, "createdAt": now, "reply": map[string]any{"root": root, "parent": ref}})
 }
 
 func makeX(s Settings) Connector {
