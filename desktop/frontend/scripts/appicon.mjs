@@ -74,3 +74,48 @@ await page.setContent(`<style>html,body{margin:0;background:transparent}</style>
 await page.screenshot({ path: path.join(out, "appicon.png"), omitBackground: true });
 await browser.close();
 console.log("icon written to", out);
+
+// The background of the macOS disk image (desktop/dmg), at 1x and 2x: CI joins them into one
+// retina TIFF. The app sits at (170,190) and the Applications shortcut at (490,190).
+const dmgDir = path.resolve(here, "../../dmg");
+fs.mkdirSync(dmgDir, { recursive: true });
+const arrow = [
+  "..........X.....",
+  "...........X....",
+  "............X...",
+  "XXXXXXXXXXXXXX..",
+  "............X...",
+  "...........X....",
+  "..........X.....",
+]
+  .map((row, y) =>
+    [...row]
+      .map((c, x) => (c === "X" ? `<rect x="${x * 8}" y="${y * 8}" width="8" height="8"/>` : ""))
+      .join(""),
+  )
+  .join("");
+const backdrop = `<!doctype html><style>
+html,body{margin:0;width:660px;height:400px;overflow:hidden}
+body{position:relative;background:linear-gradient(#1a1530,#0a0a0f);font-family:"DejaVu Sans Mono","SF Mono",Menlo,monospace;color:#e6e6f0}
+.t{position:absolute;top:26px;left:0;right:0;text-align:center;font-size:20px;letter-spacing:.5px}
+.t b{color:#38bdf8}
+.n{position:absolute;bottom:20px;left:0;right:0;text-align:center;font-size:12px;color:#9a9ab0}
+.n code{color:#f39a3b}
+svg{position:absolute;left:268px;top:162px}
+.edge{position:absolute;inset:6px;border:2px solid #38bdf8;border-radius:22px;opacity:.55}
+</style>
+<div class="edge"></div>
+<div class="t">Drag <b>Kitties</b> to Applications</div>
+<svg width="128" height="56" shape-rendering="crispEdges" fill="#38bdf8">${arrow}</svg>
+<div class="n">First time? Open <code>READ ME FIRST.txt</code> before you start the app.</div>`;
+for (const [scale, file] of [
+  [1, "background.png"],
+  [2, "background@2x.png"],
+]) {
+  const b = await chromium.launch();
+  const pg = await b.newPage({ viewport: { width: 660, height: 400 }, deviceScaleFactor: scale });
+  await pg.setContent(backdrop);
+  await pg.screenshot({ path: path.join(dmgDir, file) });
+  await b.close();
+}
+console.log("disk image background written to", dmgDir);

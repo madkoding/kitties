@@ -1,0 +1,32 @@
+KITTIES
+=======
+
+1. Drag Kitties.app onto the Applications folder.
+
+2. macOS will say it "could not verify" Kitties. The app is not damaged:
+   it is simply not signed with an Apple Developer ID yet. Open Terminal
+   and run this once:
+
+       xattr -dr com.apple.quarantine /Applications/Kitties.app
+
+3. Open Kitties from Applications. It talks to a kitties gateway
+   (http://127.0.0.1:7488 by default): start one with `kitties gateway`,
+   or `kitties -demo gateway` to try it without a key or Docker.
+
+   https://github.com/madkoding/kitties
+
+
+KITTIES (en español)
+====================
+
+1. Arrastra Kitties.app a la carpeta Aplicaciones.
+
+2. macOS dirá que no pudo verificar Kitties. La app no está dañada: aún no
+   está firmada con un Developer ID de Apple. Abre Terminal y ejecuta esto
+   una sola vez:
+
+       xattr -dr com.apple.quarantine /Applications/Kitties.app
+
+3. Abre Kitties desde Aplicaciones. Se conecta a un gateway de kitties
+   (http://127.0.0.1:7488 por defecto): inicia uno con `kitties gateway`,
+   o `kitties -demo gateway` para probarlo sin clave ni Docker.

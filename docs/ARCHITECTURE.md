@@ -257,6 +257,13 @@ CI builds the image and checks its health and the 401 on every push, and publish
 
 ## The desktop app (`desktop/`)
 
+The macOS download is a disk image (`desktop/dmg`): the signed-ad-hoc `Kitties.app`, an
+Applications shortcut, a `READ ME FIRST.txt` with the `xattr` command for the first open, and a
+background with an arrow, laid out by `dmgbuild` (no Finder needed in CI). If the styled image
+cannot be built, CI falls back to a plain `hdiutil` image with the same three items, and always
+mounts the result to check them. The icon and the background are drawn by
+`frontend/scripts/appicon.mjs` from the interface's own tabby.
+
 A Wails v2 application in its own Go module, so the framework's dependencies never reach the
 CLI. The Go side (`app.go`) owns the connection and proxies the API (`App.Request`), so the page
 never holds the token; the page (`desktop/frontend`, Vite + Preact + Tailwind) works both inside
