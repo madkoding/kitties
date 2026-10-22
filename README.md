@@ -43,6 +43,20 @@ kitties -demo gateway        # three kitties with a scripted brain and a drawn d
 Open `http://127.0.0.1:7488` (on the same machine no token is typed: the page gets it from the
 gateway) or run the desktop app, then ask Tom to *open https://example.com*.
 
+## Downloading a release
+
+Each release has binaries for Linux, macOS, Windows and Android, plus the desktop app and
+`SHA256SUMS`. They are not yet signed with an Apple Developer ID, so macOS blocks a file that
+came through a browser ("Apple could not verify..."). It is the quarantine flag, not damage:
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing      # shasum -a 256 -c on macOS
+xattr -d com.apple.quarantine kitties-darwin-arm64 && chmod +x kitties-darwin-arm64
+xattr -dr com.apple.quarantine Kitties.app    # the desktop app
+```
+
+On Windows, SmartScreen asks once: *More info* then *Run anyway*.
+
 ## The real thing
 
 ```sh
