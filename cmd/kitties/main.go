@@ -28,6 +28,7 @@ import (
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
+	"github.com/madkoding/kitties/internal/web"
 )
 
 // version is set by the linker (-X main.version=...).
@@ -39,7 +40,8 @@ Usage: kitties [-config file] <command> [arguments]
 
 Commands:
   init                      write an example configuration (and a sample soul) to start from
-  gateway                   bootstrap the fleet from the configuration and serve the HTTP API
+  gateway [-listen addr]    bootstrap the fleet and serve the HTTP API and the web interface
+  token                     print the gateway's token (to sign in to the web interface)
   ls                        list the kitties and their state
   create <name> [flags]     create a kitty (-provider, -persona, -soul file, -avatar breed/color, -no-desktop)
   start|stop|rm <name>      manage one kitty
@@ -54,6 +56,9 @@ Flags: -config file picks the configuration; -demo needs no key and no Docker (a
 and a drawn desktop) and is the quickest way to see the interface: kitties -demo gateway.
 
 Environment: KITTIES_CONFIG names the configuration file (default ./kitties.yaml or ~/.kitties/kitties.yaml).
+A gateway without a configuration file starts empty: add models and kitties from the web page.
+For a server, KITTIES_LISTEN, KITTIES_TOKEN, KITTIES_PUBLIC_URL and KITTIES_DATA_DIR override the
+gateway block, which is how a container is configured (see docs/DEPLOY.md).
 `
 
 func main() {
@@ -77,6 +82,7 @@ type app struct {
 var (
 	detectRuntime = container.Detect
 	newContainers = func(rt container.Runtime) orchestrator.Containers { return container.New(rt) }
+	webFS         = web.FS
 	notifyContext = func() (context.Context, context.CancelFunc) {
 		return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	}
@@ -112,13 +118,24 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 		path = config.DefaultPath()
 	}
 	cfg, err := config.Load(path)
-	if err != nil && *demoMode && *configPath == "" {
+	switch {
+	case err != nil && *demoMode && *configPath == "":
 		// No file of their own: the demo brings its kitties. A file that was named must load.
 		cfg, err = demoConfig()
+	case err != nil && errors.Is(err, os.ErrNotExist) && *configPath == "" && os.Getenv("KITTIES_CONFIG") == "" && (cmd == "gateway" || cmd == "token"):
+		// A server with no file yet: it starts empty and is set up from the web page.
+		cfg, err = config.Defaults(), nil
+		fmt.Fprintf(errOut, "kitties: no configuration file (%s): starting empty; add models and kitties from the web page\n", path)
+	}
+	if err == nil {
+		err = cfg.ApplyEnv(os.Getenv)
 	}
 	if err != nil {
 		fmt.Fprintf(errOut, "kitties: %v\nRun `kitties init` to write an example configuration.\n", err)
 		return 1
+	}
+	if cmd == "token" {
+		return cmdToken(cfg, out, errOut)
 	}
 	a := &app{cfg: cfg, in: in, out: out, err: errOut, demo: *demoMode}
 	if err := a.open(cmd); err != nil {
@@ -185,7 +202,7 @@ func (a *app) dispatch(cmd string, args []string) error {
 	defer cancel()
 	switch cmd {
 	case "gateway":
-		return a.cmdGateway(ctx)
+		return a.cmdGateway(ctx, args)
 	case "ls":
 		return a.cmdList()
 	case "providers":
@@ -245,17 +262,52 @@ func cmdInit(path string, out, errOut io.Writer) int {
 	return 0
 }
 
-func (a *app) cmdGateway(ctx context.Context) error {
+// gatewayToken is the token the gateway uses: the configured one, else the one a previous run
+// left in the data directory (so a restart does not sign everybody out), else a new one. It is
+// kept in the data directory where a program on this machine finds it.
+func gatewayToken(cfg config.Config) (token, path string, fresh bool) {
+	path = filepath.Join(cfg.DataDirOr(), "gateway.token")
+	if cfg.Gateway.Token != "" {
+		return cfg.Gateway.Token, path, false
+	}
+	if data, err := os.ReadFile(path); err == nil {
+		if t := strings.TrimSpace(string(data)); len(t) >= 16 {
+			return t, path, false
+		}
+	}
+	return gateway.NewToken(), path, true
+}
+
+// cmdToken prints the token a gateway of this configuration uses, for signing in to the web page.
+func cmdToken(cfg config.Config, out, errOut io.Writer) int {
+	token, path, fresh := gatewayToken(cfg)
+	if fresh {
+		fmt.Fprintf(errOut, "kitties: no token yet (%s); start the gateway once and it makes one\n", path)
+		return 1
+	}
+	fmt.Fprintln(out, token)
+	return 0
+}
+
+func (a *app) cmdGateway(ctx context.Context, args []string) error {
+	fs := flag.NewFlagSet("gateway", flag.ContinueOnError)
+	fs.SetOutput(a.err)
+	listen := fs.String("listen", "", "address to listen on (default gateway.listen; 0.0.0.0:7488 serves the network)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	if *listen != "" {
+		a.cfg.Gateway.Listen = *listen
+		if err := a.cfg.Validate(); err != nil {
+			return err
+		}
+	}
 	if err := a.fleet.Bootstrap(ctx); err != nil {
 		fmt.Fprintf(a.err, "kitties: some kitties did not start: %v\n", err)
 	}
-	token := a.cfg.Gateway.Token
-	if token == "" {
-		token = gateway.NewToken()
-	}
+	token, tokenPath, _ := gatewayToken(a.cfg)
 	// The token is left where a local program finds it (the desktop app, a script of the
 	// same user), so a local executable never asks for it.
-	tokenPath := filepath.Join(a.cfg.DataDirOr(), "gateway.token")
 	if err := os.MkdirAll(filepath.Dir(tokenPath), 0o700); err == nil {
 		if err := os.WriteFile(tokenPath, []byte(token+"\n"), 0o600); err != nil {
 			fmt.Fprintf(a.err, "kitties: could not keep the token in %s: %v\n", tokenPath, err)
@@ -265,13 +317,20 @@ func (a *app) cmdGateway(ctx context.Context) error {
 	for _, k := range a.fleet.List() {
 		fmt.Fprintf(a.out, "  %-16s %-8s %s\n", k.Name, k.Status, k.Provider)
 	}
-	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts)
+	g := a.cfg.Gateway
+	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).
+		WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
+	if site, ok := webFS(); ok {
+		srv.WithWeb(site)
+	} else {
+		fmt.Fprintln(a.err, "kitties: this build has no web interface inside (make web); serving the built-in page")
+	}
 	logf := func(format string, args ...any) {
 		fmt.Fprintf(a.out, format+"\n", args...)
 	}
 	// The signed-in connectors keep their tokens fresh in the background.
 	go a.fleet.KeepTokensFresh(ctx, logf)
-	return srv.Listen(ctx, a.cfg.Gateway.Listen, logf)
+	return srv.Listen(ctx, g.Listen, logf)
 }
 
 func (a *app) cmdList() error {
