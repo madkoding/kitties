@@ -52,6 +52,8 @@ type Fleet interface {
 	SetConnector(name string, c config.Connector) error
 	RemoveConnector(name string) error
 	OAuth() *oauth.Manager
+	// InboundSecret is the secret a service presents to post events to a connector.
+	InboundSecret(name string) (string, error)
 }
 
 // Chats is what the gateway needs from the chat service.
@@ -87,6 +89,8 @@ type Server struct {
 	tlsCert      string
 	tlsKey       string
 	limit        *limiter
+	// agenda is the goals and journals, nil when the deployment has none.
+	agenda Agenda
 }
 
 // WithLibrary serves the skills and the artifacts.
@@ -152,6 +156,7 @@ func (s *Server) routes() {
 	s.mux.Handle("PUT /v1/settings/connectors/{name}", api(s.handleSetConnector))
 	s.mux.Handle("DELETE /v1/settings/connectors/{name}", api(s.handleRemoveConnector))
 	s.mux.HandleFunc("GET /v1/local-token", s.handleLocalToken)
+	s.agendaRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
@@ -417,8 +422,10 @@ func codeFor(err error) int {
 	switch {
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
-	case errors.Is(err, chat.ErrBusy):
+	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"):
 		return http.StatusConflict
+	case strings.Contains(msg, "configuration file"):
+		return http.StatusForbidden
 	case strings.Contains(msg, "already exists"), strings.Contains(msg, "not valid"), strings.Contains(msg, "unknown "),
 		strings.Contains(msg, "cannot be"), strings.Contains(msg, "is empty"), strings.Contains(msg, "needs at least"),
 		strings.Contains(msg, "not between"), strings.Contains(msg, "not a kitty"), strings.Contains(msg, "is not one of"),
@@ -426,7 +433,9 @@ func codeFor(err error) int {
 		strings.Contains(msg, "clear text"), strings.Contains(msg, ".kind:"), strings.HasPrefix(msg, "avatar."),
 		strings.Contains(msg, "too big"), strings.Contains(msg, "too long"), strings.Contains(msg, "is empty"), strings.Contains(msg, "needs a name"),
 		strings.Contains(msg, "built in"), strings.Contains(msg, "holds"), strings.Contains(msg, " needs "), strings.Contains(msg, "not a valid"),
-		strings.Contains(msg, "does not sign in"), strings.Contains(msg, "no OAuth flow"), strings.Contains(msg, "not signed in"):
+		strings.Contains(msg, "does not sign in"), strings.Contains(msg, "no OAuth flow"), strings.Contains(msg, "not signed in"),
+		strings.HasPrefix(msg, "schedule:"), strings.HasPrefix(msg, "on:"), strings.Contains(msg, "a goal "), strings.Contains(msg, "back itself up"),
+		strings.Contains(msg, "limits"):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
@@ -544,7 +553,20 @@ func (s *Server) handleStopKitty(w http.ResponseWriter, r *http.Request) {
 	s.lifecycle(w, r, s.fleet.Stop)
 }
 func (s *Server) handleRemoveKitty(w http.ResponseWriter, r *http.Request) {
-	s.lifecycle(w, r, s.fleet.Remove)
+	id := ""
+	if k, err := s.fleet.Get(r.PathValue("ref")); err == nil {
+		id = k.ID
+	}
+	s.lifecycle(w, r, func(ctx context.Context, ref string) error {
+		if err := s.fleet.Remove(ctx, ref); err != nil {
+			return err
+		}
+		// Its goals and journal go with it.
+		if f, ok := s.agenda.(Forgetter); ok && id != "" {
+			_ = f.Forget(id)
+		}
+		return nil
+	})
 }
 
 func (s *Server) handleExec(w http.ResponseWriter, r *http.Request) {

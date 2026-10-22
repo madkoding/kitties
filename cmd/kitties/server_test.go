@@ -12,7 +12,9 @@ import (
 	"testing/fstest"
 	"time"
 
+	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/config"
+	"github.com/madkoding/kitties/internal/orchestrator"
 )
 
 func TestGatewayToken(t *testing.T) {
@@ -182,5 +184,54 @@ func TestGatewayWithoutAConfigurationFile(t *testing.T) {
 	t.Setenv("KITTIES_PUBLIC_URL", "nope")
 	if code, _, errOut := exec(t, "", "gateway"); code != 1 || !strings.Contains(errOut, "public_url") {
 		t.Errorf("a bad environment: %d %s", code, errOut)
+	}
+}
+
+func TestGatewayGoalsAndWatchdog(t *testing.T) {
+	withRuntime(t, true)
+	cfg := writeConfig(t, chatServer(t, "ok"))
+	text := mustRead(t, cfg)
+	text = strings.Replace(text, "kitties:\n  - name: mimi\n  - name: team\n    replicas: 2\n    desktop: false\n",
+		"kitties:\n  - name: mimi\n    backup: team-1\n    limits:\n      retries: 2\n    goals:\n      - title: Inbox\n        text: Look at the inbox\n        every: '@hourly'\n  - name: team\n    replicas: 2\n    desktop: false\n    goals:\n      - title: Standup\n        every: '0 9 * * 1-5'\n", 1)
+	_ = os.WriteFile(cfg, []byte(text), 0o600)
+	old := watchEvery
+	watchEvery = 20 * time.Millisecond
+	t.Cleanup(func() { watchEvery = old })
+	addr, out, _, stop := serve(t, "-config", cfg, "gateway")
+	tok := strings.TrimSpace(strings.SplitN(strings.SplitN(out.String(), "gateway token: ", 2)[1], " ", 2)[0])
+	req, _ := http.NewRequest("GET", "http://"+addr+"/v1/goals", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	resp, err := http.Get("http://" + addr + "/v1/goals?token=" + tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	// mimi's goal and one per team replica.
+	if resp.StatusCode != 200 || strings.Count(string(body), `"title":"Inbox"`) != 1 || strings.Count(string(body), `"title":"Standup"`) != 2 || !strings.Contains(string(body), `"from_file":true`) {
+		t.Errorf("goals = %d %s", resp.StatusCode, body)
+	}
+	resp, _ = http.Get("http://" + addr + "/v1/kitties/mimi?token=" + tok)
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(body), `"backup":"team-1"`) || !strings.Contains(string(body), `"retries":2`) {
+		t.Errorf("mimi = %s", body)
+	}
+	time.Sleep(80 * time.Millisecond) // the watchdog looks a few times and finds nothing wrong
+	stop()
+	// A kitty of the file that was never created (no bootstrap yet) has its goals skipped.
+	loaded, err := config.Load(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded.DataDir = t.TempDir()
+	fleet, err := orchestrator.New(loaded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ag, _ := agenda.Open(t.TempDir(), nil)
+	a := &app{cfg: loaded, fleet: fleet, agenda: ag}
+	if err := a.syncGoals(); err != nil || len(ag.Goals("")) != 0 {
+		t.Errorf("sync without kitties: %v %d", err, len(ag.Goals("")))
 	}
 }

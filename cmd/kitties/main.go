@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/artifacts"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/config"
@@ -71,6 +72,7 @@ type app struct {
 	cfg    config.Config
 	fleet  *orchestrator.Manager
 	chats  *chat.Service
+	agenda *agenda.Agenda
 	skills *skills.Library
 	arts   *artifacts.Store
 	in     io.Reader
@@ -193,6 +195,12 @@ func (a *app) open(cmd string) error {
 	a.skills = skills.New(filepath.Join(a.cfg.DataDirOr(), "skills"))
 	a.arts = artifacts.New(filepath.Join(a.cfg.DataDirOr(), "artifacts"))
 	chats.SetLibrary(a.skills, a.arts)
+	ag, err := agenda.Open(a.cfg.DataDirOr(), chats)
+	if err != nil {
+		return err
+	}
+	chats.SetAgenda(ag.Journal, ag)
+	a.agenda = ag
 	a.fleet, a.chats = fleet, chats
 	return nil
 }
@@ -305,6 +313,9 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	if err := a.fleet.Bootstrap(ctx); err != nil {
 		fmt.Fprintf(a.err, "kitties: some kitties did not start: %v\n", err)
 	}
+	if err := a.syncGoals(); err != nil {
+		fmt.Fprintf(a.err, "kitties: goals from the configuration: %v\n", err)
+	}
 	token, tokenPath, _ := gatewayToken(a.cfg)
 	// The token is left where a local program finds it (the desktop app, a script of the
 	// same user), so a local executable never asks for it.
@@ -318,7 +329,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 		fmt.Fprintf(a.out, "  %-16s %-8s %s\n", k.Name, k.Status, k.Provider)
 	}
 	g := a.cfg.Gateway
-	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).
+	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
 		WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
 	if site, ok := webFS(); ok {
 		srv.WithWeb(site)
@@ -328,9 +339,46 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	logf := func(format string, args ...any) {
 		fmt.Fprintf(a.out, format+"\n", args...)
 	}
-	// The signed-in connectors keep their tokens fresh in the background.
+	// The signed-in connectors keep their tokens fresh in the background; the scheduler wakes
+	// the kitties up for their goals; the watchdog keeps their containers up.
 	go a.fleet.KeepTokensFresh(ctx, logf)
+	a.agenda.Scheduler.SetLog(logf)
+	go a.agenda.Run(ctx)
+	go a.fleet.Watch(ctx, watchEvery, func(k *kitty.Kitty, what string) {
+		logf("watchdog: %s is back (%s)", k.Name, what)
+		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindRecovered, Text: what})
+	}, logf)
 	return srv.Listen(ctx, g.Listen, logf)
+}
+
+// watchEvery is how often the watchdog looks at the containers.
+var watchEvery = 30 * time.Second
+
+// syncGoals gives the agenda the goals the configuration lists, by the kitties' ids.
+func (a *app) syncGoals() error {
+	var goals []agenda.Goal
+	for _, k := range a.cfg.Kitties {
+		if len(k.Goals) == 0 {
+			continue
+		}
+		names := []string{k.Name}
+		if k.Replicas > 1 {
+			names = names[:0]
+			for i := 1; i <= k.Replicas; i++ {
+				names = append(names, fmt.Sprintf("%s-%d", k.Name, i))
+			}
+		}
+		for _, name := range names {
+			kit, err := a.fleet.Get(name)
+			if err != nil {
+				continue
+			}
+			for _, g := range k.Goals {
+				goals = append(goals, agenda.Goal{Kitty: kit.ID, Title: g.Title, Text: g.Text, Every: g.Every, On: g.On})
+			}
+		}
+	}
+	return a.agenda.Store.Sync(goals)
 }
 
 func (a *app) cmdList() error {

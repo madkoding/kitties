@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -174,6 +175,15 @@ func (o *oauthStore) SaveOAuthCredentials(_ string, c oauth.Credentials) error {
 var sharedOAuth = oauth.New(&oauthStore{})
 
 func (f *fakeFleet) OAuth() *oauth.Manager { return sharedOAuth }
+func (f *fakeFleet) InboundSecret(name string) (string, error) {
+	switch name {
+	case "gh":
+		return "shh", nil
+	case "sl":
+		return "", nil
+	}
+	return "", fmt.Errorf("%w: connector %q", orchestrator.ErrNotFound, name)
+}
 
 type fakeChats struct {
 	sessions map[string]*chat.Session
