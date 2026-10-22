@@ -85,7 +85,8 @@ cd desktop && wails dev   # live reload while working on it
 | --- | --- |
 | ![A chat with one kitty](docs/screenshots/02-chat.png) | ![A group chat](docs/screenshots/03-group.png) |
 | ![A kitty's desktop](docs/screenshots/05-kitty-drawer.png) | ![Settings: the models](docs/screenshots/08-settings-models.png) |
-| ![Settings: the connectors](docs/screenshots/09-settings-connectors.png) | ![Adding a connector from the catalogue](docs/screenshots/17-connector-form.png) |
+| ![Settings: the connectors](docs/screenshots/09-settings-connectors.png) | ![The catalogue: one button per service](docs/screenshots/17-connector-catalogue.png) |
+| ![Google Workspace: sign in with OAuth](docs/screenshots/18-connector-oauth.png) | ![A kitty's own display](docs/screenshots/13-tom-display.png) |
 | ![The library: skills](docs/screenshots/15-library-skills.png) | ![The library: artifacts](docs/screenshots/16-library-artifacts.png) |
 | ![New kitty: pick its pixel cat](docs/screenshots/07-new-kitty.png) | ![Light mode](docs/screenshots/11-light.png) |
 
@@ -154,6 +155,16 @@ page, the phone layout and a kitty's own display.
   every kitty and every chat, downloadable from the page.
 - **Avatars**: every kitty is an animated pixel cat (five breeds, ten coats) that reacts as a bot
   would: idle, thinking, talking, working, happy, error, sleeping.
+- **Native tool calling**: with every provider family (OpenAI chat and responses, Anthropic,
+  Gemini) the desktop tools, the connectors and the library are offered as real tools and the
+  model calls them in its own format; `tools: text` on a profile keeps the `@tool` lines for a
+  server without tool support. Both run through the same actions.
+- **Live events**: the gateway streams every turn, step and finish of a chat as server-sent
+  events (`GET /v1/chats/{id}/events`); the page and the desktop app follow a chat live instead
+  of polling.
+- **OAuth**: Google Workspace (Gmail, Calendar, Drive, Sheets, Docs) and Microsoft 365 (Outlook
+  mail, Calendar, OneDrive) sign in with the person's own OAuth app from Settings; the gateway
+  runs the authorization-code flow with PKCE, keeps the refresh token and renews access tokens.
 - **Gateway** (`internal/gateway`): the HTTP API and the browser page.
 
 ## Configuration
@@ -193,12 +204,13 @@ connectors:
 | Social media | Mastodon, Bluesky, X, LinkedIn |
 | Git | GitHub (issues, comments, pull requests, files), GitLab, Gitea/Forgejo, motita (coding tasks) |
 | Productivity | Notion, Trello, Todoist, Linear, Jira |
-| Office | Airtable, Nextcloud (WebDAV files), Google Sheets (Apps Script) |
+| Office | Google Workspace (OAuth: Gmail, Calendar, Drive, Sheets, Docs), Microsoft 365 (OAuth: Outlook, Calendar, OneDrive), Airtable, Nextcloud (WebDAV files), Google Sheets (Apps Script) |
 | Drawing | Diagrams through Kroki (mermaid, plantuml, graphviz, d2…) rendered to SVG artifacts, Figma, Excalidraw scenes |
 | Generic | Webhook, any HTTP API with a bearer token, a program on the gateway's machine |
 
-Each one is configured from **Settings → Connectors** (the form shows the fields the service
-needs; secrets are kept on the gateway) or in the YAML with `kind` and `settings`. Inside its
+Each one is a button with its logo under **Settings → Connectors**: pick the service, fill the
+fields it needs (secrets are kept on the gateway; OAuth services get a *Sign in* button), or
+write it in the YAML with `kind` and `settings`. Inside its
 container a kitty also has LibreOffice, Inkscape, ImageMagick and mtPaint for office documents
 and drawing on its own display.
 
@@ -223,6 +235,8 @@ Keys come from the provider's usual variable (`OPENAI_API_KEY`, `ANTHROPIC_API_K
 | `POST /v1/chats/{id}/cancel` · `GET /v1/chats/{id}/shots/{name}` | stop a task; a step's screenshot |
 | `GET /v1/settings` · `PUT/DELETE /v1/settings/providers/{name}` · `POST …/test` · `PUT/DELETE /v1/settings/connectors/{name}` | the models and the connectors |
 | `GET /v1/local-token`                     | the token, handed only to a client on the same machine |
+| `GET /v1/chats/{id}/events`               | server-sent events: `turn`, `update`, `done`, `deleted` |
+| `POST /v1/oauth/{connector}/start` · `GET /v1/oauth/callback` | the OAuth sign-in of a connector |
 | `PATCH /v1/kitties/{ref}` `{avatar, soul}` · `GET /v1/avatars` | change a kitty's looks; the breeds and coats |
 | `GET/PUT/DELETE /v1/skills/{name}` · `POST …/accept` | the skills library and its proposals |
 | `GET/PUT/DELETE /v1/artifacts/{name}`     | the artifacts library (raw file bodies) |
@@ -238,6 +252,10 @@ make dist     # linux, macOS, windows and android binaries
 make image    # the kitty-desktop container image
 make desktop-check   # the Wails module and its page
 ```
+
+On a tag CI also publishes the `kitty-desktop` image to `ghcr.io/madkoding/kitty-desktop`
+(amd64 and arm64) and attaches the Wails desktop builds for Linux, Windows and macOS to the
+release next to the CLI binaries.
 
 The project builds with the Go standard library only. Commits follow
 [Conventional Commits](https://www.conventionalcommits.org/); releases are cut from tags.

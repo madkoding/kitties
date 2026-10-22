@@ -50,10 +50,14 @@ Each responder answers in turn:
 1. The transcript is rendered for that kitty: its own turns as `assistant`, everything else
    (the person and the other kitties) as `user` turns labelled `[name]: text`, so a kitty builds
    on what a teammate just said instead of repeating it.
-2. The brain answers. Lines of the form `@connector <name> <json>`, `@skill <verb> …` and
-   `@artifact <verb> …` are parsed out and run (only the connectors the kitty is allowed), their
-   results are fed back as a message and the brain is asked again, up to `MaxRounds` times. A
-   file a connector answered with is saved to the artifacts and named on the turn.
+2. The brain answers. With a provider that calls tools natively (the default), the desktop
+   tools, the connectors (`connector_<name>`) and the library (`skill_read`, `artifact_save`,
+   …) are offered as tools and the calls come back typed; with `tools: text` the same things
+   are lines in the reply (`@tool`, `@connector`, `@skill`, `@artifact`). Both are parsed into
+   one list of actions (`internal/chat/actions.go`), run the same way, and answered in the
+   shape the model spoke: tool-result messages (with the screenshot as a following user turn)
+   or one text message. This repeats up to `MaxRounds` times. A file a connector answered with
+   is saved to the artifacts and named on the turn.
 3. The turn is saved with the connector results and the token usage.
 
 Turns of one session are serialised; different sessions run in parallel.
@@ -77,6 +81,25 @@ with `@tool <name> <json>` lines. When a reply carries such lines:
 
 The demo (`internal/demo`) implements the same `Runner` with an in-memory desktop that draws its
 screenshots, which is what the documentation's pictures show.
+
+## Live events
+
+`chat.Service.Subscribe(id)` hands a watcher every new or changed turn of a session (`turn`,
+`update` while a task adds steps, `done`, `deleted`); a slow watcher loses events rather than
+holding the chat. The gateway streams them at `GET /v1/chats/{id}/events` as server-sent events
+with a heartbeat. The page uses an `EventSource` in a browser; inside Wails the Go side reads the
+stream (`App.Watch`) and re-emits each event through the Wails runtime, since the page there
+holds no token.
+
+## OAuth (`internal/oauth`)
+
+Google Workspace and Microsoft 365 sign in with the person's own OAuth app (client id, optional
+secret) through the authorization-code flow with PKCE: `POST /v1/oauth/{connector}/start`
+returns the consent URL, the browser lands on `GET /v1/oauth/callback` (open, tied to the flow
+by its state), the code is exchanged and the tokens are written into the connector's settings
+(`oauth_*` keys, never returned by the API). The connector's requests take their bearer token
+from a token source bound to the connector's name, which refreshes it a minute before expiry
+and saves the new one.
 
 ## Run-time settings (`internal/orchestrator/settings.go`)
 
