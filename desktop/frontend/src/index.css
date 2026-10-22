@@ -782,3 +782,78 @@ html[data-motion="off"] .cat-spark {
   background: rgb(0 0 0 / calc(var(--well-k) * 0.22));
   border-radius: var(--radius-cut);
 }
+
+/* ─── The connector catalogue: one button per service, with its logo ─────────────────────── */
+.service-btn {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 112px;
+  min-height: 86px;
+  padding: 10px 6px;
+  background: rgb(var(--ov-rgb) / 0.04);
+  border: 1px solid rgb(var(--ov-rgb) / 0.08);
+  color: var(--t2);
+  font-size: 0.75rem;
+  line-height: 1.15;
+  text-align: center;
+  position: relative;
+  transition:
+    background 160ms ease,
+    border-color 160ms ease,
+    transform 160ms ease;
+}
+.service-btn > span {
+  overflow-wrap: anywhere;
+}
+.service-btn:hover {
+  background: rgb(var(--ov-rgb) / 0.09);
+  border-color: color-mix(in srgb, var(--brand, var(--color-accent)) 60%, transparent);
+  color: var(--t1);
+  transform: translateY(-1px);
+}
+.service-btn.on {
+  background: rgb(var(--accent-rgb) / 0.12);
+  border-color: rgb(var(--accent-rgb) / 0.5);
+  color: var(--t1);
+}
+.service-btn .logo,
+.service-btn .logo-fallback {
+  display: block;
+  color: var(--brand, var(--color-accent));
+}
+.service-oauth {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  color: var(--t3);
+  border: 1px solid rgb(var(--ov-rgb) / 0.15);
+}
+.service-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  background: rgb(var(--ov-rgb) / 0.05);
+  border: 1px solid rgb(var(--ov-rgb) / 0.1);
+  color: var(--brand, var(--color-accent));
+}
+.logo-fallback {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  color: var(--brand, var(--color-accent));
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
+}

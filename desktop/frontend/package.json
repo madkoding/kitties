@@ -12,7 +12,8 @@
     "format:check": "prettier --check src"
   },
   "dependencies": {
-    "preact": "^11.0.0"
+    "preact": "^11.0.0",
+    "simple-icons": "^16.35.0"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.9.0",

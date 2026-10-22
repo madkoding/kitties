@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import type { Kitty, Session } from "./api";
-import { ApiError, api } from "./api";
+import { ApiError, api, watchChat } from "./api";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
 import { IconMenu, IconTrash, IconUsers } from "./icons";
@@ -11,14 +11,15 @@ import Sidebar, { moodOf } from "./Sidebar";
 import PixelCat from "./PixelCat";
 import { cycleMode } from "./theme";
 
-type ModalKind = "none" | "chat" | "kitty" | "connect" | "settings" | "connectors" | "connectors-add" | "library" | "artifacts";
+type ModalKind = "none" | "chat" | "kitty" | "connect" | "settings" | "connectors" | "connectors-add" | "library" | "artifacts" | "connector";
 
 // The route is the hash: #chat/<id> or #kitty/<id>, so a view can be linked and reloaded.
-function routeFromHash(): { chat: string | null; kitty: string | null; modal: ModalKind } {
-  const m = location.hash.match(/^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors|connect|settings))?/);
+function routeFromHash(): { chat: string | null; kitty: string | null; modal: ModalKind; connector: string } {
+  const m = location.hash.match(/^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|connect|settings|library|artifacts))?/);
   const n = location.hash.match(/^#new-(chat|kitty|connectors-add|connectors|connect|settings|library|artifacts)/);
-  const modal = (m?.[3] || n?.[1] || "none") as ModalKind;
-  return { chat: m?.[1] === "chat" ? m[2] : null, kitty: m?.[1] === "kitty" ? m[2] : null, modal };
+  const c = location.hash.match(/^#connector\/([a-z0-9-]+)/);
+  const modal = (c ? "connector" : m?.[3] || n?.[1] || "none") as ModalKind;
+  return { chat: m?.[1] === "chat" ? m[2] : null, kitty: m?.[1] === "kitty" ? m[2] : null, modal, connector: c?.[1] || "" };
 }
 
 export default function App() {
@@ -86,17 +87,43 @@ export default function App() {
 
   const working = useMemo(() => Boolean(session?.turns?.some((t) => t.working)), [session]);
 
-  // Poll: quickly while a kitty works, slowly otherwise.
+  // The open chat is watched live: every new turn, step and finish arrives as an event and is
+  // merged into the session. A slow poll remains as the safety net.
   useEffect(() => {
-    const every = working || pending ? 1200 : 8000;
+    if (!current) {
+      return;
+    }
+    return watchChat(current, (ev) => {
+      if (ev.type === "deleted") {
+        location.hash = "";
+        refresh();
+        return;
+      }
+      if (ev.turn === undefined || ev.index === undefined) {
+        return;
+      }
+      setSession((prev) => {
+        if (!prev || prev.id !== ev.session) {
+          return prev;
+        }
+        const turns = [...(prev.turns || [])];
+        turns[ev.index!] = ev.turn!;
+        return { ...prev, turns };
+      });
+      if (ev.type === "done") {
+        refresh();
+      }
+    });
+  }, [current, refresh]);
+  useEffect(() => {
     const id = setInterval(() => {
       refresh();
       if (current) {
         loadSession(current);
       }
-    }, every);
+    }, 15000);
     return () => clearInterval(id);
-  }, [working, pending, current, refresh, loadSession]);
+  }, [current, refresh, loadSession]);
 
   const workingChats = useMemo(() => {
     const set = new Set<string>();
@@ -225,8 +252,13 @@ export default function App() {
         />
       )}
       {(modal === "library" || modal === "artifacts") && <LibraryModal initial={modal === "artifacts" ? "artifacts" : "skills"} onClose={() => setModal("none")} />}
-      {(modal === "settings" || modal === "connectors" || modal === "connectors-add") && (
-        <SettingsModal initial={modal === "settings" ? "models" : "connectors"} addConnector={modal === "connectors-add"} onClose={() => setModal("none")} />
+      {(modal === "settings" || modal === "connectors" || modal === "connectors-add" || modal === "connector") && (
+        <SettingsModal
+          initial={modal === "settings" ? "models" : "connectors"}
+          addConnector={modal === "connectors-add"}
+          editConnector={modal === "connector" ? routeFromHash().connector : undefined}
+          onClose={() => setModal("none")}
+        />
       )}
       {modal === "connect" && (
         <ConnectModal

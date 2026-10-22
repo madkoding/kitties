@@ -7,7 +7,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestRequestAndConnect(t *testing.T) {
@@ -78,4 +80,61 @@ func TestRequestAndConnect(t *testing.T) {
 		t.Error("connect to nothing")
 	}
 	a.shutdown(t.Context())
+}
+
+func TestWatch(t *testing.T) {
+	var events []map[string]any
+	var mu sync.Mutex
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/chats/bad/events" {
+			w.WriteHeader(404)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: hello\ndata: {}\n\nevent: turn\ndata: {\"type\":\"turn\",\"index\":1}\n\n: ping\n\nevent: deleted\ndata: {\"type\":\"deleted\"}\n\n"))
+	}))
+	defer srv.Close()
+	a := NewApp()
+	a.emit = func(name string, data any) {
+		mu.Lock()
+		defer mu.Unlock()
+		events = append(events, data.(map[string]any))
+	}
+	a.startup(t.Context())
+	a.conn.URL = srv.URL
+	if err := a.Watch("c/1"); err == nil {
+		t.Error("a bad id is refused")
+	}
+	if err := a.Watch("c1"); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		mu.Lock()
+		n := len(events)
+		mu.Unlock()
+		if n >= 2 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	mu.Lock()
+	if len(events) < 2 || events[0]["type"] != "turn" || events[1]["type"] != "deleted" {
+		t.Errorf("events = %v", events)
+	}
+	mu.Unlock()
+	a.Unwatch("c1")
+	a.Unwatch("c1")
+	reconnectAfter = time.Millisecond
+	_ = a.Watch("bad")
+	time.Sleep(20 * time.Millisecond)
+	a.shutdown(t.Context())
+	a.conn.URL = "http://127.0.0.1:1"
+	if err := a.stream(t.Context(), "x"); err == nil {
+		t.Error("a gateway that does not answer")
+	}
+	a.conn.URL = "::bad"
+	if err := a.stream(t.Context(), "x"); err == nil {
+		t.Error("a bad url")
+	}
 }

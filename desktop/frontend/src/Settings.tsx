@@ -3,6 +3,8 @@ import type { ConnectorKind, ConnectorView, ProviderKind, ProviderView, Settings
 import { api } from "./api";
 import { IconPlus, IconTrash, IconX } from "./icons";
 import { ConnectModal } from "./Modals";
+import ConnectorLogo, { logoColor } from "./ConnectorLogo";
+import { openExternal, oauthStart } from "./api";
 
 type Tab = "models" | "connectors" | "gateway";
 
@@ -149,9 +151,59 @@ function ProviderRow({ p, onEdit, onChanged }: { p: ProviderView; onEdit: () => 
   );
 }
 
+// ServiceGrid is the catalogue as buttons with their logos, grouped by category.
+function ServiceGrid({ catalog, categories, picked, onPick }: { catalog: ConnectorKind[]; categories: string[]; picked: string; onPick: (k: ConnectorKind) => void }) {
+  return (
+    <div class="service-grid">
+      {categories.map((c) => (
+        <div key={c}>
+          <div class="section-title !mx-0">{c}</div>
+          <div class="flex flex-wrap gap-2">
+            {catalog
+              .filter((k) => k.category === c)
+              .map((k) => (
+                <button key={k.name} type="button" class={`plain service-btn ${picked === k.name ? "on" : ""}`} style={`--brand:${logoColor(k.name)}`} onClick={() => onPick(k)} title={k.help}>
+                  <ConnectorLogo kind={k.name} size={26} />
+                  <span>{k.label}</span>
+                  {k.oauth && <span class="service-oauth">OAuth</span>}
+                </button>
+              ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// OAuthButton signs a connector in: it asks the gateway for the consent URL and opens it.
+function OAuthButton({ view, onDone }: { view: ConnectorView; onDone: () => void }) {
+  const [msg, setMsg] = useState("");
+  const go = async () => {
+    try {
+      const url = await oauthStart(view.name);
+      openExternal(url);
+      setMsg("A browser window opened: sign in there, then come back.");
+      const id = setInterval(onDone, 3000);
+      setTimeout(() => clearInterval(id), 120000);
+    } catch (e) {
+      setMsg((e as Error).message);
+    }
+  };
+  return (
+    <div class="mt-1 mb-3 flex items-center gap-3 flex-wrap">
+      <button type="button" class={`${view.signed_in ? "btn-ghost" : "btn-accent"} px-4 py-2 text-sm flex items-center gap-2`} onClick={go}>
+        <ConnectorLogo kind={view.kind} size={16} mono />
+        {view.signed_in ? "Sign in again" : `Sign in with ${view.oauth === "google" ? "Google" : "Microsoft"}`}
+      </button>
+      {view.signed_in && <span class="tag tag-green">signed in{view.account ? " · " + view.account : ""}</span>}
+      {msg && <span class="text-xs text-[var(--t3)]">{msg}</span>}
+    </div>
+  );
+}
+
 function ConnectorForm({ view, catalog, categories, motitaURL, onSaved, onClose }: { view: ConnectorView; catalog: ConnectorKind[]; categories: string[]; motitaURL?: string; onSaved: (s: SettingsView) => void; onClose: () => void }) {
   const [name, setName] = useState(view.name);
-  const [kind, setKind] = useState(view.kind || catalog[0]?.name || "");
+  const [kind, setKind] = useState(view.kind || "");
   const [description, setDescription] = useState(view.description || "");
   const [values, setValues] = useState<Record<string, string>>({ ...view.settings });
   const [err, setErr] = useState("");
@@ -174,41 +226,55 @@ function ConnectorForm({ view, catalog, categories, motitaURL, onSaved, onClose 
       setBusy(false);
     }
   };
+  if (!kind) {
+    return (
+      <div class="mt-3 p-4 border border-[rgb(var(--accent-rgb)/0.3)] bg-[rgb(var(--accent-rgb)/0.05)]">
+        <p class="text-sm text-[var(--t3)]">Pick the service to connect.</p>
+        <ServiceGrid
+          catalog={catalog}
+          categories={categories}
+          picked=""
+          onPick={(k) => {
+            setKind(k.name);
+            setValues({});
+            if (!name) {
+              setName(k.name);
+            }
+          }}
+        />
+        <div class="flex justify-end gap-2 mt-4">
+          <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
+            Cancel
+          </button>
+        </div>
+      </div>
+    );
+  }
   return (
     <div class="mt-3 p-4 border border-[rgb(var(--accent-rgb)/0.3)] bg-[rgb(var(--accent-rgb)/0.05)]">
+      <div class="flex items-center gap-3 mb-1">
+        <span class="service-badge" style={`--brand:${logoColor(kind)}`}>
+          <ConnectorLogo kind={kind} size={28} />
+        </span>
+        <div class="flex-1 min-w-0">
+          <div class="font-semibold">{def?.label || kind}</div>
+          <div class="text-xs text-[var(--t3)]">{def?.help}</div>
+        </div>
+        {!view.name && (
+          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setKind("")}>
+            change service
+          </button>
+        )}
+      </div>
+      {def?.oauth && view.name && <OAuthButton view={view} onDone={() => api.settings().then(onSaved).catch(() => {})} />}
+      {def?.oauth && !view.name && <p class="text-xs text-[var(--t3)] mb-2">Save first, then sign in with the button that appears here.</p>}
       <div class="grid sm:grid-cols-2 gap-x-4">
-        <div>
+        <div class="sm:col-span-2">
           <label class={LABEL}>Name</label>
           <input class={INPUT} value={name} disabled={Boolean(view.name)} onInput={(e) => setName((e.target as HTMLInputElement).value)} placeholder="team-slack" />
         </div>
-        <div>
-          <label class={LABEL}>Service</label>
-          <select
-            class={INPUT}
-            value={kind}
-            onChange={(e) => {
-              setKind((e.target as HTMLSelectElement).value);
-              setValues({});
-            }}
-          >
-            {categories.map((c) => (
-              <optgroup key={c} label={c}>
-                {catalog
-                  .filter((k) => k.category === c)
-                  .map((k) => (
-                    <option key={k.name} value={k.name}>
-                      {k.label}
-                    </option>
-                  ))}
-              </optgroup>
-            ))}
-          </select>
-        </div>
-        {def && (
-          <div class="sm:col-span-2 text-xs text-[var(--t3)] mt-2">
-            {def.help}.{" "}
-            {def.actions.length > 0 && <span>Actions: {def.actions.map((a) => a.name + "(" + (a.args || []).join(", ") + ")").join("; ")}</span>}
-          </div>
+        {def && def.actions.length > 0 && (
+          <div class="sm:col-span-2 text-xs text-[var(--t3)] mt-2">Actions: {def.actions.map((a) => a.name + "(" + (a.args || []).join(", ") + ")").join("; ")}</div>
         )}
         <div class="sm:col-span-2">
           <label class={LABEL}>Description (what the kitties are told it does)</label>
@@ -243,17 +309,28 @@ function ConnectorForm({ view, catalog, categories, motitaURL, onSaved, onClose 
   );
 }
 
-const NEW_CONNECTOR: ConnectorView = { name: "", kind: "slack", category: "messaging", label: "Slack", token_set: false, settings: {}, secrets_set: [], from_file: false };
+const NEW_CONNECTOR: ConnectorView = { name: "", kind: "", category: "", label: "", token_set: false, settings: {}, secrets_set: [], from_file: false };
 
-export default function SettingsModal({ onClose, initial, addConnector }: { onClose: () => void; initial?: Tab; addConnector?: boolean }) {
+export default function SettingsModal({ onClose, initial, addConnector, editConnector }: { onClose: () => void; initial?: Tab; addConnector?: boolean; editConnector?: string }) {
   const [tab, setTab] = useState<Tab>(initial || "models");
   const [view, setView] = useState<SettingsView | null>(null);
   const [err, setErr] = useState("");
   const [editing, setEditing] = useState<ProviderView | null>(null);
   const [editingC, setEditingC] = useState<ConnectorView | null>(addConnector ? NEW_CONNECTOR : null);
   useEffect(() => {
-    api.settings().then(setView).catch((e) => setErr((e as Error).message));
-  }, []);
+    api
+      .settings()
+      .then((v) => {
+        setView(v);
+        if (editConnector) {
+          const c = v.connectors.find((x) => x.name === editConnector);
+          if (c) {
+            setEditingC(c);
+          }
+        }
+      })
+      .catch((e) => setErr((e as Error).message));
+  }, [editConnector]);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("keydown", onKey);
@@ -309,18 +386,24 @@ export default function SettingsModal({ onClose, initial, addConnector }: { onCl
         {tab === "connectors" && view && (
           <div>
             <p class="text-sm text-[var(--t3)]">
-              External services the kitties may use. The catalogue covers {view.connector_catalog.length} services in {view.connector_categories.length} categories:{" "}
-              {view.connector_categories.map((c) => (
-                <span key={c} class="tag mr-1">
-                  {c} · {view.connector_catalog.filter((k) => k.category === c).length}
-                </span>
-              ))}
+              External services the kitties may use: {view.connector_catalog.length} services in {view.connector_categories.length} categories. Pick one below to connect it.
             </p>
+            {!editingC && (
+              <ServiceGrid
+                catalog={view.connector_catalog}
+                categories={view.connector_categories}
+                picked=""
+                onPick={(k) => setEditingC({ ...NEW_CONNECTOR, kind: k.name, category: k.category, label: k.label, name: view.connectors.some((c) => c.name === k.name) ? "" : k.name })}
+              />
+            )}
+            <div class="section-title !mx-0 mt-4">Connected</div>
             <div class="flex flex-col gap-1 mt-3">
               {view.connectors.map((c) => (
                 <div key={c.name} class="row !py-2.5">
                   <button class="row-hit" onClick={() => setEditingC(c)} aria-label={`Edit ${c.name}`} />
-                  <span class="dot running" />
+                  <span class="service-badge" style={`--brand:${logoColor(c.kind)}`}>
+                    <ConnectorLogo kind={c.kind} size={22} />
+                  </span>
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
                       <span class="text-sm font-semibold">{c.name}</span>
@@ -328,6 +411,7 @@ export default function SettingsModal({ onClose, initial, addConnector }: { onCl
                       <span class="tag">{c.category}</span>
                       {c.from_file && <span class="tag">yaml</span>}
                       {c.secrets_set?.length > 0 && <span class="tag tag-green">secrets set</span>}
+                      {c.oauth && <span class={`tag ${c.signed_in ? "tag-green" : "tag-amber"}`}>{c.signed_in ? "signed in" : "sign in needed"}</span>}
                     </div>
                     <div class="text-xs text-[var(--t3)] truncate">{c.description || c.url || c.command || c.kind}</div>
                   </div>

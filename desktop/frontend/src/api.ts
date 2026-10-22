@@ -85,6 +85,16 @@ export interface ConnectorView {
   settings: Record<string, string>;
   secrets_set: string[];
   from_file: boolean;
+  oauth?: string;
+  signed_in?: boolean;
+  account?: string;
+}
+
+export interface ChatEvent {
+  type: "hello" | "turn" | "update" | "done" | "deleted";
+  session?: string;
+  index?: number;
+  turn?: Turn;
 }
 
 export interface ConnectorField {
@@ -103,6 +113,7 @@ export interface ConnectorKind {
   help: string;
   fields: ConnectorField[];
   actions: { name: string; help: string; args?: string[] }[];
+  oauth?: string;
 }
 
 export interface SettingsView {
@@ -337,6 +348,49 @@ export const api = {
   artifacts: () => request<{ artifacts: ArtifactInfo[] }>("GET", "/v1/artifacts").then((r) => r.artifacts || []),
   deleteArtifact: (name: string) => request("DELETE", `/v1/artifacts/${encodeURIComponent(name)}`),
 };
+
+// oauthStart asks the gateway for the consent URL of a connector's sign-in.
+export const oauthStart = (name: string) => request<{ url: string }>("POST", `/v1/oauth/${name}/start`).then((r) => r.url);
+
+// openExternal opens a URL in the person's browser: through Wails when inside it.
+export function openExternal(url: string): void {
+  const rt = (window as unknown as { runtime?: { BrowserOpenURL?: (u: string) => void } }).runtime;
+  if (rt?.BrowserOpenURL) {
+    rt.BrowserOpenURL(url);
+    return;
+  }
+  window.open(url, "_blank", "noopener");
+}
+
+// watchChat follows a chat's events as they happen. In a browser it is an EventSource on the
+// gateway; inside Wails the Go side reads the stream and emits runtime events. It returns the
+// function that stops watching.
+export function watchChat(id: string, onEvent: (e: ChatEvent) => void): () => void {
+  const app = window.go?.main?.App;
+  const rt = (window as unknown as { runtime?: { EventsOn?: (name: string, cb: (data: unknown) => void) => () => void } }).runtime;
+  if (app && (app as unknown as { Watch?: (id: string) => Promise<void> }).Watch && rt?.EventsOn) {
+    const off = rt.EventsOn("kitties:chat:" + id, (data) => onEvent(data as ChatEvent));
+    void (app as unknown as { Watch: (id: string) => Promise<void> }).Watch(id);
+    return () => {
+      off();
+      void (app as unknown as { Unwatch?: (id: string) => Promise<void> }).Unwatch?.(id);
+    };
+  }
+  if (typeof EventSource === "undefined") {
+    return () => {};
+  }
+  const es = new EventSource(shotURL(`/v1/chats/${id}/events`));
+  for (const type of ["turn", "update", "done", "deleted"]) {
+    es.addEventListener(type, (ev) => {
+      try {
+        onEvent(JSON.parse((ev as MessageEvent).data) as ChatEvent);
+      } catch {
+        /* a malformed event is dropped */
+      }
+    });
+  }
+  return () => es.close();
+}
 
 // artifactText loads a text artifact for reading in the page.
 export async function artifactText(name: string): Promise<string> {

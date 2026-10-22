@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -11,7 +12,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 // App is what the page can call: the connection to the gateway and a proxy for its API, so the
@@ -20,6 +24,10 @@ type App struct {
 	ctx  context.Context
 	http *http.Client
 	conn Connection
+	// emit hands an event to the page (the Wails runtime once the app runs).
+	emit    func(name string, data any)
+	mu      sync.Mutex
+	watches map[string]context.CancelFunc
 }
 
 // Connection is where the gateway is and how to talk to it.
@@ -30,15 +38,106 @@ type Connection struct {
 
 // NewApp creates the application.
 func NewApp() *App {
-	return &App{http: &http.Client{Timeout: 10 * time.Minute}}
+	return &App{http: &http.Client{Timeout: 10 * time.Minute}, watches: map[string]context.CancelFunc{}}
 }
 
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	a.conn = loadConnection()
+	if a.emit == nil {
+		a.emit = func(name string, data any) { runtime.EventsEmit(ctx, name, data) }
+	}
 }
 
-func (a *App) shutdown(context.Context) {}
+func (a *App) shutdown(context.Context) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	for id, cancel := range a.watches {
+		cancel()
+		delete(a.watches, id)
+	}
+}
+
+// Watch follows a chat's events from the gateway and hands each one to the page as the
+// runtime event "kitties:chat:<id>". Watching again restarts the stream.
+func (a *App) Watch(id string) error {
+	if strings.ContainsAny(id, "/?#") || id == "" {
+		return errors.New("not a chat id")
+	}
+	a.Unwatch(id)
+	ctx, cancel := context.WithCancel(context.Background())
+	a.mu.Lock()
+	a.watches[id] = cancel
+	a.mu.Unlock()
+	go a.follow(ctx, id)
+	return nil
+}
+
+// Unwatch stops following a chat.
+func (a *App) Unwatch(id string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if cancel, ok := a.watches[id]; ok {
+		cancel()
+		delete(a.watches, id)
+	}
+}
+
+// follow reads the event stream until the context ends, reconnecting after a drop.
+func (a *App) follow(ctx context.Context, id string) {
+	for ctx.Err() == nil {
+		if err := a.stream(ctx, id); err != nil && ctx.Err() == nil {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(reconnectAfter):
+			}
+		}
+	}
+}
+
+var reconnectAfter = 3 * time.Second
+
+func (a *App) stream(ctx context.Context, id string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, a.conn.URL+"/v1/chats/"+id+"/events", nil)
+	if err != nil {
+		return err
+	}
+	if a.conn.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+a.conn.Token)
+	}
+	resp, err := (&http.Client{}).Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("the gateway answered HTTP %d", resp.StatusCode)
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64<<10), 8<<20)
+	event := ""
+	for scanner.Scan() {
+		line := scanner.Text()
+		switch {
+		case strings.HasPrefix(line, "event:"):
+			event = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+		case strings.HasPrefix(line, "data:"):
+			var payload map[string]any
+			if json.Unmarshal([]byte(strings.TrimSpace(strings.TrimPrefix(line, "data:"))), &payload) == nil && event != "" && event != "hello" {
+				if a.emit != nil {
+					a.emit("kitties:chat:"+id, payload)
+				}
+				if event == "deleted" {
+					return nil
+				}
+			}
+		case line == "":
+			event = ""
+		}
+	}
+	return scanner.Err()
+}
 
 // configPath is where the connection is kept: ~/.kitties/desktop.json.
 func configPath() string {
