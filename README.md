@@ -362,7 +362,7 @@ connectors:
 | Category | Services |
 | --- | --- |
 | Messaging | Slack (webhook, bot token or OAuth sign-in; reads and replies), Discord, Telegram, WhatsApp (Cloud API), Email (SMTP), Matrix, Google Chat, Microsoft Teams, ntfy (push to your phone) |
-| Social media | Mastodon and Bluesky (post, timeline, mentions, reply, like), X, LinkedIn |
+| Social media | Facebook Pages (post, posts, comments, reply, like, Messenger inbox and answers), Instagram professional accounts (pictures and reels, posts, comments, replies), Mastodon and Bluesky (post, timeline, mentions, reply, like), X, LinkedIn |
 | Git | GitHub (issues, comments, pull requests, files; a token or OAuth sign-in), GitLab, Gitea/Forgejo, motita (coding tasks) |
 | Productivity | Notion, Trello, Todoist, Linear, Jira, Zendesk (support tickets) |
 | Finance | Stripe (balance, invoices, payments, refunds) |
@@ -378,6 +378,12 @@ fails on a stale token. In a chat, every call a kitty makes shows up as a chip w
 service's logo. Inside its
 container a kitty also has LibreOffice, Inkscape, ImageMagick and mtPaint for office documents
 and drawing on its own display.
+
+Facebook and Instagram use Meta's Graph API with a token of your own app (developers.facebook.com):
+for a Page, a long-lived Page token and the Page id; for Instagram, a professional (business or
+creator) account linked to a Page, with a Page token, or an Instagram Login token (`IG…`), and the
+account id. Instagram only publishes media from a public https URL (a JPEG, or an MP4 for a reel).
+Publishing, replying, liking and messaging ask you first until you trust the kitty with them.
 
 Keys come from the provider's usual variable (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`,
 `GEMINI_API_KEY`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`,

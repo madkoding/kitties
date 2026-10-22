@@ -578,3 +578,18 @@ test("the Android app asks for the gateway first, then works as a remote", async
   await expect(kittyRow(page, "mimi")).toBeVisible();
   await shot(page, "38-android-app");
 });
+
+test("Facebook and Instagram: a Page or a professional account, and what waits for a yes", async ({
+  page,
+}) => {
+  await open(page, "#new-connectors-add");
+  await page.getByRole("button", { name: "Social media" }).click();
+  for (const name of ["Facebook Page", "Instagram"]) {
+    await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
+  }
+  await page.locator(".service-btn", { hasText: "Instagram" }).click();
+  await expect(page.getByText("Instagram account id")).toBeVisible();
+  await page.getByText("What the kitties can do with it").click();
+  await expect(page.locator("li", { hasText: /^Post/ }).first()).toContainText("asks you first");
+  await shot(page, "39-instagram");
+});

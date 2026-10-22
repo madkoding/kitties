@@ -99,7 +99,7 @@ func init() {
 }
 
 func catalog() []Kind {
-	kinds := withReads(withInbound(append(moreKinds(), []Kind{
+	kinds := withReads(withInbound(append(append(moreKinds(), metaKinds()...), []Kind{
 		// ── messaging ──────────────────────────────────────────────────────────────────────────
 		{Name: "slack", Category: CatMessaging, Label: "Slack", Help: "posts messages to a Slack channel, through a webhook, a bot token or a sign-in",
 			Fields: []Field{f("url", "Incoming webhook URL", "from Slack's app settings", false, true), f("token", "Bot token", "xoxb-…, instead of a webhook", false, true), f("channel", "Channel", "#general, used with a bot token or a sign-in", false, false),
@@ -610,7 +610,7 @@ func summary(data []byte) string {
 	var m map[string]any
 	if json.Unmarshal(data, &m) == nil {
 		parts := []string{"done"}
-		for _, k := range []string{"html_url", "url", "web_url", "id", "ts", "number", "iid", "key"} {
+		for _, k := range []string{"html_url", "url", "web_url", "id", "ts", "number", "iid", "key", "message_id"} {
 			if v, ok := m[k]; ok && v != nil {
 				parts = append(parts, k+": "+fmt.Sprint(v))
 			}
