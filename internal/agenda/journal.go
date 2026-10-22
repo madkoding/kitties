@@ -21,6 +21,8 @@ const (
 	KindRecovered = "recovered" // its container was brought back
 	KindSkipped   = "skipped"   // a run was skipped (still busy)
 	KindEvent     = "event"     // something arrived from a service
+	KindApproval  = "approval"  // an action waited for a yes, or went ahead on trust
+	KindLearned   = "learned"   // it noted something about the person or the work
 )
 
 // Entry is one line of a kitty's journal.

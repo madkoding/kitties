@@ -284,6 +284,8 @@ type Spec struct {
 	Limits kitty.Limits `json:"limits"`
 	// Backup names the kitty that takes over a task this one gives up on.
 	Backup string `json:"backup"`
+	// Approvals is ask (or empty) or auto.
+	Approvals string `json:"approvals"`
 }
 
 // Create adds a kitty. The container is created on Start.
@@ -313,6 +315,9 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 	if s.Backup == s.Name {
 		return nil, errors.New("a kitty cannot back itself up")
 	}
+	if !kitty.ValidApprovals(s.Approvals) {
+		return nil, fmt.Errorf("approvals %q is not ask or auto", s.Approvals)
+	}
 	personality := soul.Default(s.Name)
 	if s.SoulFile != "" {
 		fromFile, err := soul.Load(s.SoulFile)
@@ -335,7 +340,7 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 	k := &kitty.Kitty{
 		ID: m.newID(), Name: s.Name, Provider: prov, Soul: personality, Connectors: s.Connectors,
 		Desktop: desktop, Status: kitty.StatusCreated, CreatedAt: m.now(), Avatar: avatar,
-		Limits: s.Limits, Backup: s.Backup,
+		Limits: s.Limits, Backup: s.Backup, Approvals: s.Approvals,
 	}
 	if desktop {
 		k.Container = kitty.ContainerName(s.Name)
@@ -407,7 +412,7 @@ func (m *Manager) Bootstrap(ctx context.Context) error {
 			if _, err := m.Get(name); err == nil {
 				continue
 			}
-			spec := Spec{Name: name, Provider: k.Provider, Soul: k.Soul, SoulFile: k.SoulFile, Connectors: k.Connectors, Desktop: k.Desktop, Avatar: k.Avatar, Limits: k.Limits, Backup: k.Backup}
+			spec := Spec{Name: name, Provider: k.Provider, Soul: k.Soul, SoulFile: k.SoulFile, Connectors: k.Connectors, Desktop: k.Desktop, Avatar: k.Avatar, Limits: k.Limits, Backup: k.Backup, Approvals: k.Approvals}
 			if spec.Soul.Name == "" {
 				spec.Soul.Name = k.Name
 			}
@@ -595,6 +600,8 @@ type Update struct {
 	Limits *kitty.Limits `json:"limits,omitempty"`
 	// Backup is the kitty to hand tasks to; an empty string, when set, clears it.
 	Backup *string `json:"backup,omitempty"`
+	// Approvals is ask or auto (empty is ask).
+	Approvals *string `json:"approvals,omitempty"`
 }
 
 // Edit applies an update to a kitty and saves it.
@@ -620,6 +627,12 @@ func (m *Manager) Edit(ref string, u Update) (*kitty.Kitty, error) {
 			return nil, err
 		}
 		k.Limits = *u.Limits
+	}
+	if u.Approvals != nil {
+		if !kitty.ValidApprovals(*u.Approvals) {
+			return nil, fmt.Errorf("approvals %q is not ask or auto", *u.Approvals)
+		}
+		k.Approvals = *u.Approvals
 	}
 	if u.Backup != nil {
 		backup := strings.TrimSpace(*u.Backup)

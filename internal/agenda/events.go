@@ -79,6 +79,32 @@ func Summarise(source, kind string, body []byte) Event {
 			}
 		}
 	}
+	// Stripe: an event's type and the object it is about.
+	if typ := str(m, "type"); typ != "" && strings.Contains(typ, ".") {
+		if data, ok := m["data"].(map[string]any); ok {
+			if obj, ok := data["object"].(map[string]any); ok {
+				if ev.Kind == "" {
+					ev.Kind = typ
+				}
+				line := typ
+				if id := str(obj, "id"); id != "" {
+					line += " " + id
+				}
+				lines = append(lines, line)
+				if amount, ok := obj["amount_due"].(float64); ok {
+					lines = append(lines, fmt.Sprintf("amount due: %.2f %s", amount/100, strings.ToUpper(str(obj, "currency"))))
+				} else if amount, ok := obj["amount"].(float64); ok {
+					lines = append(lines, fmt.Sprintf("amount: %.2f %s", amount/100, strings.ToUpper(str(obj, "currency"))))
+				}
+				if who := str(obj, "customer_email", "receipt_email", "email"); who != "" {
+					lines = append(lines, "customer: "+who)
+				}
+				if st := str(obj, "status"); st != "" {
+					lines = append(lines, "status: "+st)
+				}
+			}
+		}
+	}
 	// Slack (Events API) and Discord: who said what, where.
 	if inner, ok := m["event"].(map[string]any); ok {
 		if ev.Kind == "" {

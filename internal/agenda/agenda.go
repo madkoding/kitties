@@ -11,6 +11,9 @@ type Agenda struct {
 	Store     *Store
 	Journal   *Journal
 	Scheduler *Scheduler
+	// OnForget are called with a removed kitty's id, so the other stores that keep things about
+	// a kitty (its memory, the actions held for it) drop them too.
+	OnForget []func(kitty string) error
 }
 
 // Open keeps the goals and the journals under dir and prepares the scheduler over runner.
@@ -59,6 +62,11 @@ func (a *Agenda) Report(goalID, result string) { a.Scheduler.Report(goalID, resu
 func (a *Agenda) Forget(kitty string) error {
 	if err := a.Store.RemoveOf(kitty); err != nil {
 		return err
+	}
+	for _, fn := range a.OnForget {
+		if err := fn(kitty); err != nil {
+			return err
+		}
 	}
 	return a.Journal.Forget(kitty)
 }

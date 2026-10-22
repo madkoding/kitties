@@ -9,6 +9,7 @@ import (
 
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/notify"
 )
 
 func TestLimitsAndBackup(t *testing.T) {
@@ -158,4 +159,60 @@ func cfgConnector(c config.Connector, key, value string) config.Connector {
 	settings[key] = value
 	c.Settings = settings
 	return c
+}
+
+func TestNotifySettings(t *testing.T) {
+	cfg := testConfig(t)
+	m, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := m.Notify(); c.Connector != "" {
+		t.Errorf("off by default: %+v", c)
+	}
+	v := m.Settings()
+	if v.Notify.Connector != "" || len(v.Notify.On) != 0 || strings.Join(v.NotifyEvents, ",") != "help,approval,goal_done,goal_blocked,recovered" {
+		t.Errorf("view = %+v %v", v.Notify, v.NotifyEvents)
+	}
+	if err := m.SetNotify(notify.Config{Connector: "nope"}); err == nil {
+		t.Error("an unknown connector is refused")
+	}
+	if err := m.SetNotify(notify.Config{Connector: "sl", On: []string{"boom"}}); err == nil {
+		t.Error("an unknown event is refused")
+	}
+	if err := m.SetNotify(notify.Config{Connector: "sl", On: []string{"help", "goal_done"}}); err != nil {
+		t.Fatal(err)
+	}
+	if c := m.Notify(); c.Connector != "sl" || len(c.On) != 2 {
+		t.Errorf("set = %+v", c)
+	}
+	// It survives a restart, on top of the file.
+	again, err := New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := again.Notify(); c.Connector != "sl" || strings.Join(c.On, ",") != "help,goal_done" {
+		t.Errorf("reloaded = %+v", c)
+	}
+	// Removing the connector turns notifications off instead of leaving them pointing nowhere.
+	if err := again.RemoveConnector("sl"); err != nil {
+		t.Fatal(err)
+	}
+	if c := again.Notify(); c.Connector != "" {
+		t.Errorf("after removing the connector = %+v", c)
+	}
+	third, _ := New(cfg)
+	if third.Notify().Connector != "" {
+		t.Error("and it stays off")
+	}
+	// From the file: a notify block names a configured connector.
+	file, err := config.Parse([]byte("providers:\n  p:\n    kind: ollama\nconnectors:\n  hook:\n    kind: webhook\n    url: http://h\nnotify:\n  connector: hook\n  on: [help]\n"))
+	if err != nil || file.Notify.Connector != "hook" {
+		t.Fatalf("file = %+v %v", file.Notify, err)
+	}
+	for _, bad := range []string{"notify:\n  connector: nope\n", "notify:\n  connector: hook\n  on: [boom]\n"} {
+		if _, err := config.Parse([]byte("providers:\n  p:\n    kind: ollama\nconnectors:\n  hook:\n    kind: webhook\n    url: http://h\n" + bad)); err == nil {
+			t.Errorf("%q must be refused", bad)
+		}
+	}
 }

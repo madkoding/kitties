@@ -267,6 +267,19 @@ func TestSummarise(t *testing.T) {
 	if ev := Summarise("github", "release", []byte(`{"release":{"tag_name":"v1.0","html_url":"u"}}`)); !strings.Contains(ev.Text, "release: v1.0") {
 		t.Errorf("release: %q", ev.Text)
 	}
+	stripe := `{"type":"invoice.payment_failed","data":{"object":{"id":"in_1","amount_due":25000,"currency":"eur","customer_email":"c@x","status":"open"}}}`
+	ev = Summarise("billing", "", []byte(stripe))
+	for _, want := range []string{"invoice.payment_failed in_1", "amount due: 250.00 EUR", "customer: c@x", "status: open"} {
+		if !strings.Contains(ev.Text, want) {
+			t.Errorf("stripe: missing %q in %q", want, ev.Text)
+		}
+	}
+	if ev.Kind != "invoice.payment_failed" {
+		t.Errorf("stripe kind = %q", ev.Kind)
+	}
+	if ev := Summarise("billing", "x", []byte(`{"type":"charge.succeeded","data":{"object":{"amount":999,"currency":"usd"}}}`)); ev.Kind != "x" || !strings.Contains(ev.Text, "amount: 9.99 USD") {
+		t.Errorf("stripe payment: %+v", ev)
+	}
 }
 
 // fakeRunner records the goals it was asked to run.
@@ -471,8 +484,14 @@ func TestAgendaFacade(t *testing.T) {
 		t.Error("RemoveGoal")
 	}
 	_, _ = a.AddGoal(Goal{Kitty: "k1", Title: "x", Every: "@daily"})
-	if err := a.Forget("k1"); err != nil || len(a.Goals("")) != 0 || a.Recent("k1", 1) != nil {
+	var forgot []string
+	a.OnForget = []func(string) error{func(k string) error { forgot = append(forgot, k); return nil }}
+	if err := a.Forget("k1"); err != nil || len(a.Goals("")) != 0 || a.Recent("k1", 1) != nil || len(forgot) != 1 || forgot[0] != "k1" {
 		t.Error("Forget")
+	}
+	a.OnForget = []func(string) error{func(string) error { return errors.New("disk") }}
+	if err := a.Forget("k1"); err == nil {
+		t.Error("a store that cannot forget is an error")
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

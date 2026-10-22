@@ -12,6 +12,7 @@ import (
 
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/provider"
 )
@@ -23,6 +24,8 @@ type Settings struct {
 	Providers       map[string]config.Provider  `json:"providers"`
 	Connectors      map[string]config.Connector `json:"connectors"`
 	DefaultProvider string                      `json:"default_provider,omitempty"`
+	// Notify is where the person is told outside the interface; nil keeps the file's.
+	Notify *notify.Config `json:"notify,omitempty"`
 	// Removed names entries of the file the person deleted from the page.
 	Removed struct {
 		Providers  []string `json:"providers,omitempty"`
@@ -69,7 +72,31 @@ func (m *Manager) loadSettings() error {
 	if s.DefaultProvider != "" {
 		m.cfg.DefaultProvider = s.DefaultProvider
 	}
+	if s.Notify != nil {
+		m.cfg.Notify = *s.Notify
+	}
 	return nil
+}
+
+// Notify is where the person is told, outside the interface, when a kitty needs them.
+func (m *Manager) Notify() notify.Config {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	c := m.cfg.Notify
+	c.On = append([]string(nil), c.On...)
+	return c
+}
+
+// SetNotify chooses the connector notifications go through and which events are sent.
+func (m *Manager) SetNotify(c notify.Config) error {
+	if err := c.Validate(m.connectors); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cfg.Notify = c
+	m.overlay.Notify = &c
+	return m.saveSettings()
 }
 
 func (m *Manager) saveSettings() error {
@@ -176,6 +203,9 @@ type SettingsView struct {
 	Catalog         []connector.Kind `json:"connector_catalog"`
 	Categories      []string         `json:"connector_categories"`
 	MotitaURL       string           `json:"motita_url,omitempty"`
+	// Notify is where the person is told outside the interface, and NotifyEvents what can be sent.
+	Notify       notify.Config `json:"notify"`
+	NotifyEvents []string      `json:"notify_events"`
 }
 
 // Settings describes the profiles and connectors, secrets left out.
@@ -183,7 +213,13 @@ func (m *Manager) Settings() SettingsView {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	view := SettingsView{DefaultProvider: m.cfg.DefaultProvider, ConnectorKinds: config.ConnectorKinds, Catalog: connector.Kinds(),
-		Categories: connector.Categories, MotitaURL: m.cfg.Motita.URL}
+		Categories: connector.Categories, MotitaURL: m.cfg.Motita.URL, Notify: m.cfg.Notify}
+	for _, e := range notify.Events {
+		view.NotifyEvents = append(view.NotifyEvents, string(e))
+	}
+	if view.Notify.On == nil {
+		view.Notify.On = []string{}
+	}
 	for _, k := range provider.Kinds() {
 		kind, _ := provider.Lookup(k)
 		view.Kinds = append(view.Kinds, kind)
@@ -374,6 +410,11 @@ func (m *Manager) RemoveConnector(name string) error {
 	delete(m.cfg.Connectors, name)
 	delete(m.overlay.Connectors, name)
 	m.connectors.Remove(name)
+	if m.cfg.Notify.Connector == name {
+		// Notifications cannot go through a connector that is gone: they are turned off.
+		m.cfg.Notify = notify.Config{}
+		m.overlay.Notify = &notify.Config{}
+	}
 	if !contains(m.overlay.Removed.Connectors, name) {
 		m.overlay.Removed.Connectors = append(m.overlay.Removed.Connectors, name)
 	}

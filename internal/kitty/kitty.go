@@ -40,7 +40,14 @@ type Kitty struct {
 	Limits Limits `json:"limits"`
 	// Backup names the kitty a task is handed to when this one gives up; empty asks the person.
 	Backup string `json:"backup,omitempty"`
+	// Approvals is "ask" (or empty): an action that reaches other people waits for a yes until
+	// the kitty has earned the right to do it alone; "auto": it acts without asking, except
+	// for what is never done unasked.
+	Approvals string `json:"approvals,omitempty"`
 }
+
+// ValidApprovals reports whether s is a mode of approvals.
+func ValidApprovals(s string) bool { return s == "" || s == "ask" || s == "auto" }
 
 // Limits is what a kitty may spend on one task before it stops and says so.
 type Limits struct {

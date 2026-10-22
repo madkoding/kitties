@@ -18,6 +18,7 @@ import (
 	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/soul"
 	"github.com/madkoding/kitties/internal/yamlx"
@@ -41,6 +42,8 @@ type Config struct {
 	Motita Motita `yaml:"motita"`
 	// Connectors are the external services the kitties may use.
 	Connectors map[string]Connector `yaml:"connectors"`
+	// Notify says where the person is told, outside the interface, when a kitty needs them.
+	Notify notify.Config `yaml:"notify"`
 }
 
 // Provider is one AI profile.
@@ -91,6 +94,8 @@ type Kitty struct {
 	Limits kitty.Limits `yaml:"limits"`
 	// Backup names the kitty that takes over a task this one could not finish.
 	Backup string `yaml:"backup"`
+	// Approvals is ask (the default) or auto: see kitty.Kitty.
+	Approvals string `yaml:"approvals"`
 	// Goals are what the kitty pursues on its own: on a schedule, on events, or both.
 	Goals []Goal `yaml:"goals"`
 }
@@ -366,6 +371,9 @@ func (c *Config) Validate() error {
 		if err := k.Limits.Validate(); err != nil {
 			return fmt.Errorf("kitties[%d].%v", i, err)
 		}
+		if !kitty.ValidApprovals(k.Approvals) {
+			return fmt.Errorf("kitties[%d].approvals: %q is not ask or auto", i, k.Approvals)
+		}
 		if k.Backup != "" {
 			if k.Backup == k.Name {
 				return fmt.Errorf("kitties[%d].backup: a kitty cannot back itself up", i)
@@ -406,6 +414,14 @@ func (c *Config) Validate() error {
 	}
 	if c.Gateway.Listen == "" {
 		return errors.New("gateway.listen cannot be empty")
+	}
+	if err := c.Notify.Validate(nil); err != nil {
+		return err
+	}
+	if c.Notify.Connector != "" {
+		if _, ok := c.Connectors[c.Notify.Connector]; !ok {
+			return fmt.Errorf("notify.connector: %q is not a configured connector", c.Notify.Connector)
+		}
 	}
 	if (c.Gateway.TLSCert == "") != (c.Gateway.TLSKey == "") {
 		return errors.New("gateway.tls_cert and gateway.tls_key go together")
