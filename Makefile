@@ -6,6 +6,9 @@ LDFLAGS  := -s -w -X main.version=$(VERSION)
 GO       ?= go
 DIST     := dist
 PKGS     := ./internal/... ./cmd/...
+# WEB=0 builds without the web interface inside (no Node needed): the gateway then serves its
+# small built-in page.
+WEB      ?= 1
 # Coverage every package must reach (percent).
 COVER_MIN ?= 90
 IMAGE    ?= ghcr.io/madkoding/kitty-desktop:latest
@@ -16,18 +19,18 @@ PLATFORMS := linux/amd64 linux/arm64 linux/arm android/arm64 \
              windows/amd64 windows/arm64 darwin/amd64 darwin/arm64
 
 .DEFAULT_GOAL := help
-.PHONY: help build dist test vet fmt fmt-check check cover image run clean frontend desktop desktop-check e2e demo
+.PHONY: help build dist test vet fmt fmt-check check cover image run clean frontend web desktop desktop-check e2e demo
 
 help: ## Show this list of commands
 	@printf '\nkitties: what you can run here\n\n'
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-12s\033[0m %s\n", $$1, $$2}'
 	@printf '\n'
 
-build: ## Build kitties for this computer (result: dist/kitties)
+build: $(if $(filter 1,$(WEB)),web) ## Build kitties for this computer (result: dist/kitties)
 	@mkdir -p $(DIST)
 	@$(GO) build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/kitties ./cmd/kitties && echo "built $(DIST)/kitties ($(VERSION))"
 
-dist: ## Build kitties for every supported system
+dist: $(if $(filter 1,$(WEB)),web) ## Build kitties for every supported system
 	@mkdir -p $(DIST)
 	@for p in $(PLATFORMS); do \
 		os=$${p%/*}; arch=$${p#*/}; ext=""; \
@@ -62,6 +65,11 @@ cover: ## Coverage per package, against COVER_MIN
 
 frontend: ## Build the desktop app's page (desktop/frontend/dist)
 	@cd desktop/frontend && npm ci --no-audit --no-fund && npm run typecheck && npm run build
+
+web: frontend ## Copy the built page into the binary's embed folder (the web interface of the gateway)
+	@find internal/web/dist -mindepth 1 ! -name placeholder.txt -delete
+	@cp -r desktop/frontend/dist/. internal/web/dist/
+	@echo "web interface ready in internal/web/dist"
 
 desktop-check: frontend ## Vet and test the Wails app (needs the page built)
 	@cd desktop && $(GO) vet ./... && $(GO) test -count=1 -cover ./...
