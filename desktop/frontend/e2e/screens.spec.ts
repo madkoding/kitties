@@ -470,3 +470,79 @@ test("settings still draw against an older gateway that leaves fields out", asyn
   await expect(page.getByTestId("notify")).toBeVisible();
   await expect(page.getByText("Settings could not be drawn")).toHaveCount(0);
 });
+
+test("a model can think on a subscription: Claude through Claude Code, Copilot with a code", async ({
+  page,
+}) => {
+  // Nothing is signed in yet (whatever this computer has), until Copilot is.
+  let polls = 0;
+  await page.route("**/v1/settings", async (route) => {
+    const res = await route.fetch();
+    const json = await res.json();
+    json.accounts = [
+      { kind: "claude-code", signed_in: false, available: true },
+      { kind: "copilot", signed_in: polls > 1, who: "octocat", available: true },
+    ];
+    return route.fulfill({ json });
+  });
+  await open(page, "#new-models-add");
+  await page.getByRole("button", { name: /^Anthropic Claude/ }).click();
+  const form = page.getByTestId("model-form");
+  // A key is the default; the subscription is one click away and walks through Claude Code.
+  await expect(form.getByRole("radio", { name: /API key/ })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await form.getByRole("radio", { name: /Claude subscription/ }).click();
+  const signIn = form.getByTestId("sign-in");
+  await expect(signIn).toContainText("claude auth login");
+  await expect(page.getByLabel("Model")).toHaveValue("sonnet");
+  await expect(form.getByLabel("API key")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Save and test" })).toBeDisabled();
+  await shot(page, "35-claude-subscription");
+
+  // Copilot signs in with a code typed on GitHub; the panel follows it until it is done.
+  await page.route("**/v1/settings/accounts/copilot/login", (route) =>
+    route.fulfill({
+      json: {
+        id: "f1",
+        kind: "copilot",
+        method: "device",
+        url: "about:blank",
+        code: "ABCD-1234",
+        status: "pending",
+      },
+    }),
+  );
+  await page.route("**/v1/settings/logins/f1", (route) => {
+    polls++;
+    return route.fulfill({
+      json: {
+        id: "f1",
+        kind: "copilot",
+        method: "device",
+        status: polls > 1 ? "connected" : "pending",
+        who: "octocat",
+      },
+    });
+  });
+  await form.getByRole("button", { name: "change" }).click();
+  await page.getByRole("button", { name: /^GitHub Copilot/ }).click();
+  await expect(form.getByRole("radio", { name: /GitHub Copilot/ })).toHaveAttribute(
+    "aria-checked",
+    "true",
+  );
+  await form.getByTestId("sign-in-start").click();
+  await expect(form.getByTestId("sign-in-code")).toContainText("ABCD-1234");
+  await shot(page, "36-copilot-code");
+  await expect(form.getByTestId("sign-in")).toContainText("Signed in as octocat", {
+    timeout: 10_000,
+  });
+  await expect(page.getByRole("button", { name: "Save and test" })).toBeEnabled();
+
+  // Qwen's sign-in ended: the page says so and points at a key.
+  await form.getByRole("button", { name: "change" }).click();
+  await page.getByRole("button", { name: /^Qwen/ }).click();
+  await form.getByRole("radio", { name: /qwen.ai account/ }).click();
+  await expect(form.getByTestId("sign-in")).toContainText("DashScope");
+});

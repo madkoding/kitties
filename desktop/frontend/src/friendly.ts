@@ -62,6 +62,11 @@ export const PROVIDERS: Record<string, ProviderMeta> = {
     keyURL: "https://platform.openai.com/api-keys",
   },
   copilot: { label: "GitHub Copilot", blurb: "The models of your Copilot plan." },
+  "claude-code": {
+    label: "Claude subscription",
+    blurb: "Claude on your Pro or Max plan, through Claude Code.",
+    models: ["sonnet", "opus", "haiku"],
+  },
   custom: {
     label: "Another server",
     blurb: "Anything that speaks the OpenAI API: LM Studio, vLLM, a company gateway.",
@@ -87,6 +92,90 @@ export const PROVIDER_ORDER = [
 ];
 
 export const providerLabel = (kind: string): string => PROVIDERS[kind]?.label || kind;
+
+// SignIn is the account a provider can be used with instead of an API key: a subscription the
+// person already pays for.
+export interface SignIn {
+  // kind is the provider kind the profile is saved as.
+  kind: string;
+  label: string;
+  plans: string;
+  how: "cli" | "browser" | "device" | "gcloud";
+  help: string;
+  // setupURL is where the program the sign-in needs is installed from.
+  setupURL?: string;
+  models?: string[];
+  // unavailable says why it cannot be used.
+  unavailable?: string;
+}
+
+const CHATGPT: SignIn = {
+  kind: "codex",
+  label: "ChatGPT plan",
+  plans: "Plus, Pro, Business or Enterprise",
+  how: "browser",
+  help: "Sign in with your ChatGPT account: your plan pays for the answers, no API key or credits needed.",
+  models: ["gpt-5.5-codex", "gpt-5.5"],
+};
+
+export const SIGN_IN: Record<string, SignIn> = {
+  anthropic: {
+    kind: "claude-code",
+    label: "Claude subscription",
+    plans: "Pro or Max",
+    how: "cli",
+    help: "Your Claude plan pays for the answers. Anthropic allows it only through its own Claude Code program: Kitties runs it for you, signed in with your account.",
+    setupURL: "https://claude.com/product/claude-code",
+    models: ["sonnet", "opus", "haiku"],
+  },
+  openai: CHATGPT,
+  codex: CHATGPT,
+  copilot: {
+    kind: "copilot",
+    label: "GitHub Copilot",
+    plans: "any Copilot plan, Free included",
+    how: "device",
+    help: "Sign in with GitHub: open the link, type the code shown here, and your Copilot plan pays for the answers.",
+    models: ["gpt-4.1", "gpt-5-mini", "claude-sonnet-4", "gemini-2.5-pro"],
+  },
+  gemini: {
+    kind: "gemini",
+    label: "Google account",
+    plans: "a Google Cloud project",
+    how: "gcloud",
+    help: "Uses the Google login of the gcloud program on this computer, billed to your Cloud project.",
+    setupURL: "https://cloud.google.com/sdk/docs/install",
+  },
+  qwen: {
+    kind: "qwen",
+    label: "qwen.ai account",
+    plans: "",
+    how: "device",
+    help: "",
+    unavailable:
+      "Qwen ended its account sign-in on April 15, 2026. Use a DashScope (Alibaba Cloud Model Studio) API key instead.",
+  },
+};
+
+// pickOf is the provider card a saved profile belongs to: a Claude subscription is Anthropic's,
+// a ChatGPT plan is OpenAI's.
+export function pickOf(kind: string, auth?: string): string {
+  if (kind === "claude-code") {
+    return "anthropic";
+  }
+  if (kind === "codex" && auth === "login") {
+    return "openai";
+  }
+  return kind;
+}
+
+// signedInWith names the subscription a profile thinks on, or "" for a key.
+export function signedInWith(kind: string, auth?: string): string {
+  if (kind === "claude-code") {
+    return SIGN_IN.anthropic.label;
+  }
+  return auth === "login" ? SIGN_IN[kind]?.label || "account" : "";
+}
 
 // CATEGORY says what a connector category holds.
 export const CATEGORY: Record<string, string> = {
@@ -137,6 +226,13 @@ export function people(names: string[]): string {
 export function friendlyError(msg: string): string {
   if (/API key is missing|api key is missing/i.test(msg)) {
     return "It needs an API key: paste one in the form.";
+  }
+  // An account that is not signed in says how to sign in; that beats "the key was refused".
+  const account = msg.match(
+    /((?:claude is )?not signed in.*|the [\w ]+ sign-in could not be renewed.*|the claude program .*)$/i,
+  );
+  if (account) {
+    return account[1].charAt(0).toUpperCase() + account[1].slice(1);
   }
   if (/401|unauthori[sz]ed|invalid.*key|incorrect api key/i.test(msg)) {
     return "The key was refused: check that it is complete and still valid.";

@@ -1133,3 +1133,36 @@ html.mac-inset aside .titlebar {
   align-items: center;
   gap: 10px;
 }
+
+/* Paying with a key or with a subscription: two cards, one chosen. */
+.way {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  text-align: left;
+  background: rgb(var(--ov-rgb) / 0.04);
+  border: 1px solid rgb(var(--ov-rgb) / 0.12);
+  color: var(--t2);
+}
+.way.on {
+  border-color: rgb(var(--accent-rgb) / 0.6);
+  background: rgb(var(--accent-rgb) / 0.12);
+  color: var(--t1);
+}
+.steps {
+  list-style: decimal;
+  padding-left: 1.2rem;
+}
+.steps li {
+  padding: 4px 0;
+}
+.command {
+  display: block;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  background: rgb(var(--ov-rgb) / 0.06);
+  border: 1px solid rgb(var(--ov-rgb) / 0.1);
+  overflow-x: auto;
+  white-space: nowrap;
+}

@@ -1,6 +1,7 @@
 import type { ComponentChildren } from "preact";
 import { useEffect, useErrorBoundary, useMemo, useState } from "preact/hooks";
 import type {
+  Account,
   ConnectorKind,
   ConnectorView,
   Kitty,
@@ -13,17 +14,21 @@ import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,
   PROVIDERS,
+  SIGN_IN,
   actionLabel,
   categoryLabel,
   friendlyError,
   mayUse,
   people,
+  pickOf,
   providerLabel,
+  signedInWith,
   uniqueName,
   withConnection,
 } from "./friendly";
 import { IconPlus, IconTrash, IconX } from "./icons";
 import { ConnectModal } from "./Modals";
+import { AccountSignIn } from "./SignIn";
 
 // SETTINGS, FOR PEOPLE.
 //
@@ -99,6 +104,11 @@ function ProviderPicker({ kinds, onPick }: { kinds: ProviderKind[]; onPick: (k: 
           <span class="flex flex-col min-w-0">
             <span class="font-semibold text-sm">{providerLabel(n)}</span>
             <span class="text-xs text-[var(--t3)]">{PROVIDERS[n]?.blurb || n}</span>
+            {SIGN_IN[n] && !SIGN_IN[n].unavailable && (
+              <span class="text-xs text-[var(--color-accent)]">
+                API key or your {SIGN_IN[n].label}
+              </span>
+            )}
           </span>
         </button>
       ))}
@@ -106,24 +116,37 @@ function ProviderPicker({ kinds, onPick }: { kinds: ProviderKind[]; onPick: (k: 
   );
 }
 
-// ModelForm adds or edits a model. A new one starts with the provider; the key is write-only
-// (a saved one is never shown again). Saving tests it at once and says how it went.
+// ModelForm adds or edits a model. A new one starts with the provider, then how to pay for it:
+// an API key (write-only: a saved one is never shown again) or a subscription the person signs in
+// with. Saving tests it at once and says how it went.
 function ModelForm({
   view,
   kinds,
   taken,
+  accounts,
+  onAccounts,
   onSaved,
   onClose,
 }: {
   view: ProviderView | null;
   kinds: ProviderKind[];
   taken: string[];
+  accounts: Account[];
+  onAccounts: () => void;
   onSaved: (s: SettingsView, note: string) => void;
   onClose: () => void;
 }) {
-  const [kind, setKind] = useState(view?.kind || "");
+  // picked is the provider card; kind is what the profile is saved as (a Claude subscription is
+  // Anthropic's card, saved as claude-code).
+  const [picked, setPicked] = useState(view ? pickOf(view.kind, view.auth) : "");
+  const signIn = SIGN_IN[picked];
+  const [way, setWay] = useState<"key" | "login">(
+    view && (view.auth === "login" || view.kind === "claude-code") ? "login" : "key",
+  );
+  const kind = way === "login" && signIn ? signIn.kind : picked;
   const info = kinds.find((k) => k.Name === kind);
-  const meta = PROVIDERS[kind] || { label: kind, blurb: "" };
+  const meta = PROVIDERS[picked] || { label: picked, blurb: "" };
+  const account = signIn && accounts.find((a) => a.kind === signIn.kind);
   const [model, setModel] = useState(view?.model || "");
   const [key, setKey] = useState("");
   const [base, setBase] = useState(view?.base_url || "");
@@ -132,18 +155,27 @@ function ModelForm({
   const [err, setErr] = useState("");
   const [phase, setPhase] = useState<"edit" | "saving" | "testing" | "failed">("edit");
   const [saved, setSaved] = useState<SettingsView | null>(null);
+  const defaultModel = (k: string) => kinds.find((x) => x.Name === k)?.DefaultModel || "";
   const pick = (k: string) => {
-    setKind(k);
-    setModel(kinds.find((x) => x.Name === k)?.DefaultModel || "");
+    // Copilot has no key of its own to speak of: its sign-in comes first.
+    const w = k === "copilot" ? "login" : "key";
+    setPicked(k);
+    setWay(w);
+    setModel(defaultModel(w === "login" ? SIGN_IN[k].kind : k));
     setBase("");
   };
-  if (!kind) {
+  const choose = (w: "key" | "login") => {
+    setWay(w);
+    setErr("");
+    setModel(defaultModel(w === "login" && signIn ? signIn.kind : picked));
+  };
+  if (!picked) {
     return (
       <div class="form-card">
         <div class="font-semibold">Which provider?</div>
         <p class="text-xs text-[var(--t3)]">
-          Pick where the brain comes from. You need an account (and a key) with the provider, except
-          for Ollama on this computer.
+          Pick where the brain comes from. Pay with an API key, or sign in with a subscription you
+          already have (Claude, ChatGPT, GitHub Copilot). Ollama on this computer is free.
         </p>
         <ProviderPicker kinds={kinds} onPick={pick} />
         <div class="flex justify-end mt-4">
@@ -154,15 +186,18 @@ function ModelForm({
       </div>
     );
   }
-  const needsKey = !info?.NoKey;
-  const showAddress = Boolean(meta.address);
+  const needsKey = way === "key" && !info?.NoKey;
+  const showAddress = way === "key" && Boolean(meta.address);
   const finalName = view?.name || name.trim() || uniqueName(kind, taken);
   const save = async () => {
     setErr("");
     setPhase("saving");
     try {
       const body: Record<string, unknown> = { kind, model: model.trim(), base_url: base.trim() };
-      if (key.trim()) {
+      if (way === "login" && kind !== "claude-code") {
+        body.auth = "login";
+      }
+      if (way === "key" && key.trim()) {
         body.api_key = key.trim();
       }
       if (maxTokens.trim()) {
@@ -183,7 +218,8 @@ function ModelForm({
       setPhase("edit");
     }
   };
-  const missingKey = needsKey && !key.trim() && !view?.api_key_set;
+  const missingKey = needsKey && !key.trim() && !(view?.api_key_set && view.kind === kind);
+  const missingLogin = way === "login" && (!account?.signed_in || Boolean(signIn?.unavailable));
   return (
     <div class="form-card" data-testid="model-form">
       <div class="flex items-start gap-3">
@@ -195,12 +231,41 @@ function ModelForm({
           <div class="text-xs text-[var(--t3)]">{meta.blurb}</div>
         </div>
         {!view && (
-          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setKind("")}>
+          <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setPicked("")}>
             change
           </button>
         )}
       </div>
-      {(needsKey || kind === "custom") && (
+      {signIn && (
+        <div class="flex gap-2 mt-3" role="radiogroup" aria-label="How to pay for it">
+          <button
+            type="button"
+            role="radio"
+            aria-checked={way === "key"}
+            class={`plain way ${way === "key" ? "on" : ""}`}
+            onClick={() => choose("key")}
+          >
+            <div class="text-sm font-semibold">API key</div>
+            <div class="text-xs text-[var(--t3)]">Pay per use with a key</div>
+          </button>
+          <button
+            type="button"
+            role="radio"
+            aria-checked={way === "login"}
+            class={`plain way ${way === "login" ? "on" : ""}`}
+            onClick={() => choose("login")}
+          >
+            <div class="text-sm font-semibold">{signIn.label}</div>
+            <div class="text-xs text-[var(--t3)]">
+              {signIn.unavailable ? "Not available" : "Sign in with your subscription"}
+            </div>
+          </button>
+        </div>
+      )}
+      {way === "login" && signIn && (
+        <AccountSignIn signIn={signIn} account={account} onAccounts={onAccounts} />
+      )}
+      {way === "key" && (needsKey || kind === "custom") && (
         <>
           <label class={LABEL} for="model-key">
             API key{needsKey ? "" : " (if the server asks for one)"}
@@ -272,7 +337,14 @@ function ModelForm({
         placeholder={info?.DefaultModel || "model name"}
       />
       <datalist id="model-suggestions">
-        {[...new Set([info?.DefaultModel, ...(meta.models || [])].filter(Boolean))].map((m) => (
+        {[
+          ...new Set(
+            [
+              info?.DefaultModel,
+              ...((way === "login" ? signIn?.models : meta.models) || []),
+            ].filter(Boolean),
+          ),
+        ].map((m) => (
           <option key={m} value={m} />
         ))}
       </datalist>
@@ -290,7 +362,7 @@ function ModelForm({
           placeholder={uniqueName(kind, taken)}
         />
         <p class={HELP}>How the kitties and the configuration file call it.</p>
-        {!showAddress && (
+        {!showAddress && way === "key" && (
           <>
             <label class={LABEL} for="model-base">
               Server address
@@ -344,8 +416,10 @@ function ModelForm({
           </button>
           <button
             class="btn-accent px-4 py-2 text-sm"
-            disabled={phase !== "edit" || !model.trim() || missingKey}
-            title={missingKey ? "Paste the API key first" : undefined}
+            disabled={phase !== "edit" || !model.trim() || missingKey || missingLogin}
+            title={
+              missingKey ? "Paste the API key first" : missingLogin ? "Sign in first" : undefined
+            }
             onClick={save}
           >
             {phase === "saving" ? "Saving…" : phase === "testing" ? "Checking…" : "Save and test"}
@@ -368,7 +442,8 @@ function ModelRow({
   const [test, setTest] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const label = providerLabel(p.kind);
+  const label = providerLabel(pickOf(p.kind, p.auth));
+  const plan = signedInWith(p.kind, p.auth);
   const run = async () => {
     setBusy(true);
     setTest("");
@@ -407,6 +482,7 @@ function ModelRow({
           <span class="text-sm font-semibold">{label}</span>
           <span class="text-xs font-mono text-[var(--t3)] truncate">{p.model}</span>
           {p.default && <span class="tag tag-green">default</span>}
+          {plan && <span class="tag">{plan}</span>}
         </div>
         <div class="text-xs text-[var(--t3)] mt-0.5">
           {p.error ? (
@@ -1176,6 +1252,8 @@ export default function SettingsModal({
                 view={model === "new" ? null : model}
                 kinds={view.kinds}
                 taken={modelNames}
+                accounts={view.accounts || []}
+                onAccounts={load}
                 onSaved={(s, msg) => {
                   setView(s);
                   setModel(null);

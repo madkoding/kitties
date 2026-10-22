@@ -187,6 +187,31 @@ export interface ProviderKind {
   KeyEnv: string;
   NoKey: boolean;
   DefaultModel: string;
+  // Login names the account a profile of this kind can sign in with instead of a key.
+  Login?: string;
+}
+
+// Account is one sign-in a profile can think on instead of a key.
+export interface Account {
+  kind: string;
+  signed_in: boolean;
+  who?: string;
+  available: boolean;
+  note?: string;
+}
+
+// LoginFlow is a sign-in in progress: open url (and type code), or paste back where the browser
+// landed.
+export interface LoginFlow {
+  id: string;
+  kind: string;
+  method: "device" | "browser" | "instant";
+  url?: string;
+  code?: string;
+  paste?: boolean;
+  status: "pending" | "connected" | "failed";
+  error?: string;
+  who?: string;
 }
 
 export interface ProviderView {
@@ -198,6 +223,8 @@ export interface ProviderView {
   base_url?: string;
   api_key_set: boolean;
   api_key_env?: string;
+  // auth is "login" when it thinks on a signed-in account instead of a key.
+  auth?: string;
   max_tokens?: number;
   temperature?: number;
   default: boolean;
@@ -265,6 +292,7 @@ export interface SettingsView {
   motita_url?: string;
   notify: { connector: string; on: string[]; digest?: string };
   notify_events: string[];
+  accounts: Account[];
 }
 
 export interface Skill {
@@ -390,6 +418,7 @@ function fixSettings<T>(path: string, data: T): T {
     "connector_catalog",
     "connector_categories",
     "notify_events",
+    "accounts",
   ]) {
     if (!Array.isArray(v[k])) {
       v[k] = [];
@@ -565,6 +594,13 @@ export const api = {
       "POST",
       `/v1/settings/providers/${name}/test`,
     ),
+  startLogin: (kind: string, project?: string) =>
+    request<LoginFlow>("POST", `/v1/settings/accounts/${kind}/login`, project ? { project } : {}),
+  loginFlow: (id: string) => request<LoginFlow>("GET", `/v1/settings/logins/${id}`),
+  pasteLogin: (id: string, code: string) =>
+    request<LoginFlow>("POST", `/v1/settings/logins/${id}/paste`, { code }),
+  cancelLogin: (id: string) => request("DELETE", `/v1/settings/logins/${id}`),
+  signOut: (kind: string) => request<SettingsView>("DELETE", `/v1/settings/accounts/${kind}`),
   setDefaultProvider: (name: string) =>
     request<SettingsView>("PUT", "/v1/settings/default-provider", { name }),
   setConnector: (name: string, c: Record<string, unknown>) =>
