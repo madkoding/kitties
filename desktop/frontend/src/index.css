@@ -232,6 +232,40 @@ select {
     border-color var(--motion-base) var(--ease-out),
     box-shadow var(--motion-base) var(--ease-out);
 }
+/* A select is drawn like the other fields (the system's own button ignores the design): no
+   native chrome, a neon chevron, room for it, and a dark list where the system draws one. */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 2.25rem;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-accent) 50%),
+    linear-gradient(135deg, var(--color-accent) 50%, transparent 50%);
+  background-position:
+    calc(100% - 17px) 50%,
+    calc(100% - 12px) 50%;
+  background-size:
+    5px 5px,
+    5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+  text-overflow: ellipsis;
+}
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--color-accent);
+}
+select:hover:not(:disabled) {
+  border-color: rgb(var(--accent-rgb) / 0.45);
+}
+select:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+select option {
+  background: rgb(var(--bg-rgb));
+  color: var(--t1);
+}
 input:focus,
 textarea:focus,
 select:focus {
@@ -332,6 +366,15 @@ select:focus {
 }
 .dot.stopped {
   background: var(--c-amber);
+}
+.dot.starting {
+  background: var(--color-accent);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+@keyframes dot-pulse {
+  50% {
+    opacity: 0.35;
+  }
 }
 
 /* Rows of the sidebar. */
