@@ -52,6 +52,18 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	lower := strings.ToLower(last)
 	usage := provider.Usage{Input: len(system) / 4, Output: 40}
 	switch {
+	case strings.Contains(system, "You keep the memory of a kitty"):
+		// The kitty consolidates what it learned: the corrections and likes it was given, as notes.
+		return provider.Reply{Content: distilled(last), Usage: usage}, nil
+	case strings.Contains(system, "You keep the running summary"):
+		return provider.Reply{Content: "The person and the kitties have been planning the launch: the plan is drafted, the numbers are being checked and the announcement is pending.", Usage: usage}, nil
+	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "held: the person has to approve"):
+		return provider.Reply{Content: "That needs your yes first, so I left it waiting for your approval. Once you approve it goes out, and I will see the result here.", Usage: usage}, nil
+	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "noted ("):
+		return provider.Reply{Content: "Got it, I will remember that.", Usage: usage}, nil
+	case strings.Contains(lower, "remember that "):
+		text := strings.TrimSpace(last[strings.Index(lower, "remember that ")+len("remember that "):])
+		return provider.Reply{Content: fmt.Sprintf("Noted.\n@memory remember {\"text\": %q}", text), Usage: usage}, nil
 	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "- @delegate "):
 		who := strings.TrimSpace(strings.SplitN(strings.SplitN(last, "- @delegate ", 2)[1], " ", 2)[0])
 		return provider.Reply{Content: fmt.Sprintf("%s took care of it and reported back; I checked the result and it looks right. Anything else?", who), Usage: usage}, nil
@@ -105,6 +117,34 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	default:
 		return provider.Reply{Content: fmt.Sprintf("Good question. In short: %s. Tell me if you want me to dig deeper or try it on my desktop.", summarise(last)), Usage: usage}, nil
 	}
+}
+
+// distilled writes the notes a consolidation answers with: what the person said in their
+// feedback, and the notes the kitty already had, as a JSON list.
+func distilled(prompt string) string {
+	var notes []string
+	seen := map[string]bool{}
+	add := func(scope, text string) {
+		text = strings.TrimSpace(text)
+		if text == "" || seen[text] {
+			return
+		}
+		seen[text] = true
+		notes = append(notes, fmt.Sprintf("{\"scope\": %q, \"text\": %q}", scope, text))
+	}
+	for _, line := range strings.Split(prompt, "\n") {
+		switch {
+		case strings.HasPrefix(line, "[user] "):
+			add("user", strings.TrimPrefix(line, "[user] "))
+		case strings.HasPrefix(line, "[work] "):
+			add("work", strings.TrimPrefix(line, "[work] "))
+		case strings.HasPrefix(line, "- down") && strings.Contains(line, "the person said: "):
+			if said := strings.TrimSpace(line[strings.Index(line, "the person said: ")+len("the person said: "):]); said != "" {
+				add("user", "Correction: "+said)
+			}
+		}
+	}
+	return "[" + strings.Join(notes, ", ") + "]"
 }
 
 // peerAsked is the other kitty the person asked this one to involve ("ask luna to ..."),

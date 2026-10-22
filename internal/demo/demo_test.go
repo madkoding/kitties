@@ -67,6 +67,26 @@ func TestBrain(t *testing.T) {
 	if got := ask(t, b, peers, "Results of your actions:\n- @delegate luna {\"task\": \"x\"}: ok\n  luna answered:\n  done\n\nContinue, and answer the person."); !strings.Contains(got, "luna took care of it") {
 		t.Error(got)
 	}
+	// Memory: the kitty keeps what it is told, thanks for it, and consolidates the feedback it got.
+	if got := ask(t, b, desk, "[Pat]: please remember that I like short answers"); !strings.Contains(got, `@memory remember {"text": "I like short answers"}`) {
+		t.Error(got)
+	}
+	if got := ask(t, b, desk, "Results of your actions:\n- @memory remember {}: ok\n  noted (user, id a1)\n\nContinue, and answer the person."); !strings.Contains(got, "remember that") {
+		t.Error(got)
+	}
+	if got := ask(t, b, desk, "Results of your actions:\n- @connector team-slack {}: ok\n  held: the person has to approve this first (request x).\n\nContinue"); !strings.Contains(got, "approval") {
+		t.Error(got)
+	}
+	prompt := "Current notes:\n[user] Answer in Spanish\n[work] Dates twice\n[user] Answer in Spanish\n\nThe person's latest feedback, oldest first:\n- down | asked: x | the kitty did: y | the person said: too long\n- up | asked: x\n- down | asked: x | the person said:  \n"
+	if got := ask(t, b, "You keep the memory of a kitty, an AI assistant", prompt); got != `[{"scope": "user", "text": "Answer in Spanish"}, {"scope": "work", "text": "Dates twice"}, {"scope": "user", "text": "Correction: too long"}]` {
+		t.Errorf("distilled = %s", got)
+	}
+	if got := ask(t, b, "You keep the memory of a kitty", "Current notes:\n(none)\n"); got != "[]" {
+		t.Errorf("nothing to keep = %s", got)
+	}
+	if got := ask(t, b, "You keep the running summary of a long conversation", "Summary so far"); !strings.Contains(got, "planning the launch") {
+		t.Error(got)
+	}
 	if got := ask(t, b, desk, "[scheduler]: Goal: Inbox\nLook at it.\n\nWhy now: the schedule"); !strings.Contains(got, "Checked **Inbox**") {
 		t.Error(got)
 	}

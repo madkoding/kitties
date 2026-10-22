@@ -22,10 +22,13 @@ import (
 	"time"
 
 	"github.com/madkoding/kitties/internal/agenda"
+	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/memory"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
@@ -53,6 +56,18 @@ type Turn struct {
 	NeedsHelp bool `json:"needs_help,omitempty"`
 	// Delegations are the subtasks the kitty handed to other kitties in this turn.
 	Delegations []Delegation `json:"delegations,omitempty"`
+	// Approvals are the actions this turn held for the person's yes.
+	Approvals []ApprovalRef `json:"approvals,omitempty"`
+	// Feedback is what the person said about the turn: "up", "down" or empty.
+	Feedback string `json:"feedback,omitempty"`
+}
+
+// ApprovalRef points at an action held for approval.
+type ApprovalRef struct {
+	ID        string `json:"id"`
+	Connector string `json:"connector"`
+	Action    string `json:"action"`
+	Summary   string `json:"summary"`
 }
 
 // Delegation is a subtask one kitty handed to another.
@@ -93,6 +108,10 @@ type Session struct {
 	Depth int    `json:"depth,omitempty"`
 	// Help says the last turn is a kitty asking for help; set on the copies Get and List hand out.
 	Help bool `json:"needs_help,omitempty"`
+	// Summary stands for the first SummaryUpTo turns, which the kitties no longer see one by
+	// one: a long thread keeps its early context in a few lines instead of dropping it.
+	Summary     string `json:"summary,omitempty"`
+	SummaryUpTo int    `json:"summary_up_to,omitempty"`
 }
 
 // NeedsHelp reports whether the last turn is a kitty asking the person for help.
@@ -160,6 +179,22 @@ type Service struct {
 	// journal and goals are the agenda's record and its report line, nil without an agenda.
 	journal *agenda.Journal
 	goals   Reporter
+	// approvals holds the actions waiting for a yes, nil when nothing is held back.
+	approvals *approvals.Store
+	// demand is how demanding a kitty's person is (1 relaxed to 5 strict); 3 when unset.
+	demand func(kittyID string) int
+	// notifier tells the person what happened outside the interface, nil when it does not.
+	notifier notify.Sender
+	// learnFromApproval hears every decision of the person, to learn from it; nil without memory.
+	learnFromApproval func(approvals.Approval)
+	// memory is what the kitties know about the person and the work, nil without it.
+	memory *memory.Store
+	// distilling marks the kitties whose memory is being consolidated, so it runs once at a time.
+	distilling map[string]bool
+	// CompactAfter is how many turns past the last summary a thread may grow before the early
+	// ones are summarised; CompactKeep is how many of the latest stay as they were said.
+	CompactAfter int
+	CompactKeep  int
 	// pollEvery is how often a delegating kitty looks whether the other one finished.
 	pollEvery time.Duration
 }
@@ -221,7 +256,8 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
 		now: time.Now, newID: randomID, MaxRounds: 4, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
-		DefaultLimits: kitty.Limits{MaxTokens: 400000, MaxSeconds: 1800, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond}
+		DefaultLimits: kitty.Limits{MaxTokens: 400000, MaxSeconds: 1800, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
+		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
 	if err := s.load(); err != nil {
 		return nil, err
 	}
@@ -280,6 +316,8 @@ func parseDirectives(text string) ([]Directive, string) {
 			kind = "artifact"
 		case strings.HasPrefix(trimmed, "@delegate "):
 			kind = "delegate"
+		case strings.HasPrefix(trimmed, "@memory "):
+			kind = "memory"
 		default:
 			kept = append(kept, line)
 			continue
@@ -290,8 +328,11 @@ func parseDirectives(text string) ([]Directive, string) {
 		if argsText = strings.TrimSpace(argsText); argsText != "" {
 			if err := json.Unmarshal([]byte(argsText), &d.Args); err != nil {
 				key := "name"
-				if kind == "delegate" {
+				switch kind {
+				case "delegate":
 					key = "task"
+				case "memory":
+					key = "text"
 				}
 				d.Args[key] = strings.Trim(argsText, "\"' ")
 			}
@@ -786,11 +827,16 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	if lib := s.libraryPrompt(); lib != "" {
 		system += "\n" + lib
 	}
+	s.compact(ctx, id, brain)
 	sess, err := s.Get(id)
 	if err != nil {
 		return Turn{}, nil, err
 	}
-	messages := s.transcript(system, sess.Turns, k)
+	system += s.memoryPrompt(k, sess)
+	if sess.Summary != "" {
+		system += fmt.Sprintf("\nEarlier in this conversation (a summary of its first %d messages, which you no longer see one by one):\n%s\n", sess.SummaryUpTo, sess.Summary)
+	}
+	messages := s.transcript(system, sess.Turns[min(sess.SummaryUpTo, len(sess.Turns)):], k)
 
 	native := false
 	var tools []provider.Tool
@@ -1120,13 +1166,10 @@ func (s *Service) closeTask(id string, index int, k *kitty.Kitty, text string, n
 			t.Text = "(" + t.From + " finished without a word)"
 		}
 	})
-	s.mu.RLock()
-	goal := ""
-	if sess, ok := s.sessions[id]; ok {
-		goal = sess.Goal
+	if needsHelp {
+		s.tell(notify.Help, k, "needs your help", summaryLine(text), id)
 	}
-	s.mu.RUnlock()
-	if goal != "" {
+	if goal := s.goalOf(id); goal != "" {
 		s.reportGoal(k, goal, id, result, text)
 	}
 }

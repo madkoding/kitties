@@ -19,7 +19,7 @@ import (
 
 // action is one thing the model asked for.
 type action struct {
-	kind   string // tool | connector | skill | artifact | delegate
+	kind   string // tool | connector | skill | artifact | delegate | memory
 	name   string // the tool, the connector, or the verb (skill/artifact)
 	args   map[string]any
 	raw    string
@@ -71,6 +71,13 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 			provider.Tool{Name: prefixSkill + "save", Description: "Propose a new skill you learned; a person accepts it.", Parameters: obj(map[string]any{"name": str("a short name"), "body": str("the markdown document: a title, what it is for, the steps")}, "name", "body")},
 		)
 	}
+	if s.memory != nil {
+		tools = append(tools,
+			provider.Tool{Name: "memory_remember", Description: "Keep a note about the person or the work for next time: a preference, a correction, a fact of the project. Short, durable, one thing each.", Parameters: obj(map[string]any{"text": str("the note"), "scope": str("user (how the person likes things, the default), work (a lesson about the work) or project (about this thread's project)")}, "text")},
+			provider.Tool{Name: "memory_forget", Description: "Drop a note that is wrong or out of date.", Parameters: obj(map[string]any{"id": str("the note's id")}, "id")},
+			provider.Tool{Name: "memory_list", Description: "Read your notes, with their ids.", Parameters: obj(map[string]any{})},
+		)
+	}
 	if s.canDelegate(k) {
 		tools = append(tools, provider.Tool{Name: "delegate", Description: "Hand a subtask to another kitty and get its answer back. For work another kitty is better placed for, never the whole task.",
 			Parameters: obj(map[string]any{"kitty": str("the other kitty's name"), "task": str("what to do, with everything it needs to know")}, "kitty", "task")})
@@ -113,6 +120,8 @@ func fromCalls(calls []provider.ToolCall) []action {
 			a.kind, a.name = "skill", strings.TrimPrefix(c.Name, prefixSkill)
 		case strings.HasPrefix(c.Name, prefixArtifact):
 			a.kind, a.name = "artifact", strings.TrimPrefix(c.Name, prefixArtifact)
+		case strings.HasPrefix(c.Name, "memory_"):
+			a.kind, a.name = "memory", strings.TrimPrefix(c.Name, "memory_")
 		case c.Name == "delegate":
 			a.kind = "delegate"
 			a.name, _ = a.args["kitty"].(string)
@@ -183,9 +192,15 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 		switch a.kind {
 		case "delegate":
 			out = append(out, s.delegate(ctx, id, a, k, turn))
+		case "memory":
+			out = append(out, s.runMemory(id, a, k))
 		case "connector":
 			if len(allowed) == 0 {
 				out = append(out, outcome{action: a, err: "this kitty has no connectors"})
+				continue
+			}
+			if held, ok := s.gate(id, k, a, turn); ok {
+				out = append(out, held)
 				continue
 			}
 			results := []connector.Result{s.fleet.Connectors().Call(ctx, connector.Call{Name: a.name, Args: a.args, Raw: a.raw}, k.Connectors)}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -57,12 +58,15 @@ func (e *echoConn) Call(_ context.Context, a map[string]any) (string, error) {
 
 // scripted answers with the given replies in order, remembering what it was asked.
 type scripted struct {
+	mu      sync.Mutex
 	replies []string
 	seen    [][]provider.Message
 	err     error
 }
 
 func (s *scripted) Complete(_ context.Context, m []provider.Message) (provider.Reply, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.seen = append(s.seen, m)
 	if s.err != nil {
 		return provider.Reply{}, s.err

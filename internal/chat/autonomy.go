@@ -9,6 +9,7 @@ import (
 
 	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/notify"
 )
 
 // HOW A KITTY WORKS ON ITS OWN.
@@ -40,10 +41,14 @@ func (s *Service) reportGoal(k *kitty.Kitty, goal, chatID, result, text string) 
 	switch result {
 	case "blocked":
 		kind = agenda.KindBlocked
+		s.tell(notify.GoalBlocked, k, "could not finish a goal", summaryLine(text), chatID)
 	case "escalated":
 		kind = agenda.KindEscalated
 	case "delegated":
 		kind = agenda.KindDelegated
+		s.tell(notify.GoalDone, k, "finished a goal (through "+"another kitty)", summaryLine(text), chatID)
+	default:
+		s.tell(notify.GoalDone, k, "finished a goal", summaryLine(text), chatID)
 	}
 	s.note(k, kind, goal, chatID, firstLine(text))
 }
