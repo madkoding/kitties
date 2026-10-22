@@ -2,6 +2,7 @@
 package kitty
 
 import (
+	"errors"
 	"time"
 
 	"github.com/madkoding/kitties/internal/soul"
@@ -35,6 +36,50 @@ type Kitty struct {
 	CreatedAt time.Time `json:"created_at"`
 	// Workspace is the host folder mounted into the container.
 	Workspace string `json:"workspace,omitempty"`
+	// Limits bound what one task of this kitty may spend; a zero field takes the default.
+	Limits Limits `json:"limits"`
+	// Backup names the kitty a task is handed to when this one gives up; empty asks the person.
+	Backup string `json:"backup,omitempty"`
+}
+
+// Limits is what a kitty may spend on one task before it stops and says so.
+type Limits struct {
+	// MaxTokens is the input plus output tokens one task may use.
+	MaxTokens int `json:"max_tokens,omitempty" yaml:"max_tokens"`
+	// MaxSeconds is how long one task may run.
+	MaxSeconds int `json:"max_seconds,omitempty" yaml:"max_seconds"`
+	// MaxRounds is how many rounds of actions one task may take.
+	MaxRounds int `json:"max_rounds,omitempty" yaml:"max_rounds"`
+	// Retries is how many times a failed task is tried another way before giving up.
+	Retries int `json:"retries,omitempty" yaml:"retries"`
+}
+
+// Validate refuses a negative limit.
+func (l Limits) Validate() error {
+	if l.MaxTokens < 0 || l.MaxSeconds < 0 || l.MaxRounds < 0 || l.Retries < 0 {
+		return errors.New("limits cannot be negative")
+	}
+	if l.Retries > 10 {
+		return errors.New("limits.retries: at most 10")
+	}
+	return nil
+}
+
+// Or fills the zero fields of l from d.
+func (l Limits) Or(d Limits) Limits {
+	if l.MaxTokens == 0 {
+		l.MaxTokens = d.MaxTokens
+	}
+	if l.MaxSeconds == 0 {
+		l.MaxSeconds = d.MaxSeconds
+	}
+	if l.MaxRounds == 0 {
+		l.MaxRounds = d.MaxRounds
+	}
+	if l.Retries == 0 {
+		l.Retries = d.Retries
+	}
+	return l
 }
 
 // ContainerName is the container a kitty called name runs in.

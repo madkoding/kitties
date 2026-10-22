@@ -213,3 +213,33 @@ func TestApplyEnv(t *testing.T) {
 		t.Error("a bad public url is refused")
 	}
 }
+
+func TestKittyLimitsBackupAndGoals(t *testing.T) {
+	base := "providers:\n  p:\n    kind: ollama\nconnectors:\n  gh:\n    kind: github\n    settings:\n      token: t\n"
+	cfg, err := Parse([]byte(base + "kitties:\n  - name: ana\n    backup: bob\n    limits:\n      max_tokens: 5000\n      max_seconds: 600\n      retries: 2\n    goals:\n      - title: Triage\n        text: Look at new issues\n        on: [gh]\n      - title: Report\n        every: '@weekly'\n  - name: bob\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ana := cfg.Kitties[0]
+	if ana.Backup != "bob" || ana.Limits.MaxTokens != 5000 || ana.Limits.Retries != 2 || len(ana.Goals) != 2 || ana.Goals[0].On[0] != "gh" || ana.Goals[1].Every != "@weekly" {
+		t.Errorf("ana = %+v", ana)
+	}
+	if _, err := Parse([]byte(base + "kitties:\n  - name: ana\n    backup: team-2\n  - name: team\n    replicas: 2\n")); err != nil {
+		t.Errorf("a replica backs up: %v", err)
+	}
+	for _, bad := range []string{
+		"kitties:\n  - name: ana\n    backup: team-3\n  - name: team\n    replicas: 2\n",
+		"kitties:\n  - name: ana\n    backup: team-x\n  - name: team\n    replicas: 2\n",
+		"kitties:\n  - name: ana\n    backup: ana\n",
+		"kitties:\n  - name: ana\n    backup: nobody\n",
+		"kitties:\n  - name: ana\n    limits:\n      max_tokens: -1\n",
+		"kitties:\n  - name: ana\n    goals:\n      - text: no title\n        every: '@daily'\n",
+		"kitties:\n  - name: ana\n    goals:\n      - title: nothing runs it\n",
+		"kitties:\n  - name: ana\n    goals:\n      - title: bad cron\n        every: 'x y'\n",
+		"kitties:\n  - name: ana\n    goals:\n      - title: unknown connector\n        on: [nope]\n",
+	} {
+		if _, err := Parse([]byte(base + bad)); err == nil || !strings.Contains(err.Error(), "kitties[0]") {
+			t.Errorf("%q must be refused: %v", bad, err)
+		}
+	}
+}

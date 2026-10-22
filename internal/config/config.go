@@ -11,9 +11,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/provider"
@@ -85,6 +87,23 @@ type Kitty struct {
 	Replicas int `yaml:"replicas"`
 	// Desktop is false to run the kitty without a container (brain only).
 	Desktop *bool `yaml:"desktop"`
+	// Limits bound one task: tokens, seconds, rounds and retries. Zero fields take the defaults.
+	Limits kitty.Limits `yaml:"limits"`
+	// Backup names the kitty that takes over a task this one could not finish.
+	Backup string `yaml:"backup"`
+	// Goals are what the kitty pursues on its own: on a schedule, on events, or both.
+	Goals []Goal `yaml:"goals"`
+}
+
+// Goal is a standing task of a kitty, from the configuration file.
+type Goal struct {
+	Title string `yaml:"title"`
+	// Text is what the kitty is told each time; the title when empty.
+	Text string `yaml:"text"`
+	// Every is a cron expression (five fields, or @hourly, @daily, @weekly, @monthly).
+	Every string `yaml:"every"`
+	// On names the connectors whose incoming events run the goal.
+	On []string `yaml:"on"`
 }
 
 // Containers is the container runtime block.
@@ -344,6 +363,35 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("kitties[%d].connectors: %q is not a configured connector", i, cn)
 			}
 		}
+		if err := k.Limits.Validate(); err != nil {
+			return fmt.Errorf("kitties[%d].%v", i, err)
+		}
+		if k.Backup != "" {
+			if k.Backup == k.Name {
+				return fmt.Errorf("kitties[%d].backup: a kitty cannot back itself up", i)
+			}
+			if !c.hasKitty(k.Backup) {
+				return fmt.Errorf("kitties[%d].backup: %q is not a configured kitty", i, k.Backup)
+			}
+		}
+		for j, g := range k.Goals {
+			if strings.TrimSpace(g.Title) == "" {
+				return fmt.Errorf("kitties[%d].goals[%d]: a goal needs a title", i, j)
+			}
+			if strings.TrimSpace(g.Every) == "" && len(g.On) == 0 {
+				return fmt.Errorf("kitties[%d].goals[%d] (%s): a goal runs on a schedule (every), on events (on), or both", i, j, g.Title)
+			}
+			if g.Every != "" {
+				if _, err := agenda.Parse(g.Every); err != nil {
+					return fmt.Errorf("kitties[%d].goals[%d] (%s): every: %v", i, j, g.Title, err)
+				}
+			}
+			for _, cn := range g.On {
+				if _, ok := c.Connectors[cn]; !ok {
+					return fmt.Errorf("kitties[%d].goals[%d] (%s): on: %q is not a configured connector", i, j, g.Title, cn)
+				}
+			}
+		}
 	}
 	switch c.Containers.Runtime {
 	case "auto", "docker", "podman":
@@ -374,6 +422,21 @@ func (c *Config) Validate() error {
 		}
 	}
 	return nil
+}
+
+// hasKitty reports whether a kitty of that name is configured, replicas included (team-2).
+func (c *Config) hasKitty(name string) bool {
+	for _, k := range c.Kitties {
+		if k.Name == name {
+			return true
+		}
+		if k.Replicas > 1 && strings.HasPrefix(name, k.Name+"-") {
+			if n, err := strconv.Atoi(strings.TrimPrefix(name, k.Name+"-")); err == nil && n >= 1 && n <= k.Replicas {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // isLocal reports whether a URL points at this machine.

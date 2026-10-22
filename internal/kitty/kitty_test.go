@@ -38,3 +38,21 @@ func TestAvatar(t *testing.T) {
 		t.Error("unknown color")
 	}
 }
+
+func TestLimits(t *testing.T) {
+	if err := (Limits{MaxTokens: 1, MaxSeconds: 2, MaxRounds: 3, Retries: 4}).Validate(); err != nil {
+		t.Error(err)
+	}
+	for _, bad := range []Limits{{MaxTokens: -1}, {MaxSeconds: -1}, {MaxRounds: -1}, {Retries: -1}, {Retries: 11}} {
+		if bad.Validate() == nil {
+			t.Errorf("%+v must be refused", bad)
+		}
+	}
+	d := Limits{MaxTokens: 100, MaxSeconds: 200, MaxRounds: 30, Retries: 1}
+	if got := (Limits{MaxSeconds: 5}).Or(d); got != (Limits{MaxTokens: 100, MaxSeconds: 5, MaxRounds: 30, Retries: 1}) {
+		t.Errorf("Or = %+v", got)
+	}
+	if got := (Limits{}).Or(d); got != d {
+		t.Errorf("Or empty = %+v", got)
+	}
+}
