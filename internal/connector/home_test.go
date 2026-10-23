@@ -122,3 +122,17 @@ func TestWeather(t *testing.T) {
 		t.Errorf("a forecast without days = %q %v", out, err)
 	}
 }
+
+func TestHomeAssistantReceivesEvents(t *testing.T) {
+	k, _ := LookupKind("home-assistant")
+	found := false
+	for _, f := range k.Fields {
+		found = found || f.Name == "inbound_secret"
+	}
+	if !k.Inbound || !found {
+		t.Errorf("home assistant takes events: %+v", k)
+	}
+	if w, _ := LookupKind("weather"); w.Inbound {
+		t.Error("the weather posts nothing")
+	}
+}

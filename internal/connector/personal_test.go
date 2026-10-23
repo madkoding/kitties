@@ -448,3 +448,42 @@ func TestMicrosoftContactsAndTodo(t *testing.T) {
 		}
 	}
 }
+
+func TestInvites(t *testing.T) {
+	if got := Attendees(map[string]any{"attendees": "ana@x.com, mailto:bo@y.org; not-an-email"}); len(got) != 2 || got[1] != "bo@y.org" {
+		t.Errorf("attendees = %v", got)
+	}
+	if got := Attendees(map[string]any{"attendees": []any{"ana@x.com", 3.0}}); len(got) != 1 {
+		t.Errorf("list = %v", got)
+	}
+	for _, kind := range []string{"google-workspace", "microsoft-365"} {
+		if RiskOfCall(kind, map[string]any{"action": "create_event"}) != RiskNone ||
+			RiskOfCall(kind, map[string]any{"action": "create_event", "attendees": "ana@x.com"}) != RiskAsk {
+			t.Errorf("%s: an event with guests asks first", kind)
+		}
+	}
+	if RiskOfCall("caldav", map[string]any{"action": "add_event", "attendees": []any{"ana@x.com"}}) != RiskAsk {
+		t.Error("caldav guests ask first")
+	}
+	_, _, cap := run(t, "google-workspace", google, map[string]any{"action": "create_event", "summary": "Plan", "start": "2026-10-24T10:00:00Z", "attendees": "ana@x.com"})
+	if !strings.Contains(cap.reqs[0].URL.String(), "sendUpdates=all") || !strings.Contains(cap.bodies[0], `"attendees":[{"email":"ana@x.com"}]`) {
+		t.Errorf("google = %s %s", cap.reqs[0].URL, cap.bodies[0])
+	}
+	_, _, cap = run(t, "google-workspace", google, map[string]any{"action": "create_event", "summary": "Alone", "start": "2026-10-24T10:00:00Z"})
+	if strings.Contains(cap.reqs[0].URL.String(), "sendUpdates") || strings.Contains(cap.bodies[0], "attendees") {
+		t.Errorf("no guests = %s", cap.bodies[0])
+	}
+	_, _, cap = run(t, "microsoft-365", ms, map[string]any{"action": "create_event", "subject": "Plan", "start": "2026-10-24T10:00:00", "attendees": "ana@x.com"})
+	if !strings.Contains(cap.bodies[0], `"attendees":[{"emailAddress":{"address":"ana@x.com"},"type":"required"}]`) {
+		t.Errorf("microsoft = %s", cap.bodies[0])
+	}
+	_, _, cap = run(t, "caldav", dav, map[string]any{"action": "add_event", "title": "Plan", "start": "2026-10-24T10:00:00Z", "attendees": "bo@y.org"}, davPrincipal, davCalHome, davCalendars, "")
+	if !strings.Contains(cap.bodies[3], "ORGANIZER:mailto:ana@example.com") || !strings.Contains(cap.bodies[3], "RSVP=TRUE:mailto:bo@y.org") {
+		t.Errorf("caldav:\n%s", cap.bodies[3])
+	}
+	fakeMac(t, `{}`)
+	c, _ := Build("apple", Settings{}, "")
+	if _, err := c.Call(context.Background(), map[string]any{"action": "add_event", "title": "x", "start": "2026-10-24", "attendees": "a@b.c"}); err == nil || !strings.Contains(err.Error(), "cannot invite") {
+		t.Errorf("apple = %v", err)
+	}
+}

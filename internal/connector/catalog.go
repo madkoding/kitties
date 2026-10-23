@@ -184,7 +184,7 @@ func catalog() []Kind {
 			Fields: []Field{f("client_id", "OAuth client id", "a Desktop or Web client of your Google Cloud project", true, false), f("client_secret", "OAuth client secret", "", false, true)},
 			Actions: []Action{
 				{Name: "send_mail", Help: "send a mail from the account", Args: []string{"to", "subject", fText}},
-				{Name: "create_event", Help: "add a calendar event", Args: []string{"summary", "start (RFC 3339)", "end (RFC 3339)", "description (optional)"}},
+				{Name: "create_event", Help: "add a calendar event; with attendees it invites them (that asks you first)", Args: []string{"summary", "start (RFC 3339)", "end (RFC 3339)", "description (optional)", "attendees (optional emails)"}},
 				{Name: "upload", Help: "create a text file in Drive", Args: []string{"name", fContent}},
 				{Name: "append_row", Help: "append a row to a spreadsheet", Args: []string{"spreadsheet (id)", "values (a list)", "range (optional, Sheet1!A1)"}},
 				{Name: "create_doc", Help: "create a document with text", Args: []string{fTitle, fText}},
@@ -193,7 +193,7 @@ func catalog() []Kind {
 			Fields: []Field{f("client_id", "Application (client) id", "an app registration in Entra ID with a public client or a secret", true, false), f("client_secret", "Client secret", "", false, true)},
 			Actions: []Action{
 				{Name: "send_mail", Help: "send a mail from the account", Args: []string{"to", "subject", fText}},
-				{Name: "create_event", Help: "add a calendar event", Args: []string{"subject", "start (RFC 3339)", "end (RFC 3339)", "body (optional)"}},
+				{Name: "create_event", Help: "add a calendar event; with attendees it invites them (that asks you first)", Args: []string{"subject", "start (RFC 3339)", "end (RFC 3339)", "body (optional)", "attendees (optional emails)"}},
 				{Name: "upload", Help: "create a text file in OneDrive", Args: []string{"name", fContent}},
 			}, make: makeMicrosoft365, oauth: "microsoft"},
 		{Name: "airtable", Category: CatOffice, Label: "Airtable", Help: "records in an Airtable table",
@@ -243,7 +243,7 @@ func withReads(kinds []Kind) []Kind {
 // withInbound adds the incoming events field to the kinds whose services report events.
 func withInbound(kinds []Kind) []Kind {
 	for i := range kinds {
-		if inboundCategories[kinds[i].Category] && kinds[i].Name != "shell" {
+		if (inboundCategories[kinds[i].Category] && kinds[i].Name != "shell") || inboundKinds[kinds[i].Name] {
 			kinds[i].Fields = append(kinds[i].Fields, fInbound)
 			kinds[i].Inbound = true
 		}
@@ -255,6 +255,10 @@ func withInbound(kinds []Kind) []Kind {
 // when it posts to the connector's hook (POST /v1/hooks/<name>), so a kitty can act on
 // what arrives.
 var fInbound = f("inbound_secret", "Incoming events secret", "to receive events at /v1/hooks/<name>: GitHub's webhook secret, or any secret sent as X-Kitties-Secret", false, true)
+
+// inboundKinds are the kinds of other categories whose services report events: Home Assistant
+// posts what the house does (a door opened, the alarm went off) from an automation.
+var inboundKinds = map[string]bool{"home-assistant": true}
 
 // inboundCategories are the categories whose services report events.
 var inboundCategories = map[string]bool{CatMessaging: true, CatGit: true, CatProductivity: true, CatFinance: true, CatGeneric: true}
@@ -1285,8 +1289,17 @@ func makeGoogleWorkspace(s Settings) Connector {
 			if end == "" {
 				end = start
 			}
-			return request{method: "POST", url: "https://www.googleapis.com/calendar/v3/calendars/primary/events", body: map[string]any{
-				"summary": summary, "description": str(a, "description"), "start": map[string]any{"dateTime": start}, "end": map[string]any{"dateTime": end}}}, nil
+			body := map[string]any{"summary": summary, "description": str(a, "description"), "start": map[string]any{"dateTime": start}, "end": map[string]any{"dateTime": end}}
+			target := "https://www.googleapis.com/calendar/v3/calendars/primary/events"
+			if guests := Attendees(a); len(guests) > 0 {
+				list := make([]any, 0, len(guests))
+				for _, g := range guests {
+					list = append(list, map[string]any{"email": g})
+				}
+				body["attendees"] = list
+				target += "?sendUpdates=all" // Google mails the invitations
+			}
+			return request{method: "POST", url: target, body: body}, nil
 		},
 		"upload": func(s Settings, a map[string]any) (request, error) {
 			name, err := need(a, "name")
@@ -1358,9 +1371,16 @@ func makeMicrosoft365(s Settings) Connector {
 			if end == "" {
 				end = start
 			}
-			return request{method: "POST", url: "https://graph.microsoft.com/v1.0/me/events", body: map[string]any{
-				"subject": subject, "body": map[string]any{"contentType": "Text", "content": str(a, "body", "description")},
-				"start": map[string]any{"dateTime": start, "timeZone": "UTC"}, "end": map[string]any{"dateTime": end, "timeZone": "UTC"}}}, nil
+			body := map[string]any{"subject": subject, "body": map[string]any{"contentType": "Text", "content": str(a, "body", "description")},
+				"start": map[string]any{"dateTime": start, "timeZone": "UTC"}, "end": map[string]any{"dateTime": end, "timeZone": "UTC"}}
+			if guests := Attendees(a); len(guests) > 0 {
+				list := make([]any, 0, len(guests))
+				for _, g := range guests {
+					list = append(list, map[string]any{"emailAddress": map[string]any{"address": g}, "type": "required"})
+				}
+				body["attendees"] = list // Outlook sends the invitations
+			}
+			return request{method: "POST", url: "https://graph.microsoft.com/v1.0/me/events", body: body}, nil
 		},
 		"upload": func(s Settings, a map[string]any) (request, error) {
 			name, err := need(a, "name")

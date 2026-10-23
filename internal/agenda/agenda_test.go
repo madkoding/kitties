@@ -506,3 +506,13 @@ func TestAgendaFacade(t *testing.T) {
 		}
 	}
 }
+
+func TestSummariseHomeAssistant(t *testing.T) {
+	ev := Summarise("house", "", []byte(`{"entity_id":"binary_sensor.front_door","name":"Front door","from":"off","state":"on","message":"opened at night"}`))
+	if ev.Kind != "state_changed" || !strings.Contains(ev.Text, "Front door (binary_sensor.front_door) went from off is now on") || !strings.Contains(ev.Text, "opened at night") {
+		t.Errorf("event = %+v", ev)
+	}
+	if ev := Summarise("house", "alarm", []byte(`{"entity_id":"alarm_control_panel.home","to_state":"triggered"}`)); ev.Kind != "alarm" || !strings.Contains(ev.Text, "alarm_control_panel.home is now triggered") {
+		t.Errorf("bare event = %+v", ev)
+	}
+}

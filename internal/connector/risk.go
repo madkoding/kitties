@@ -65,7 +65,33 @@ func RiskOfCall(kind string, args map[string]any) Risk {
 		}
 		return RiskAsk
 	}
+	// An event with guests sends them an invitation: it reaches people.
+	if (action == "create_event" || action == "add_event") && len(Attendees(args)) > 0 {
+		return max(RiskAsk, RiskOf(kind, action))
+	}
 	return RiskOf(kind, action)
+}
+
+// Attendees are the guests a call names: a list, or emails separated by commas or spaces.
+func Attendees(args map[string]any) []string {
+	var raw []string
+	switch v := args["attendees"].(type) {
+	case []any:
+		for _, x := range v {
+			if s, ok := x.(string); ok {
+				raw = append(raw, s)
+			}
+		}
+	case string:
+		raw = strings.FieldsFunc(v, func(r rune) bool { return r == ',' || r == ';' || r == ' ' })
+	}
+	var out []string
+	for _, a := range raw {
+		if a = strings.TrimSpace(strings.TrimPrefix(a, "mailto:")); strings.Contains(a, "@") {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // ActionOf is the action a call asks for: its "action", or the kind's first when it names none.

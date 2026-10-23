@@ -194,6 +194,9 @@ func (c *appleConnector) Call(ctx context.Context, args map[string]any) (string,
 		}
 		return strings.Join(out, "\n"), nil
 	case "add_event":
+		if len(Attendees(args)) > 0 {
+			return "", errors.New("the Mac's Calendar cannot invite people through automation: add the event without attendees, or invite them through the account's own connection (Google, Microsoft or CalDAV)")
+		}
 		title, err := need(args, "title", "summary", "text")
 		if err != nil {
 			return "", err
@@ -594,7 +597,7 @@ func microsoftPersonal() map[string]actionFn {
 func personalKinds() []Kind {
 	fEvents := []Action{
 		{Name: "events", Help: "what is on the calendar (the next 7 days by default)", Args: []string{"days (optional)", "from (optional)", "calendar (optional)"}},
-		{Name: "add_event", Help: "add an event", Args: []string{fTitle, "start (2026-10-22 15:00, RFC 3339, or a date for all day)", "end (optional; an hour later)", "location (optional)", "notes (optional)", "calendar (optional)"}},
+		{Name: "add_event", Help: "add an event; with attendees it invites them (that asks you first)", Args: []string{fTitle, "start (2026-10-22 15:00, RFC 3339, or a date for all day)", "end (optional; an hour later)", "location (optional)", "notes (optional)", "attendees (optional emails)", "calendar (optional)"}},
 		{Name: "calendars", Help: "the calendars and task lists of the account"},
 	}
 	fReminders := []Action{
@@ -630,7 +633,7 @@ func personalKinds() []Kind {
 				f("list", "Reminders list", "where new reminders go; empty: the default list", false, false),
 			},
 			Actions: append(append(append([]Action{}, fEvents...), fReminders...), fContacts...), make: makeApple},
-		{Name: "home-assistant", Category: CatHome, Label: "Home Assistant", Help: "the house through Home Assistant: what the lights, sensors, heating and doors say, and acting on them",
+		{Name: "home-assistant", Category: CatHome, Label: "Home Assistant", Help: "the house through Home Assistant: what the lights, sensors, heating and doors say, and acting on them; an automation can tell the kitties what happens (a rest_command posting to /v1/hooks/<name>)",
 			Fields: []Field{
 				f("url", "Address", "http://homeassistant.local:8123", true, false),
 				f("token", "Long-lived access token", "your profile in Home Assistant → Security → Long-lived access tokens", true, true),

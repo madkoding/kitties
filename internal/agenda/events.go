@@ -105,6 +105,26 @@ func Summarise(source, kind string, body []byte) Event {
 			}
 		}
 	}
+	// Home Assistant (an automation's rest_command): which device, and what it is now.
+	if entity := str(m, "entity_id"); entity != "" {
+		line := entity
+		if name := str(m, "name", "friendly_name"); name != "" {
+			line = name + " (" + entity + ")"
+		}
+		if from := str(m, "from", "from_state"); from != "" {
+			line += " went from " + from
+		}
+		if to := str(m, "state", "to", "to_state"); to != "" {
+			line += " is now " + to
+		}
+		if ev.Kind == "" {
+			ev.Kind = "state_changed"
+		}
+		lines = append(lines, line)
+		if msg := str(m, "message"); msg != "" {
+			lines = append(lines, clip(msg, 600))
+		}
+	}
 	// Slack (Events API) and Discord: who said what, where.
 	if inner, ok := m["event"].(map[string]any); ok {
 		if ev.Kind == "" {

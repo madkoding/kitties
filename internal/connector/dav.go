@@ -643,6 +643,15 @@ func (c *caldavConnector) addEvent(ctx context.Context, args map[string]any) (st
 	if v := str(args, "description", "notes"); v != "" {
 		b.WriteString("DESCRIPTION:" + icsEscape(v) + "\r\n")
 	}
+	// Guests: the server sends the invitations, from the account as the organiser.
+	if guests := Attendees(args); len(guests) > 0 {
+		if strings.Contains(c.s["user"], "@") {
+			b.WriteString("ORGANIZER:mailto:" + c.s["user"] + "\r\n")
+		}
+		for _, g := range guests {
+			b.WriteString("ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:" + g + "\r\n")
+		}
+	}
 	b.WriteString("END:VEVENT\r\n")
 	if err := c.put(ctx, col, uid, vcalendar(b.String())); err != nil {
 		return "", err
