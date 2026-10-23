@@ -22,6 +22,9 @@ desktop/frontend/dist/
 desktop/build/*
 !desktop/build/appicon.png
 !desktop/build/appicon.svg
+# a `go build` in desktop/ leaves the app's binary there
+/desktop/desktop
+/desktop/desktop.exe
 
 # The end-to-end run: its data, state and reports
 desktop/frontend/e2e/.data/
