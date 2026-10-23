@@ -2,7 +2,10 @@
 #
 # VERSION can be overridden: make VERSION=v1.0.0 dist
 VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
-LDFLAGS  := -s -w -X main.version=$(VERSION)
+# OAUTH_APPS are the apps the connections sign in through when the person has none of their
+# own: "spotify=<client id>,facebook=<id>:<secret>,..." (see internal/oauth: Builtin).
+OAUTH_APPS ?=
+LDFLAGS  := -s -w -X main.version=$(VERSION) -X 'github.com/madkoding/kitties/internal/oauth.builtin=$(OAUTH_APPS)'
 GO       ?= go
 DIST     := dist
 PKGS     := ./internal/... ./cmd/...

@@ -240,9 +240,11 @@ jobs:
       # it when none is running (desktop/gateway.go), so nothing else has to be installed.
       - name: build the gateway the app starts
         shell: bash
+        env:
+          OAUTH_APPS: ${{ secrets.KITTIES_OAUTH_APPS }}
         run: |
           ext=""; if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi
-          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }}" -o "desktop/build/bin/kitties-gateway$ext" ./cmd/kitties
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }} -X 'github.com/madkoding/kitties/internal/oauth.builtin=$OAUTH_APPS'" -o "desktop/build/bin/kitties-gateway$ext" ./cmd/kitties
           ls -la desktop/build/bin
       - name: pack
         shell: bash
@@ -384,7 +386,10 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop/frontend/package-lock.json
-      - run: make VERSION=${{ github.ref_name }} dist
+      - run: make VERSION=${{ github.ref_name }} OAUTH_APPS="$OAUTH_APPS" dist
+        env:
+          # The apps Kitties signs in through (a repository secret; empty: the person's own).
+          OAUTH_APPS: ${{ secrets.KITTIES_OAUTH_APPS }}
       - uses: actions/download-artifact@v4
         with:
           pattern: kitties-desktop-*
