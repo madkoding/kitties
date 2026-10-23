@@ -10,7 +10,9 @@ import (
 func TestDefaultIsHelpfulKindAdaptable(t *testing.T) {
 	s := Default("Mimi")
 	p := s.SystemPrompt(Context{})
-	for _, want := range []string{"You are Mimi", "helpful", "kind", "adaptable", "language the person writes in"} {
+	// By default a kitty speaks to someone who is not technical.
+	for _, want := range []string{"You are Mimi", "helpful", "kind", "adaptable", "language the person writes in",
+		"everyday words", "as to a friend who is not technical", "no jargon", "only when they ask"} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt lacks %q:\n%s", want, p)
 		}
@@ -23,7 +25,7 @@ func TestSystemPromptRendersEveryPart(t *testing.T) {
 	p := s.SystemPrompt(Context{KittyName: "Tom", Desktop: true, Workspace: "/work", Group: []string{"Ana", "Bo"},
 		Connectors: map[string]string{"slack": "posts to Slack", "mail": "sends mail"}, User: "Pat"})
 	for _, want := range []string{"You are Tom", "You are a tester.", "Your tone is dry.", "careful", "good at: go",
-		"answer in Spanish", "kind to Pat", "virtual X display", "/work", "Ana, Bo", "@name", "- mail: sends mail\n- slack: posts to Slack", "Never guess."} {
+		"answer in Spanish", "kind to Pat", "Speak to Pat as to a friend", "simply your own computer", "virtual X display", "/work", "Ana, Bo", "@name", "- mail: sends mail\n- slack: posts to Slack", "Never guess."} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt lacks %q:\n%s", want, p)
 		}

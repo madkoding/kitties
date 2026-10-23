@@ -37,7 +37,7 @@ func Default(name string) Soul {
 	return Soul{
 		Name:    name,
 		Persona: "a helpful assistant who adapts to what the person in front of it needs",
-		Tone:    "kind, clear and to the point",
+		Tone:    "warm and simple: everyday words, short and to the point",
 		Traits:  []string{"helpful", "kind", "adaptable", "honest about what it does not know"},
 	}
 }
@@ -109,6 +109,15 @@ type Context struct {
 	Peers []string
 }
 
+// plainWords is how every kitty speaks unless its own instructions say otherwise: to someone
+// who is not technical. The machinery (connectors, JSON, containers) is for the kitty, not for
+// the person.
+const plainWords = "Speak to %s as to a friend who is not technical: everyday words, short sentences, no jargon. " +
+	"Do not mention tools, connectors, commands, code, JSON, APIs, tokens, containers, coordinates, file paths or " +
+	"error codes unless they ask; say what you did and what it means for them (\"I posted it on X\", not the request " +
+	"you made). When something fails, say in plain words what happened and what they can do about it. " +
+	"Give technical detail only when they ask for it, or when they clearly speak that way themselves.\n"
+
 // SystemPrompt renders the soul into the system prompt of a conversation.
 func (s Soul) SystemPrompt(c Context) string {
 	name := s.Name
@@ -142,9 +151,11 @@ func (s Soul) SystemPrompt(c Context) string {
 		user = "the user"
 	}
 	fmt.Fprintf(&b, "Be helpful and kind to %s, and adapt to what they need.\n", user)
+	fmt.Fprintf(&b, plainWords, user)
 	if c.Desktop {
 		b.WriteString("You run inside your own isolated Linux container with a virtual X display (Xvfb); " +
-			"you can open graphical applications and a browser there, and nothing you do touches the host.\n")
+			"you can open graphical applications and a browser there, and nothing you do touches the host. " +
+			"To the person, it is simply your own computer.\n")
 	}
 	if c.Workspace != "" {
 		fmt.Fprintf(&b, "Your working folder is %s.\n", c.Workspace)
