@@ -253,6 +253,20 @@ export interface ConnectorView {
   signed_in?: boolean;
   needs_sign_in?: boolean;
   account?: string;
+  // auth is how one that signs in reaches its account: "sign-in", "keys", "token", "webhook".
+  auth?: string;
+  // token_expires is when a typed token of a known lifetime stops working (RFC 3339).
+  token_expires?: string;
+}
+
+// ConnectorTest is what testing a connection answered: tested false when it cannot be tested
+// without acting.
+export interface ConnectorTest {
+  ok: boolean;
+  tested: boolean;
+  account?: string;
+  error?: string;
+  message?: string;
 }
 
 export interface ChatEvent {
@@ -615,6 +629,8 @@ export const api = {
       "POST",
       `/v1/settings/providers/${name}/test`,
     ),
+  testConnector: (name: string) =>
+    request<ConnectorTest>("POST", `/v1/settings/connectors/${name}/test`),
   startLogin: (kind: string, project?: string) =>
     request<LoginFlow>("POST", `/v1/settings/accounts/${kind}/login`, project ? { project } : {}),
   loginFlow: (id: string) => request<LoginFlow>("GET", `/v1/settings/logins/${id}`),

@@ -415,6 +415,11 @@ out** forgets an account. Signing in replaces a token typed before (it would win
 account). Through the API, `PUT /v1/settings/connectors/{name}` takes `"clear": ["token",
 "sign_in"]` for the same.
 
+Each connection says what it uses (the sign-in, the OAuth 1.0 keys, a token or a webhook) and has
+a **Test** that reads who the account is, without posting; a save tests it by itself. A webhook
+cannot be tested without posting, so it says so. X's pasted OAuth 2.0 token counts down its two
+hours on the list and in the form.
+
 The apps a build signs in through come from `OAUTH_APPS` at build time
 (`make OAUTH_APPS="spotify=<client id>,facebook=<id>:<secret>" dist`; the release reads the
 `KITTIES_OAUTH_APPS` repository secret), or from `KITTIES_<SERVICE>_CLIENT_ID` and
@@ -469,7 +474,7 @@ renewed before they expire.
 | `POST /v1/chats/{id}/members` · `DELETE /v1/chats/{id}/members/{ref}` | who is in the group |
 | `POST /v1/chats/{id}/messages` `{text}`   | send a message; returns the kitties' turns (a desktop task goes on in the background: poll the chat) |
 | `POST /v1/chats/{id}/cancel` · `GET /v1/chats/{id}/shots/{name}` | stop a task; a step's screenshot |
-| `GET /v1/settings` · `PUT/DELETE /v1/settings/providers/{name}` · `POST …/test` · `PUT/DELETE /v1/settings/connectors/{name}` | the models and the connectors (a connector that signs in needs its sign-in or a key; `?sign_in=1` saves it just before its sign-in) |
+| `GET /v1/settings` · `PUT/DELETE /v1/settings/providers/{name}` · `POST …/test` · `PUT/DELETE /v1/settings/connectors/{name}` | the models and the connectors (a connector that signs in needs its sign-in or a key; `?sign_in=1` saves it just before its sign-in); `POST …/connectors/{name}/test` checks its account with a request that only reads |
 | `GET /v1/local-token`                     | the token, handed only to a client on the same machine |
 | `GET /v1/chats/{id}/events`               | server-sent events: `turn`, `update`, `done`, `deleted` |
 | `POST /v1/oauth/{connector}/start` · `GET /v1/oauth/callback` | the OAuth sign-in of a connector |

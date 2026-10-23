@@ -833,3 +833,42 @@ test("X: the callback address, the app's fields stay put, and the OAuth 1.0 keys
   await expect(form.getByText("OAuth 1.0 Keys → Consumer Key")).toBeVisible();
   await shot(page, "43-x-keys");
 });
+
+test("a connection says what it uses, is tested from the list and after saving, and a short token counts down", async ({
+  page,
+}) => {
+  const headers = { Authorization: "Bearer e2e-token" };
+  await page.request.put(`${GATEWAY}/v1/settings/connectors/tw`, {
+    headers,
+    data: { kind: "x", settings: { token: "pasted-oauth2-token" } },
+  });
+  await open(page, "#new-connectors");
+  // What each one uses, and the two hours of X's pasted token.
+  await expect(page.getByTestId("connection-team-slack")).toContainText("uses a webhook");
+  const tw = page.getByTestId("connection-tw");
+  await expect(tw).toContainText("uses a token");
+  await expect(page.getByTestId("expiry-tw")).toContainText(/token expires in (1h 5\d|2h 0)m/);
+  // A webhook cannot be tested without posting: the row says so instead of posting.
+  await page.getByTestId("test-team-slack").click();
+  await expect(page.getByTestId("test-result-team-slack")).toContainText(
+    "cannot be tested without acting",
+  );
+  await shot(page, "44-connection-test");
+
+  // Hours later the token is gone: the row and the form say so.
+  await page.clock.setFixedTime(Date.now() + 3 * 60 * 60 * 1000);
+  await page.reload();
+  await expect(kittyRow(page, "mimi")).toBeAttached();
+  await expect(page.getByTestId("expiry-tw")).toHaveText("token expired");
+  await open(page, "#connector/tw");
+  await expect(page.getByTestId("token-expired")).toContainText("use the OAuth 1.0 keys");
+
+  // Saving runs the test by itself; its answer shows on the row.
+  await page.route("**/v1/settings/connectors/tw/test", (route) =>
+    route.fulfill({ json: { ok: true, tested: true, account: "madkoding" } }),
+  );
+  const form = page.getByTestId("connection-form");
+  await form.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByTestId("test-result-tw")).toHaveText("✓ It works as madkoding.");
+  await page.request.delete(`${GATEWAY}/v1/settings/connectors/tw`, { headers });
+});

@@ -3,6 +3,7 @@ import { useEffect, useErrorBoundary, useMemo, useState } from "preact/hooks";
 import type {
   Account,
   ConnectorKind,
+  ConnectorTest,
   ConnectorView,
   Kitty,
   ProviderKind,
@@ -1015,6 +1016,13 @@ function ConnectionForm({
           )}
         </div>
       )}
+      {view?.token_expires && Date.parse(view.token_expires) <= Date.now() && (
+        <div class="callout callout-warn mt-3" data-testid="token-expired">
+          The token pasted here has expired: it lasts a short time. Sign in, or{" "}
+          {oauth1 ? "use the OAuth 1.0 keys, which do not expire" : "paste a new one"}, and clear
+          the old token so it does not stand in the way.
+        </div>
+      )}
       {keyFields.length > 0 && (
         <More
           label={
@@ -1131,18 +1139,66 @@ function followSignIn(name: string, done: (s?: SettingsView, c?: ConnectorView) 
   setTimeout(look, 2500);
 }
 
+// AUTH_LABEL says what a connection that signs in uses instead of the sign-in.
+const AUTH_LABEL: Record<string, string> = {
+  keys: "uses the OAuth 1.0 keys",
+  token: "uses a token",
+  webhook: "uses a webhook",
+};
+
+// expiresIn says how long a token has left, or that it is gone.
+function expiresIn(at: string, now: number): { gone: boolean; text: string } {
+  const left = Date.parse(at) - now;
+  if (left <= 0) {
+    return { gone: true, text: "token expired" };
+  }
+  const min = Math.ceil(left / 60_000);
+  return {
+    gone: false,
+    text: `token expires in ${min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`}`,
+  };
+}
+
 function ConnectionRow({
   c,
+  testNow = 0,
   onEdit,
   onChanged,
 }: {
   c: ConnectorView;
+  // testNow, when it changes, tests the connection (it was just saved).
+  testNow?: number;
   onEdit: () => void;
   onChanged: (s: SettingsView) => void;
 }) {
   const [err, setErr] = useState("");
   const [waiting, setWaiting] = useState(false);
+  const [test, setTest] = useState<ConnectorTest | "busy" | null>(null);
+  const [now, setNow] = useState(Date.now());
   const users = c.used_by || [];
+  // A token with a lifetime counts down while the page is open.
+  useEffect(() => {
+    if (!c.token_expires) {
+      return;
+    }
+    const tick = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(tick);
+  }, [c.token_expires]);
+  const expiry = c.token_expires ? expiresIn(c.token_expires, now) : null;
+  // runTest checks the account with a request that only reads.
+  const runTest = async () => {
+    setTest("busy");
+    try {
+      setTest(await api.testConnector(c.name));
+    } catch (e) {
+      setTest({ ok: false, tested: true, error: errText(e) });
+    }
+  };
+  useEffect(() => {
+    if (testNow) {
+      runTest();
+    }
+  }, [testNow]);
   // finish takes up a sign-in that never ended (or never began) right from the list; a service
   // that needs an app of the person's first opens its form, which says how.
   const finish = async () => {
@@ -1172,11 +1228,37 @@ function ConnectionRow({
             <span class="tag tag-green">signed in{c.account ? " · " + c.account : ""}</span>
           )}
           {c.needs_sign_in && <span class="tag tag-amber">sign in needed</span>}
+          {c.auth && AUTH_LABEL[c.auth] && (
+            <span class="tag" title="What the kitties use to reach the account">
+              {AUTH_LABEL[c.auth]}
+            </span>
+          )}
+          {expiry && (
+            <span
+              class="tag tag-amber"
+              title="A pasted token of this service lasts a short time: sign in, or use keys that do not expire"
+              data-testid={`expiry-${c.name}`}
+            >
+              {expiry.text}
+            </span>
+          )}
         </div>
         <div class="text-xs text-[var(--t3)] mt-0.5">
           {users.length ? `Used by ${people(users)}` : "No kitty may use it yet"}
           {c.from_file && <span class="text-[var(--t4)]"> · from the configuration file</span>}
         </div>
+        {test && test !== "busy" && (
+          <div
+            class={`text-xs mt-1 ${test.ok ? (test.tested ? "text-[var(--c-green)]" : "text-[var(--t3)]") : "text-[var(--c-red)]"}`}
+            data-testid={`test-result-${c.name}`}
+          >
+            {!test.ok
+              ? `✗ It does not work: ${test.error}`
+              : test.tested
+                ? `✓ It works${test.account ? ` as ${test.account}` : ""}.`
+                : "It cannot be tested without acting: it is tried the first time a kitty uses it."}
+          </div>
+        )}
         <Err text={err} />
       </div>
       <div class="flex gap-1 flex-none">
@@ -1190,6 +1272,14 @@ function ConnectionRow({
             {waiting ? "Waiting for the browser…" : "Sign in"}
           </button>
         )}
+        <button
+          class="btn-ghost px-2 py-1 text-xs"
+          disabled={test === "busy"}
+          onClick={runTest}
+          data-testid={`test-${c.name}`}
+        >
+          {test === "busy" ? "Testing…" : "Test"}
+        </button>
         <button class="btn-ghost px-2 py-1 text-xs" onClick={onEdit} aria-label={`Edit ${c.name}`}>
           Edit
         </button>
@@ -1403,6 +1493,8 @@ export default function SettingsModal({
   // A page that cannot draw a tab says why, instead of leaving it blank.
   const [crash] = useErrorBoundary();
   const [model, setModel] = useState<ProviderView | null | "new">(addModel ? "new" : null);
+  // tested asks the row of a connection just saved to test it.
+  const [tested, setTested] = useState({ name: "", n: 0 });
   const [conn, setConn] = useState<ConnectionEdit | null>(null);
   const [adding, setAdding] = useState(Boolean(addConnector));
   const [note, flash] = useFlash();
@@ -1583,7 +1675,8 @@ export default function SettingsModal({
                     flash("Saved: now sign in.");
                   } else {
                     setConn(null);
-                    flash(`${conn.kind.label} is connected.`);
+                    flash(`${conn.kind.label} is saved: testing it…`);
+                    setTested({ name, n: Date.now() });
                   }
                 }}
                 onClose={() => setConn(null)}
@@ -1600,6 +1693,7 @@ export default function SettingsModal({
                     <ConnectionRow
                       key={c.name}
                       c={c}
+                      testNow={tested.name === c.name ? tested.n : 0}
                       onEdit={() => {
                         const k = kindOf(c.kind);
                         k && setConn({ view: c, kind: k });
