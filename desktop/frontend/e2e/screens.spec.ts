@@ -61,16 +61,20 @@ test("a group chat shows every member", async ({ page }) => {
 test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await open(page, `#chat/${ids.desktop}`);
   const trail = page.locator(".trail").first();
-  await expect(trail.getByText("open", { exact: true })).toBeVisible();
-  await expect(trail.getByText("done", { exact: true })).toBeVisible();
+  // Each step reads as a sentence; the coordinates and the tokens are only on hover.
+  await expect(trail.getByText("Opened example.com", { exact: true })).toBeVisible();
+  await expect(trail.getByText("Clicked on the screen", { exact: true })).toBeVisible();
+  await expect(trail.getByText("Finished", { exact: true })).toBeVisible();
+  await expect(trail).not.toContainText("640, 420");
+  await expect(page.locator(".msg .meta").first()).not.toContainText("tokens");
   await expect(trail.locator(".shot-thumb img").first()).toBeVisible();
   await shot(page, "04-desktop-task");
   await page.goto(`/?theme=light&motion=off#chat/${ids.desktop}`);
-  await expect(trail.getByText("done", { exact: true })).toBeVisible();
+  await expect(trail.getByText("Finished", { exact: true })).toBeVisible();
   await shot(page, "11-light");
   await page.setViewportSize({ width: 430, height: 900 });
   await page.goto(`/${Q}#chat/${ids.desktop}`);
-  await expect(page.locator(".trail").first().getByText("done", { exact: true })).toBeVisible();
+  await expect(page.locator(".trail").first().getByText("Finished", { exact: true })).toBeVisible();
   await shot(page, "12-phone");
 });
 
@@ -193,7 +197,7 @@ test("an action that reaches other people waits for a yes, and runs when it is a
 }) => {
   await open(page, `#chat/${ids.post}`);
   await expect(page.getByText("That needs your yes first").first()).toBeVisible();
-  await expect(page.getByText("waiting for your yes · team-slack.send")).toBeVisible();
+  await expect(page.getByText("waiting for your yes: Send (team-slack)")).toBeVisible();
   await expect(page.getByTestId("approvals-button")).toContainText("1 waiting");
   expect(hooked()).not.toContain("Kitties launches next week");
   await shot(page, "23-waiting-for-a-yes");

@@ -40,6 +40,68 @@ export function stepArgs(action: string, args?: Record<string, unknown>): string
   }
 }
 
+// stepSentence says a desktop step the way a person would: no coordinates, no commands. The
+// technical form (stepArgs) stays for whoever hovers it.
+export function stepSentence(action: string, args?: Record<string, unknown>): string {
+  const a = args || {};
+  switch (action) {
+    case "open": {
+      const url = String(a.url ?? "");
+      let host = url;
+      try {
+        host = new URL(url).hostname.replace(/^www\./, "");
+      } catch {
+        /* not an address: said as it is */
+      }
+      return host ? `Opened ${host}` : "Opened a page";
+    }
+    case "click":
+      return "Clicked on the screen";
+    case "double_click":
+      return "Double-clicked on the screen";
+    case "move":
+      return "Moved the pointer";
+    case "type": {
+      const text = String(a.text ?? "");
+      return text ? `Typed “${text.length > 40 ? text.slice(0, 40) + "…" : text}”` : "Typed";
+    }
+    case "key":
+      return `Pressed ${keyName(String(a.keys ?? a.key ?? ""))}`;
+    case "scroll":
+      return a.direction === "up" ? "Scrolled up" : "Scrolled down";
+    case "wait":
+      return "Waited a moment";
+    case "screenshot":
+      return "Looked at the screen";
+    case "run":
+      return "Ran a program";
+    case "done":
+      return "Finished";
+  }
+  const words = action.replace(/_/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// keyName says a key combination as it reads on a keyboard: Return is Enter, ctrl+l is Ctrl+L.
+function keyName(keys: string): string {
+  if (!keys) {
+    return "a key";
+  }
+  return keys
+    .split("+")
+    .map((k) => {
+      const low = k.trim().toLowerCase();
+      if (low === "return") {
+        return "Enter";
+      }
+      if (low === "ctrl" || low === "control") {
+        return "Ctrl";
+      }
+      return low.length === 1 ? low.toUpperCase() : low.charAt(0).toUpperCase() + low.slice(1);
+    })
+    .join("+");
+}
+
 // inline turns **bold** and `code` into elements; everything else stays text.
 export function inline(text: string): (string | { t: "b" | "c"; v: string })[] {
   const out: (string | { t: "b" | "c"; v: string })[] = [];

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "preact/hooks";
 import type { Kitty, Session, Step, Turn } from "./api";
 import { api, shotData, shotURL } from "./api";
-import { inline, stepArgs, when } from "./format";
+import { inline, stepArgs, stepSentence, when } from "./format";
+import { actionLabel } from "./friendly";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
 import { IconHand, IconShield, IconThumbDown, IconThumbUp } from "./icons";
@@ -65,17 +66,15 @@ function StepRow({
   onOpen: (src: string) => void;
 }) {
   const cls = step.error ? "failed" : step.action === "done" ? "done" : "";
+  // The step reads as a sentence; what it did exactly (coordinates, the command) is on hover.
   const args = stepArgs(step.action, step.args);
+  const detail = [step.action, args, step.result?.split("\n")[0]].filter(Boolean).join(" · ");
   return (
-    <div class="step">
-      <span class={`what ${cls}`}>{step.action}</span>
+    <div class="step" title={detail}>
+      <span class={`what ${cls}`} aria-hidden="true" />
       <span class="how">
-        {args && <code>{args}</code>}
-        {step.error ? (
-          <span class="text-[var(--c-red)]"> {step.error}</span>
-        ) : step.result && step.action !== "done" ? (
-          <span> · {step.result.split("\n")[0].slice(0, 120)}</span>
-        ) : null}
+        {stepSentence(step.action, step.args)}
+        {step.error && <span class="text-[var(--c-red)]"> — it did not work: {step.error}</span>}
       </span>
       {step.shot && (
         <div class="shot">
@@ -208,12 +207,20 @@ function TurnCard({
       )}
       {turn.working && (
         <div class="working-line">
-          <span class="spinner" /> working on the desktop…
+          <span class="spinner" /> working on its computer…
         </div>
       )}
       {(turn.calls?.length || turn.usage?.input || turn.artifacts?.length || !mine) && (
         <div class="meta">
-          <span>{when(turn.at)}</span>
+          <span
+            title={
+              turn.usage && (turn.usage.input || turn.usage.output)
+                ? `${turn.usage.input} → ${turn.usage.output} tokens`
+                : undefined
+            }
+          >
+            {when(turn.at)}
+          </span>
           {turn.calls?.map((c, i) => (
             <span
               key={i}
@@ -226,7 +233,7 @@ function TurnCard({
           ))}
           {turn.approvals?.map((a) => (
             <a key={a.id} class="tag tag-amber tag-logo" href="#new-approvals" title={a.summary}>
-              <IconShield size={11} /> waiting for your yes · {a.connector}.{a.action}
+              <IconShield size={11} /> waiting for your yes: {actionLabel(a.action)} ({a.connector})
             </a>
           ))}
           {turn.delegations?.map((d, i) => (
@@ -254,11 +261,6 @@ function TurnCard({
               ↓ {n}
             </a>
           ))}
-          {turn.usage && (turn.usage.input || turn.usage.output) ? (
-            <span>
-              {turn.usage.input}→{turn.usage.output} tokens
-            </span>
-          ) : null}
           {!mine && !system && turn.kitty && !turn.working && (
             <Feedback chat={chat} index={index} current={turn.feedback || ""} />
           )}
