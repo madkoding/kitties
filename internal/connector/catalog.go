@@ -28,6 +28,10 @@ type Field struct {
 	Placeholder string `json:"placeholder,omitempty"`
 	Secret      bool   `json:"secret,omitempty"`
 	Required    bool   `json:"required,omitempty"`
+	// Key groups the fields that, all filled in, are an account instead of the sign-in of a
+	// kind that signs in: "token" (a token, with its email where the service pairs them) or
+	// "oauth1" (X's OAuth 1.0a keys).
+	Key string `json:"key,omitempty"`
 }
 
 // Action is one thing a kind can do, as the model and the page see it.
@@ -92,7 +96,12 @@ func fApp(where string) []Field {
 // signIn is a kind's sign-in fields after its own: the person's token (instead of signing in),
 // then an app of their own.
 func signIn(own []Field, token Field, where string) []Field {
-	token.Required = false
+	for i := range own {
+		if own[i].Name == "email" {
+			own[i].Key = keyToken
+		}
+	}
+	token.Required, token.Key = false, keyToken
 	if token.Help == "" {
 		token.Help = "instead of signing in"
 	} else {
@@ -148,9 +157,8 @@ func catalog() []Kind {
 		{Name: "bluesky", Category: CatSocial, Label: "Bluesky", Help: "posts to a Bluesky account",
 			Fields:  []Field{f("handle", "Handle", "name.bsky.social", true, false), f("password", "App password", "", true, true)},
 			Actions: []Action{{Name: "post", Help: "publish a post", Args: []string{fText}}}, make: makeBluesky},
-		{Name: "x", Category: CatSocial, Label: "X (Twitter)", Help: "posts to an X account",
-			Fields:  signIn(nil, f("token", "OAuth 2.0 user token", "with tweet.write", false, true), "developer.x.com"),
-			Actions: []Action{{Name: "post", Help: "publish a post", Args: []string{fText}}}, make: makeX, oauth: "x"},
+		{Name: "x", Category: CatSocial, Label: "X (Twitter)", Help: "posts to an X account (the app-only Bearer Token cannot post, so it is not asked for)",
+			Fields: xFields(), Actions: []Action{{Name: "post", Help: "publish a post", Args: []string{fText}}}, make: makeX, oauth: "x"},
 		{Name: "linkedin", Category: CatSocial, Label: "LinkedIn", Help: "shares a post from a LinkedIn member",
 			Fields:  signIn([]Field{f("author", "Author URN", "urn:li:person:…; signing in fills it", false, false)}, fToken, "linkedin.com/developers"),
 			Actions: []Action{{Name: "post", Help: "share a post", Args: []string{fText}}}, make: makeLinkedIn, oauth: "linkedin"},
@@ -288,7 +296,7 @@ var inboundCategories = map[string]bool{CatMessaging: true, CatGit: true, CatPro
 func Kinds() []Kind {
 	out := append([]Kind(nil), Catalog...)
 	for i := range out {
-		out[i].OAuth = out[i].oauth
+		out[i] = out[i].public()
 	}
 	sort.SliceStable(out, func(i, j int) bool {
 		ci, cj := indexOf(Categories, out[i].Category), indexOf(Categories, out[j].Category)
@@ -313,11 +321,25 @@ func indexOf(list []string, s string) int {
 func LookupKind(name string) (Kind, bool) {
 	for _, k := range Catalog {
 		if k.Name == name {
-			k.OAuth = k.oauth
-			return k, true
+			return k.public(), true
 		}
 	}
 	return Kind{}, false
+}
+
+// public is the kind as callers see it: its identity service, and, for a kind that signs in,
+// its token marked as the key that stands for the sign-in.
+func (k Kind) public() Kind {
+	k.OAuth = k.oauth
+	if k.oauth != "" {
+		k.Fields = append([]Field(nil), k.Fields...)
+		for i := range k.Fields {
+			if k.Fields[i].Name == "token" && k.Fields[i].Key == "" {
+				k.Fields[i].Key = keyToken
+			}
+		}
+	}
+	return k
 }
 
 // TokenSource hands a connector a valid bearer token for its account, refreshing it when needed.
@@ -375,23 +397,34 @@ func (k Kind) Validate(s Settings) error {
 	return nil
 }
 
-// KeySet reports whether the settings carry the key an OAuth kind takes instead of a sign-in:
-// its token (with the email, for the kinds that pair them), or Slack's webhook. An instance's
-// address (Mastodon, GitLab, Home Assistant) is not a key.
+// The groups of key fields (Field.Key).
+const (
+	keyToken  = "token"
+	keyOAuth1 = "oauth1"
+)
+
+// KeySet reports whether the settings carry an account an OAuth kind takes instead of a
+// sign-in: one group of key fields all filled in (a token, with its email for the kinds that
+// pair them; X's OAuth 1.0a keys), or Slack's webhook. An instance's address (Mastodon, GitLab,
+// Home Assistant) is not a key.
 func (k Kind) KeySet(s Settings) bool {
 	if k.Name == "slack" && strings.TrimSpace(s["url"]) != "" {
 		return true
 	}
-	token, email := false, true
+	groups := map[string]bool{}
 	for _, f := range k.Fields {
-		switch f.Name {
-		case "token":
-			token = strings.TrimSpace(s["token"]) != ""
-		case "email":
-			email = strings.TrimSpace(s["email"]) != ""
+		if f.Key == "" {
+			continue
+		}
+		full, seen := groups[f.Key]
+		groups[f.Key] = (full || !seen) && strings.TrimSpace(s[f.Name]) != ""
+	}
+	for _, full := range groups {
+		if full {
+			return true
 		}
 	}
-	return token && email
+	return false
 }
 
 // Kinder is a connector that knows its kind in the catalogue (the page shows its logo).
@@ -553,6 +586,19 @@ func (a *api) call(ctx context.Context, args map[string]any) (text, name string,
 	req, err := fn(a.s, args)
 	if err != nil {
 		return "", "", nil, err
+	}
+	// X's OAuth 1.0a keys sign the request themselves, before the sign-in is looked at.
+	if a.kind.Name == "x" && !req.plain {
+		if keys, ok := xKeysOf(a.s); ok {
+			auth, err := keys.sign(req.method, req.url, nil)
+			if err != nil {
+				return "", "", nil, err
+			}
+			if req.headers == nil {
+				req.headers = map[string]string{}
+			}
+			req.headers["Authorization"] = auth
+		}
 	}
 	// An OAuth kind signs the request with the account's token, unless the request is plain
 	// (a webhook) or already carries a token the person typed.

@@ -258,10 +258,11 @@ func mastodonReads() map[string]actionFn {
 
 func xReads() map[string]actionFn {
 	user := func(s Settings) (string, error) {
-		if s["user_id"] == "" {
-			return "", errors.New("this needs the account's numeric user id in the connector's settings (user_id)")
+		id := xUserID(s)
+		if id == "" {
+			return "", errors.New("this needs the account's numeric user id in the connector's settings (user_id); signing in, or the OAuth 1.0 keys, fill it")
 		}
-		return s["user_id"], nil
+		return id, nil
 	}
 	return map[string]actionFn{
 		"mentions": func(s Settings, a map[string]any) (request, error) {
@@ -755,7 +756,7 @@ func readActions(kind string) []Action {
 // readFields are the settings the reading actions need besides the ones a kind had.
 func readFields(kind string) []Field {
 	if kind == "x" {
-		return []Field{f("user_id", "User id", "the account's numeric id, for mentions and likes", false, false)}
+		return []Field{f("user_id", "User id", "the account's numeric id, for mentions and likes; signing in or the OAuth 1.0 keys fill it", false, false)}
 	}
 	return nil
 }
