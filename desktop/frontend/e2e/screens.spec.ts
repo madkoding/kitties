@@ -1170,10 +1170,10 @@ test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) 
   const saved = page.waitForResponse(
     (r) => r.request().method() === "PATCH" && r.url().includes("/v1/kitties/"),
   );
-  await pick.selectOption("ceres-pro");
-  expect(JSON.parse((await saved).request().postData() || "{}")).toEqual({ theme: "ceres-pro" });
-  await expect(page.getByText("tom's desktop now wears Ceres Pro.")).toBeVisible();
-  await expect(pick).toHaveValue("ceres-pro");
+  await pick.selectOption("ceres");
+  expect(JSON.parse((await saved).request().postData() || "{}")).toEqual({ theme: "ceres" });
+  await expect(page.getByText("tom's desktop now wears Ceres.")).toBeVisible();
+  await expect(pick).toHaveValue("ceres");
   await pick.selectOption("");
   await expect(pick).toHaveValue("");
 });

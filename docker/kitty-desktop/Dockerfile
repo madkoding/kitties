@@ -1,15 +1,16 @@
 # kitty-desktop: the body of a kitty.
 #
-# A desktop on a headless X display (Xvfb) with the IceWM window manager in the Ceres theme and
-# Kitties' fonts: a taskbar with Chromium, a terminal and the files, windows to move, focus and
-# close, and PCManFM for the desktop's wallpaper and icons and as the file manager. The kitty acts on it with xdotool
-# and wmctrl, and the person can watch it live and take it over from the chat. Chromium for the
-# web, LibreOffice for office documents (also headless: `soffice --headless --convert-to pdf
-# file.docx`), Inkscape, ImageMagick and mtPaint for drawing; kitty-install adds more from
-# Debian, and they are installed again when the container is made anew. Nothing listens on a
-# port: the orchestrator reaches the container through `docker exec` only.
+# A desktop on a headless X display (Xvfb) with the IceWM window manager in the dark Ceres Pro
+# theme and Kitties' fonts: a taskbar with Chromium, a terminal and the files, windows to move,
+# focus and close, and PCManFM for the desktop's wallpaper and icons and as the file manager. The
+# kitty acts on it with xdotool and wmctrl, and the person can watch it live and take it over
+# from the chat. Chromium for the web, LibreOffice for office documents (also headless: `soffice
+# --headless --convert-to pdf file.docx`), Inkscape, ImageMagick and mtPaint for drawing;
+# kitty-install adds more from Debian, and they are installed again when the container is made
+# anew. Nothing listens on a port: the orchestrator reaches the container through `docker exec`.
 #
 #   docker build -t ghcr.io/madkoding/kitty-desktop:latest docker/kitty-desktop
+
 # The window manager's theme, Ceres by sixsixfive (BSD 2-Clause), at a fixed commit and checksum
 # (ceres takes its taskbar, menus, icons and wallpaper from ceres-pro, so both come);
 # and Kitties' own fonts (Sansation, JetBrains Mono Nerd Font, the same files as the app's page),

@@ -14,8 +14,8 @@ for _ in $(seq 1 50); do
     fi
     sleep 0.1
 done
-# The desktop: IceWM with the Ceres theme, its wallpaper and its taskbar (Chromium and a terminal
-# on it), and the terminal in Kitties' colours.
+# The desktop: IceWM with the dark Ceres Pro theme and its taskbar (Chromium, a terminal and the
+# files on it), and the terminal in Kitties' colours.
 xrdb -nocpp -merge "$HOME/.Xresources" 2>/dev/null || true
 # The theme picked for this kitty, kept in its workspace (kitty-theme).
 if [ -s "$HOME/work/.desktop/theme" ]; then

@@ -34,7 +34,7 @@ type Kitty struct {
 	// BodyLater is true when the kitty wanted a container but no engine answered when it was
 	// made: it gets one as soon as Docker or Podman does.
 	BodyLater bool `json:"body_later,omitempty"`
-	// Theme is the look of its desktop, one of Themes; empty is the image's own (Ceres).
+	// Theme is the look of its desktop, one of Themes; empty is the image's own (Ceres Pro, dark).
 	Theme string `json:"theme,omitempty"`
 	// Container is the container name, empty without a desktop.
 	Container string    `json:"container,omitempty"`

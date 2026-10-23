@@ -305,15 +305,15 @@ connectors:
   the configuration and each kitty picks one.
 - **Containers** (`internal/container`): one container per kitty from `docker/kitty-desktop`
   (Debian, Xvfb, the IceWM desktop with a taskbar, Chromium, a terminal, LibreOffice, Inkscape,
-  xdotool, wmctrl, scrot). IceWM wears the [Ceres](https://codeberg.org/sixsixfive/ceres) theme
-  by sixsixfive (BSD 2-Clause, its licence in `/usr/share/doc/ceres-icewm`) in Kitties' own fonts:
+  xdotool, wmctrl, scrot). IceWM wears the dark Ceres Pro of the
+  [Ceres](https://codeberg.org/sixsixfive/ceres) themes by sixsixfive (BSD 2-Clause, its licence in `/usr/share/doc/ceres-icewm`) in Kitties' own fonts:
   Sansation for the windows and the taskbar, JetBrains Mono for the terminal. PCManFM draws the
   wallpaper (`docker/kitty-desktop/wallpaper/`) and the icons on it (Work, Chromium, Files,
   Terminal) and is the file manager, all in [Haiku's icons](https://github.com/darealshinji/haiku-icons)
   (MIT, Haiku, Inc.; the Haiku logo and leaf, trademarks, are left out). It is dark throughout:
   Chromium (its face, and the pages that offer a dark look), GTK programs, LibreOffice and the
   terminal. Each kitty can wear
-  another IceWM theme (Ceres Pro, IceWM's own, Windows 95…), picked in its drawer. Nothing is published on the host; the orchestrator reaches a kitty
+  another IceWM theme (the light Ceres, IceWM's own, Windows 95…), picked in its drawer. Nothing is published on the host; the orchestrator reaches a kitty
   with `docker exec`, and `kitty-shot` returns a PNG of its display. `kitty-install` adds
   programs from Debian (sudo only runs the installer, by package name) and remembers them in the
   workspace, so a container made anew installs them again.

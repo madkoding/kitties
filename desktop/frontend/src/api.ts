@@ -22,14 +22,14 @@ export interface Kitty {
   // approvals is "ask" (the default: an action that reaches other people waits for a yes until
   // the kitty is trusted with it) or "auto".
   approvals?: "ask" | "auto" | "";
-  // theme is the look of its desktop (an IceWM theme); empty is the image's own, Ceres.
+  // theme is the look of its desktop (an IceWM theme); empty is the image's own, Ceres Pro (dark).
   theme?: string;
 }
 
 // THEMES are the looks a kitty's desktop can wear, as the gateway knows them.
 export const THEMES: [string, string][] = [
-  ["", "Ceres"],
-  ["ceres-pro", "Ceres Pro"],
+  ["", "Ceres Pro"],
+  ["ceres", "Ceres"],
   ["default", "IceWM"],
   ["CrystalBlue", "Crystal Blue"],
   ["Helix", "Helix"],

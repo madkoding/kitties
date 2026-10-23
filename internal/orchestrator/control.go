@@ -113,8 +113,9 @@ func (m *Manager) SetClipboard(ctx context.Context, ref, text string) error {
 	return err
 }
 
-// DefaultTheme is the image's own theme, which an empty kitty.Theme stands for.
-const DefaultTheme = "ceres"
+// DefaultTheme is the image's own theme, which an empty kitty.Theme stands for: Ceres Pro, the
+// dark one.
+const DefaultTheme = "ceres-pro"
 
 // applyTheme dresses a running desktop in the kitty's theme; reset puts the image's own back
 // when the kitty has none. An image without kitty-theme (an older one) keeps its look, and the
