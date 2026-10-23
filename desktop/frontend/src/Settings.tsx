@@ -610,6 +610,9 @@ const OAUTH_LABEL: Record<string, string> = {
   microsoft: "Microsoft",
   slack: "Slack",
   github: "GitHub",
+  spotify: "Spotify",
+  tidal: "TIDAL",
+  dropbox: "Dropbox",
 };
 
 // OAuthButton signs a connector in: it asks the gateway for the consent URL and opens it.

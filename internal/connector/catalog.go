@@ -71,11 +71,12 @@ const (
 	CatDrawing      = "drawing"
 	CatFinance      = "finance"
 	CatHome         = "home"
+	CatMusic        = "music"
 	CatGeneric      = "generic"
 )
 
 // Categories lists them in order.
-var Categories = []string{CatMessaging, CatSocial, CatPersonal, CatGit, CatProductivity, CatOffice, CatFinance, CatHome, CatDrawing, CatGeneric}
+var Categories = []string{CatMessaging, CatSocial, CatPersonal, CatGit, CatProductivity, CatOffice, CatFinance, CatHome, CatMusic, CatDrawing, CatGeneric}
 
 func f(name, label, help string, required, secret bool) Field {
 	return Field{Name: name, Label: label, Help: help, Required: required, Secret: secret}
@@ -101,7 +102,7 @@ func init() {
 }
 
 func catalog() []Kind {
-	kinds := withReads(withInbound(append(append(append(moreKinds(), metaKinds()...), personalKinds()...), []Kind{
+	kinds := withReads(withInbound(append(append(append(append(moreKinds(), metaKinds()...), personalKinds()...), mediaKinds()...), []Kind{
 		// ── messaging ──────────────────────────────────────────────────────────────────────────
 		{Name: "slack", Category: CatMessaging, Label: "Slack", Help: "posts messages to a Slack channel, through a webhook, a bot token or a sign-in",
 			Fields: []Field{f("url", "Incoming webhook URL", "from Slack's app settings", false, true), f("token", "Bot token", "xoxb-…, instead of a webhook", false, true), f("channel", "Channel", "#general, used with a bot token or a sign-in", false, false),

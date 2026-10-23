@@ -94,8 +94,8 @@ function run(argv) {
 }`
 
 // osascript runs the script with the request; tests answer without a Mac.
-var osascript = func(ctx context.Context, request []byte) ([]byte, []byte, error) {
-	cmd := exec.CommandContext(ctx, "/usr/bin/osascript", "-l", "JavaScript", "-e", appleScript, string(request))
+var osascript = func(ctx context.Context, script string, request []byte) ([]byte, []byte, error) {
+	cmd := exec.CommandContext(ctx, "/usr/bin/osascript", "-l", "JavaScript", "-e", script, string(request))
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	err := cmd.Run()
@@ -116,19 +116,28 @@ func (c *appleConnector) Describe() string {
 
 // ask runs one request against the Mac's apps and decodes the answer into v.
 func (c *appleConnector) ask(ctx context.Context, req map[string]any, v any) error {
+	return askMac(ctx, appleScript, "Calendar, Reminders and Contacts", req, v)
+}
+
+// askMac runs one request with a JavaScript for Automation script and decodes its JSON answer;
+// apps names what it reaches, for the messages.
+func askMac(ctx context.Context, script, apps string, req map[string]any, v any) error {
 	if !onMac() {
-		return errors.New("the Mac's Calendar, Reminders and Contacts are only reachable when the gateway runs on a Mac (the desktop app does); elsewhere use CalDAV/CardDAV (iCloud) instead")
+		return fmt.Errorf("the Mac's %s are only reachable when the gateway runs on a Mac (the desktop app does)", apps)
 	}
 	payload, _ := json.Marshal(req)
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
-	out, errOut, err := osascript(ctx, payload)
+	out, errOut, err := osascript(ctx, script, payload)
 	if err != nil {
 		msg := strings.TrimSpace(string(errOut))
-		if strings.Contains(msg, "-1743") || strings.Contains(strings.ToLower(msg), "not authorized") || strings.Contains(strings.ToLower(msg), "not allowed") {
+		low := strings.ToLower(msg)
+		switch {
+		case strings.Contains(msg, "-1743") || strings.Contains(low, "not authorized") || strings.Contains(low, "not allowed"):
 			return errors.New("macOS did not let Kitties use the app: allow it in System Settings → Privacy & Security → Automation (and Calendars, Reminders or Contacts), then try again")
-		}
-		if msg == "" {
+		case strings.Contains(msg, "-2700") || strings.Contains(low, "can’t get application") || strings.Contains(low, "can't get application"):
+			return fmt.Errorf("the app is not installed on this Mac (%s)", apps)
+		case msg == "":
 			msg = err.Error()
 		}
 		return errors.New("the Mac's apps answered: " + clip(msg, 300))

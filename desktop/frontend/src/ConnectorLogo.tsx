@@ -5,6 +5,9 @@ import {
   siApple,
   siHomeassistant,
   siRss,
+  siSpotify,
+  siThings,
+  siTidal,
   siClaude,
   siDeepseek,
   siGithubcopilot,
@@ -15,6 +18,7 @@ import {
   siQwen,
   siBluesky,
   siDiscord,
+  siDropbox,
   siExcalidraw,
   siFacebook,
   siFigma,
@@ -94,6 +98,11 @@ const WEATHER: Mark = {
   hex: "FFB020",
   path: "M11 1h2v3h-2zm0 19h2v3h-2zM1 11h3v2H1zm19 0h3v2h-3zM4.2 5.6l1.4-1.4 2.1 2.1-1.4 1.4zm12.1 12.1 1.4-1.4 2.1 2.1-1.4 1.4zM4.2 18.4l2.1-2.1 1.4 1.4-2.1 2.1zM16.3 6.3l2.1-2.1 1.4 1.4-2.1 2.1zM12 6a6 6 0 1 1 0 12 6 6 0 0 1 0-12z",
 };
+// OmniFocus has no mark in simple-icons: a check in a circle, in its purple.
+const OMNIFOCUS: Mark = {
+  hex: "8E44AD",
+  path: "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm0 2a8 8 0 1 1 0 16 8 8 0 0 1 0-16zm4.3 4.3L10.5 14l-2.8-2.8-1.4 1.4 4.2 4.2 7.2-7.1z",
+};
 const SHELL: Mark = {
   hex: "4EAA25",
   path: "M3 4h18a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1zm1 2v12h16V6zm2.5 2.6 1.4-1.4L11.3 11l-3.4 3.4-1.4-1.4 2-2zM12 14h6v2h-6z",
@@ -126,6 +135,11 @@ const MARKS: Record<string, Mark> = {
   "home-assistant": brand(siHomeassistant),
   rss: brand(siRss),
   weather: WEATHER,
+  spotify: brand(siSpotify),
+  tidal: brand(siTidal),
+  dropbox: brand(siDropbox),
+  things: brand(siThings),
+  omnifocus: OMNIFOCUS,
   instagram: brand(siInstagram),
   github: brand(siGithub),
   gitlab: brand(siGitlab),
@@ -154,7 +168,7 @@ const MARKS: Record<string, Mark> = {
 };
 
 // Some brand marks are black and would vanish on the dark ground: they take the text colour.
-const DARK_MARKS = new Set(["x", "notion", "matrix", "github", "apple"]);
+const DARK_MARKS = new Set(["x", "notion", "matrix", "github", "apple", "tidal"]);
 
 export function logoColor(kind: string): string {
   const m = MARKS[kind];

@@ -32,6 +32,8 @@ var askActions = map[string]bool{
 	"send_mail": true, "send_invoice": true, "create_pr": true, "run": true,
 	// Home Assistant: a service can unlock a door or turn the heating off.
 	"call_service": true,
+	// Dropbox: a link anyone can open.
+	"share_link": true,
 }
 
 // alwaysActions are never done without approval, whatever the trust.

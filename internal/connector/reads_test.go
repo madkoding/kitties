@@ -367,7 +367,7 @@ func TestRisk(t *testing.T) {
 	if ActionOf("slack", nil) != "send" || ActionOf("slack", map[string]any{"action": "History"}) != "history" || ActionOf("nope", nil) != "" {
 		t.Error("ActionOf")
 	}
-	if len(Categories) != 10 || Categories[2] != CatPersonal || Categories[6] != CatFinance {
+	if len(Categories) != 11 || Categories[2] != CatPersonal || Categories[6] != CatFinance || Categories[8] != CatMusic {
 		t.Errorf("categories = %v", Categories)
 	}
 }

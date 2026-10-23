@@ -652,3 +652,32 @@ test("calendars, reminders and contacts: iCloud and others over CalDAV, the Mac'
     await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
   }
 });
+
+test("music, files and the Mac's task managers; the summary can start with the day", async ({
+  page,
+}) => {
+  await open(page, "#new-connectors-add");
+  await page.getByRole("button", { name: "Music", exact: true }).click();
+  for (const name of ["Spotify", "TIDAL"]) {
+    await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
+  }
+  await page.locator(".service-btn", { hasText: "TIDAL" }).click();
+  await expect(page.getByText("no remote playback")).toBeVisible();
+  await shot(page, "41-music");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByRole("button", { name: "All", exact: true }).click();
+  for (const name of ["Dropbox", "Things (Mac)", "OmniFocus (Mac)"]) {
+    await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
+  }
+
+  // The daily summary can open with the person's day, and keeps the choice.
+  await page.getByRole("tab", { name: "Notifications" }).click();
+  const day = page.getByTestId("notify-day");
+  await expect(day).not.toBeChecked();
+  await day.check();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("Saved.")).toBeVisible();
+  await page.reload();
+  await page.getByRole("tab", { name: "Notifications" }).click();
+  await expect(page.getByTestId("notify-day")).toBeChecked();
+});

@@ -51,6 +51,19 @@ var Providers = map[string]Provider{
 		Name: "slack", Label: "Slack", AuthURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access",
 		Scopes: []string{"chat:write", "chat:write.public", "channels:read"}, ScopeSep: ",", NoExpiry: true,
 	},
+	"spotify": {
+		Name: "spotify", Label: "Spotify", AuthURL: "https://accounts.spotify.com/authorize", TokenURL: "https://accounts.spotify.com/api/token",
+		Scopes: []string{"user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "playlist-read-private", "playlist-modify-private", "playlist-modify-public"},
+	},
+	"tidal": {
+		Name: "tidal", Label: "TIDAL", AuthURL: "https://login.tidal.com/authorize", TokenURL: "https://auth.tidal.com/v1/oauth2/token",
+		Scopes: []string{"search.read", "playlists.read", "playlists.write", "collection.read", "user.read"},
+	},
+	"dropbox": {
+		Name: "dropbox", Label: "Dropbox", AuthURL: "https://www.dropbox.com/oauth2/authorize", TokenURL: "https://api.dropboxapi.com/oauth2/token",
+		Scopes: []string{"files.metadata.read", "files.content.read", "files.content.write", "sharing.write"},
+		Extra:  map[string]string{"token_access_type": "offline"},
+	},
 	"github": {
 		Name: "github", Label: "GitHub", AuthURL: "https://github.com/login/oauth/authorize", TokenURL: "https://github.com/login/oauth/access_token",
 		Scopes: []string{"repo"}, NoExpiry: true,

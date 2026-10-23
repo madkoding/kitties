@@ -183,6 +183,7 @@ export const CATEGORY: Record<string, string> = {
   "social media": "Social media",
   personal: "Calendar, reminders & contacts",
   home: "Home, news & weather",
+  music: "Music",
   git: "Code",
   productivity: "Productivity",
   office: "Office & files",

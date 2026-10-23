@@ -365,10 +365,11 @@ connectors:
 | Social media | Facebook Pages (post, posts, comments, reply, like, Messenger inbox and answers), Instagram professional accounts (pictures and reels, posts, comments, replies), Mastodon and Bluesky (post, timeline, mentions, reply, like), X, LinkedIn |
 | Calendar, reminders & contacts | CalDAV (iCloud, Fastmail, Nextcloud, Synology…: events, new events, reminders, ticking them off), CardDAV (find and add people), the Mac's own Calendar, Reminders and Contacts (when the gateway runs on the Mac), Google Contacts and Tasks, Outlook contacts and Microsoft To Do |
 | Git | GitHub (issues, comments, pull requests, files; a token or OAuth sign-in), GitLab, Gitea/Forgejo, motita (coding tasks) |
-| Productivity | Notion, Trello, Todoist, Linear, Jira, Zendesk (support tickets) |
+| Productivity | Notion, Trello, Todoist, Linear, Jira, Zendesk (support tickets), Things and OmniFocus (on the Mac) |
 | Finance | Stripe (balance, invoices, payments, refunds) |
-| Home, news & weather | Home Assistant (states, acting on devices: asks first), RSS and Atom feeds, the weather and forecast (Open-Meteo, no key) |
-| Office | Google Workspace (OAuth: Gmail inbox and send, Calendar, Drive, Sheets, Docs), Microsoft 365 (OAuth: Outlook inbox and send, Calendar, OneDrive), Airtable, Nextcloud (WebDAV files), Google Sheets (Apps Script) |
+| Home, news & weather | Home Assistant (states, acting on devices: asks first; its automations can post events), RSS and Atom feeds, the weather and forecast (Open-Meteo, no key) |
+| Music | Spotify (what is playing, play, pause, skip and queue with Premium, search, playlists), TIDAL (search and playlists: its public API has no remote playback) |
+| Office | Dropbox (list, search, read, save, share a link: asks first), Google Workspace (OAuth: Gmail inbox and send, Calendar, Drive, Sheets, Docs), Microsoft 365 (OAuth: Outlook inbox and send, Calendar, OneDrive), Airtable, Nextcloud (WebDAV files), Google Sheets (Apps Script) |
 | Drawing | Diagrams through Kroki (mermaid, plantuml, graphviz, d2…) rendered to SVG artifacts, Figma, Excalidraw scenes |
 | Generic | Webhook, any HTTP API with a bearer token, a program on the gateway's machine |
 
@@ -386,6 +387,18 @@ with an app-specific password from appleid.apple.com. iCloud reminders made with
 are no longer served over CalDAV: on a Mac, the **Mac Calendar, Reminders & Contacts** connection
 reaches them through the Reminders app (macOS asks once to allow it). Google and Microsoft accounts
 signed in before contacts and tasks were added need to sign in once more for them.
+
+Spotify, TIDAL and Dropbox sign in with an app of your own (developer.spotify.com,
+developer.tidal.com, dropbox.com/developers) whose redirect address is this gateway's
+`/v1/oauth/callback`. An event created with `attendees` invites them (Google, Outlook and CalDAV
+send the invitations), so it asks first. Notion Calendar has no public API: it shows the Google
+or iCloud calendars, which the kitties reach directly.
+
+With **Settings → Notifications → Start it with my day**, the daily summary opens with what is
+on the calendar, the reminders still to do and the weather. A Home Assistant automation tells the
+kitties what happens with a `rest_command` that posts `{"entity_id": "{{ trigger.entity_id }}",
+"state": "{{ trigger.to_state.state }}"}` to `/v1/hooks/<name>` with the connection's secret as
+`X-Kitties-Secret`; the goals that listen to it (`on: [<name>]`) run.
 
 Facebook and Instagram use Meta's Graph API with a token of your own app (developers.facebook.com):
 for a Page, a long-lived Page token and the Page id; for Instagram, a professional (business or

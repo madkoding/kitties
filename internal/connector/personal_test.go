@@ -265,7 +265,7 @@ func fakeMac(t *testing.T, answers ...string) *[]string {
 	t.Helper()
 	oldRun, oldMac := osascript, onMac
 	var got []string
-	osascript = func(_ context.Context, req []byte) ([]byte, []byte, error) {
+	osascript = func(_ context.Context, _ string, req []byte) ([]byte, []byte, error) {
 		got = append(got, string(req))
 		a := answers[0]
 		if len(answers) > 1 {
@@ -349,7 +349,7 @@ func TestApple(t *testing.T) {
 		}
 	}
 	onMac = func() bool { return false }
-	if _, err := call(map[string]any{}); err == nil || !strings.Contains(err.Error(), "runs on a Mac") {
+	if _, err := call(map[string]any{}); err == nil || !strings.Contains(err.Error(), "on a Mac") {
 		t.Errorf("off a Mac = %v", err)
 	}
 	if localTime("x", false) != "x" || !strings.Contains(appleScript, "function run(argv)") {
