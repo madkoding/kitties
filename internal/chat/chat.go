@@ -61,9 +61,21 @@ type Turn struct {
 	Approvals []ApprovalRef `json:"approvals,omitempty"`
 	// Feedback is what the person said about the turn: "up", "down" or empty.
 	Feedback string `json:"feedback,omitempty"`
+	// Limits are the limits the kitty set on its own actions in this turn, because the person
+	// asked: the page shows them, and can take each back.
+	Limits []LimitRef `json:"limits,omitempty"`
 	// Detail is the technical form of what the text says in plain words (an error as the
 	// service wrote it), for whoever asks to see technical details.
 	Detail string `json:"detail,omitempty"`
+}
+
+// LimitRef is a limit a kitty set on itself: the mode it set (empty for a limit lifted) and the
+// one there was before, which undoing it puts back.
+type LimitRef struct {
+	Connector string `json:"connector"`
+	Action    string `json:"action"`
+	Mode      string `json:"mode"`
+	Previous  string `json:"previous,omitempty"`
 }
 
 // ApprovalRef points at an action held for approval.

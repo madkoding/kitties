@@ -68,6 +68,13 @@ func TestBrain(t *testing.T) {
 		t.Error(got)
 	}
 	// Memory: the kitty keeps what it is told, thanks for it, and consolidates the feedback it got.
+	// Asked to hold back, it limits itself, and says so once it is set.
+	if got := ask(t, b, desk, "[Pat]: please ask me before posting"); !strings.Contains(got, `@limit set {"connector": "team-slack", "action": "send", "mode": "ask"}`) {
+		t.Errorf("limit = %q", got)
+	}
+	if got := ask(t, b, desk, "Results of your actions:\n- @limit set {}: ok\n  from now on, send on team-slack waits for the person's yes\n\nContinue, and answer the person."); !strings.Contains(got, "ask you before posting") {
+		t.Errorf("limit set = %q", got)
+	}
 	if got := ask(t, b, desk, "[Pat]: please remember that I like short answers"); !strings.Contains(got, `@memory remember {"text": "I like short answers"}`) {
 		t.Error(got)
 	}

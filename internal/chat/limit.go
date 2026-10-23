@@ -28,7 +28,7 @@ func (s *Service) limitPrompt(allowed map[string]string) string {
 }
 
 // runLimit sets, changes or lifts a limit on one of the kitty's own connections.
-func (s *Service) runLimit(id string, a action, k *kitty.Kitty, allowed map[string]string) outcome {
+func (s *Service) runLimit(id string, a action, k *kitty.Kitty, allowed map[string]string, turn *Turn) outcome {
 	if s.approvals == nil {
 		return outcome{action: a, err: "limits are not kept here"}
 	}
@@ -47,11 +47,16 @@ func (s *Service) runLimit(id string, a action, k *kitty.Kitty, allowed map[stri
 	case "":
 		mode = approvals.ModeAsk
 	}
+	previous := s.approvals.ModeOf(k.ID, conn, action)
 	if _, err := s.approvals.SetRule(approvals.Rule{Kitty: k.ID, KittyName: k.Name, Connector: conn, Action: action, Mode: mode}); err != nil {
 		return outcome{action: a, err: err.Error()}
 	}
+	if action == "" {
+		action = approvals.AnyAction
+	}
+	turn.Limits = append(turn.Limits, LimitRef{Connector: conn, Action: action, Mode: mode, Previous: previous})
 	what := action + " on " + conn
-	if action == "" || action == approvals.AnyAction {
+	if action == approvals.AnyAction {
 		what = "any action on " + conn
 	}
 	var text string

@@ -202,7 +202,7 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 		case "memory":
 			out = append(out, s.runMemory(id, a, k))
 		case "limit":
-			out = append(out, s.runLimit(id, a, k, allowed))
+			out = append(out, s.runLimit(id, a, k, allowed, turn))
 		case "connector":
 			if len(allowed) == 0 {
 				out = append(out, outcome{action: a, err: "this kitty has no connectors"})

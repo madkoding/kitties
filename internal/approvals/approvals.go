@@ -211,6 +211,22 @@ func (s *Store) ruleLocked(kitty, conn, action string) *Rule {
 	return any
 }
 
+// ModeOf is the mode of the rule for exactly this action of the kitty ("*" for the whole
+// connection), empty when there is none.
+func (s *Store) ModeOf(kitty, conn, action string) string {
+	if action == "" {
+		action = AnyAction
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, r := range s.d.Rules {
+		if r.Kitty == kitty && r.Connector == conn && r.Action == strings.ToLower(action) {
+			return r.Mode
+		}
+	}
+	return ""
+}
+
 // SetRule sets how an action of a kitty is limited (auto, ask or never), or takes the limit
 // away with an empty mode. The action "*" covers every action of the connector.
 func (s *Store) SetRule(r Rule) (*Rule, error) {

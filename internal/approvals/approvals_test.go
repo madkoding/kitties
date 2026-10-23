@@ -142,6 +142,9 @@ func TestSetRule(t *testing.T) {
 	if v := s.Check("k2", "x", "post", "ask", "", 3); !v.Run {
 		t.Error("rules are per kitty")
 	}
+	if s.ModeOf("k1", "x", "") != ModeAsk || s.ModeOf("k1", "x", "LIKE") != ModeNever || s.ModeOf("k1", "x", "post") != "" {
+		t.Error("ModeOf is the rule for exactly that action")
+	}
 	// Setting again changes the mode; an empty mode takes the limit away.
 	if r, err := s.SetRule(Rule{Kitty: "k1", Connector: "x", Action: "like", Mode: ModeAuto}); err != nil || r.Mode != ModeAuto || len(s.Rules()) != 2 {
 		t.Errorf("change = %+v %v %d", r, err, len(s.Rules()))

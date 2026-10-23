@@ -257,8 +257,13 @@ func TestNoLimitUnlessSet(t *testing.T) {
 	// Asked to, the kitty limits itself: ask first for posts, never for the shell.
 	sa.replies = []string{"Sure.\n@limit set {\"connector\": \"hook\", \"action\": \"post\", \"mode\": \"ask\"}\n" +
 		"@limit set {\"connector\": \"sh\", \"mode\": \"never\"}", "From now on I will ask first."}
-	if _, err := s.Send(context.Background(), sess.ID, "ask me before posting, and never use the shell"); err != nil {
+	turns, err := s.Send(context.Background(), sess.ID, "ask me before posting, and never use the shell")
+	if err != nil {
 		t.Fatal(err)
+	}
+	// The turn says which limits it set, so the page can show them and take them back.
+	if l := turns[0].Limits; len(l) != 2 || l[0] != (LimitRef{Connector: "hook", Action: "post", Mode: "ask"}) || l[1] != (LimitRef{Connector: "sh", Action: "*", Mode: "never"}) {
+		t.Errorf("limits on the turn = %+v", l)
 	}
 	rules, _ := s.ApprovalRules()
 	if len(rules) != 2 || rules[0].KittyName != "ana" {
@@ -279,7 +284,10 @@ func TestNoLimitUnlessSet(t *testing.T) {
 	}
 	// And lifts a limit when asked; nonsense is refused.
 	sa.replies = []string{"@limit set {\"connector\": \"sh\", \"mode\": \"none\"}\n@limit set {\"mode\": \"ask\"}\n@limit set {\"connector\": \"nope\", \"mode\": \"ask\"}", "ok"}
-	_, _ = s.Send(context.Background(), sess.ID, "you may use the shell again")
+	lifted, _ := s.Send(context.Background(), sess.ID, "you may use the shell again")
+	if l := lifted[0].Limits; len(l) != 1 || l[0] != (LimitRef{Connector: "sh", Action: "*", Mode: "", Previous: "never"}) {
+		t.Errorf("a limit lifted keeps what it was = %+v", l)
+	}
 	if rules, _ := s.ApprovalRules(); len(rules) != 1 {
 		t.Errorf("the shell limit is gone: %+v", rules)
 	}
