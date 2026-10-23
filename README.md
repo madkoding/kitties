@@ -305,7 +305,9 @@ connectors:
   the configuration and each kitty picks one.
 - **Containers** (`internal/container`): one container per kitty from `docker/kitty-desktop`
   (Debian, Xvfb, the IceWM desktop with a taskbar, Chromium, a terminal, LibreOffice, Inkscape,
-  xdotool, wmctrl, scrot). Nothing is published on the host; the orchestrator reaches a kitty
+  xdotool, wmctrl, scrot). IceWM wears the [Ceres](https://codeberg.org/sixsixfive/ceres) theme
+  by sixsixfive (BSD 2-Clause, its licence in `/usr/share/doc/ceres-icewm`) in Kitties' own fonts:
+  Sansation for the windows and the taskbar, JetBrains Mono for the terminal. Nothing is published on the host; the orchestrator reaches a kitty
   with `docker exec`, and `kitty-shot` returns a PNG of its display. `kitty-install` adds
   programs from Debian (sudo only runs the installer, by package name) and remembers them in the
   workspace, so a container made anew installs them again.

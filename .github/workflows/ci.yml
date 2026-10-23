@@ -166,6 +166,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: shell scripts parse
         run: for f in docker/kitty-desktop/*.sh; do sh -n "$f"; done
+      - name: the desktop's fonts are the app's
+        run: for f in docker/kitty-desktop/fonts/*.woff2; do cmp "$f" "desktop/frontend/public/$(basename "$f")"; done
       - name: build the image
         run: docker build -t kitty-desktop:ci docker/kitty-desktop
       - name: the display comes up and a screenshot is a PNG
@@ -174,6 +176,7 @@ jobs:
           sleep 5
           docker exec kitty-ci kitty-shot > shot.png
           head -c 8 shot.png | od -An -c | grep -q 'P   N   G'
+          docker exec kitty-ci sh -c 'pgrep -x icewm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/icewm/themes/ceres/default.theme'
           docker rm -f kitty-ci
 
   # The gateway as a server image: the web page and the binary inside. Built on every push, it

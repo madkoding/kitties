@@ -4,7 +4,8 @@
 set -eu
 : "${DISPLAY:=:99}"
 : "${SCREEN:=1280x800x24}"
-Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp -ac +extension RANDR >/tmp/xvfb.log 2>&1 &
+# -noreset: without it the display forgets the resources (xrdb) when its last client leaves.
+Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp -ac -noreset +extension RANDR >/tmp/xvfb.log 2>&1 &
 XVFB=$!
 # Wait until the display answers, then hand the process over so signals stop the container.
 for _ in $(seq 1 50); do
@@ -13,10 +14,10 @@ for _ in $(seq 1 50); do
     fi
     sleep 0.1
 done
-# The desktop: IceWM with its taskbar (Chromium and a terminal on it), on a plain background so
-# screenshots read clearly (no icewmbg, whose picture would cover it).
-xsetroot -solid '#1e222b'
-icewm >/tmp/icewm.log 2>&1 &
+# The desktop: IceWM with the Ceres theme, its wallpaper and its taskbar (Chromium and a terminal
+# on it), and the terminal in Kitties' colours.
+xrdb -nocpp -merge "$HOME/.Xresources" 2>/dev/null || true
+icewm-session >/tmp/icewm.log 2>&1 &
 # The programs the kitty installed come back on a container made anew (they are listed in its
 # workspace, which outlives the container).
 if [ -s "$HOME/work/.desktop/packages" ]; then

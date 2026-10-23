@@ -30,7 +30,7 @@ const page0 =
   "<h1>Hello from tom's desktop</h1><p>Chromium, a terminal and IceWM, in tom's own container.</p>";
 await exec(["kitty-open", page0]);
 await wait(4000);
-await exec(["kitty-launch", "xterm", "-geometry", "90x24+640+430"]);
+await exec(["kitty-launch", "xterm", "-geometry", "74x16+620+420"]);
 await wait(3000);
 
 const browser = await chromium.launch();
