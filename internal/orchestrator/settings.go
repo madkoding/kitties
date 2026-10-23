@@ -10,6 +10,7 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
@@ -170,6 +171,11 @@ type ConnectorView struct {
 	SignedIn    bool   `json:"signed_in,omitempty"`
 	NeedsSignIn bool   `json:"needs_sign_in,omitempty"`
 	Account     string `json:"account,omitempty"`
+	// Auth says how one that signs in reaches its account: "sign-in", "keys" (X's OAuth 1.0
+	// keys), "token" or "webhook". TokenExpires is when a typed token of a known lifetime stops
+	// working (RFC 3339): X's OAuth 2.0 access token lasts two hours.
+	Auth         string `json:"auth,omitempty"`
+	TokenExpires string `json:"token_expires,omitempty"`
 	// UsedBy names the kitties allowed to use it.
 	UsedBy []string `json:"used_by,omitempty"`
 }
@@ -187,7 +193,7 @@ func connectorView(name string, c config.Connector, fromFile bool) ConnectorView
 		}
 	}
 	for k, v := range all {
-		if secret[k] || strings.HasPrefix(k, "oauth_") {
+		if secret[k] || strings.HasPrefix(k, "oauth_") || k == connector.TokenSavedAt {
 			if v != "" && secret[k] {
 				secrets = append(secrets, k)
 			}
@@ -197,9 +203,15 @@ func connectorView(name string, c config.Connector, fromFile bool) ConnectorView
 	}
 	sort.Strings(secrets)
 	creds := oauth.FromSettings(all)
+	signedIn := kind.OAuth != "" && creds.SignedIn()
+	expires := ""
+	if at, ok := kind.TokenExpiry(all); ok {
+		expires = at.UTC().Format(time.RFC3339)
+	}
 	return ConnectorView{Name: name, Kind: c.Kind, Category: kind.Category, Label: kind.Label, Description: c.Description, URL: shown["url"],
 		TokenSet: c.Token != "" || all["token"] != "", ChatID: c.ChatID, Command: c.Command, Settings: shown, SecretsSet: secrets, FromFile: fromFile,
-		OAuth: kind.OAuth, SignedIn: kind.OAuth != "" && creds.SignedIn(), NeedsSignIn: kind.OAuth != "" && !creds.SignedIn() && !kind.KeySet(all), Account: creds.Account}
+		OAuth: kind.OAuth, SignedIn: signedIn, NeedsSignIn: kind.OAuth != "" && !creds.SignedIn() && !kind.KeySet(all), Account: creds.Account,
+		Auth: kind.AuthOf(all, signedIn), TokenExpires: expires}
 }
 
 // usersLocked names, sorted, the kitties a test picks; callers hold the lock.
@@ -477,6 +489,7 @@ func (m *Manager) SetConnector(name string, c config.Connector, change Connector
 			}
 		}
 	}
+	m.stampToken(name, &c)
 	if err := config.ValidateConnector(name, c, m.cfg.Motita.URL); err != nil {
 		return err
 	}
@@ -496,6 +509,46 @@ func (m *Manager) SetConnector(name string, c config.Connector, change Connector
 	m.cfg.Connectors[name] = c
 	m.connectors.Add(name, m.buildConnector(name, c))
 	return m.saveSettings()
+}
+
+// stampToken keeps when a token of a known lifetime was typed: a new token is stamped now, the
+// same one keeps its time, and none forgets it. Callers hold the lock.
+func (m *Manager) stampToken(name string, c *config.Connector) {
+	kind, _ := connector.LookupKind(c.Kind)
+	if kind.TokenLifetime() == 0 {
+		return
+	}
+	token := strings.TrimSpace(c.ConnectorSettings()["token"])
+	var oldToken, oldAt string
+	if old, ok := m.cfg.Connectors[name]; ok && old.Kind == c.Kind {
+		s := old.ConnectorSettings()
+		oldToken, oldAt = strings.TrimSpace(s["token"]), s[connector.TokenSavedAt]
+	}
+	if c.Settings == nil {
+		c.Settings = map[string]string{}
+	}
+	switch {
+	case token == "":
+		delete(c.Settings, connector.TokenSavedAt)
+	case token != oldToken || oldAt == "":
+		c.Settings[connector.TokenSavedAt] = m.now().UTC().Format(time.RFC3339)
+	default:
+		c.Settings[connector.TokenSavedAt] = oldAt
+	}
+}
+
+// TestConnector checks a connector's account with a request that only reads, and names the
+// account when the service says it; connector.ErrNoCheck when it cannot be tested without acting.
+func (m *Manager) TestConnector(ctx context.Context, name string) (string, error) {
+	c, ok := m.connectors.Get(name)
+	if !ok {
+		return "", fmt.Errorf("%w: connector %q", ErrNotFound, name)
+	}
+	ch, ok := c.(connector.Checker)
+	if !ok {
+		return "", connector.ErrNoCheck
+	}
+	return ch.Check(ctx)
 }
 
 // needsAccount refuses a connector that signs in but has neither a sign-in nor a key: it would

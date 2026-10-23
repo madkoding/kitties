@@ -57,6 +57,8 @@ type Fleet interface {
 	// one that signs in be saved without an account yet, as the step before its sign-in.
 	SetConnector(name string, c config.Connector, change orchestrator.ConnectorChange) error
 	RemoveConnector(name string) error
+	// TestConnector checks a connector's account with a request that only reads.
+	TestConnector(ctx context.Context, name string) (string, error)
 	OAuth() *oauth.Manager
 	// Accounts are the AI sign-ins (ChatGPT, Copilot, Google, Claude) of the profiles.
 	Accounts() *llmauth.Manager
@@ -200,6 +202,7 @@ func (s *Server) routes() {
 	s.mux.Handle("PUT /v1/settings/default-provider", api(s.handleDefaultProvider))
 	s.mux.Handle("PUT /v1/settings/connectors/{name}", api(s.handleSetConnector))
 	s.mux.Handle("DELETE /v1/settings/connectors/{name}", api(s.handleRemoveConnector))
+	s.mux.Handle("POST /v1/settings/connectors/{name}/test", api(s.handleTestConnector))
 	s.mux.HandleFunc("GET /v1/local-token", s.handleLocalToken)
 	s.agendaRoutes()
 	s.accountRoutes()
@@ -813,6 +816,24 @@ func (s *Server) handleSetConnector(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusOK, s.fleet.Settings())
+}
+
+// handleTestConnector checks a connection's account without acting: ok with the account's
+// name, ok false with the service's answer, or tested false for one that cannot be checked.
+func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	account, err := s.fleet.TestConnector(ctx, r.PathValue("name"))
+	switch {
+	case errors.Is(err, orchestrator.ErrNotFound):
+		fail(w, http.StatusNotFound, err)
+	case errors.Is(err, connector.ErrNoCheck):
+		reply(w, http.StatusOK, map[string]any{"ok": true, "tested": false, "message": err.Error()})
+	case err != nil:
+		reply(w, http.StatusOK, map[string]any{"ok": false, "tested": true, "error": err.Error()})
+	default:
+		reply(w, http.StatusOK, map[string]any{"ok": true, "tested": true, "account": account})
+	}
 }
 
 func (s *Server) handleRemoveConnector(w http.ResponseWriter, r *http.Request) {

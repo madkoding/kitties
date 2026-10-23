@@ -165,6 +165,17 @@ func (f *fakeFleet) SetConnector(name string, c config.Connector, change orchest
 	f.signingIn, f.cleared = change.SigningIn, change.Clear
 	return config.ValidateConnector(name, c, "")
 }
+func (f *fakeFleet) TestConnector(_ context.Context, name string) (string, error) {
+	switch name {
+	case "c":
+		return "@me", nil
+	case "hook":
+		return "", connector.ErrNoCheck
+	case "bad":
+		return "", errors.New("HTTP 401: bad credentials")
+	}
+	return "", orchestrator.ErrNotFound
+}
 func (f *fakeFleet) RemoveConnector(name string) error {
 	if name != "c" {
 		return orchestrator.ErrNotFound
@@ -586,6 +597,14 @@ func TestSettingsRoutes(t *testing.T) {
 	}
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/connectors/c", "tok", "{"); code != 400 {
 		t.Error("connector bad json")
+	}
+	for name, want := range map[string]string{"c": `"account":"@me"`, "hook": `"tested":false`, "bad": `"ok":false`} {
+		if code, _, raw := call(t, srv, "POST", "/v1/settings/connectors/"+name+"/test", "tok", nil); code != 200 || !strings.Contains(string(raw), want) {
+			t.Errorf("test %s = %d %s", name, code, raw)
+		}
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/settings/connectors/zz/test", "tok", nil); code != 404 {
+		t.Error("test of an unknown connector is 404")
 	}
 	if code, _, _ := call(t, srv, "DELETE", "/v1/settings/connectors/c", "tok", nil); code != 200 {
 		t.Error("remove connector")

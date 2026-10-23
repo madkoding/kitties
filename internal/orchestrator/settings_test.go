@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/madkoding/kitties/internal/config"
+	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/provider"
 )
@@ -302,6 +303,55 @@ func TestConnectorClearAndSignOut(t *testing.T) {
 	}
 	if c := m.cfg.Connectors["gh"]; c.Token != "" || c.ConnectorSettings()["token"] != "" {
 		t.Errorf("the token is forgotten: %+v", c)
+	}
+}
+
+func TestConnectorAuthAndTokenExpiry(t *testing.T) {
+	m, err := New(testConfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	at := time.Date(2026, 10, 23, 10, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return at }
+	// X's pasted OAuth 2.0 token lasts two hours from when it was typed.
+	if err := m.SetConnector("tw", config.Connector{Kind: "x", Settings: map[string]string{"token": "t1"}}, ConnectorChange{}); err != nil {
+		t.Fatal(err)
+	}
+	v := findC(m.Settings().Connectors, "tw")
+	if v == nil || v.Auth != "token" || v.TokenExpires != "2026-10-23T12:00:00Z" || v.Settings[connector.TokenSavedAt] != "" {
+		t.Fatalf("x with a token = %+v", v)
+	}
+	// An edit that keeps the token keeps its time; a new token starts again.
+	m.now = func() time.Time { return at.Add(time.Hour) }
+	if err := m.SetConnector("tw", config.Connector{Kind: "x", Description: "posts"}, ConnectorChange{}); err != nil {
+		t.Fatal(err)
+	}
+	if v := findC(m.Settings().Connectors, "tw"); v.TokenExpires != "2026-10-23T12:00:00Z" {
+		t.Errorf("kept token = %s", v.TokenExpires)
+	}
+	if err := m.SetConnector("tw", config.Connector{Kind: "x", Settings: map[string]string{"token": "t2"}}, ConnectorChange{}); err != nil {
+		t.Fatal(err)
+	}
+	if v := findC(m.Settings().Connectors, "tw"); v.TokenExpires != "2026-10-23T13:00:00Z" {
+		t.Errorf("new token = %s", v.TokenExpires)
+	}
+	// The OAuth 1.0 keys do not expire; clearing the token forgets its time.
+	keys := map[string]string{"consumer_key": "ck", "consumer_secret": "cs", "access_token": "1-a", "access_secret": "as"}
+	if err := m.SetConnector("tw", config.Connector{Kind: "x", Settings: keys}, ConnectorChange{Clear: []string{"token"}}); err != nil {
+		t.Fatal(err)
+	}
+	if v := findC(m.Settings().Connectors, "tw"); v.Auth != "keys" || v.TokenExpires != "" || m.cfg.Connectors["tw"].Settings[connector.TokenSavedAt] != "" {
+		t.Errorf("x with keys = %+v", v)
+	}
+	// A webhook is no way to check an account; an unknown connection is not found.
+	if err := m.SetConnector("hook", config.Connector{Kind: "webhook", URL: "http://127.0.0.1:1/x"}, ConnectorChange{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.TestConnector(context.Background(), "hook"); !errors.Is(err, connector.ErrNoCheck) {
+		t.Errorf("webhook test = %v", err)
+	}
+	if _, err := m.TestConnector(context.Background(), "nobody"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown test = %v", err)
 	}
 }
 
