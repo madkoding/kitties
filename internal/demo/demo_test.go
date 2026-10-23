@@ -1,10 +1,12 @@
 package demo
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/provider"
@@ -167,5 +169,40 @@ func TestDesktop(t *testing.T) {
 	_ = d.Remove(ctx, "kitty-a")
 	if list, _ := d.List(ctx); len(list) != 0 {
 		t.Error("Remove")
+	}
+}
+
+// The demo's display streams its drawing again when it changes, keeps a clipboard and takes a
+// theme, like a real one.
+func TestDesktopStreamAndClipboard(t *testing.T) {
+	old := streamEvery
+	streamEvery = time.Millisecond
+	t.Cleanup(func() { streamEvery = old })
+	d := NewDesktop()
+	ctx, cancel := context.WithCancel(context.Background())
+	rc, err := d.Stream(ctx, "kitty-a", 8, 70)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := bufio.NewReader(rc)
+	first, err := container.ReadFrame(r)
+	if err != nil || !bytes.HasPrefix(first, []byte("\x89PNG")) {
+		t.Fatalf("first frame = %d bytes %v", len(first), err)
+	}
+	_, _ = d.Exec(ctx, "kitty-a", "kitty-open", "https://example.com")
+	second, err := container.ReadFrame(r)
+	if err != nil || bytes.Equal(first, second) {
+		t.Errorf("a changed display sends a new picture: %v", err)
+	}
+	cancel()
+	_ = rc.Close()
+	if out, _ := d.Exec(ctx, "kitty-a", "kitty-clip", "set", "hola"); out != "set" {
+		t.Errorf("set = %q", out)
+	}
+	if out, _ := d.Exec(ctx, "kitty-a", "kitty-clip", "get"); out != "hola" {
+		t.Errorf("get = %q", out)
+	}
+	if out, _ := d.Exec(ctx, "kitty-a", "kitty-theme", "win95"); out != "theme win95" {
+		t.Errorf("theme = %q", out)
 	}
 }

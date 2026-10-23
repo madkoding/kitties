@@ -66,3 +66,95 @@ func TestDesktopWaitsWhileHeld(t *testing.T) {
 		t.Errorf("steps = %+v", steps)
 	}
 }
+
+// A kitty asks for help: the step carries the reason, it waits for the person to take the
+// desktop and give it back, then goes on; when nobody comes it hears so and stops.
+func TestAskHelp(t *testing.T) {
+	oldEvery, oldWait := heldEvery, helpWait
+	heldEvery = time.Millisecond
+	t.Cleanup(func() { heldEvery, helpWait = oldEvery, oldWait })
+	for _, comes := range []bool{true, false} {
+		helpWait = time.Hour
+		if !comes {
+			helpWait = 20 * time.Millisecond
+		}
+		f, sa, _, _ := fleet(t)
+		h := &heldFleet{deskFleet: &deskFleet{fakeFleet: f}}
+		s := service(t, h)
+		sa.replies = []string{"I need you for a captcha.\n@tool ask_help {\"reason\": \"a captcha\"}", "@tool done {\"summary\": \"in\"}"}
+		sess, _ := s.Create("", []string{"ana"})
+		if _, err := s.Send(context.Background(), sess.ID, "sign me in"); err != nil {
+			t.Fatal(err)
+		}
+		if comes {
+			// The step shows, the person takes the desktop, then gives it back.
+			deadline := time.Now().Add(2 * time.Second)
+			for {
+				got, _ := s.Get(sess.ID)
+				if len(got.Turns) > 1 && len(got.Turns[1].Steps) > 0 {
+					st := got.Turns[1].Steps[0]
+					if st.Action != "ask_help" || st.Args["reason"] != "a captcha" {
+						t.Fatalf("step = %+v", st)
+					}
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("no help step")
+				}
+				time.Sleep(time.Millisecond)
+			}
+			h.mu.Lock()
+			h.held = true
+			h.mu.Unlock()
+			time.Sleep(20 * time.Millisecond)
+			h.give()
+		}
+		waitDone(t, s, sess.ID)
+		seen := sa.seen[len(sa.seen)-1]
+		last := seen[len(seen)-1].Content
+		want := "gave it back"
+		if !comes {
+			want = "nobody came"
+		}
+		if !strings.Contains(last, want) {
+			t.Errorf("comes=%v: the kitty heard %q", comes, last)
+		}
+	}
+}
+
+// quickFleet is a person who took the desktop and gave it back between two looks of the kitty.
+type quickFleet struct {
+	*deskFleet
+	mu   sync.Mutex
+	took time.Time
+}
+
+func (q *quickFleet) Held(string) bool { return false }
+func (q *quickFleet) HoldStarted(string) time.Time {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	return q.took
+}
+
+func TestAskHelpQuickGiveBack(t *testing.T) {
+	oldEvery, oldWait := heldEvery, helpWait
+	heldEvery, helpWait = 5*time.Millisecond, time.Hour
+	t.Cleanup(func() { heldEvery, helpWait = oldEvery, oldWait })
+	f, sa, _, _ := fleet(t)
+	q := &quickFleet{deskFleet: &deskFleet{fakeFleet: f}}
+	s := service(t, q)
+	sa.replies = []string{"@tool ask_help {\"reason\": \"a code\"}", "@tool done {\"summary\": \"in\"}"}
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "sign me in"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(30 * time.Millisecond)
+	q.mu.Lock()
+	q.took = time.Now()
+	q.mu.Unlock()
+	waitDone(t, s, sess.ID)
+	seen := sa.seen[len(sa.seen)-1]
+	if last := seen[len(seen)-1].Content; !strings.Contains(last, "gave it back") {
+		t.Errorf("the kitty heard %q", last)
+	}
+}

@@ -4,7 +4,7 @@
 //   make image && kitties gateway          # with a kitty called tom that has a desktop
 //   cd desktop/frontend && node scripts/live-desktop-shots.mjs http://127.0.0.1:7488 TOKEN
 //
-// It opens Chromium and a terminal on tom's display through the API, then, on the gateway's own
+// It opens the file manager and a terminal on tom's display through the API, then, on the gateway's own
 // page, opens the live desktop, takes control and types a command in the terminal.
 import { chromium } from "@playwright/test";
 
@@ -23,14 +23,10 @@ async function exec(argv) {
 }
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
-// A page of its own, so the picture needs no network (Chromium ignores chrome:// pages given on
-// its command line).
-const page0 =
-  "data:text/html,<title>tom's notes</title><body style='font:20px sans-serif;padding:40px'>" +
-  "<h1>Hello from tom's desktop</h1><p>Chromium, a terminal and IceWM, in tom's own container.</p>";
-await exec(["kitty-open", page0]);
-await wait(4000);
-await exec(["kitty-launch", "xterm", "-geometry", "74x16+620+420"]);
+// The file manager on the work folder and a terminal, over the wallpaper and the icons.
+await exec(["kitty-launch", "pcmanfm", "/home/kitty/work"]);
+await wait(3000);
+await exec(["kitty-launch", "xterm", "-geometry", "74x16+600+330"]);
 await wait(3000);
 
 const browser = await chromium.launch();
@@ -49,7 +45,7 @@ await page.waitForTimeout(500);
 const box = await frame.boundingBox();
 const at = (x, y) => ({ x: (x * box.width) / 1280, y: (y * box.height) / 800 });
 // The terminal's window (in the display's own pixels), then a command typed in it.
-await frame.click({ position: at(800, 600) });
+await frame.click({ position: at(850, 520) });
 await page.waitForTimeout(800);
 await page.keyboard.type("echo hola desde el escritorio de tom; uname -sm");
 await page.keyboard.press("Enter");

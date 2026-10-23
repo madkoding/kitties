@@ -1,0 +1,5 @@
+# Haiku's icons, Kitties' font and the dark Adwaita in the GTK 2 programs (the file manager and
+# its desktop).
+gtk-theme-name="Adwaita-dark"
+gtk-icon-theme-name="Haiku"
+gtk-font-name="Sansation 10"

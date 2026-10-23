@@ -176,7 +176,10 @@ jobs:
           sleep 5
           docker exec kitty-ci kitty-shot > shot.png
           head -c 8 shot.png | od -An -c | grep -q 'P   N   G'
-          docker exec kitty-ci sh -c 'pgrep -x icewm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/icewm/themes/ceres/default.theme'
+          docker exec kitty-ci sh -c 'pgrep -x icewm && pgrep -x pcmanfm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/icewm/themes/ceres/default.theme && test -f /usr/share/icons/Haiku/index.theme && test -f /usr/share/backgrounds/kitties/wallpaper.jpg'
+          # The live stream sends pictures, and ends when its input closes.
+          sleep 3 | docker exec -i kitty-ci kitty-stream --stdin 4 60 > stream.bin
+          head -c 5 stream.bin | grep -q FRAME
           docker rm -f kitty-ci
 
   # The gateway as a server image: the web page and the binary inside. Built on every push, it

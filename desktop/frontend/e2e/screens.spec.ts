@@ -1093,6 +1093,10 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live).toBeVisible();
   await expect(live.getByTestId("live-frame")).toBeVisible();
   await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  // The picture is a stream (the gateway's motion JPEG, cut into pictures by the page), not
+  // screenshots one by one.
+  await expect(live.getByTestId("live-frame")).toHaveAttribute("data-mode", "stream");
+  await expect(live.getByTestId("live-frame")).toHaveAttribute("src", /^blob:/);
   // Taking control: the clicks, the keys and the text reach the display through the gateway.
   const held = page.waitForResponse((r) => r.url().includes("/control") && r.status() === 200);
   await live.getByTestId("take-control").click();
@@ -1112,6 +1116,14 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await page.keyboard.press("Enter");
   await live.getByRole("button", { name: "Alt+Tab" }).click();
   await expect.poll(() => inputs).toEqual(["click", "type", "key", "key"]);
+  // The clipboard both ways: the person's text goes to the kitty's, and comes back.
+  const clipboard = live.getByTestId("clipboard");
+  await clipboard.getByRole("textbox").fill("my coupon code");
+  await clipboard.getByRole("button", { name: "Send to tom" }).click();
+  await expect(live.getByTestId("clip-note")).toContainText("On tom's clipboard");
+  await clipboard.getByRole("textbox").fill("");
+  await clipboard.getByRole("button", { name: "Copy from tom" }).click();
+  await expect(clipboard.getByRole("textbox")).toHaveValue("my coupon code");
   // Escape is a key of the display while the person has it, not a way out.
   await page.keyboard.press("Escape");
   await expect(live).toBeVisible();
@@ -1126,4 +1138,42 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await live.getByRole("button", { name: "Close", exact: true }).click();
   await expect(live).toHaveCount(0);
   await expect(page.locator("[data-modal]")).toHaveCount(1);
+});
+
+test("a kitty that needs the person asks for help: a button takes control, and giving it back lets it finish", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByPlaceholder("Say something…").fill("tom, sign in to the shop for me");
+  await page.keyboard.press("Enter");
+  const callout = page.getByTestId("help-callout");
+  await expect(callout).toBeVisible({ timeout: 15000 });
+  await expect(
+    page.getByText("Asked you for help: the shop's sign-in needs your password"),
+  ).toBeVisible();
+  await callout.getByTestId("help-take-control").click();
+  const live = page.getByTestId("live-desktop");
+  await expect(live.getByTestId("live-state")).toContainText("You have the controls");
+  await live.getByTestId("give-back").click();
+  await live.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByText("Signed in to the shop: thank you for the password.")).toBeVisible({
+    timeout: 15000,
+  });
+  await expect(callout).toHaveCount(0);
+});
+
+test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await kittyRow(page, "tom").click();
+  const pick = page.locator("[data-modal]").getByTestId("desktop-theme");
+  await expect(pick).toHaveValue("");
+  const saved = page.waitForResponse(
+    (r) => r.request().method() === "PATCH" && r.url().includes("/v1/kitties/"),
+  );
+  await pick.selectOption("ceres-pro");
+  expect(JSON.parse((await saved).request().postData() || "{}")).toEqual({ theme: "ceres-pro" });
+  await expect(page.getByText("tom's desktop now wears Ceres Pro.")).toBeVisible();
+  await expect(pick).toHaveValue("ceres-pro");
+  await pick.selectOption("");
+  await expect(pick).toHaveValue("");
 });

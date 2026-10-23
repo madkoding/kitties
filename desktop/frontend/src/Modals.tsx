@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
-import { api, errText, inAndroid, inWails, saveConnection, savedConnection } from "./api";
+import { api, errText, inAndroid, inWails, saveConnection, savedConnection, THEMES } from "./api";
 import { ask } from "./Confirm";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
 import { ProviderLogo } from "./ConnectorLogo";
@@ -481,6 +481,31 @@ function KittyBasics({
           ))}
         </select>
       </div>
+      {kitty.desktop && (
+        <>
+          <div class="section-title !mx-0 mt-4">{t("Desktop look")}</div>
+          <select
+            class={INPUT}
+            aria-label={t("Desktop look")}
+            value={kitty.theme || ""}
+            onChange={(e) => {
+              const v = (e.target as HTMLSelectElement).value;
+              const label = THEMES.find(([name]) => name === v)?.[1] || v;
+              save(
+                { theme: v },
+                t("{name}'s desktop now wears {theme}.", { name: kitty.name, theme: label }),
+              );
+            }}
+            data-testid="desktop-theme"
+          >
+            {THEMES.map(([name, label]) => (
+              <option key={name} value={name}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </>
+      )}
       <div class="section-title !mx-0 mt-4">{t("Personality")}</div>
       <label class="block text-xs text-[var(--t4)] mb-1" for="drawer-persona">
         {t("Who is it?")}

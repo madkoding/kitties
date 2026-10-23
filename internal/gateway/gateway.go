@@ -50,6 +50,11 @@ type Fleet interface {
 	// of the person on it.
 	Hold(ref string, on bool) (bool, error)
 	Input(ctx context.Context, ref string, a desktop.Action) error
+	// Stream follows a kitty's display (pictures for container.ReadFrame) until closed.
+	Stream(ctx context.Context, ref string, fps, quality int) (io.ReadCloser, error)
+	// Clipboard and SetClipboard are the text on a kitty's clipboard, both ways.
+	Clipboard(ctx context.Context, ref string) (string, error)
+	SetClipboard(ctx context.Context, ref, text string) error
 	Providers() *provider.Registry
 	Connectors() *connector.Registry
 	HasContainers() (bool, error)
@@ -212,6 +217,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/settings/connectors/{name}/test", api(s.handleTestConnector))
 	s.mux.HandleFunc("GET /v1/local-token", s.handleLocalToken)
 	s.agendaRoutes()
+	s.liveRoutes()
 	s.accountRoutes()
 	s.approvalRoutes()
 	s.memoryRoutes()

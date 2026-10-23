@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Files
+Comment=The work folder
+Exec=pcmanfm /home/kitty/work
+Icon=system-file-manager
+Terminal=false

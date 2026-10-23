@@ -22,7 +22,24 @@ export interface Kitty {
   // approvals is "ask" (the default: an action that reaches other people waits for a yes until
   // the kitty is trusted with it) or "auto".
   approvals?: "ask" | "auto" | "";
+  // theme is the look of its desktop (an IceWM theme); empty is the image's own, Ceres.
+  theme?: string;
 }
+
+// THEMES are the looks a kitty's desktop can wear, as the gateway knows them.
+export const THEMES: [string, string][] = [
+  ["", "Ceres"],
+  ["ceres-pro", "Ceres Pro"],
+  ["default", "IceWM"],
+  ["CrystalBlue", "Crystal Blue"],
+  ["Helix", "Helix"],
+  ["Infadel2", "Infadel"],
+  ["NanoBlue", "Nano Blue"],
+  ["icedesert", "Ice Desert"],
+  ["metal2", "Metal"],
+  ["motif", "Motif"],
+  ["win95", "Windows 95"],
+];
 
 // Approval is an action a kitty wants to take and is waiting to be allowed.
 export interface Approval {
@@ -600,6 +617,7 @@ export const api = {
       limits?: Limits;
       backup?: string;
       approvals?: string;
+      theme?: string;
     },
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
   startKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/start`),
@@ -609,6 +627,11 @@ export const api = {
     request<{ held: boolean }>("POST", `/v1/kitties/${ref}/control`, { hold }).then((r) => r.held),
   inputKitty: (ref: string, action: string, args: Record<string, unknown>) =>
     request("POST", `/v1/kitties/${ref}/input`, { action, args }),
+  // clipboard is the text on a kitty's clipboard; setClipboard gives it the person's.
+  clipboard: (ref: string) =>
+    request<{ text: string }>("GET", `/v1/kitties/${ref}/clipboard`).then((r) => r.text || ""),
+  setClipboard: (ref: string, text: string) =>
+    request("PUT", `/v1/kitties/${ref}/clipboard`, { text }),
   stopKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/stop`),
   removeKitty: (ref: string) => request("DELETE", `/v1/kitties/${ref}`),
   // connectorNames are the connections a kitty may be given.
@@ -771,6 +794,136 @@ export function openExternal(url: string): void {
     return;
   }
   window.open(url, "_blank", "noopener");
+}
+
+// watchDesktop follows a kitty's display live inside Wails, where the page cannot load the
+// gateway's stream itself: each picture comes as a data: URL. It returns the function that stops
+// watching, or null outside Wails (there an <img> loads streamURL).
+export function watchDesktop(
+  ref: string,
+  onFrame: (src: string) => void,
+  onError: (why: string) => void,
+): (() => void) | null {
+  const app = window.go?.main?.App as unknown as
+    | {
+        WatchDesktop?: (ref: string) => Promise<void>;
+        UnwatchDesktop?: (ref: string) => Promise<void>;
+      }
+    | undefined;
+  const rt = (
+    window as unknown as {
+      runtime?: { EventsOn?: (name: string, cb: (data: unknown) => void) => () => void };
+    }
+  ).runtime;
+  if (!app?.WatchDesktop || !rt?.EventsOn) {
+    return null;
+  }
+  const off = rt.EventsOn("kitties:desktop:" + ref, (data) => {
+    const d = data as { frame?: string; error?: string };
+    if (d.frame) {
+      onFrame(d.frame);
+    } else if (d.error) {
+      onError(d.error);
+    }
+  });
+  void app.WatchDesktop(ref).catch((e: unknown) => onError(String(e)));
+  return () => {
+    off();
+    void app.UnwatchDesktop?.(ref);
+  };
+}
+
+// streamDesktop follows a kitty's display live and hands each picture to onFrame as an image
+// address (a blob: URL in a browser, a data: URL inside Wails), until the returned function is
+// called. The gateway's motion JPEG is read with fetch and cut into pictures here: an <img> of
+// it shows nothing in some browsers (headless Chromium, Safari's webviews). onError gets why a
+// stream ended or could not start; the caller falls back to screenshots.
+export function streamDesktop(
+  ref: string,
+  onFrame: (src: string) => void,
+  onError: (why: string) => void,
+): () => void {
+  const wails = watchDesktop(ref, onFrame, onError);
+  if (wails) {
+    return wails;
+  }
+  const stop = new AbortController();
+  let last = "";
+  void (async () => {
+    try {
+      let conn = savedConnection();
+      if (!conn.token) {
+        conn = await fetchLocalToken(conn);
+      }
+      const res = await fetch(conn.url.replace(/\/$/, "") + `/v1/kitties/${ref}/stream`, {
+        headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
+        signal: stop.signal,
+      });
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const reader = res.body.getReader();
+      let buf = new Uint8Array(0);
+      const text = new TextDecoder();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) {
+          throw new Error("the stream ended");
+        }
+        const joined = new Uint8Array(buf.length + value.length);
+        joined.set(buf);
+        joined.set(value, buf.length);
+        buf = joined;
+        // Parts: "--boundary\r\n" or headers, a blank line, Content-Length bytes, "\r\n".
+        for (;;) {
+          const end = indexOf(buf, [13, 10, 13, 10]);
+          if (end < 0) {
+            break;
+          }
+          const head = text.decode(buf.subarray(0, end));
+          const len = Number(/content-length:\s*(\d+)/i.exec(head)?.[1] ?? NaN);
+          const type = /content-type:\s*([^\r\n]+)/i.exec(head)?.[1] ?? "image/jpeg";
+          if (!Number.isFinite(len)) {
+            throw new Error("not a picture stream");
+          }
+          if (buf.length < end + 4 + len) {
+            break;
+          }
+          const picture = buf.slice(end + 4, end + 4 + len);
+          buf = buf.slice(end + 4 + len);
+          const src = URL.createObjectURL(new Blob([picture], { type }));
+          onFrame(src);
+          if (last) {
+            URL.revokeObjectURL(last);
+          }
+          last = src;
+        }
+      }
+    } catch (e) {
+      if (!stop.signal.aborted) {
+        onError(e instanceof Error ? e.message : String(e));
+      }
+    }
+  })();
+  return () => {
+    stop.abort();
+    if (last) {
+      setTimeout(() => URL.revokeObjectURL(last), 1000);
+    }
+  };
+}
+
+// indexOf finds a sequence of bytes, or -1.
+function indexOf(buf: Uint8Array, seq: number[]): number {
+  outer: for (let i = 0; i + seq.length <= buf.length; i++) {
+    for (let j = 0; j < seq.length; j++) {
+      if (buf[i + j] !== seq[j]) {
+        continue outer;
+      }
+    }
+    return i;
+  }
+  return -1;
 }
 
 // watchChat follows a chat's events as they happen. In a browser it is an EventSource on the

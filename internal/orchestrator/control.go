@@ -3,9 +3,11 @@ package orchestrator
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/madkoding/kitties/internal/desktop"
+	"github.com/madkoding/kitties/internal/kitty"
 )
 
 // TAKING THE DESKTOP OVER.
@@ -30,9 +32,12 @@ func (m *Manager) Hold(ref string, on bool) (bool, error) {
 	m.holdMu.Lock()
 	defer m.holdMu.Unlock()
 	if m.holds == nil {
-		m.holds = map[string]time.Time{}
+		m.holds, m.holdStarted = map[string]time.Time{}, map[string]time.Time{}
 	}
 	if on {
+		if _, held := m.holds[k.ID]; !held {
+			m.holdStarted[k.ID] = m.now()
+		}
 		m.holds[k.ID] = m.now()
 	} else {
 		delete(m.holds, k.ID)
@@ -52,6 +57,14 @@ func (m *Manager) Held(id string) bool {
 	return ok
 }
 
+// HoldStarted is when the person last took the kitty's display (zero when never): a kitty that
+// asked for help knows they came even when they gave it back between two of its looks.
+func (m *Manager) HoldStarted(id string) time.Time {
+	m.holdMu.Lock()
+	defer m.holdMu.Unlock()
+	return m.holdStarted[id]
+}
+
 // Input is what the person does on the display: a click, keys, text, the wheel or a drag. It
 // takes the display over, or keeps it taken.
 func (m *Manager) Input(ctx context.Context, ref string, a desktop.Action) error {
@@ -68,4 +81,51 @@ func (m *Manager) Input(ctx context.Context, ref string, a desktop.Action) error
 	}
 	_, err = m.Exec(ctx, k.ID, argv...)
 	return err
+}
+
+// Stream follows the kitty's display live: pictures to read with container.ReadFrame, at most
+// fps a second, until the stream is closed.
+func (m *Manager) Stream(ctx context.Context, ref string, fps, quality int) (io.ReadCloser, error) {
+	k, err := m.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	if !k.Desktop {
+		return nil, fmt.Errorf("%s has no desktop", k.Name)
+	}
+	return m.ctr().Stream(ctx, k.Container, fps, quality)
+}
+
+// MaxClipboard is the most text the clipboard of a display takes from the person at once.
+const MaxClipboard = 100 << 10
+
+// Clipboard is the text on the kitty's clipboard, for the person to take.
+func (m *Manager) Clipboard(ctx context.Context, ref string) (string, error) {
+	return m.Exec(ctx, ref, "kitty-clip", "get")
+}
+
+// SetClipboard puts the person's text on the kitty's clipboard.
+func (m *Manager) SetClipboard(ctx context.Context, ref, text string) error {
+	if len(text) > MaxClipboard {
+		return fmt.Errorf("the text is too long for the clipboard (at most %d KB)", MaxClipboard>>10)
+	}
+	_, err := m.Exec(ctx, ref, "kitty-clip", "set", text)
+	return err
+}
+
+// DefaultTheme is the image's own theme, which an empty kitty.Theme stands for.
+const DefaultTheme = "ceres"
+
+// applyTheme dresses a running desktop in the kitty's theme; reset puts the image's own back
+// when the kitty has none. An image without kitty-theme (an older one) keeps its look, and the
+// next start tries again.
+func (m *Manager) applyTheme(ctx context.Context, k *kitty.Kitty, reset bool) {
+	name := k.Theme
+	if name == "" && reset {
+		name = DefaultTheme
+	}
+	if !k.Desktop || name == "" || m.ctr() == nil {
+		return
+	}
+	_, _ = m.ctr().Exec(ctx, k.Container, "kitty-theme", name)
 }

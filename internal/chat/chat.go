@@ -990,8 +990,53 @@ func (s *Service) startTask(id string, index int, k *kitty.Kitty, p *pendingTask
 }
 
 // runner is the fleet as a desktop runner, when it is one.
+// helpWait is how long a kitty that asked for help waits for the person to take its desktop.
+var helpWait = 15 * time.Minute
+
+// askHelp is the kitty asking the person to take its desktop over: the step shows a button to
+// take control in the chat, a notification goes out, and the kitty waits until the person has
+// taken the desktop and given it back (or does not come in time).
+func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Kitty, reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" || reason == "<nil>" {
+		reason = "something on the desktop needs you"
+	}
+	s.appendStep(id, index, Step{At: s.now(), Action: "ask_help", Args: map[string]any{"reason": reason}, Result: reason})
+	s.tell(notify.Help, k, "needs your hands on its desktop", reason, id)
+	asked := time.Now()
+	h, ok := s.fleet.(holder)
+	if !ok {
+		return "nobody can take your desktop from here: say in your answer what you need, and stop"
+	}
+	started, _ := s.fleet.(holdStarter)
+	deadline := time.NewTimer(helpWait)
+	defer deadline.Stop()
+	t := time.NewTicker(heldEvery)
+	defer t.Stop()
+	came := false
+	for {
+		held := h.Held(k.ID)
+		came = came || held || started != nil && started.HoldStarted(k.ID).After(asked)
+		if came && !held {
+			return "the person took your desktop and gave it back: look at the screenshot and continue"
+		}
+		select {
+		case <-ctx.Done():
+			return "stopped"
+		case <-deadline.C:
+			if !came {
+				return fmt.Sprintf("nobody came in %d minutes: say in your answer what you need from the person, and stop", int(helpWait.Minutes()))
+			}
+		case <-t.C:
+		}
+	}
+}
+
 // holder knows whether the person has taken a kitty's display over (the orchestrator does).
 type holder interface{ Held(id string) bool }
+
+// holdStarter knows when the person last took a kitty's display.
+type holdStarter interface{ HoldStarted(id string) time.Time }
 
 // heldEvery is how often a kitty waiting for its display looks whether it is back.
 var heldEvery = time.Second
@@ -1126,6 +1171,13 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 				s.appendStep(id, index, Step{At: s.now(), Action: a.name, Args: a.args, Result: summary})
 				outs = append(outs, outcome{action: a, text: "finished"})
 				break
+			}
+			if da.Name == "ask_help" {
+				outs = append(outs, outcome{action: a, text: s.askHelp(ctx, id, index, k, fmt.Sprint(a.args["reason"]))})
+				if ctx.Err() != nil {
+					break
+				}
+				continue
 			}
 			s.waitWhileHeld(ctx, id, index, k.ID)
 			out, err := desktop.Run(ctx, runner, k.ID, da)

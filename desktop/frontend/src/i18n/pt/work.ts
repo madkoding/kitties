@@ -369,6 +369,22 @@ const dict: Dictionary = {
   "Installed {apps}": "Instalou {apps}",
   "Installed programs": "Instalou programas",
   "Waited while you used the desktop": "Esperou enquanto você usava a área de trabalho",
+  "On {name}'s clipboard: paste it there with Ctrl+V.":
+    "Na área de transferência de {name}: cole lá com Ctrl+V.",
+  "{name}'s clipboard is empty.": "A área de transferência de {name} está vazia.",
+  "Copied from {name}'s clipboard.": "Copiado da área de transferência de {name}.",
+  "Here is {name}'s clipboard: copy it from the field.":
+    "Esta é a área de transferência de {name}: copie do campo.",
+  "Text for {name}'s clipboard": "Texto para a área de transferência de {name}",
+  Clipboard: "Área de transferência",
+  "Send to {name}": "Enviar para {name}",
+  "Copy from {name}": "Copiar de {name}",
+  "{name} is waiting for you on its desktop.": "{name} está esperando você na área de trabalho.",
+  "The kitty": "O kitty",
+  "Asked you for help: {reason}": "Pediu sua ajuda: {reason}",
+  "Asked you for help on its desktop": "Pediu sua ajuda na área de trabalho",
+  "Desktop look": "Aparência da área de trabalho",
+  "{name}'s desktop now wears {theme}.": "A área de trabalho de {name} agora usa {theme}.",
 };
 
 export default dict;

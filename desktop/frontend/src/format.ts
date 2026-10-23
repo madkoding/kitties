@@ -87,6 +87,10 @@ export function stepSentence(action: string, args?: Record<string, unknown>): st
       const list = Array.isArray(a.packages) ? a.packages.join(", ") : String(a.packages ?? "");
       return list ? t("Installed {apps}", { apps: list }) : t("Installed programs");
     }
+    case "ask_help":
+      return a.reason
+        ? t("Asked you for help: {reason}", { reason: String(a.reason) })
+        : t("Asked you for help on its desktop");
     case "held":
       return t("Waited while you used the desktop");
     case "wait":

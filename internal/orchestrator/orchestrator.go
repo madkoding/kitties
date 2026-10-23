@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -35,6 +36,8 @@ type Containers interface {
 	Remove(ctx context.Context, name string) error
 	Exec(ctx context.Context, name string, argv ...string) (string, error)
 	Screenshot(ctx context.Context, name string) ([]byte, error)
+	// Stream follows the display: pictures to read with container.ReadFrame, until closed.
+	Stream(ctx context.Context, name string, fps, quality int) (io.ReadCloser, error)
 	List(ctx context.Context) ([]container.Info, error)
 }
 
@@ -56,6 +59,8 @@ type Manager struct {
 	// holds are the displays the person has taken over, by kitty id, with their last use.
 	holdMu sync.Mutex
 	holds  map[string]time.Time
+	// holdStarted is when the person last took each display, kept after they give it back.
+	holdStarted map[string]time.Time
 
 	mu      sync.RWMutex
 	kitties map[string]*kitty.Kitty
@@ -606,6 +611,7 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 			return m.fail(k.ID, err)
 		}
 	}
+	m.applyTheme(ctx, k, false)
 	return m.setStatus(k.ID, kitty.StatusRunning, "")
 }
 
@@ -823,10 +829,22 @@ type Update struct {
 	Backup *string `json:"backup,omitempty"`
 	// Approvals is ask or auto (empty is ask).
 	Approvals *string `json:"approvals,omitempty"`
+	// Theme is the look of its desktop (kitty.Themes; empty is the image's own).
+	Theme *string `json:"theme,omitempty"`
 }
 
-// Edit applies an update to a kitty and saves it.
+// Edit applies an update to a kitty and saves it. A new theme reaches a running desktop at once.
 func (m *Manager) Edit(ref string, u Update) (*kitty.Kitty, error) {
+	k, err := m.edit(ref, u)
+	if err == nil && u.Theme != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		m.applyTheme(ctx, k, true)
+	}
+	return k, err
+}
+
+func (m *Manager) edit(ref string, u Update) (*kitty.Kitty, error) {
 	k, err := m.Get(ref)
 	if err != nil {
 		return nil, err
@@ -875,6 +893,12 @@ func (m *Manager) Edit(ref string, u Update) (*kitty.Kitty, error) {
 			return nil, fmt.Errorf("approvals %q is not ask or auto", *u.Approvals)
 		}
 		k.Approvals = *u.Approvals
+	}
+	if u.Theme != nil {
+		if !kitty.ValidTheme(*u.Theme) {
+			return nil, fmt.Errorf("theme %q is not one of %s", *u.Theme, strings.Join(kitty.Themes, ", "))
+		}
+		k.Theme = *u.Theme
 	}
 	if u.Backup != nil {
 		backup := strings.TrimSpace(*u.Backup)

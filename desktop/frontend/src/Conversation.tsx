@@ -10,6 +10,7 @@ import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
 import { IconHand, IconShield, IconThumbDown, IconThumbUp } from "./icons";
 import { RULE_LABEL, ruleTarget } from "./Approvals";
+import LiveDesktop from "./LiveDesktop";
 
 function Text({ text }: { text: string }) {
   return (
@@ -240,6 +241,7 @@ function TurnCard({
   kitty,
   latest,
   onOpen,
+  onHelp,
 }: {
   turn: Turn;
   index: number;
@@ -248,6 +250,8 @@ function TurnCard({
   kitty?: Kitty;
   latest: boolean;
   onOpen: (src: string) => void;
+  // onHelp opens the kitty's desktop with the controls, when it asked for help.
+  onHelp?: () => void;
 }) {
   const mine = turn.from === "user";
   // The scheduler's wake-up call and the answer to an approval read like the person's side,
@@ -289,6 +293,22 @@ function TurnCard({
           {turn.steps.map((s, i) => (
             <StepRow key={i} step={s} chat={chat} onOpen={onOpen} />
           ))}
+        </div>
+      )}
+      {turn.working && turn.steps?.[turn.steps.length - 1]?.action === "ask_help" && onHelp && (
+        <div class="callout callout-warn flex items-center gap-2 mt-2" data-testid="help-callout">
+          <span class="flex-1">
+            {t("{name} is waiting for you on its desktop.", {
+              name: kitty?.name || t("The kitty"),
+            })}
+          </span>
+          <button
+            class="btn-accent px-3 py-1.5 text-sm"
+            onClick={onHelp}
+            data-testid="help-take-control"
+          >
+            {t("Take control")}
+          </button>
         </div>
       )}
       {turn.working && (
@@ -381,6 +401,8 @@ interface Props {
 export default function Conversation({ session, kitties, user, pending, waiting }: Props) {
   const byId = new Map(kitties.map((k) => [k.id, k]));
   const [zoom, setZoom] = useState<string>("");
+  // helping is the kitty whose desktop is open because it asked for help.
+  const [helping, setHelping] = useState<Kitty | null>(null);
   const end = useRef<HTMLDivElement>(null);
   const count = session?.turns?.length ?? 0;
   // Escape closes a screenshot opened big, like a click on it does.
@@ -436,6 +458,12 @@ export default function Conversation({ session, kitties, user, pending, waiting 
           kitty={turn.kitty ? byId.get(turn.kitty) : undefined}
           latest={i >= all.length - session.members.length}
           onOpen={setZoom}
+          onHelp={() => {
+            const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+            if (k) {
+              setHelping(k);
+            }
+          }}
         />
       ))}
       {pending && (
@@ -465,6 +493,7 @@ export default function Conversation({ session, kitties, user, pending, waiting 
         </>
       )}
       <div ref={end} />
+      {helping && <LiveDesktop kitty={helping} autoControl onClose={() => setHelping(null)} />}
       {zoom && (
         <div
           class="fixed inset-0 z-40 bg-black/80 flex items-center justify-center p-6 backdrop"

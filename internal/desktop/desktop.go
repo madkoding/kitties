@@ -55,6 +55,7 @@ var Tools = []struct{ Name, Args, Help string }{
 	{"install", `{"packages": ["gimp"]}`, "install applications from Debian's repository; they are installed again when the desktop restarts"},
 	{"run", `{"argv": ["ls", "-la"]}`, "run a program in your working folder (an argument list, no shell)"},
 	{"wait", `{"seconds": 2}`, "wait for something to load (at most 10 seconds)"},
+	{"ask_help", `{"reason": "..."}`, "ask the person to take control of your desktop for what you cannot do alone (a password, a captcha, a code they receive); you wait until they give it back, then continue"},
 	{"done", `{"summary": "..."}`, "finish the task and report what you achieved"},
 }
 
@@ -65,11 +66,12 @@ func Catalogue() string {
 		"one action per line, in order. After the actions run you receive their results and a screenshot, " +
 		"and you continue. Write `@tool done {\"summary\": \"...\"}` when the task is finished, and write " +
 		"no @tool line at all when you only want to talk. Coordinates are pixels of the 1280x800 display, " +
-		"origin top-left. The display is a desktop with IceWM: a taskbar at the bottom, its menu at the left " +
-		"corner, a terminal (xterm), the browser, LibreOffice, Inkscape and mtPaint; install what else you need. " +
-		"When something needs the person (a password, a captcha, a code they receive), ask them to take control " +
-		"of your desktop from the chat: they see it live and click and type in it, and your actions wait until " +
-		"they give it back. The tools:\n")
+		"origin top-left. The display is a desktop with IceWM: a taskbar at the bottom (its menu at the left " +
+		"corner, then Chromium, a terminal and the files), icons on the desktop to double-click (Work is your " +
+		"working folder), a file manager (pcmanfm), LibreOffice, Inkscape and mtPaint; install what else you need. " +
+		"When something needs the person (a password, a captcha, a code they receive), use ask_help: they get a " +
+		"button to take control of your desktop, see it live and click and type in it, and you go on when they " +
+		"give it back. The tools:\n")
 	for _, t := range Tools {
 		fmt.Fprintf(&b, "- %s %s: %s\n", t.Name, t.Args, t.Help)
 	}
@@ -151,7 +153,7 @@ var sleep = func(ctx context.Context, d time.Duration) {
 // done build nothing.
 func Argv(a Action) ([]string, error) {
 	switch a.Name {
-	case "screenshot", "done", "wait":
+	case "screenshot", "done", "wait", "ask_help":
 		return nil, nil
 	case "click", "double_click", "move":
 		x, err := num(a.Args, "x")
@@ -317,7 +319,8 @@ func Run(ctx context.Context, r Runner, ref string, a Action) (string, error) {
 		return "", err
 	}
 	switch a.Name {
-	case "screenshot", "done":
+	case "screenshot", "done", "ask_help":
+		// ask_help is the chat's to run: it waits for the person.
 		return "", nil
 	case "wait":
 		seconds, err := num(a.Args, "seconds")

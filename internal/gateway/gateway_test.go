@@ -40,6 +40,8 @@ type fakeFleet struct {
 	cleared   []string
 	// accounts keeps the AI sign-ins in a folder of the test's own.
 	accounts *llmauth.Manager
+	// stream is what a display stream carries (a default when empty); clip is its clipboard.
+	stream, clip string
 }
 
 func (f *fakeFleet) List() []*kitty.Kitty {
@@ -125,6 +127,29 @@ func (f *fakeFleet) Exec(_ context.Context, ref string, argv ...string) (string,
 		return "partial", f.fail
 	}
 	return strings.Join(argv, " "), nil
+}
+func (f *fakeFleet) Stream(_ context.Context, ref string, fps, quality int) (io.ReadCloser, error) {
+	if _, err := f.Get(ref); err != nil {
+		return nil, err
+	}
+	f.calls = append(f.calls, fmt.Sprintf("stream %d %d", fps, quality))
+	if f.stream != "" {
+		return io.NopCloser(strings.NewReader(f.stream)), nil
+	}
+	return io.NopCloser(strings.NewReader("PING\nFRAME 8\n\x89PNG\r\n\x1a\nFRAME 3\nabc")), nil
+}
+func (f *fakeFleet) Clipboard(_ context.Context, ref string) (string, error) {
+	if _, err := f.Get(ref); err != nil {
+		return "", err
+	}
+	return f.clip, nil
+}
+func (f *fakeFleet) SetClipboard(_ context.Context, ref, text string) error {
+	if _, err := f.Get(ref); err != nil {
+		return err
+	}
+	f.clip = text
+	return nil
 }
 func (f *fakeFleet) Hold(ref string, on bool) (bool, error) {
 	if _, err := f.Get(ref); err != nil {

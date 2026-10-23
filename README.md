@@ -307,7 +307,13 @@ connectors:
   (Debian, Xvfb, the IceWM desktop with a taskbar, Chromium, a terminal, LibreOffice, Inkscape,
   xdotool, wmctrl, scrot). IceWM wears the [Ceres](https://codeberg.org/sixsixfive/ceres) theme
   by sixsixfive (BSD 2-Clause, its licence in `/usr/share/doc/ceres-icewm`) in Kitties' own fonts:
-  Sansation for the windows and the taskbar, JetBrains Mono for the terminal. Nothing is published on the host; the orchestrator reaches a kitty
+  Sansation for the windows and the taskbar, JetBrains Mono for the terminal. PCManFM draws the
+  wallpaper (`docker/kitty-desktop/wallpaper/`) and the icons on it (Work, Chromium, Files,
+  Terminal) and is the file manager, all in [Haiku's icons](https://github.com/darealshinji/haiku-icons)
+  (MIT, Haiku, Inc.; the Haiku logo and leaf, trademarks, are left out). It is dark throughout:
+  Chromium (its face, and the pages that offer a dark look), GTK programs, LibreOffice and the
+  terminal. Each kitty can wear
+  another IceWM theme (Ceres Pro, IceWM's own, Windows 95…), picked in its drawer. Nothing is published on the host; the orchestrator reaches a kitty
   with `docker exec`, and `kitty-shot` returns a PNG of its display. `kitty-install` adds
   programs from Debian (sudo only runs the installer, by package name) and remembers them in the
   workspace, so a container made anew installs them again.
@@ -322,10 +328,14 @@ connectors:
   shows it to the model and continues in the background until `@tool done`. Every step and
   picture lands in the thread; the chat can be cancelled.
 - **Taking the desktop over**: the **Desktop** button of a chat (or *Live and take control* in a
-  kitty's drawer) shows its display live. **Take control** sends your clicks, drags, wheel and
-  keys to it, like a remote screen, for what the kitty cannot do alone (a password, a captcha);
-  the kitty's own actions wait until you give it back, and a hold left idle for five minutes
-  ends by itself. Frames and input go through the gateway's API: no VNC port is opened.
+  kitty's drawer) shows its display live, streamed as motion JPEG (a picture whenever it
+  changes, about a quarter of a second behind). **Take control** sends your clicks, drags, wheel
+  and keys to it, like a remote screen, for what the kitty cannot do alone (a password, a
+  captcha); the clipboard goes both ways. The kitty's own actions wait until you give it back,
+  and a hold left idle for five minutes ends by itself. A kitty that needs you says so with
+  `ask_help`: the chat shows a **Take control** button and a notification goes out, and it goes
+  on when you give the desktop back. Frames and input go through the gateway's API: no VNC port
+  is opened.
 - **Settings** (`internal/orchestrator/settings.go`): models and connectors edited from the app
   are kept in `settings.json` on top of the YAML, keys included and never shown again.
 - **Demo** (`internal/demo`): a scripted brain and a drawn desktop, for `kitties -demo`.
@@ -506,6 +516,8 @@ renewed before they expire.
 | `GET /v1/kitties/{ref}/screenshot`        | a PNG of its display                           |
 | `POST /v1/kitties/{ref}/control` `{hold}` | take its display over, or give it back         |
 | `POST /v1/kitties/{ref}/input` `{action, args}` | a click, drag, scroll, key or text of the person on it |
+| `GET /v1/kitties/{ref}/stream`            | its display live, as motion JPEG (`?fps=1-15`) |
+| `GET/PUT /v1/kitties/{ref}/clipboard` `{text}` | its clipboard, both ways                  |
 | `POST /v1/scale/{name}` `{replicas}`      | run n replicas of a configured kitty           |
 | `GET/POST /v1/chats`                      | threads; create `{title, members: [names]}`    |
 | `POST /v1/chats/{id}/members` · `DELETE /v1/chats/{id}/members/{ref}` | who is in the group |

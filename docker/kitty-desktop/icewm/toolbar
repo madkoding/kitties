@@ -1,3 +1,4 @@
 # The buttons of the taskbar.
-prog "Chromium" chromium kitty-open
+prog "Chromium" web-browser kitty-open
 prog "Terminal" utilities-terminal xterm
+prog "Files" system-file-manager pcmanfm /home/kitty/work

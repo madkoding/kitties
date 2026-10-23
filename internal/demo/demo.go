@@ -11,8 +11,10 @@ import (
 	"image/color"
 	"image/draw"
 	"image/png"
+	"io"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/provider"
@@ -81,6 +83,9 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	case strings.HasPrefix(last, "Results of your actions") && !strings.Contains(last, "- @tool ") && (strings.Contains(last, "- @skill ") || strings.Contains(last, "- @artifact ")):
 		// The library answered: the plan was saved, the procedure read.
 		return provider.Reply{Content: "Saved the plan to the library as **launch-plan.md** so the team can pick it up, and I followed the report-findings skill for the format.", Usage: usage}, nil
+	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "- @tool ask_help"):
+		// The person took the desktop for the password and gave it back.
+		return provider.Reply{Content: "@tool done {\"summary\": \"Signed in to the shop: thank you for the password. Your order history is open on my desktop.\"}", Usage: usage}, nil
 	case strings.HasPrefix(last, "Results of your actions") || strings.HasPrefix(last, "[desktop] Results"):
 		return provider.Reply{Content: b.nextRound(last), Usage: usage}, nil
 	case strings.Contains(last, "Goal: "):
@@ -101,6 +106,8 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	case firstConnector(system) != "" && (strings.Contains(lower, "post ") || strings.Contains(lower, "announce") || strings.Contains(lower, "publica") || strings.Contains(lower, "share ")):
 		name := firstConnector(system)
 		return provider.Reply{Content: fmt.Sprintf("Sure, I will post it through %s.\n@connector %s {\"text\": \"Kitties launches next week: autonomous kitties with their own desktops, a connector for every service and a library of skills.\"}", name, name), Usage: usage}, nil
+	case desktop && (strings.Contains(lower, "sign in") || strings.Contains(lower, "log in") || strings.Contains(lower, "inicia sesi")):
+		return provider.Reply{Content: "The shop is open on my desktop, but its sign-in asks for your password, which I do not have.\n@tool ask_help {\"reason\": \"the shop's sign-in needs your password\"}", Usage: usage}, nil
 	case desktop && (strings.Contains(lower, "open") || strings.Contains(lower, "abre") || strings.Contains(lower, "browse") || strings.Contains(lower, "visit")):
 		url := "https://example.com"
 		for _, w := range strings.Fields(last) {
@@ -237,11 +244,12 @@ type Desktop struct {
 	running map[string]bool
 	opened  map[string]string
 	clicks  map[string]int
+	clip    map[string]string // the clipboard of each display
 }
 
 // NewDesktop creates the demo runtime.
 func NewDesktop() *Desktop {
-	return &Desktop{running: map[string]bool{}, opened: map[string]string{}, clicks: map[string]int{}}
+	return &Desktop{running: map[string]bool{}, opened: map[string]string{}, clicks: map[string]int{}, clip: map[string]string{}}
 }
 
 // Up implements orchestrator.Containers.
@@ -305,6 +313,14 @@ func (d *Desktop) Exec(_ context.Context, name string, argv ...string) (string, 
 			d.clicks[name]++
 		}
 		return "", nil
+	case "kitty-clip":
+		if len(argv) > 2 && argv[1] == "set" {
+			d.clip[name] = argv[2]
+			return "set", nil
+		}
+		return d.clip[name], nil
+	case "kitty-theme":
+		return "theme " + strings.Join(argv[1:], " "), nil
 	default:
 		return "(demo) " + strings.Join(argv, " ") + "\n", nil
 	}
@@ -316,6 +332,37 @@ func (d *Desktop) Screenshot(_ context.Context, name string) ([]byte, error) {
 	url, clicks := d.opened[name], d.clicks[name]
 	d.mu.Unlock()
 	return Render(url, clicks), nil
+}
+
+// streamEvery is how often the demo's stream draws its display again.
+var streamEvery = 300 * time.Millisecond
+
+// Stream implements orchestrator.Containers: the drawing, again whenever it changed.
+func (d *Desktop) Stream(ctx context.Context, name string, _, _ int) (io.ReadCloser, error) {
+	r, w := io.Pipe()
+	go func() {
+		var last []byte
+		t := time.NewTicker(streamEvery)
+		defer t.Stop()
+		for {
+			frame, _ := d.Screenshot(ctx, name)
+			if !bytes.Equal(frame, last) {
+				if err := container.WriteFrame(w, frame); err != nil {
+					return
+				}
+				last = frame
+			} else if _, err := io.WriteString(w, "PING\n"); err != nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				_ = w.CloseWithError(ctx.Err())
+				return
+			case <-t.C:
+			}
+		}
+	}()
+	return r, nil
 }
 
 // Render draws a 1280x800 desktop with a browser window showing url (nothing when empty).

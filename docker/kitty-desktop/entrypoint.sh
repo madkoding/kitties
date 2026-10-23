@@ -17,7 +17,13 @@ done
 # The desktop: IceWM with the Ceres theme, its wallpaper and its taskbar (Chromium and a terminal
 # on it), and the terminal in Kitties' colours.
 xrdb -nocpp -merge "$HOME/.Xresources" 2>/dev/null || true
+# The theme picked for this kitty, kept in its workspace (kitty-theme).
+if [ -s "$HOME/work/.desktop/theme" ]; then
+    printf 'Theme="%s/default.theme"\n' "$(head -n 1 "$HOME/work/.desktop/theme" | tr -cd 'A-Za-z0-9@._-')" >"$HOME/.icewm/theme"
+fi
 icewm-session >/tmp/icewm.log 2>&1 &
+# The wallpaper and the icons on it (PCManFM draws them over IceWM's background).
+pcmanfm --desktop >/tmp/pcmanfm.log 2>&1 &
 # The programs the kitty installed come back on a container made anew (they are listed in its
 # workspace, which outlives the container).
 if [ -s "$HOME/work/.desktop/packages" ]; then

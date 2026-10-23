@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -22,6 +23,7 @@ type fakeContainers struct {
 	exists  map[string]bool
 	running map[string]bool
 	fail    string // the operation that fails
+	execs   []string
 }
 
 func newFake() *fakeContainers {
@@ -66,7 +68,11 @@ func (f *fakeContainers) Remove(_ context.Context, n string) error {
 	return nil
 }
 func (f *fakeContainers) Exec(_ context.Context, n string, argv ...string) (string, error) {
+	f.execs = append(f.execs, n+":"+strings.Join(argv, " "))
 	return n + ":" + strings.Join(argv, " "), f.op("exec")
+}
+func (f *fakeContainers) Stream(context.Context, string, int, int) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("FRAME 3\npng")), nil
 }
 func (f *fakeContainers) Screenshot(context.Context, string) ([]byte, error) {
 	return []byte("png"), f.op("shot")

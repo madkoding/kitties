@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { api, type Kitty, shotData } from "./api";
+import { api, type Kitty, shotData, streamDesktop } from "./api";
 import { plainError } from "./friendly";
 import { t } from "./i18n";
 import { IconX } from "./icons";
 
-// LIVE DESKTOP: the kitty's display as it is now, refreshed while it is open. The person can
+// LIVE DESKTOP: the kitty's display as it is now, streamed while it is open (motion JPEG from
+// the gateway: a picture whenever it changes; screenshots one after another when the stream
+// cannot be had). The person can
 // take it over: their clicks, drags, the wheel and the keyboard go to the display, like on a
 // remote screen, and the kitty's own actions wait until they give it back. Nothing is opened
 // on the container: every frame and every input goes through the gateway's API.
@@ -83,11 +85,28 @@ const QUICK: [string, string][] = [
   ["Alt+F4", "alt+F4"],
 ];
 
-export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose: () => void }) {
+// INPUT is the look of a text field here.
+const INPUT = "w-full px-3 py-1.5 text-sm";
+
+export default function LiveDesktop({
+  kitty,
+  onClose,
+  autoControl,
+}: {
+  kitty: Kitty;
+  onClose: () => void;
+  // autoControl takes the controls at once (the kitty asked for help).
+  autoControl?: boolean;
+}) {
   const [frame, setFrame] = useState("");
   const [control, setControl] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
+  // mode is how the pictures come: a stream, or screenshots when the stream fails.
+  const [mode, setMode] = useState<"stream" | "poll">("stream");
+  const [loaded, setLoaded] = useState(false);
+  const [clip, setClip] = useState("");
+  const [clipNote, setClipNote] = useState("");
   const img = useRef<HTMLImageElement>(null);
   const surface = useRef<HTMLDivElement>(null);
   const controlRef = useRef(false);
@@ -101,8 +120,33 @@ export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose:
   // sent side by side would reach the display mixed up.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
 
-  // The frames: one after another, never two at once.
+  // The stream; one that fails, or shows nothing in a few seconds, gives way to screenshots.
   useEffect(() => {
+    if (mode !== "stream") {
+      return;
+    }
+    let got = false;
+    const stop = streamDesktop(
+      kitty.id,
+      (src) => {
+        got = true;
+        setFrame(src);
+        setLoaded(true);
+      },
+      () => setMode("poll"),
+    );
+    const id = setTimeout(() => !got && setMode("poll"), 6000);
+    return () => {
+      clearTimeout(id);
+      stop();
+    };
+  }, [kitty.id, mode]);
+
+  // Screenshots: one after another, never two at once.
+  useEffect(() => {
+    if (mode !== "poll") {
+      return;
+    }
     let alive = true;
     let n = 0;
     (async () => {
@@ -111,6 +155,7 @@ export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose:
           const src = await loadFrame(`/v1/kitties/${kitty.id}/screenshot?live=${n++}`);
           if (alive) {
             setFrame(src);
+            setLoaded(true);
             setErr((e) => (e === t("The desktop did not answer") ? "" : e));
           }
         } catch (e) {
@@ -124,7 +169,15 @@ export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose:
     return () => {
       alive = false;
     };
-  }, [kitty.id]);
+  }, [kitty.id, mode]);
+
+  // Asked for help: the controls are the person's as soon as the window opens.
+  useEffect(() => {
+    if (autoControl) {
+      void take(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoControl]);
 
   // Closing gives the display back, so the kitty never waits on a closed window.
   useEffect(
@@ -161,6 +214,38 @@ export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose:
       setErr(plainError((e as Error).message));
     } finally {
       setBusy(false);
+    }
+  };
+
+  // The clipboard both ways: the person's text to the kitty's, and the kitty's to the person.
+  const sendClip = async () => {
+    try {
+      await api.setClipboard(kitty.id, clip);
+      setClipNote(t("On {name}'s clipboard: paste it there with Ctrl+V.", { name: kitty.name }));
+    } catch (e) {
+      setErr(plainError((e as Error).message));
+    }
+  };
+  const takeClip = async () => {
+    try {
+      const text = await api.clipboard(kitty.id);
+      setClip(text);
+      let copied = false;
+      try {
+        await navigator.clipboard.writeText(text);
+        copied = true;
+      } catch {
+        /* no clipboard access here: the text is in the field to copy by hand */
+      }
+      setClipNote(
+        !text
+          ? t("{name}'s clipboard is empty.", { name: kitty.name })
+          : copied
+            ? t("Copied from {name}'s clipboard.", { name: kitty.name })
+            : t("Here is {name}'s clipboard: copy it from the field.", { name: kitty.name }),
+      );
+    } catch (e) {
+      setErr(plainError((e as Error).message));
     }
   };
 
@@ -305,7 +390,7 @@ export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose:
             <button
               class="btn-accent px-3 py-1.5 text-sm"
               onClick={() => take(true)}
-              disabled={busy || !frame}
+              disabled={busy || !loaded}
               data-testid="take-control"
             >
               {t("Take control")}
@@ -327,19 +412,22 @@ export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose:
           onPaste={onPaste}
           onContextMenu={(e) => control && e.preventDefault()}
         >
-          {frame ? (
+          {frame && (
             <img
               ref={img}
               src={frame}
               alt={t("{name}'s desktop", { name: kitty.name })}
-              class="max-w-full max-h-[70vh] select-none"
+              class={`max-w-full max-h-[70vh] select-none ${loaded ? "" : "invisible absolute"}`}
               draggable={false}
+              onLoad={() => setLoaded(true)}
               onMouseDown={onMouseDown}
               onMouseUp={onMouseUp}
               onWheel={onWheel}
               data-testid="live-frame"
+              data-mode={mode}
             />
-          ) : (
+          )}
+          {!loaded && (
             <div class="text-sm text-[var(--t3)] py-20">
               <span class="spinner" /> {t("Connecting to the desktop…")}
             </div>
@@ -364,6 +452,33 @@ export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose:
               {t("Click, drag, scroll and type on the picture; Ctrl+V pastes your own text.")}
             </span>
           </div>
+        )}
+        {control && (
+          <div class="flex gap-1.5 flex-wrap sm:flex-nowrap items-center" data-testid="clipboard">
+            <input
+              class={INPUT}
+              value={clip}
+              placeholder={t("Text for {name}'s clipboard", { name: kitty.name })}
+              aria-label={t("Clipboard")}
+              onInput={(e) => setClip((e.target as HTMLInputElement).value)}
+              onKeyDown={(e) => e.stopPropagation()}
+            />
+            <button
+              class="btn-ghost px-2 py-1.5 text-xs whitespace-nowrap"
+              onClick={sendClip}
+              disabled={!clip}
+            >
+              {t("Send to {name}", { name: kitty.name })}
+            </button>
+            <button class="btn-ghost px-2 py-1.5 text-xs whitespace-nowrap" onClick={takeClip}>
+              {t("Copy from {name}", { name: kitty.name })}
+            </button>
+          </div>
+        )}
+        {clipNote && (
+          <p class="text-xs text-[var(--t3)]" role="status" data-testid="clip-note">
+            {clipNote}
+          </p>
         )}
         {!control && (
           <p class="text-xs text-[var(--t3)]">

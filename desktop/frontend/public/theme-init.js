@@ -1,7 +1,8 @@
 // Applies the saved colour mode before the first paint, so a page set to light never flashes
 // dark. The same rules as src/theme.ts; the palette is the Motita design system (themes.css).
 (function () {
-  var mode = "system";
+  // Dark unless the person picked light or the system's.
+  var mode = "dark";
   var q = /[?&]theme=(light|dark)/.exec(location.search);
   if (q) {
     mode = q[1];
@@ -11,7 +12,7 @@
       throw new Error("the query wins");
     }
     var raw = JSON.parse(localStorage.getItem("kitties.ui.theme") || "{}");
-    if (raw.mode === "light" || raw.mode === "dark") {
+    if (raw.mode === "light" || raw.mode === "dark" || raw.mode === "system") {
       mode = raw.mode;
     }
   } catch (e) {

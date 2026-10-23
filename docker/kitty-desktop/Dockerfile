@@ -1,7 +1,8 @@
 # kitty-desktop: the body of a kitty.
 #
 # A desktop on a headless X display (Xvfb) with the IceWM window manager in the Ceres theme and
-# Kitties' fonts: a taskbar with Chromium and a terminal, windows to move, focus and close. The kitty acts on it with xdotool
+# Kitties' fonts: a taskbar with Chromium, a terminal and the files, windows to move, focus and
+# close, and PCManFM for the desktop's wallpaper and icons and as the file manager. The kitty acts on it with xdotool
 # and wmctrl, and the person can watch it live and take it over from the chat. Chromium for the
 # web, LibreOffice for office documents (also headless: `soffice --headless --convert-to pdf
 # file.docx`), Inkscape, ImageMagick and mtPaint for drawing; kitty-install adds more from
@@ -16,7 +17,9 @@
 FROM debian:bookworm-slim AS extras
 ARG CERES_COMMIT=27318b2a9e9baa3146e3be008782a37c5e6c9886
 ARG CERES_SHA256=4b7967960e50a7a94a0ff2eb969d7fdf11fd34578b395d5eddc8020bc8f41f49
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl woff2 \
+# Haiku's icons (MIT, Haiku, Inc.), as exported by darealshinji/haiku-icons, at a fixed commit.
+ARG HAIKU_ICONS_COMMIT=ccf434a0cf31aae47cc8aac91934651619c1b9b2
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git woff2 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL -o /tmp/ceres.tar.gz "https://codeberg.org/sixsixfive/ceres/archive/${CERES_COMMIT}.tar.gz" \
     && echo "${CERES_SHA256}  /tmp/ceres.tar.gz" | sha256sum -c - \
@@ -26,20 +29,30 @@ RUN curl -fsSL -o /tmp/ceres.tar.gz "https://codeberg.org/sixsixfive/ceres/archi
     && cp /tmp/ceres/LICENSE /out/doc/LICENSE
 COPY fonts/ /tmp/fonts/
 RUN for f in /tmp/fonts/*.woff2; do woff2_decompress "$f"; done && mv /tmp/fonts/*.ttf /out/fonts/
+COPY haiku/ /tmp/haiku/
+RUN git init -q /tmp/haiku-icons \
+    && git -C /tmp/haiku-icons fetch -q --depth 1 https://github.com/darealshinji/haiku-icons "${HAIKU_ICONS_COMMIT}" \
+    && git -C /tmp/haiku-icons checkout -q FETCH_HEAD \
+    && test "$(git -C /tmp/haiku-icons rev-parse HEAD)" = "${HAIKU_ICONS_COMMIT}" \
+    && /tmp/haiku/build-theme.sh /tmp/haiku-icons /out/icons/Haiku \
+    && cp /tmp/haiku-icons/LICENSE /out/doc/HAIKU-ICONS-LICENSE
 
 FROM debian:bookworm-slim
 
+# Dark everywhere: GTK 3 programs (LibreOffice among them) in Adwaita's dark variant.
 ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:99 \
     SCREEN=1280x800x24 \
-    LANG=C.UTF-8
+    LANG=C.UTF-8 \
+    GTK_THEME=Adwaita:dark \
+    SAL_USE_VCLPLUGIN=gtk3
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl \
-        icewm xterm sudo \
+        xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip \
+        icewm xterm sudo pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
         chromium fonts-dejavu fonts-noto-color-emoji \
         ca-certificates curl git jq python3 openssh-client \
-        libreoffice-writer libreoffice-calc libreoffice-impress \
+        libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
         inkscape imagemagick mtpaint \
         tini procps \
     && rm -rf /var/lib/apt/lists/* \
@@ -50,8 +63,16 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=extras /out/themes/ /usr/share/icewm/themes/
 COPY --from=extras /out/doc/LICENSE /usr/share/doc/ceres-icewm/LICENSE
+COPY --from=extras /out/icons/Haiku/ /usr/share/icons/Haiku/
+COPY --from=extras /out/doc/HAIKU-ICONS-LICENSE /usr/share/doc/haiku-icons/LICENSE
 COPY --from=extras /out/fonts/ /usr/share/fonts/truetype/kitties/
 RUN fc-cache -f
+# The wallpaper: whatever picture is in wallpaper/ (jpg, png or webp), cropped to the display.
+COPY wallpaper/ /tmp/wallpaper/
+RUN mkdir -p /usr/share/backgrounds/kitties \
+    && convert "$(ls /tmp/wallpaper/* | head -n 1)" -resize '1280x800^' -gravity center -extent 1280x800 \
+        -quality 90 /usr/share/backgrounds/kitties/wallpaper.jpg \
+    && rm -rf /tmp/wallpaper
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/kitty-entrypoint
 COPY --chmod=755 kitty-shot.sh /usr/local/bin/kitty-shot
@@ -59,7 +80,13 @@ COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch
 COPY --chmod=755 kitty-install.sh /usr/local/bin/kitty-install
 COPY --chmod=755 kitty-apt.sh /usr/local/sbin/kitty-apt
+COPY --chmod=755 kitty-stream.sh /usr/local/bin/kitty-stream
+COPY --chmod=755 kitty-clip.sh /usr/local/bin/kitty-clip
+COPY --chmod=755 kitty-theme.sh /usr/local/bin/kitty-theme
 COPY --chown=kitty:kitty icewm/ /home/kitty/.icewm/
+# The desktop's icons and the file manager's settings; the work folder is on the desktop too.
+COPY --chown=kitty:kitty home/ /home/kitty/
+RUN ln -s /home/kitty/work /home/kitty/Desktop/Work && chown -h kitty:kitty /home/kitty/Desktop/Work
 COPY --chown=kitty:kitty Xresources /home/kitty/.Xresources
 
 USER kitty

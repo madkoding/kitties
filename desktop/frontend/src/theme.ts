@@ -10,10 +10,11 @@ export function savedMode(): Mode {
     return q;
   }
   try {
+    // Dark unless the person picked light or the system's.
     const raw = JSON.parse(localStorage.getItem(KEY) || "{}");
-    return raw.mode === "light" || raw.mode === "dark" ? raw.mode : "system";
+    return raw.mode === "light" || raw.mode === "system" ? raw.mode : "dark";
   } catch {
-    return "system";
+    return "dark";
   }
 }
 

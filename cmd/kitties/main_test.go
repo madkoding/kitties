@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -32,6 +33,9 @@ func (f *fakeContainers) Remove(_ context.Context, n string) error {
 }
 func (f *fakeContainers) Exec(_ context.Context, n string, argv ...string) (string, error) {
 	return "ran " + strings.Join(argv, " ") + "\n", nil
+}
+func (f *fakeContainers) Stream(context.Context, string, int, int) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("FRAME 3\npng")), nil
 }
 func (f *fakeContainers) Screenshot(context.Context, string) ([]byte, error) {
 	return []byte("PNG"), nil
