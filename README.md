@@ -81,7 +81,11 @@ kitties exec mimi kitty-open https://example.com
 kitties shot mimi desk.png                  # what is on its display right now
 ```
 
-Without a container runtime the kitties still run, brain-only.
+Without a container runtime the kitties still run, brain-only. The gateway keeps looking for
+Docker or Podman every half minute, so opening Docker Desktop after Kitties is enough: the
+kitties that wanted a desktop get one without a restart. On a Mac, the folders Docker Desktop,
+Homebrew, OrbStack, Rancher Desktop and Podman install to are searched even when the app is
+opened from the Finder, whose PATH lacks them.
 
 ## On a server
 

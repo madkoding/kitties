@@ -11,11 +11,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -53,8 +57,49 @@ type Runtime struct {
 // ErrNoRuntime is returned when neither docker nor podman answers.
 var ErrNoRuntime = errors.New("no container runtime: install Docker or Podman, or set containers.runtime")
 
+// A Mac app opened from the Finder gets a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin), without
+// the folders Docker Desktop, Homebrew, OrbStack, Rancher Desktop or Podman put their programs
+// in: they are added, so docker is found and finds its own helpers (docker-credential-desktop).
+var (
+	goos      = runtime.GOOS
+	homeDir   = os.UserHomeDir
+	setPath   = func(v string) { _ = os.Setenv("PATH", v) }
+	getPath   = func() string { return os.Getenv("PATH") }
+	isDir     = func(p string) bool { st, err := os.Stat(p); return err == nil && st.IsDir() }
+	pathOnce  sync.Once
+	macPlaces = []string{"/usr/local/bin", "/opt/homebrew/bin", "~/.docker/bin", "/Applications/Docker.app/Contents/Resources/bin",
+		"~/.orbstack/bin", "~/.rd/bin", "/opt/podman/bin", "/opt/local/bin"}
+)
+
+// widenPath adds the folders container engines live in that PATH lacks.
+func widenPath() {
+	if goos != "darwin" {
+		return
+	}
+	home, _ := homeDir()
+	path := getPath()
+	have := map[string]bool{}
+	for _, dir := range filepath.SplitList(path) {
+		have[dir] = true
+	}
+	for _, dir := range macPlaces {
+		if strings.HasPrefix(dir, "~/") {
+			if home == "" {
+				continue
+			}
+			dir = filepath.Join(home, dir[2:])
+		}
+		if !have[dir] && isDir(dir) {
+			path += string(filepath.ListSeparator) + dir
+			have[dir] = true
+		}
+	}
+	setPath(strings.TrimPrefix(path, string(filepath.ListSeparator)))
+}
+
 // Detect finds the runtime. want is docker, podman or auto.
 func Detect(ctx context.Context, want string) (Runtime, error) {
+	pathOnce.Do(widenPath)
 	candidates := []string{"docker", "podman"}
 	if want != "" && want != "auto" {
 		candidates = []string{want}

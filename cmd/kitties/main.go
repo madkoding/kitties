@@ -183,7 +183,13 @@ func (a *app) open(cmd string) error {
 		rt, err := detectRuntime(context.Background(), a.cfg.Containers.Runtime)
 		if err != nil {
 			fmt.Fprintf(a.err, "kitties: %v; the kitties run brain-only\n", err)
-			opts = append(opts, orchestrator.WithContainers(nil, err))
+			opts = append(opts, orchestrator.WithContainers(nil, err), orchestrator.WithRuntimeRetry(func(ctx context.Context) (orchestrator.Containers, error) {
+				rt, err := detectRuntime(ctx, a.cfg.Containers.Runtime)
+				if err != nil {
+					return nil, err
+				}
+				return newContainers(rt), nil
+			}))
 		} else {
 			opts = append(opts, orchestrator.WithContainers(newContainers(rt), nil))
 		}

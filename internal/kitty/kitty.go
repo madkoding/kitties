@@ -31,6 +31,9 @@ type Kitty struct {
 	Connectors []string `json:"connectors,omitempty"`
 	// Desktop is true when the kitty has a container of its own.
 	Desktop bool `json:"desktop"`
+	// BodyLater is true when the kitty wanted a container but no engine answered when it was
+	// made: it gets one as soon as Docker or Podman does.
+	BodyLater bool `json:"body_later,omitempty"`
 	// Container is the container name, empty without a desktop.
 	Container string    `json:"container,omitempty"`
 	Status    string    `json:"status"`

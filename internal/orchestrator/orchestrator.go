@@ -48,6 +48,11 @@ type Manager struct {
 	connectors *connector.Registry
 	containers Containers // nil when no runtime is available
 	runtimeErr error
+	// rtMu guards containers and runtimeErr: a runtime found later (Docker Desktop opened after
+	// the gateway) is set while the kitties work.
+	rtMu sync.RWMutex
+	// detect looks for the runtime again; nil when it is not looked for again.
+	detect func(ctx context.Context) (Containers, error)
 
 	mu      sync.RWMutex
 	kitties map[string]*kitty.Kitty
@@ -72,6 +77,12 @@ func WithContainers(c Containers, err error) Option {
 		m.containers = c
 		m.runtimeErr = err
 	}
+}
+
+// WithRuntimeRetry looks for the container runtime again, while there is none, on every round
+// of Watch and when a kitty is made: Docker Desktop opened after the gateway is found.
+func WithRuntimeRetry(detect func(ctx context.Context) (Containers, error)) Option {
+	return func(m *Manager) { m.detect = detect }
 }
 
 // WithProviders sets a prepared provider registry instead of building one from the configuration.
@@ -263,7 +274,63 @@ func (m *Manager) Providers() *provider.Registry { return m.providers }
 func (m *Manager) Connectors() *connector.Registry { return m.connectors }
 
 // HasContainers reports whether kitties can have a body, and why not otherwise.
-func (m *Manager) HasContainers() (bool, error) { return m.containers != nil, m.runtimeErr }
+func (m *Manager) HasContainers() (bool, error) {
+	m.rtMu.RLock()
+	defer m.rtMu.RUnlock()
+	return m.containers != nil, m.runtimeErr
+}
+
+// ctr is the container runtime, nil when there is none.
+func (m *Manager) ctr() Containers {
+	m.rtMu.RLock()
+	defer m.rtMu.RUnlock()
+	return m.containers
+}
+
+// FindRuntime looks for the container runtime again when there is none and the manager may. When
+// it is found, the kitties that wanted a body and could not have one get it, and those running
+// are started in it. It reports whether a runtime was found now.
+func (m *Manager) FindRuntime(ctx context.Context) bool {
+	if m.detect == nil || m.ctr() != nil {
+		return false
+	}
+	// A runtime that does not answer quickly is not there yet: the next round tries again.
+	dctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	c, err := m.detect(dctx)
+	cancel()
+	m.rtMu.Lock()
+	if m.containers != nil {
+		m.rtMu.Unlock()
+		return false
+	}
+	if err != nil || c == nil {
+		m.runtimeErr = err
+		m.rtMu.Unlock()
+		return false
+	}
+	m.containers, m.runtimeErr = c, nil
+	m.rtMu.Unlock()
+
+	m.mu.Lock()
+	var running []string
+	for _, k := range m.kitties {
+		if !k.BodyLater {
+			continue
+		}
+		k.BodyLater, k.Desktop = false, true
+		k.Container = kitty.ContainerName(k.Name)
+		k.Workspace = filepath.Join(m.workspaceRoot(), k.Name)
+		if k.Status == kitty.StatusRunning {
+			running = append(running, k.ID)
+		}
+	}
+	_ = m.saveLocked()
+	m.mu.Unlock()
+	for _, id := range running {
+		_ = m.Start(ctx, id)
+	}
+	return true
+}
 
 // --- persistence ---------------------------------------------------------------------------
 
@@ -375,10 +442,9 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 		personality = soul.Merge(personality, fromFile)
 	}
 	personality = soul.Merge(personality, s.Soul)
-	desktop := m.containers != nil
-	if s.Desktop != nil {
-		desktop = *s.Desktop && m.containers != nil
-	}
+	m.FindRuntime(ctx)
+	wants := s.Desktop == nil || *s.Desktop
+	desktop := wants && m.ctr() != nil
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -387,7 +453,7 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 	}
 	k := &kitty.Kitty{
 		ID: m.newID(), Name: s.Name, Provider: prov, Soul: personality, Connectors: s.Connectors,
-		Desktop: desktop, Status: kitty.StatusCreated, CreatedAt: m.now(), Avatar: avatar,
+		Desktop: desktop, BodyLater: wants && !desktop, Status: kitty.StatusCreated, CreatedAt: m.now(), Avatar: avatar,
 		Limits: s.Limits, Backup: s.Backup, Approvals: s.Approvals,
 	}
 	if desktop {
@@ -499,7 +565,7 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	switch {
 	case running:
 	case exists:
-		if err := m.containers.Start(ctx, k.Container); err != nil {
+		if err := m.ctr().Start(ctx, k.Container); err != nil {
 			return m.fail(k.ID, err)
 		}
 	default:
@@ -511,7 +577,7 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 			Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: c.MemoryMB, CPUs: c.CPUs,
 			Network: c.Network, Workspace: k.Workspace, Env: c.Env,
 		}
-		if _, err := m.containers.Up(ctx, spec); err != nil {
+		if _, err := m.ctr().Up(ctx, spec); err != nil {
 			return m.fail(k.ID, err)
 		}
 	}
@@ -554,7 +620,7 @@ func (m *Manager) StartInBackground(ref string) (*kitty.Kitty, error) {
 }
 
 func (m *Manager) containerState(ctx context.Context, name string) (exists, running bool, err error) {
-	infos, err := m.containers.List(ctx)
+	infos, err := m.ctr().List(ctx)
 	if err != nil {
 		return false, false, err
 	}
@@ -576,7 +642,7 @@ func (m *Manager) Stop(ctx context.Context, ref string) error {
 		if exists, _, err := m.containerState(ctx, k.Container); err != nil {
 			return m.fail(k.ID, err)
 		} else if exists {
-			if err := m.containers.Stop(ctx, k.Container); err != nil {
+			if err := m.ctr().Stop(ctx, k.Container); err != nil {
 				return m.fail(k.ID, err)
 			}
 		}
@@ -594,7 +660,7 @@ func (m *Manager) Remove(ctx context.Context, ref string) error {
 		if exists, _, err := m.containerState(ctx, k.Container); err != nil {
 			return m.fail(k.ID, err)
 		} else if exists {
-			if err := m.containers.Remove(ctx, k.Container); err != nil {
+			if err := m.ctr().Remove(ctx, k.Container); err != nil {
 				return m.fail(k.ID, err)
 			}
 		}
@@ -829,10 +895,14 @@ func (m *Manager) Watch(ctx context.Context, every time.Duration, recovered func
 
 // Check is one round of Watch.
 func (m *Manager) Check(ctx context.Context, recovered func(k *kitty.Kitty, what string), warn func(format string, args ...any)) {
-	if m.containers == nil {
+	if m.FindRuntime(ctx) {
+		warn("watchdog: the container engine answers now: the kitties get their desktops")
+	}
+	c := m.ctr()
+	if c == nil {
 		return
 	}
-	infos, err := m.containers.List(ctx)
+	infos, err := c.List(ctx)
 	if err != nil {
 		warn("watchdog: %v", err)
 		return
@@ -892,7 +962,7 @@ func (m *Manager) Exec(ctx context.Context, ref string, argv ...string) (string,
 	if !k.Desktop {
 		return "", fmt.Errorf("%s has no container", k.Name)
 	}
-	return m.containers.Exec(ctx, k.Container, argv...)
+	return m.ctr().Exec(ctx, k.Container, argv...)
 }
 
 // Screenshot captures the kitty's display.
@@ -904,7 +974,7 @@ func (m *Manager) Screenshot(ctx context.Context, ref string) ([]byte, error) {
 	if !k.Desktop {
 		return nil, fmt.Errorf("%s has no container", k.Name)
 	}
-	return m.containers.Screenshot(ctx, k.Container)
+	return m.ctr().Screenshot(ctx, k.Container)
 }
 
 // StopAll stops every running kitty; used on shutdown when the operator asks for it.

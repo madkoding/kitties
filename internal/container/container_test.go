@@ -186,3 +186,33 @@ func TestListStatusWait(t *testing.T) {
 		t.Error("Status reports the list failure")
 	}
 }
+
+// A Mac app from the Finder has a bare PATH: the folders of Docker Desktop and the others are
+// added when they exist, once each.
+func TestWidenPath(t *testing.T) {
+	oldOS, oldHome, oldSet, oldGet, oldDir := goos, homeDir, setPath, getPath, isDir
+	t.Cleanup(func() { goos, homeDir, setPath, getPath, isDir = oldOS, oldHome, oldSet, oldGet, oldDir })
+	path := "/usr/bin:/bin:/usr/local/bin"
+	getPath = func() string { return path }
+	setPath = func(v string) { path = v }
+	homeDir = func() (string, error) { return "/Users/me", nil }
+	isDir = func(p string) bool {
+		return p == "/usr/local/bin" || p == "/Users/me/.docker/bin" || p == "/opt/homebrew/bin"
+	}
+	goos = "linux"
+	widenPath()
+	if path != "/usr/bin:/bin:/usr/local/bin" {
+		t.Errorf("linux = %s", path)
+	}
+	goos = "darwin"
+	widenPath()
+	if path != "/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin:/Users/me/.docker/bin" {
+		t.Errorf("mac = %s", path)
+	}
+	path = ""
+	homeDir = func() (string, error) { return "", errors.New("no home") }
+	widenPath()
+	if path != "/usr/local/bin:/opt/homebrew/bin" {
+		t.Errorf("empty = %s", path)
+	}
+}
