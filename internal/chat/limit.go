@@ -16,12 +16,19 @@ import (
 const limitHelp = "Limit your own actions on a connection, only when the person asks you to (\"ask me before posting\", " +
 	"\"never delete anything\"): ask makes the action wait for their yes, never refuses it, none lifts the limit."
 
-// limitPrompt tells the kitty how to limit itself, when there is something to limit.
+// limitPrompt tells the kitty its connections reach all their API, and how to limit itself when
+// there is something to limit.
 func (s *Service) limitPrompt(allowed map[string]string) string {
-	if s.approvals == nil || len(allowed) == 0 {
+	if len(allowed) == 0 {
 		return ""
 	}
-	return "\nYour actions on your connections are not limited: do what the task needs. When the person asks you to hold " +
+	whole := "\nYour connections are not limited to the actions they list: request calls any endpoint of a service's API with " +
+		"the account (method, path, query, body), and the service's own permissions are the only limit. When the person asks for " +
+		"something a listed action does not do, use request instead of saying you cannot.\n"
+	if s.approvals == nil {
+		return whole
+	}
+	return whole + "Your actions on your connections are not limited: do what the task needs. When the person asks you to hold " +
 		"back (to ask first, or never to do something), keep it as a limit with " +
 		"@limit set {\"connector\": \"name\", \"action\": \"post\", \"mode\": \"ask\"} (mode ask, never, or none to lift it; " +
 		"leave the action out for all of the connection's), and tell them in plain words. Never add a limit they did not ask for.\n"

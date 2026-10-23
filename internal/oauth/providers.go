@@ -16,20 +16,21 @@ import (
 var Providers = map[string]Provider{
 	"google": {
 		Name: "google", Label: "Google", AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: "https://oauth2.googleapis.com/token",
-		Scopes: []string{"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/documents", "https://www.googleapis.com/auth/contacts", "https://www.googleapis.com/auth/tasks"},
+		Scopes: []string{"https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.settings.basic", "https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/documents", "https://www.googleapis.com/auth/presentations", "https://www.googleapis.com/auth/forms.body", "https://www.googleapis.com/auth/contacts", "https://www.googleapis.com/auth/tasks", "https://www.googleapis.com/auth/youtube"},
 		Extra:  map[string]string{"access_type": "offline", "prompt": "consent"},
 	},
 	"microsoft": {
 		Name: "microsoft", Label: "Microsoft", AuthURL: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", TokenURL: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-		Scopes: []string{"offline_access", "Mail.Send", "Mail.Read", "Calendars.ReadWrite", "Files.ReadWrite", "User.Read", "Contacts.ReadWrite", "Tasks.ReadWrite"},
+		Scopes: []string{"offline_access", "User.Read", "Mail.ReadWrite", "Mail.Send", "MailboxSettings.ReadWrite", "Calendars.ReadWrite", "Files.ReadWrite.All", "Contacts.ReadWrite", "Tasks.ReadWrite", "Notes.ReadWrite", "People.Read", "Presence.Read"},
 	},
 	"slack": {
 		Name: "slack", Label: "Slack", AuthURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access",
-		Scopes: []string{"chat:write", "chat:write.public", "channels:read"}, ScopeSep: ",", NoExpiry: true,
+		Scopes:   []string{"chat:write", "chat:write.public", "channels:read", "channels:history", "groups:read", "groups:history", "im:read", "im:history", "im:write", "mpim:read", "mpim:history", "users:read", "reactions:read", "reactions:write", "files:read", "files:write", "pins:read", "pins:write", "bookmarks:read", "bookmarks:write"},
+		ScopeSep: ",", NoExpiry: true,
 	},
 	"github": {
 		Name: "github", Label: "GitHub", AuthURL: "https://github.com/login/oauth/authorize", TokenURL: "https://github.com/login/oauth/access_token",
-		Scopes: []string{"repo"}, NoExpiry: true,
+		Scopes: []string{"repo", "workflow", "gist", "notifications", "read:user", "user:email", "read:org", "read:project", "write:discussion"}, NoExpiry: true,
 	},
 	"gitlab": {
 		Name: "gitlab", Label: "GitLab", AuthURL: "{url}/oauth/authorize", TokenURL: "{url}/oauth/token",
@@ -37,7 +38,9 @@ var Providers = map[string]Provider{
 	},
 	"spotify": {
 		Name: "spotify", Label: "Spotify", AuthURL: "https://accounts.spotify.com/authorize", TokenURL: "https://accounts.spotify.com/api/token",
-		Scopes: []string{"user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "playlist-read-private", "playlist-modify-private", "playlist-modify-public"},
+		Scopes: []string{"user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "user-read-recently-played", "user-top-read",
+			"playlist-read-private", "playlist-read-collaborative", "playlist-modify-private", "playlist-modify-public", "user-library-read", "user-library-modify",
+			"user-follow-read", "user-follow-modify", "user-read-private", "user-read-email"},
 	},
 	"tidal": {
 		Name: "tidal", Label: "TIDAL", AuthURL: "https://login.tidal.com/authorize", TokenURL: "https://auth.tidal.com/v1/oauth2/token",
@@ -45,8 +48,8 @@ var Providers = map[string]Provider{
 	},
 	"dropbox": {
 		Name: "dropbox", Label: "Dropbox", AuthURL: "https://www.dropbox.com/oauth2/authorize", TokenURL: "https://api.dropboxapi.com/oauth2/token",
-		Scopes: []string{"files.metadata.read", "files.content.read", "files.content.write", "sharing.write"},
-		Extra:  map[string]string{"token_access_type": "offline"},
+		// No scope asked: the token gets every permission enabled for the app in Dropbox's console.
+		Extra: map[string]string{"token_access_type": "offline"},
 	},
 	"notion": {
 		Name: "notion", Label: "Notion", AuthURL: "https://api.notion.com/v1/oauth/authorize", TokenURL: "https://api.notion.com/v1/oauth/token",
@@ -54,7 +57,7 @@ var Providers = map[string]Provider{
 	},
 	"todoist": {
 		Name: "todoist", Label: "Todoist", AuthURL: "https://todoist.com/oauth/authorize", TokenURL: "https://todoist.com/oauth/access_token",
-		Scopes: []string{"data:read_write"}, ScopeSep: ",", NoExpiry: true,
+		Scopes: []string{"data:read_write", "data:delete", "project:delete"}, ScopeSep: ",", NoExpiry: true,
 	},
 	"linear": {
 		Name: "linear", Label: "Linear", AuthURL: "https://linear.app/oauth/authorize", TokenURL: "https://api.linear.app/oauth/token",
@@ -79,11 +82,14 @@ var Providers = map[string]Provider{
 	},
 	"x": {
 		Name: "x", Label: "X", AuthURL: "https://x.com/i/oauth2/authorize", TokenURL: "https://api.x.com/2/oauth2/token",
-		Scopes: []string{"tweet.read", "tweet.write", "users.read", "like.write", "offline.access"}, Basic: true, Finish: xFinish,
+		Scopes: []string{"tweet.read", "tweet.write", "tweet.moderate.write", "users.read", "follows.read", "follows.write", "like.read", "like.write",
+			"bookmark.read", "bookmark.write", "list.read", "list.write", "mute.read", "mute.write", "block.read", "block.write",
+			"dm.read", "dm.write", "space.read", "offline.access"},
+		Basic: true, Finish: xFinish,
 	},
 	"linkedin": {
 		Name: "linkedin", Label: "LinkedIn", AuthURL: "https://www.linkedin.com/oauth/v2/authorization", TokenURL: "https://www.linkedin.com/oauth/v2/accessToken",
-		Scopes: []string{"openid", "profile", "w_member_social"}, Finish: linkedinFinish,
+		Scopes: []string{"openid", "profile", "email", "w_member_social"}, Finish: linkedinFinish,
 	},
 	"facebook": {
 		Name: "facebook", Label: "Facebook", AuthURL: "https://www.facebook.com/" + graphVersion + "/dialog/oauth", TokenURL: graphRoot + "/oauth/access_token",

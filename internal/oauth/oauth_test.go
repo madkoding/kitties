@@ -237,7 +237,7 @@ func TestSlackAndGitHub(t *testing.T) {
 		t.Fatal(err)
 	}
 	u, _ := url.Parse(link)
-	if u.Host != "slack.com" || u.Query().Get("scope") != "chat:write,chat:write.public,channels:read" {
+	if u.Host != "slack.com" || !strings.HasPrefix(u.Query().Get("scope"), "chat:write,chat:write.public,channels:read,") {
 		t.Errorf("link = %s", link)
 	}
 	if _, err := m.Exchange(context.Background(), strings.Repeat("s", 24), "c"); err != nil {

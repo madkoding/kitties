@@ -58,7 +58,8 @@ func RiskOf(kind, action string) Risk {
 // is never unasked, any other writes), the rest by their action.
 func RiskOfCall(kind string, args map[string]any) Risk {
 	action := ActionOf(kind, args)
-	if kind == "http" {
+	// A call of the API is judged by its method, like the generic HTTP kind.
+	if kind == "http" || action == "request" {
 		switch strings.ToUpper(str(args, "method")) {
 		case "", "GET", "HEAD":
 			return RiskNone

@@ -21,8 +21,21 @@ import (
 // only wrote before, and listing renders what comes back as one short line per item for the
 // model to read, instead of a wall of JSON.
 
-// extraActions are the actions added to a kind besides the ones its builder lists.
+// extraActions are the actions added to a kind besides the ones its builder lists: its reads,
+// and the request that reaches the rest of its API.
 func extraActions(kind string) map[string]actionFn {
+	m := readFns(kind)
+	if spec, ok := apis[kind]; ok {
+		if m == nil {
+			m = map[string]actionFn{}
+		}
+		m["request"] = apiRequest(spec)
+	}
+	return m
+}
+
+// readFns are the reading actions of a kind.
+func readFns(kind string) map[string]actionFn {
 	switch kind {
 	case "slack":
 		return map[string]actionFn{"history": slackHistory}
@@ -56,6 +69,9 @@ func merged(a, b map[string]actionFn) map[string]actionFn {
 // readRender says an answer of a reading action as lines; ok is false for the actions that
 // render the usual way.
 func readRender(kind, action string, data []byte) (string, bool) {
+	if action == "request" {
+		return requestAnswer(data), true
+	}
 	switch kind + "." + action {
 	case "slack.history":
 		return listing(data, "messages", 20, "user", "text", "ts"), true

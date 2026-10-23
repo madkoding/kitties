@@ -396,6 +396,16 @@ are no longer served over CalDAV: on a Mac, the **Mac Calendar, Reminders & Cont
 reaches them through the Reminders app (macOS asks once to allow it). Google and Microsoft accounts
 signed in before contacts and tasks were added need to sign in once more for them.
 
+**The actions are not the limit.** What a service lists (post, reply, search…) are the common
+things, said simply. Every service with an HTTP API also has **Request**: any endpoint of that
+API (method, path, query, body), called with the account the connection has. A kitty uses it for
+whatever a listed action does not cover — DMs on X, bookmarks, labels in Gmail, workflows on
+GitHub — and only the service decides what the account may do: the permissions of its sign-in,
+its keys or its token. A full URL may only name the service's own hosts. Reading (GET) runs on
+its own; other methods ask first only if you or a kitty set a limit for them. Sign-ins ask for
+the broad permissions of each service (Dropbox gets whatever the app has enabled in its
+console), so accounts signed in before need to sign in once more to get them.
+
 ### Signing in instead of pasting keys
 
 Most connections sign in: **Sign in with …** opens the service, you allow Kitties, and the token

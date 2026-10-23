@@ -264,6 +264,9 @@ func catalog() []Kind {
 func withReads(kinds []Kind) []Kind {
 	for i := range kinds {
 		kinds[i].Actions = append(kinds[i].Actions, readActions(kinds[i].Name)...)
+		if a, ok := requestAction(kinds[i].Name); ok {
+			kinds[i].Actions = append(kinds[i].Actions, a)
+		}
 		kinds[i].Fields = append(kinds[i].Fields, readFields(kinds[i].Name)...)
 		for j := range kinds[i].Actions {
 			if r := RiskOf(kinds[i].Name, kinds[i].Actions[j].Name); r != RiskNone {

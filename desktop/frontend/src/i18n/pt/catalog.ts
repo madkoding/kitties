@@ -538,6 +538,9 @@ const dict: Dictionary = {
   Todos: "Pendências",
   Updates: "Novidades",
   Upload: "Enviar arquivo",
+  Request: "Requisição à API",
+  "anything else the service's API lets the account do":
+    "qualquer outra coisa que a API do serviço permita à conta",
 };
 
 export default dict;
