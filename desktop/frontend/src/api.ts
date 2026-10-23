@@ -52,7 +52,7 @@ export interface ApprovalRule {
   kitty_name?: string;
   connector: string;
   action: string;
-  mode: "auto" | "ask";
+  mode: "auto" | "ask" | "never";
   created: string;
 }
 
@@ -699,6 +699,14 @@ export const api = {
   approvalRules: () =>
     request<{ rules: ApprovalRule[] }>("GET", "/v1/approvals/rules").then((r) => r.rules || []),
   removeRule: (id: string) => request("DELETE", `/v1/approvals/rules/${id}`),
+  // setRule limits an action of a kitty (all of the connection's with an empty action).
+  setRule: (kitty: string, connector: string, action: string, mode: "ask" | "never" | "auto") =>
+    request<{ rule: ApprovalRule }>("POST", "/v1/approvals/rules", {
+      kitty,
+      connector,
+      action,
+      mode,
+    }),
   memory: (kitty: string) => request<MemoryView>("GET", `/v1/kitties/${kitty}/memory`),
   remember: (kitty: string, text: string, scope = "user") =>
     request<{ note: MemoryNote }>("POST", `/v1/kitties/${kitty}/memory`, { text, scope }).then(

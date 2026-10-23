@@ -131,6 +131,13 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await say(group, "@luna can you summarise the plan and @tom check the numbers?");
   const desktop = await newChat(["tom"], "Tom on the desktop");
   await say(desktop, "Tom, open https://example.com and tell me what the page says.");
+  // Nothing is limited by default: the person asked mimi to show posts to the team first.
+  await api("POST", "/v1/approvals/rules", {
+    kitty: "mimi",
+    connector: "team-slack",
+    action: "send",
+    mode: "ask",
+  });
   const post = await newChat(["mimi"], "Announcement");
   await say(post, "Mimi, please post the launch announcement to the team.");
   const tom = (await api<{ kitty: { id: string } }>("GET", "/v1/kitties/tom")).kitty.id;

@@ -1130,8 +1130,6 @@ function ConnectionForm({
             {def.actions.map((a) => (
               <li key={a.name}>
                 <b class="text-[var(--t2)]">{actionLabel(a.name)}</b>: {a.help}
-                {a.risk === "always" && <span class="tag tag-amber ml-1">always asks you</span>}
-                {a.risk === "ask" && <span class="tag ml-1">asks you first</span>}
               </li>
             ))}
           </ul>
@@ -1715,8 +1713,9 @@ export default function SettingsModal({
           <div>
             <p class="text-sm text-[var(--t3)]">
               Connections let your kitties act in other services: send messages, read email, open
-              issues, post. You choose which kitties may use each one, and anything that reaches
-              other people asks you first.
+              issues, post. You choose which kitties may use each one, and they act as far as each
+              account allows. To have a kitty ask you first, or never do something, tell it, or set
+              it in its limits.
             </p>
             {conn ? (
               <ConnectionForm

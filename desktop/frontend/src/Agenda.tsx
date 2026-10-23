@@ -3,6 +3,7 @@ import type { ConnectorView, Goal, JournalEntry, Kitty, Limits } from "./api";
 import { api } from "./api";
 import { when } from "./format";
 import { IconClock, IconPlay, IconTarget, IconTrash } from "./icons";
+import ActionLimits from "./ActionLimits";
 import { Missing, Required } from "./Required";
 
 // WHAT A KITTY DOES ON ITS OWN.
@@ -344,7 +345,7 @@ export function LimitsForm({
     day_actions: l.day_actions || 0,
   });
   const [backup, setBackup] = useState(kitty.backup || "");
-  const [approvals, setApprovals] = useState(kitty.approvals || "ask");
+  const [approvals, setApprovals] = useState(kitty.approvals === "ask" ? "ask" : "");
   const [err, setErr] = useState("");
   const [saved, setSaved] = useState(false);
   const set = (k: keyof Limits, v: string) =>
@@ -418,10 +419,10 @@ export function LimitsForm({
         id="limit-approvals"
         class={INPUT}
         value={approvals}
-        onChange={(e) => setApprovals((e.target as HTMLSelectElement).value as "ask" | "auto")}
+        onChange={(e) => setApprovals((e.target as HTMLSelectElement).value as "ask" | "")}
       >
+        <option value="">act on its own, as far as the account allows</option>
         <option value="ask">ask me first (until I trust it with that)</option>
-        <option value="auto">act without asking (refunds and the like are still asked)</option>
       </select>
       <div class="flex items-center gap-2 mt-3">
         <button class="btn-outline px-3 py-1.5 text-xs" onClick={save}>
@@ -430,6 +431,7 @@ export function LimitsForm({
         {saved && <span class="tag tag-green">saved</span>}
       </div>
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
+      <ActionLimits kitty={kitty} />
     </div>
   );
 }

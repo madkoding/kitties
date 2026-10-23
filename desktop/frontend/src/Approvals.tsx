@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Approval, ApprovalRule, Kitty } from "./api";
+import { actionLabel } from "./friendly";
 import { api } from "./api";
 import { when } from "./format";
 import { IconShield, IconX } from "./icons";
@@ -64,9 +65,6 @@ function ApprovalCard({
           </div>
           <div class="text-xs text-[var(--t3)]">{when(a.at)}</div>
         </div>
-        <span class={`tag ${a.risk === "always" ? "tag-red" : "tag-amber"}`}>
-          {a.risk === "always" ? "always asked" : "asks first"}
-        </span>
       </div>
       <p class="approval-summary">{a.summary}</p>
       <details class="text-xs text-[var(--t3)]">
@@ -107,16 +105,14 @@ function ApprovalCard({
           >
             Approve
           </button>
-          {a.risk !== "always" && (
-            <button
-              class="btn-outline px-3 py-1.5 text-xs"
-              disabled={busy}
-              onClick={() => decide(() => api.approve(a.id, true))}
-              title={`From now on ${a.kitty_name} does this without asking`}
-            >
-              Approve, don't ask again
-            </button>
-          )}
+          <button
+            class="btn-outline px-3 py-1.5 text-xs"
+            disabled={busy}
+            onClick={() => decide(() => api.approve(a.id, true))}
+            title={`From now on ${a.kitty_name} does this without asking`}
+          >
+            Approve, don't ask again
+          </button>
           <button
             class="btn-ghost px-3 py-1.5 text-xs"
             disabled={busy}
@@ -134,6 +130,21 @@ function ApprovalCard({
       {err && <p class="text-sm text-[var(--c-red)] mt-1">{err}</p>}
     </div>
   );
+}
+
+// A rule is how an action of a kitty is limited, as the lists say it.
+export const RULE_LABEL: Record<string, string> = {
+  auto: "allowed",
+  ask: "asks first",
+  never: "never",
+};
+const RULE_TAG: Record<string, string> = { auto: "tag-green", ask: "tag-amber", never: "tag-red" };
+
+// ruleTarget says what a rule covers: an action of a connection, or all of it.
+export function ruleTarget(r: { connector: string; action: string }): string {
+  return r.action === "*" || !r.action
+    ? `anything on ${r.connector}`
+    : `${actionLabel(r.action)} on ${r.connector}`;
 }
 
 export default function ApprovalsModal({
@@ -218,16 +229,13 @@ export default function ApprovalsModal({
         </div>
         {rules.length > 0 && (
           <>
-            <div class="section-title !mx-0 mt-5">Allowed for good</div>
+            <div class="section-title !mx-0 mt-5">Limits</div>
             <div class="flex flex-col gap-1" data-testid="rules">
               {rules.map((r) => (
                 <div key={r.id} class="flex items-center gap-2 text-sm">
-                  <span class="tag tag-green">{r.mode === "auto" ? "alone" : "ask"}</span>
+                  <span class={`tag ${RULE_TAG[r.mode]}`}>{RULE_LABEL[r.mode]}</span>
                   <span class="flex-1 truncate">
-                    {r.kitty_name || r.kitty} ·{" "}
-                    <code class="font-mono">
-                      {r.connector}.{r.action}
-                    </code>
+                    {r.kitty_name || r.kitty} · {ruleTarget(r)}
                   </span>
                   <button
                     class="btn-ghost px-2 py-1 text-xs"
@@ -238,7 +246,7 @@ export default function ApprovalsModal({
                         .catch((e) => setErr((e as Error).message))
                     }
                   >
-                    ask again
+                    remove
                   </button>
                 </div>
               ))}

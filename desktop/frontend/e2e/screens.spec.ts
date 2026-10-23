@@ -211,7 +211,6 @@ test("an action that reaches other people waits for a yes, and runs when it is a
   const card = page.getByTestId("approval").first();
   await expect(card).toContainText("mimi wants to team-slack.send");
   await expect(card).toContainText("Kitties launches next week");
-  await expect(card.getByText("asks first")).toBeVisible();
   await shot(page, "24-approvals");
   await card.getByRole("button", { name: "Approve", exact: true }).click();
   await expect(page.getByText("Nothing is waiting.")).toBeVisible();
@@ -289,7 +288,8 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   // The yes it gave to Slack is on its way to being trusted: twelve in a row for a demanding person.
   await expect(page.getByTestId("trust")).toContainText("team-slack.send");
   await expect(page.getByTestId("trust")).toContainText("of 12 yeses in a row");
-  await expect(page.getByLabel("When it wants to publish, send or spend")).toHaveValue("ask");
+  // By default it acts on its own, as far as the account allows.
+  await expect(page.getByLabel("When it wants to publish, send or spend")).toHaveValue("");
   // Today's spending against the daily limits.
   await expect(page.getByTestId("spent")).toContainText("of 5,000,000");
   await expect(page.getByTestId("spent")).toContainText("of 5");
@@ -362,8 +362,9 @@ test("the catalogue marks what asks first, and the new services are there", asyn
   await form.locator("#field-token").fill("sk_test_demo");
   await expect(save).toBeEnabled();
   await page.getByText("What the kitties can do with it").click();
-  await expect(page.locator("li", { hasText: "Refund" })).toContainText("always asks you");
-  await expect(page.locator("li", { hasText: "Send invoice" })).toContainText("asks you first");
+  // Nothing in the catalogue asks first: the account's own permissions are the limit.
+  await expect(page.locator("li", { hasText: "Refund" })).toBeVisible();
+  await expect(page.locator("li", { hasText: "Send invoice" })).not.toContainText("asks you first");
   await shot(page, "28-stripe");
 });
 
@@ -466,6 +467,18 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   await expect(page.getByLabel("Retries (another way)")).toHaveValue("2");
   await expect(page.getByLabel("Tokens per day")).toHaveValue("5000000");
   await expect(page.getByLabel("Actions per day")).toHaveValue("5");
+  // The action limits: the one the person set, and one added and taken away here.
+  const limits = page.getByTestId("action-limits");
+  await expect(limits.getByTestId("kitty-rules")).toContainText("asks first");
+  await expect(limits.getByTestId("kitty-rules")).toContainText("Send on team-slack");
+  await expect(limits.getByTestId("add-limit")).toBeDisabled();
+  await limits.locator("#rule-connector").selectOption("github");
+  await limits.locator("#rule-mode").selectOption("never");
+  await limits.getByTestId("add-limit").click();
+  const never = limits.getByTestId("kitty-rules").locator("div", { hasText: "anything on github" });
+  await expect(never).toContainText("never");
+  await never.getByRole("button", { name: "remove" }).click();
+  await expect(limits.getByText("anything on github")).toHaveCount(0);
   await goals.scrollIntoViewIfNeeded();
   await shot(page, "21-goals-journal");
   // The sidebar marks the goal chats, and a goal's chat shows the scheduler's call.
@@ -640,7 +653,7 @@ test("Facebook and Instagram: a Page or a professional account, and what waits f
   );
   await expect(page.getByTestId("way-token")).toBeVisible();
   await page.getByText("What the kitties can do with it").click();
-  await expect(page.locator("li", { hasText: /^Post/ }).first()).toContainText("asks you first");
+  await expect(page.locator("li", { hasText: /^Post/ }).first()).toBeVisible();
   await shot(page, "39-instagram");
 });
 

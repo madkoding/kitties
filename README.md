@@ -211,13 +211,15 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   it distils the corrections into lasting notes with its own brain. It writes notes itself
   (`@memory remember {...}` or the native `memory_*` tools) when you say "remember that...". The
   memory sits in its prompt, so it answers the way you like.
-- **Approvals.** Every connector action has a risk: reading is free, posting, replying, liking,
-  sending mail or opening a pull request is *ask*, refunding or deleting is *always ask*. A kitty
-  in `approvals: ask` holds an *ask* action and goes on with the rest; you answer in the
-  Approvals screen (*approve*, *approve and stop asking*, *reject with a reason*) and the action
-  runs or the reason reaches the kitty. Yeses in a row earn a kitty the right to do that kind of
-  action alone, sooner for a relaxed person (2) than a strict one (12), never for a level 5.
-  `approvals: auto` skips the questions.
+- **Action limits.** Nothing is limited by default: a kitty does on a connection what the account
+  allows, since that is the service's to limit (the scopes of the sign-in, the permissions of the
+  key). Tell a kitty "ask me before posting" or "never delete anything" and it adds the limit to
+  its limiter (`@limit set {"connector": "x", "action": "post", "mode": "ask"}`, or the native
+  `limit` tool); you see and change them in the kitty's *Action limits*, or set them there. An
+  *ask* action waits in the Approvals screen (*approve*, *approve and stop asking*, *reject with
+  a reason*), a *never* one is refused and the kitty says so. A kitty in `approvals: ask` asks
+  about everything that reaches other people until yeses in a row earn its trust, sooner for a
+  relaxed person (2) than a strict one (12).
 - **Notifications.** A kitty that needs you does not wait for you to open the app: through any
   messaging connector (an [ntfy](https://ntfy.sh) topic pushes to your phone) it tells you when it
   needs help, when an action waits for a yes, and optionally when a goal finishes, gets blocked or
@@ -245,7 +247,7 @@ In the YAML:
 ```yaml
 kitties:
   - name: mimi
-    approvals: ask               # ask (default) | auto
+    approvals: ask               # empty (default): acts as far as the account allows | ask
 notify:
   connector: phone               # any messaging connector; ntfy pushes to your phone
   on: [help, approval, goal_done, goal_blocked, recovered, budget]   # default: help, approval
@@ -367,9 +369,9 @@ connectors:
 | Git | GitHub (issues, comments, pull requests, files; a token or OAuth sign-in), GitLab, Gitea/Forgejo, motita (coding tasks) |
 | Productivity | Notion, Trello, Todoist, Linear, Jira, Zendesk (support tickets), Things and OmniFocus (on the Mac) |
 | Finance | Stripe (balance, invoices, payments, refunds) |
-| Home, news & weather | Home Assistant (states, acting on devices: asks first; its automations can post events), RSS and Atom feeds, the weather and forecast (Open-Meteo, no key) |
+| Home, news & weather | Home Assistant (states, acting on devices; its automations can post events), RSS and Atom feeds, the weather and forecast (Open-Meteo, no key) |
 | Music | Spotify (what is playing, play, pause, skip and queue with Premium, search, playlists), TIDAL (search and playlists: its public API has no remote playback) |
-| Office | Dropbox (list, search, read, save, share a link: asks first), Google Workspace (OAuth: Gmail inbox and send, Calendar, Drive, Sheets, Docs), Microsoft 365 (OAuth: Outlook inbox and send, Calendar, OneDrive), Airtable, Nextcloud (WebDAV files), Google Sheets (Apps Script) |
+| Office | Dropbox (list, search, read, save, share a link), Google Workspace (OAuth: Gmail inbox and send, Calendar, Drive, Sheets, Docs), Microsoft 365 (OAuth: Outlook inbox and send, Calendar, OneDrive), Airtable, Nextcloud (WebDAV files), Google Sheets (Apps Script) |
 | Drawing | Diagrams through Kroki (mermaid, plantuml, graphviz, d2…) rendered to SVG artifacts, Figma, Excalidraw scenes |
 | Generic | Webhook, any HTTP API with a bearer token, a program on the gateway's machine |
 
@@ -425,7 +427,7 @@ The apps a build signs in through come from `OAUTH_APPS` at build time
 (`make OAUTH_APPS="spotify=<client id>,facebook=<id>:<secret>" dist`; the release reads the
 `KITTIES_OAUTH_APPS` repository secret), or from `KITTIES_<SERVICE>_CLIENT_ID` and
 `KITTIES_<SERVICE>_CLIENT_SECRET` on the gateway. An event created with `attendees` invites them (Google, Outlook and CalDAV
-send the invitations), so it asks first. Notion Calendar has no public API: it shows the Google
+send the invitations), and counts as reaching people for a kitty in `approvals: ask`. Notion Calendar has no public API: it shows the Google
 or iCloud calendars, which the kitties reach directly.
 
 With **Settings → Notifications → Start it with my day**, the daily summary opens with what is
@@ -483,7 +485,7 @@ renewed before they expire.
 | `GET/PUT/DELETE /v1/skills/{name}` · `POST …/accept` | the skills library and its proposals |
 | `GET/PUT/DELETE /v1/artifacts/{name}`     | the artifacts library (raw file bodies) |
 | `GET /v1/approvals?status=pending` · `POST /v1/approvals/{id}/approve` `{always}` · `…/reject` `{reason}` | the actions held for a yes, and the answer |
-| `GET /v1/approvals/rules` · `DELETE /v1/approvals/rules/{id}` | what kitties may do alone, and taking it back |
+| `GET /v1/approvals/rules` · `POST /v1/approvals/rules` `{kitty, connector, action, mode}` · `DELETE /v1/approvals/rules/{id}` | the action limits (ask, never, auto; an empty action is all of the connection's), and taking one away |
 | `GET/POST /v1/kitties/{ref}/memory` · `DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes, its picture of you, and a distillation now |
 | `POST /v1/chats/{id}/turns/{index}/feedback` `{rating, note}` | a thumb under an answer |
 | `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` · `POST …/notify/digest` | where and when kitties tell you; a test; the daily summary now |
