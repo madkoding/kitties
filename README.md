@@ -391,8 +391,9 @@ signed in before contacts and tasks were added need to sign in once more for the
 ### Signing in instead of pasting keys
 
 Most connections sign in: **Sign in with …** opens the service, you allow Kitties, and the token
-is kept and renewed on the gateway. An API key or a token stays available under *Use an API key
-or a token instead*.
+is kept and renewed on the gateway. The form asks first **how do you connect?** (the sign-in, an
+API key or token, an app's keys, a webhook) and shows only that way's fields, each marked as
+required.
 
 | Signs in | How |
 | --- | --- |

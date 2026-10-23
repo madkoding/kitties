@@ -647,6 +647,41 @@ const OAUTH_LABEL: Record<string, string> = {
 // person's own as a third; these are their fields.
 const APP_FIELDS = ["client_id", "client_secret"];
 
+// SIGN_IN_FIELDS are what a sign-in needs besides the account, by kind.
+const SIGN_IN_FIELDS: Record<string, string[]> = { slack: ["channel"] };
+
+// wayLabel names a way to connect: the sign-in, or a group of key fields.
+function wayLabel(kind: string, way: string, service: string): string {
+  switch (way) {
+    case "signin":
+      return `Sign in with ${service}`;
+    case "oauth1":
+      return "App keys";
+    case "webhook":
+      return "Webhook";
+  }
+  if (kind === "slack") {
+    return "Bot token";
+  }
+  if (kind === "x") {
+    return "Access token";
+  }
+  return kind === "jira" || kind === "zendesk" ? "API token" : "API key or token";
+}
+
+// wayHint says in a line what a way to connect asks for.
+function wayHint(way: string, builtin: boolean): string {
+  switch (way) {
+    case "signin":
+      return builtin ? "Allow Kitties in your browser" : "Through an app of yours";
+    case "oauth1":
+      return "Four keys from your app's page; they do not expire";
+    case "webhook":
+      return "Posts to one channel, nothing to sign in";
+  }
+  return "Created in the service's settings";
+}
+
 // gatewayBase is the gateway's address as the browser reaches it: where a sign-in comes back.
 function gatewayBase(): string {
   const saved = savedConnection().url;
@@ -662,13 +697,15 @@ function FieldInput({
   saved,
   cleared,
   placeholder,
+  need,
   alternative,
   onInput,
   onClear,
 }: {
   f: ConnectorKind["fields"][number];
-  // alternative marks a field of one way among others (a key instead of the sign-in, the app
-  // of the sign-in): not "optional", but needed only for that way.
+  // need marks a field the way chosen to connect cannot go without; alternative one that is not
+  // "optional" either, but asked only when it applies (the secret of an app that has one).
+  need?: boolean;
   alternative?: boolean;
   value: string;
   saved: boolean;
@@ -684,7 +721,7 @@ function FieldInput({
       <div class="flex items-end gap-2">
         <label class={`${LABEL} flex-1`} for={id}>
           {f.label}
-          {f.required ? <Required /> : alternative ? "" : " (optional)"}
+          {f.required || need ? <Required /> : alternative ? "" : " (optional)"}
         </label>
         {/* A saved secret is never shown, so it is cleared on purpose rather than by emptying. */}
         {saved && f.secret && onClear && (
@@ -713,7 +750,7 @@ function FieldInput({
           class={`${INPUT} font-mono`}
           type="password"
           autocomplete="off"
-          aria-required={f.required && (!saved || cleared)}
+          aria-required={(f.required || need) && (!saved || cleared)}
           value={value}
           onInput={(e) => onInput((e.target as HTMLInputElement).value)}
           placeholder={
@@ -730,7 +767,7 @@ function FieldInput({
           class={INPUT}
           type="text"
           autocomplete="off"
-          aria-required={f.required}
+          aria-required={f.required || need}
           value={value}
           onInput={(e) => onInput((e.target as HTMLInputElement).value)}
           placeholder={placeholder || f.placeholder || ""}
@@ -799,35 +836,39 @@ function ConnectionForm({
   const [signedIn, setSignedIn] = useState(Boolean(view?.signed_in));
   const [account, setAccount] = useState(view?.account || "");
   const [waiting, setWaiting] = useState(false);
-  // Signing in needs no app of the person's when Kitties has one or the service needs none;
-  // that alone decides where the app's fields are, so typing in them never moves them.
+  // Signing in needs no app of the person's when Kitties has one or the service needs none.
   const builtin = signs && readyList.includes(def.oauth || "");
   const label = OAUTH_LABEL[def.oauth || ""] || def.label;
   // cleared are the saved secrets the next save forgets.
   const [cleared, setCleared] = useState<Set<string>>(new Set());
   const kept = (n: string) => (view?.secrets_set || []).includes(n) && !cleared.has(n);
   const filled = (n: string) => Boolean((values[n] || "").trim()) || kept(n);
+  const had = (n: string) => (view?.secrets_set || []).includes(n) || Boolean(view?.settings?.[n]);
   const missing = required.filter((f) => !filled(f.name));
+  // The ways in: the sign-in, and each group of key fields (a token, an app's keys, a webhook).
+  // A token that lasts only hours is not offered, unless the connection already has one.
+  const groups = [...new Set(keyFields.map((f) => f.key as string))]
+    .map((id) => ({ id, fields: keyFields.filter((f) => f.key === id) }))
+    .filter((g) => !g.fields.every((f) => f.lifetime) || g.fields.some((f) => had(f.name)));
+  const ways = [...(signs ? ["signin"] : []), ...groups.map((g) => g.id)];
+  const [way, setWay] = useState(
+    () =>
+      (signedIn && "signin") ||
+      groups.find((g) => g.fields.some((f) => had(f.name)))?.id ||
+      ways[0] ||
+      "",
+  );
+  const group = groups.find((g) => g.id === way);
+  // What the sign-in needs besides the account (Slack: the channel to post to).
+  const signInFields = def.fields.filter((f) => (SIGN_IN_FIELDS[def.name] || []).includes(f.name));
+  const signInMissing = signInFields.filter((f) => !filled(f.name));
   // The sign-in can start with Kitties' app, or the client id of the person's.
   const hasApp = builtin || filled("client_id");
-  // A service that signs in still needs an account to work: the sign-in, or one group of keys
-  // all filled in (a token, with its email when the service takes one; X's OAuth 1.0 keys), or
-  // Slack's webhook.
-  const keyGroups = [...new Set(keyFields.map((f) => f.key))];
-  const hasKey = keyGroups.some((g) =>
-    keyFields.filter((f) => f.key === g).every((f) => filled(f.name)),
-  );
-  const noAccount = signs && !signedIn && !hasKey && !(def.name === "slack" && filled("url"));
-  const oauth1 = keyGroups.includes("oauth1");
-  const keyWord = oauth1
-    ? "the OAuth 1.0 keys"
-    : def.name === "jira" || def.name === "zendesk"
-      ? "an API token"
-      : "a key";
-  const stillNeeded = [
-    ...missing.map((f) => f.label),
-    noAccount && (keyFields.length ? `sign in, or ${keyWord} instead` : "sign in"),
-  ].filter(Boolean) as string[];
+  const wayMissing =
+    way === "signin"
+      ? [...signInMissing.map((f) => f.label), ...(signedIn ? [] : ["sign in"])]
+      : (group?.fields || []).filter((f) => !filled(f.name)).map((f) => f.label);
+  const stillNeeded = [...missing.map((f) => f.label), ...wayMissing];
   const toggle = (n: string) => {
     setTouched(true);
     const next = new Set(who);
@@ -923,14 +964,15 @@ function ConnectionForm({
     }
     setBusy(false);
   };
-  const field = (f: ConnectorKind["fields"][number]) => (
+  const field = (f: ConnectorKind["fields"][number], need = false) => (
     <FieldInput
       key={f.name}
       f={f}
+      need={need}
       value={values[f.name] || ""}
       saved={(view?.secrets_set || []).includes(f.name)}
       cleared={cleared.has(f.name)}
-      alternative={Boolean(f.key) || appFields.includes(f)}
+      alternative={appFields.includes(f)}
       placeholder={f.name === "url" && def.name === "motita" ? motitaURL : undefined}
       onInput={(v) => set(f.name, v)}
       onClear={(on) => {
@@ -952,18 +994,46 @@ function ConnectionForm({
           <div class="text-xs text-[var(--t3)]">{def.help}</div>
         </div>
       </div>
-      {required.map(field)}
-      {signs && (
+      {required.map((f) => field(f))}
+      {ways.length > 1 && (
+        <>
+          <label class={LABEL}>
+            How do you connect?
+            <Required />
+          </label>
+          <div class="ways" role="radiogroup" aria-label="How do you connect?">
+            {ways.map((w) => (
+              <button
+                key={w}
+                type="button"
+                role="radio"
+                aria-checked={way === w}
+                class={`plain way ${way === w ? "on" : ""}`}
+                onClick={() => setWay(w)}
+                data-testid={`way-${w}`}
+              >
+                <div class="text-sm font-semibold">
+                  {wayLabel(def.name, w, label)}
+                  {w === "signin" && builtin && <span class="tag tag-green ml-2">easiest</span>}
+                </div>
+                <div class="text-xs text-[var(--t3)]">{wayHint(w, builtin)}</div>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+      {way === "signin" && (
         <div class="callout mt-3" data-testid="connection-sign-in">
+          {signInFields.map((f) => field(f, true))}
           {signedIn ? (
-            <div class="flex items-center gap-2 flex-wrap">
+            <div class="flex items-center gap-2 flex-wrap mt-1">
               <span class="flex-1 text-sm">
                 ✓ Signed in{account ? ` as ${account}` : ""}. The kitties use this account.
               </span>
               <button
                 type="button"
                 class="btn-ghost px-3 py-1.5 text-xs"
-                disabled={busy || missing.length > 0}
+                disabled={busy || missing.length > 0 || signInMissing.length > 0}
                 onClick={signIn}
               >
                 Sign in again
@@ -980,16 +1050,23 @@ function ConnectionForm({
             </div>
           ) : (
             <>
+              {!builtin && (
+                <>
+                  <p class={`text-xs text-[var(--t3)] ${signInFields.length ? "mt-3" : ""}`}>
+                    {label} needs an app of your own for now: add this callback address to it, then
+                    paste its client id (and its secret, if it has one).
+                  </p>
+                  <code class="command mt-2" data-testid="callback-address">
+                    {gatewayBase()}/v1/oauth/callback
+                  </code>
+                  {appFields.map((f) => field(f, f.name === "client_id"))}
+                </>
+              )}
               <button
                 type="button"
-                class="btn-accent px-4 py-2 text-sm flex items-center gap-2"
-                disabled={busy || waiting || missing.length > 0 || !hasApp}
-                title={
-                  missing.length
-                    ? `Fill in: ${missing.map((f) => f.label).join(", ")}`
-                    : !hasApp
-                      ? "Add the client id of your app first"
-                      : undefined
+                class="btn-accent px-4 py-2 text-sm flex items-center gap-2 mt-3"
+                disabled={
+                  busy || waiting || missing.length > 0 || signInMissing.length > 0 || !hasApp
                 }
                 onClick={signIn}
                 data-testid="connection-sign-in-button"
@@ -1001,47 +1078,33 @@ function ConnectionForm({
                 {waiting
                   ? "Finish signing in in your browser; this changes by itself."
                   : builtin
-                    ? "The easy way: sign in and allow Kitties. Nothing to copy."
-                    : `To sign in, ${label} needs an app of your own for now: add this callback address to it, then paste its client id and secret.`}
+                    ? "Sign in and allow Kitties. Nothing to copy."
+                    : "It opens your browser; this page follows by itself."}
               </p>
-              {!builtin && (
-                <>
-                  <code class="command mt-2" data-testid="callback-address">
-                    {gatewayBase()}/v1/oauth/callback
-                  </code>
-                  {appFields.map(field)}
-                </>
-              )}
             </>
           )}
+          {builtin && appFields.length > 0 && !signedIn && (
+            <More label="Use an app of your own">
+              <p class={HELP}>Its callback address:</p>
+              <code class="command mt-1">{gatewayBase()}/v1/oauth/callback</code>
+              {appFields.map((f) => field(f))}
+            </More>
+          )}
+        </div>
+      )}
+      {group && (
+        <div class="callout mt-3" data-testid={`way-panel-${group.id}`}>
+          {group.fields.map((f) => field(f, true))}
         </div>
       )}
       {view?.token_expires && Date.parse(view.token_expires) <= Date.now() && (
         <div class="callout callout-warn mt-3" data-testid="token-expired">
           The token pasted here has expired: it lasts a short time. Sign in, or{" "}
-          {oauth1 ? "use the OAuth 1.0 keys, which do not expire" : "paste a new one"}, and clear
-          the old token so it does not stand in the way.
+          {groups.some((g) => g.id === "oauth1")
+            ? "use the app keys, which do not expire"
+            : "paste a new one"}
+          , and clear the old token so it does not stand in the way.
         </div>
-      )}
-      {keyFields.length > 0 && (
-        <More
-          label={
-            oauth1
-              ? "Use your app's keys instead (no sign-in)"
-              : def.name === "jira" || def.name === "zendesk"
-                ? "Use an API token instead"
-                : "Use an API key or a token instead"
-          }
-        >
-          {keyFields.map(field)}
-        </More>
-      )}
-      {builtin && appFields.length > 0 && (
-        <More label="Use an app of your own">
-          <p class={HELP}>Its callback address:</p>
-          <code class="command mt-1">{gatewayBase()}/v1/oauth/callback</code>
-          {appFields.map(field)}
-        </More>
       )}
       {kitties.length > 0 && (
         <>
@@ -1075,7 +1138,7 @@ function ConnectionForm({
         </More>
       )}
       <More>
-        {optional.map(field)}
+        {optional.map((f) => field(f))}
         <label class={LABEL} for="connection-name">
           Name in Kitties
         </label>

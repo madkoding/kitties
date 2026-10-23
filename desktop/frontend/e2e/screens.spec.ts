@@ -166,14 +166,19 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByLabel("Search services").fill("github");
   await page.locator(".service-btn", { hasText: "GitHub" }).click();
-  await expect(page.getByText("Use an API key or a token instead")).toBeVisible();
-  // Without an account it cannot be saved, and the form says so under the button.
+  // One question first, how to connect: the sign-in or a token; only that way's fields show.
   const gh = page.getByTestId("connection-form");
+  await expect(gh.getByTestId("way-signin")).toHaveAttribute("aria-checked", "true");
+  await expect(gh.locator("#field-token")).toHaveCount(0);
+  // Without an account it cannot be saved, and the form says so under the button.
   await expect(gh.getByTestId("required-legend")).toBeVisible();
   const save = gh.getByRole("button", { name: "Save", exact: true });
   await expect(save).toBeDisabled();
-  await expect(gh.getByTestId("missing")).toContainText("sign in, or a key instead");
-  await page.getByText("Use an API key or a token instead").click();
+  await expect(gh.getByTestId("missing")).toHaveText("Still needed: sign in");
+  await gh.getByTestId("way-token").click();
+  await expect(gh.getByTestId("connection-sign-in")).toHaveCount(0);
+  // The token is required in that way, and marked so.
+  await expect(gh.locator("label[for=field-token] .req")).toBeVisible();
   await gh.locator("#field-token").fill("ghp_demo");
   await expect(save).toBeEnabled();
   await expect(gh.getByTestId("missing")).toHaveCount(0);
@@ -633,7 +638,7 @@ test("Facebook and Instagram: a Page or a professional account, and what waits f
   await expect(page.getByTestId("connection-sign-in-button")).toContainText(
     "Sign in with Facebook",
   );
-  await expect(page.getByText("Use an API key or a token instead")).toBeVisible();
+  await expect(page.getByTestId("way-token")).toBeVisible();
   await page.getByText("What the kitties can do with it").click();
   await expect(page.locator("li", { hasText: /^Post/ }).first()).toContainText("asks you first");
   await shot(page, "39-instagram");
@@ -789,7 +794,8 @@ test("a connection is removed after the page's own question, and a saved key can
   // account, which the form says, until the key is kept again.
   await open(page, "#connector/wiki");
   const form = page.getByTestId("connection-form");
-  await page.getByText("Use an API key or a token instead").click();
+  // The connection has a token: the form opens on that way.
+  await expect(form.getByTestId("way-token")).toHaveAttribute("aria-checked", "true");
   const save = form.getByRole("button", { name: "Save", exact: true });
   await expect(save).toBeEnabled();
   await form.getByTestId("clear-token").click();
@@ -798,7 +804,7 @@ test("a connection is removed after the page's own question, and a saved key can
     "removed when you save",
   );
   await expect(save).toBeDisabled();
-  await expect(form.getByTestId("missing")).toContainText("sign in, or a key instead");
+  await expect(form.getByTestId("missing")).toBeVisible();
   await form.getByTestId("clear-token").click();
   await expect(save).toBeEnabled();
 });
@@ -820,10 +826,14 @@ test("X: the callback address, the app's fields stay put, and the OAuth 1.0 keys
   await expect(form.getByTestId("callback-address")).toBeVisible();
   await expect(page.getByTestId("connection-sign-in-button")).toBeEnabled();
   await id.fill("");
-  // The keys that do not expire stand for the sign-in: all four, or Save waits.
-  await page.getByText("Use your app's keys instead (no sign-in)").click();
+  // Two ways: the sign-in or the app's keys; the two-hour token is not offered.
+  await expect(form.getByTestId("way-token")).toHaveCount(0);
   const save = form.getByRole("button", { name: "Save", exact: true });
-  await expect(form.getByTestId("missing")).toContainText("sign in, or the OAuth 1.0 keys instead");
+  await expect(form.getByTestId("missing")).toHaveText("Still needed: sign in");
+  // The keys that do not expire stand for the sign-in: all four, or Save waits.
+  await form.getByTestId("way-oauth1").click();
+  await expect(form.getByTestId("callback-address")).toHaveCount(0);
+  await expect(form.getByTestId("missing")).toContainText("Consumer Key");
   for (const [name, value] of [
     ["consumer_key", "ck"],
     ["consumer_secret", "cs"],
@@ -865,7 +875,7 @@ test("a connection says what it uses, is tested from the list and after saving, 
   await expect(kittyRow(page, "mimi")).toBeAttached();
   await expect(page.getByTestId("expiry-tw")).toHaveText("token expired");
   await open(page, "#connector/tw");
-  await expect(page.getByTestId("token-expired")).toContainText("use the OAuth 1.0 keys");
+  await expect(page.getByTestId("token-expired")).toContainText("use the app keys");
 
   // Saving runs the test by itself; its answer shows on the row.
   await page.route("**/v1/settings/connectors/tw/test", (route) =>

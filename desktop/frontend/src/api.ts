@@ -283,8 +283,11 @@ export interface ConnectorField {
   placeholder?: string;
   secret?: boolean;
   required?: boolean;
-  // key groups the fields that, all filled in, stand for the sign-in ("token", "oauth1").
+  // key groups the fields that, all filled in, stand for the sign-in ("token", "oauth1",
+  // "webhook").
   key?: string;
+  // lifetime is how long, in seconds, a token typed in the field lasts.
+  lifetime?: number;
 }
 
 export interface ConnectorKind {
