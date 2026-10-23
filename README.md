@@ -326,7 +326,8 @@ connectors:
   "y": 420}` lines; the runtime executes them (click, type, keys, scroll, drag, list and focus
   windows, open the browser, launch or install a program, run a command), takes a screenshot,
   shows it to the model and continues in the background until `@tool done`. Every step and
-  picture lands in the thread; the chat can be cancelled.
+  picture lands in the thread; the chat can be cancelled. How it works, with diagrams:
+  [docs/DESKTOP.md](docs/DESKTOP.md) ([en español](docs/DESKTOP.es.md)).
 - **Taking the desktop over**: the **Desktop** button of a chat (or *Live and take control* in a
   kitty's drawer) shows its display live, streamed as motion JPEG (a picture whenever it
   changes, about a quarter of a second behind). **Take control** sends your clicks, drags, wheel
