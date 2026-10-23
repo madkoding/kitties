@@ -53,9 +53,9 @@ type Fleet interface {
 	RemoveProvider(name string) error
 	SetDefaultProvider(name string) error
 	TestProvider(ctx context.Context, name string) (string, error)
-	// SetConnector saves a connector; signingIn lets one that signs in be saved without an account
-	// yet, as the step before its sign-in.
-	SetConnector(name string, c config.Connector, signingIn bool) error
+	// SetConnector saves a connector; the change may clear saved secrets or the sign-in, or let
+	// one that signs in be saved without an account yet, as the step before its sign-in.
+	SetConnector(name string, c config.Connector, change orchestrator.ConnectorChange) error
 	RemoveConnector(name string) error
 	OAuth() *oauth.Manager
 	// Accounts are the AI sign-ins (ChatGPT, Copilot, Google, Claude) of the profiles.
@@ -797,12 +797,18 @@ func (s *Server) handleDefaultProvider(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetConnector(w http.ResponseWriter, r *http.Request) {
-	var c config.Connector
-	if err := decode(r, &c); err != nil {
+	// clear names the saved secrets to forget ("sign_in" forgets the account), since an empty
+	// secret keeps the saved one.
+	var body struct {
+		config.Connector
+		Clear []string `json:"clear"`
+	}
+	if err := decode(r, &body); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.fleet.SetConnector(r.PathValue("name"), c, r.URL.Query().Get("sign_in") == "1"); err != nil {
+	change := orchestrator.ConnectorChange{SigningIn: r.URL.Query().Get("sign_in") == "1", Clear: body.Clear}
+	if err := s.fleet.SetConnector(r.PathValue("name"), body.Connector, change); err != nil {
 		fail(w, codeFor(err), err)
 		return
 	}

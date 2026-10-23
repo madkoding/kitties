@@ -307,25 +307,27 @@ func (m *Manager) Exchange(ctx context.Context, state, code string) (string, err
 	if err != nil {
 		return "", err
 	}
+	learned := map[string]string{}
 	if f.provider.Finish != nil {
-		var learned map[string]string
-		if creds, learned, err = f.provider.Finish(ctx, m.httpDo, app, creds); err != nil {
+		var more map[string]string
+		if creds, more, err = f.provider.Finish(ctx, m.httpDo, app, creds); err != nil {
 			return "", err
 		}
-		if f.provider.SelfClient {
-			if learned == nil {
-				learned = map[string]string{}
-			}
-			learned["client_id"] = f.clientID
+		for k, v := range more {
+			learned[k] = v
 		}
-		if len(learned) > 0 {
-			if err := m.store.SaveOAuthSettings(f.connector, learned); err != nil {
-				return "", err
-			}
-		}
-	} else if f.provider.SelfClient {
+	}
+	if f.provider.SelfClient {
 		// The gateway's address is the app: the refresh needs it again.
-		if err := m.store.SaveOAuthSettings(f.connector, map[string]string{"client_id": f.clientID}); err != nil {
+		learned["client_id"] = f.clientID
+	}
+	// The account signed in replaces a token typed before: a typed token would win over it,
+	// and an old one fails.
+	if strings.TrimSpace(app.Settings["token"]) != "" {
+		learned["token"] = ""
+	}
+	if len(learned) > 0 {
+		if err := m.store.SaveOAuthSettings(f.connector, learned); err != nil {
 			return "", err
 		}
 	}

@@ -137,6 +137,23 @@ func TestStartExchangeToken(t *testing.T) {
 	}
 }
 
+func TestSignInDropsTheTypedToken(t *testing.T) {
+	// A token typed before would win over the account: the sign-in forgets it.
+	st := &memStore{provider: "github", id: "cid", settings: map[string]string{"token": "old", "repo": "a/b"}}
+	m := manager(st, &answer{code: 200, body: `{"access_token":"at","expires_in":3600}`})
+	link, err := m.Start("gh", "http://127.0.0.1:7488/v1/oauth/callback")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(link)
+	if _, err := m.Exchange(context.Background(), u.Query().Get("state"), "code"); err != nil {
+		t.Fatal(err)
+	}
+	if v, ok := st.settings["token"]; !ok || v != "" || st.settings["repo"] != "a/b" {
+		t.Errorf("settings after the sign-in = %v", st.settings)
+	}
+}
+
 func TestFailures(t *testing.T) {
 	st := &memStore{provider: "microsoft", id: "cid"}
 	m := manager(st)

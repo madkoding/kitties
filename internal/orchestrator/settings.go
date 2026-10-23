@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"slices"
 	"strings"
 
 	"github.com/madkoding/kitties/internal/config"
@@ -427,20 +428,36 @@ func (m *Manager) TestProvider(ctx context.Context, name string) (string, error)
 	return strings.TrimSpace(reply.Content), nil
 }
 
-// SetConnector adds or replaces a connector and saves the overlay. An empty token keeps the one it had.
-// A connector that signs in needs an account (the sign-in, or a key instead) unless signingIn says
-// the sign-in comes next.
-func (m *Manager) SetConnector(name string, c config.Connector, signingIn bool) error {
+// ConnectorChange says how a save treats what the connector had.
+type ConnectorChange struct {
+	// SigningIn lets a connector that signs in be saved without an account yet: the sign-in
+	// comes next.
+	SigningIn bool
+	// Clear names the secrets to forget: an empty secret otherwise keeps the saved one, since
+	// the page never sees it. SignOut is the name that forgets the account of a sign-in.
+	Clear []string
+}
+
+// SignOut, in ConnectorChange.Clear, forgets the account a connector signed in with.
+const SignOut = "sign_in"
+
+// SetConnector adds or replaces a connector and saves the overlay. An empty secret keeps the one
+// it had, unless the change clears it. A connector that signs in needs an account (the sign-in,
+// or a key instead) unless the sign-in comes next.
+func (m *Manager) SetConnector(name string, c config.Connector, change ConnectorChange) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if old, ok := m.cfg.Connectors[name]; ok && old.Kind == c.Kind {
 		// An empty secret keeps the one the connector had.
-		if c.Token == "" {
+		if c.Token == "" && !slices.Contains(change.Clear, "token") {
 			c.Token = old.Token
 		}
 		kind, _ := connector.LookupKind(c.Kind)
 		oldS := old.ConnectorSettings()
 		keep := func(key string) {
+			if slices.Contains(change.Clear, key) {
+				return
+			}
 			if strings.TrimSpace(c.Settings[key]) == "" && oldS[key] != "" {
 				if c.Settings == nil {
 					c.Settings = map[string]string{}
@@ -453,15 +470,19 @@ func (m *Manager) SetConnector(name string, c config.Connector, signingIn bool) 
 				keep(f.Name)
 			}
 		}
-		// A sign-in survives an edit of the other fields.
-		for _, key := range []string{oauth.KeyAccess, oauth.KeyRefresh, oauth.KeyExpiry, oauth.KeyAccount} {
-			keep(key)
+		// A sign-in survives an edit of the other fields, unless it is the sign-out.
+		if !slices.Contains(change.Clear, SignOut) {
+			for _, key := range []string{oauth.KeyAccess, oauth.KeyRefresh, oauth.KeyExpiry, oauth.KeyAccount} {
+				keep(key)
+			}
 		}
 	}
 	if err := config.ValidateConnector(name, c, m.cfg.Motita.URL); err != nil {
 		return err
 	}
-	if err := needsAccount(name, c, signingIn); err != nil {
+	// A sign-out may leave it without an account: the person asked for it, and the page then
+	// offers the sign-in again.
+	if err := needsAccount(name, c, change.SigningIn || slices.Contains(change.Clear, SignOut)); err != nil {
 		return err
 	}
 	if m.overlay.Connectors == nil {

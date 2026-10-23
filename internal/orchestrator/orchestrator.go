@@ -170,7 +170,15 @@ func (m *Manager) SaveOAuthSettings(name string, learned map[string]string) erro
 	for k, v := range c.Settings {
 		settings[k] = v
 	}
+	// An empty value forgets the setting: a sign-in drops the token typed instead of it.
 	for k, v := range learned {
+		if v == "" {
+			delete(settings, k)
+			if k == "token" {
+				c.Token = ""
+			}
+			continue
+		}
 		settings[k] = v
 	}
 	c.Settings = settings

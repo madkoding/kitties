@@ -34,8 +34,9 @@ type fakeFleet struct {
 	fail    error
 	calls   []string
 	notify  notify.Config
-	// signingIn is what the last SetConnector was told.
+	// signingIn and cleared are what the last SetConnector was told.
 	signingIn bool
+	cleared   []string
 	// accounts keeps the AI sign-ins in a folder of the test's own.
 	accounts *llmauth.Manager
 }
@@ -160,8 +161,8 @@ func (f *fakeFleet) TestProvider(_ context.Context, name string) (string, error)
 	}
 	return "hello", nil
 }
-func (f *fakeFleet) SetConnector(name string, c config.Connector, signingIn bool) error {
-	f.signingIn = signingIn
+func (f *fakeFleet) SetConnector(name string, c config.Connector, change orchestrator.ConnectorChange) error {
+	f.signingIn, f.cleared = change.SigningIn, change.Clear
 	return config.ValidateConnector(name, c, "")
 }
 func (f *fakeFleet) RemoveConnector(name string) error {
@@ -579,6 +580,9 @@ func TestSettingsRoutes(t *testing.T) {
 	}
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/connectors/c?sign_in=1", "tok", map[string]any{"kind": "webhook", "url": "http://x"}); code != 200 || !f.signingIn {
 		t.Errorf("a save before a sign-in says so: %d %v", code, f.signingIn)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/connectors/c", "tok", map[string]any{"kind": "webhook", "url": "http://x", "clear": []string{"token", "sign_in"}}); code != 200 || len(f.cleared) != 2 || f.cleared[1] != "sign_in" {
+		t.Errorf("what to clear reaches the fleet: %d %v", code, f.cleared)
 	}
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/connectors/c", "tok", "{"); code != 400 {
 		t.Error("connector bad json")
