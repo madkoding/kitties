@@ -311,8 +311,8 @@ connectors:
   wallpaper (`docker/kitty-desktop/wallpaper/`) and the icons on it (Work, Chromium, Files,
   Terminal) and is the file manager, all in [Haiku's icons](https://github.com/darealshinji/haiku-icons)
   (MIT, Haiku, Inc.; the Haiku logo and leaf, trademarks, are left out). It is dark throughout:
-  Chromium (its face, and the pages that offer a dark look), GTK programs, LibreOffice and the
-  terminal. Each kitty can wear
+  Chromium (its face, and the pages that offer a dark look), GTK programs, LibreOffice (its page
+  too, on screen: a printed or exported document keeps its own colours) and the terminal. Each kitty can wear
   another IceWM theme (the light Ceres, IceWM's own, Windows 95…), picked in its drawer. Nothing is published on the host; the orchestrator reaches a kitty
   with `docker exec`, and `kitty-shot` returns a PNG of its display. `kitty-install` adds
   programs from Debian (sudo only runs the installer, by package name) and remembers them in the
