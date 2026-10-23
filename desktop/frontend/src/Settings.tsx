@@ -850,25 +850,15 @@ function ConnectionForm({
     }
     setBusy(false);
     setWaiting(true);
-    const until = Date.now() + 3 * 60_000;
-    const look = async () => {
-      const s = await api.settings().catch(() => null);
-      const c = s?.connectors.find((x) => x.name === finalName);
-      if (s && c?.signed_in) {
-        setWaiting(false);
+    followSignIn(finalName, (s, c) => {
+      setWaiting(false);
+      if (s && c) {
         setSignedIn(true);
         setAccount(c.account || "");
         onChange();
         onSaved(s, finalName);
-        return;
       }
-      if (Date.now() < until) {
-        setTimeout(look, 2500);
-      } else {
-        setWaiting(false);
-      }
-    };
-    setTimeout(look, 2500);
+    });
   };
   const field = (f: ConnectorKind["fields"][number]) => (
     <FieldInput
@@ -1035,6 +1025,25 @@ function ConnectionForm({
   );
 }
 
+// followSignIn asks the gateway now and then, for three minutes, whether a connection's sign-in
+// in the browser finished; done gets the settings and the connection once it has, or nothing
+// when it gave up.
+function followSignIn(name: string, done: (s?: SettingsView, c?: ConnectorView) => void) {
+  const until = Date.now() + 3 * 60_000;
+  const look = async () => {
+    const s = await api.settings().catch(() => null);
+    const c = s?.connectors.find((x) => x.name === name);
+    if (s && c?.signed_in) {
+      done(s, c);
+    } else if (Date.now() < until) {
+      setTimeout(look, 2500);
+    } else {
+      done();
+    }
+  };
+  setTimeout(look, 2500);
+}
+
 function ConnectionRow({
   c,
   onEdit,
@@ -1045,7 +1054,24 @@ function ConnectionRow({
   onChanged: (s: SettingsView) => void;
 }) {
   const [err, setErr] = useState("");
+  const [waiting, setWaiting] = useState(false);
   const users = c.used_by || [];
+  // finish takes up a sign-in that never ended (or never began) right from the list; a service
+  // that needs an app of the person's first opens its form, which says how.
+  const finish = async () => {
+    setErr("");
+    try {
+      openExternal(await oauthStart(c.name));
+    } catch {
+      onEdit();
+      return;
+    }
+    setWaiting(true);
+    followSignIn(c.name, (s) => {
+      setWaiting(false);
+      s && onChanged(s);
+    });
+  };
   return (
     <div class="item" data-testid={`connection-${c.name}`}>
       <span class="service-badge" style={`--brand:${logoColor(c.kind)}`}>
@@ -1067,6 +1093,16 @@ function ConnectionRow({
         <Err text={err} />
       </div>
       <div class="flex gap-1 flex-none">
+        {c.needs_sign_in && c.oauth && (
+          <button
+            class="btn-outline px-2 py-1 text-xs"
+            disabled={waiting}
+            onClick={finish}
+            data-testid={`finish-sign-in-${c.name}`}
+          >
+            {waiting ? "Waiting for the browser…" : "Sign in"}
+          </button>
+        )}
         <button class="btn-ghost px-2 py-1 text-xs" onClick={onEdit} aria-label={`Edit ${c.name}`}>
           Edit
         </button>

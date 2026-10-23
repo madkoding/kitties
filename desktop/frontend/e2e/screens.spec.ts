@@ -110,6 +110,14 @@ test("settings: models, connections and the gateway", async ({ page }) => {
   await expect(page.getByTestId("connection-team-slack")).toContainText("Slack");
   await expect(page.getByText("sign in needed")).toBeVisible();
   await shot(page, "09-settings-connectors");
+  // A sign-in that never ended is taken up from the list, without opening the form.
+  await page.route("**/v1/oauth/workspace/start", (route) =>
+    route.fulfill({ json: { url: "about:blank", redirect: "" } }),
+  );
+  await expect(page.getByTestId("finish-sign-in-team-slack")).toHaveCount(0);
+  await page.getByTestId("finish-sign-in-workspace").click();
+  await expect(page.getByTestId("finish-sign-in-workspace")).toHaveText("Waiting for the browser…");
+  await expect(page.getByTestId("connection-form")).toHaveCount(0);
   await open(page, "#new-connect");
   await shot(page, "10-gateway-settings");
 });
@@ -647,7 +655,8 @@ test("creating a kitty closes the dialog at once, and a desktop that cannot star
   // The brain picker is drawn like the other fields, not as the system's button.
   const brain = page.locator("#kitty-brain");
   await expect(brain).toHaveCSS("appearance", "none");
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  // Enter in the name creates it, like the button.
+  await page.locator("#kitty-name").press("Enter");
   await expect(page.locator("#kitty-name")).toHaveCount(0);
   await expect(kittyRow(page, "nube")).toBeAttached();
 

@@ -268,6 +268,13 @@ export function NewKittyModal({
         class={INPUT}
         aria-required="true"
         aria-invalid={clash}
+        onKeyDown={(e) => {
+          // Enter creates it, like the button, once there is a name no other kitty has.
+          if (e.key === "Enter" && name && !clash && !busy) {
+            e.preventDefault();
+            create();
+          }
+        }}
         aria-describedby={clash ? "kitty-name-taken" : undefined}
         value={raw}
         onInput={(e) => setRaw((e.target as HTMLInputElement).value)}
