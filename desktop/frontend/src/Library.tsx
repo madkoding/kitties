@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import type { ArtifactInfo, Skill } from "./api";
 import { api, artifactText, shotURL } from "./api";
+import { ask } from "./Confirm";
 import { when } from "./format";
 import { IconPlus, IconTrash, IconX } from "./icons";
 import { Missing, Required } from "./Required";
@@ -73,7 +74,7 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
                       </button>
                     )}
                     {!s.builtin && (
-                      <button class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]" aria-label={`Delete ${s.name}`} onClick={() => confirm(`Delete the skill ${s.name}?`) && act(api.deleteSkill(s.name))}>
+                      <button class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]" aria-label={`Delete ${s.name}`} onClick={async () => (await ask(`Delete the skill ${s.name}?`, "Delete")) && act(api.deleteSkill(s.name))}>
                         <IconTrash size={12} />
                       </button>
                     )}
@@ -145,7 +146,7 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
                     <a class="btn-ghost px-2 py-1 text-xs" href={shotURL(`/v1/artifacts/${encodeURIComponent(a.name)}`)} download={a.name} target="_blank">
                       download
                     </a>
-                    <button class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]" aria-label={`Delete ${a.name}`} onClick={() => confirm(`Delete ${a.name}?`) && act(api.deleteArtifact(a.name))}>
+                    <button class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]" aria-label={`Delete ${a.name}`} onClick={async () => (await ask(`Delete ${a.name}?`, "Delete")) && act(api.deleteArtifact(a.name))}>
                       <IconTrash size={12} />
                     </button>
                   </div>

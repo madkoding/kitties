@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
 import { api, errText, inAndroid, inWails, saveConnection, savedConnection } from "./api";
+import { ask } from "./Confirm";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
 import { ProviderLogo } from "./ConnectorLogo";
 import { Shot } from "./Conversation";
@@ -681,8 +682,8 @@ export function KittyDrawer({
             )}
             <button
               class="btn-danger px-3 py-2 text-sm flex items-center gap-2"
-              onClick={() =>
-                confirm(`Remove ${kitty.name} and its container?`) &&
+              onClick={async () =>
+                (await ask(`Remove ${kitty.name} and its container?`)) &&
                 act(() => api.removeKitty(kitty.id).then(onClose))
               }
             >

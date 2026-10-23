@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo, Session } from "./api";
 import { ApiError, api, cookieLogin, errText, inWails, watchChat } from "./api";
+import { ConfirmHost, ask } from "./Confirm";
 import Login from "./Login";
 import Welcome from "./Welcome";
 import Composer from "./Composer";
@@ -283,7 +284,7 @@ export default function App() {
   };
 
   const deleteChat = async () => {
-    if (session && confirm(`Delete the chat "${session.title}"?`)) {
+    if (session && (await ask(`Delete the chat "${session.title}"?`, "Delete"))) {
       await api.deleteChat(session.id).catch((e) => setError(e.message));
       location.hash = "";
       refresh();
@@ -299,6 +300,7 @@ export default function App() {
 
   return (
     <div class="app-bg h-full flex overflow-hidden">
+      <ConfirmHost />
       <Sidebar
         chats={chats}
         kitties={kitties}

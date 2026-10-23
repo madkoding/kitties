@@ -404,6 +404,17 @@ that does not expire), the Instagram account linked to it, your LinkedIn author 
 id, your Jira site. Telegram, WhatsApp, email, Stripe, Discord and the webhooks keep their keys:
 those services have no sign-in for this.
 
+**X** takes the sign-in (its OAuth 2.0 Client ID and Secret, with this gateway's callback under
+*User authentication settings*), or, without a sign-in, the four **OAuth 1.0 keys** of *Keys and
+tokens*: Consumer Key and Secret, Access Token and Secret (Read and write). Those do not expire,
+and the account's id comes from the access token. The OAuth 2.0 access token the portal shows
+lasts two hours, and the app-only Bearer Token cannot post.
+
+A saved key is never shown again: **Clear** next to it forgets it on the next save, and **Sign
+out** forgets an account. Signing in replaces a token typed before (it would win over the
+account). Through the API, `PUT /v1/settings/connectors/{name}` takes `"clear": ["token",
+"sign_in"]` for the same.
+
 The apps a build signs in through come from `OAUTH_APPS` at build time
 (`make OAUTH_APPS="spotify=<client id>,facebook=<id>:<secret>" dist`; the release reads the
 `KITTIES_OAUTH_APPS` repository secret), or from `KITTIES_<SERVICE>_CLIENT_ID` and

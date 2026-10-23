@@ -269,6 +269,8 @@ export interface ConnectorField {
   placeholder?: string;
   secret?: boolean;
   required?: boolean;
+  // key groups the fields that, all filled in, stand for the sign-in ("token", "oauth1").
+  key?: string;
 }
 
 export interface ConnectorKind {

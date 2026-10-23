@@ -30,6 +30,7 @@ import { IconPlus, IconTrash, IconX } from "./icons";
 import { ConnectModal } from "./Modals";
 import { Missing, Required, RequiredLegend } from "./Required";
 import { AccountSignIn } from "./SignIn";
+import { ask } from "./Confirm";
 
 // SETTINGS, FOR PEOPLE.
 //
@@ -473,7 +474,7 @@ function ModelRow({
     const what = users.length
       ? `${people(users)} will switch to another model.`
       : "No kitty uses it.";
-    if (!confirm(`Remove ${label} (${p.model})? ${what}`)) {
+    if (!(await ask(`Remove ${label} (${p.model})? ${what}`))) {
       return;
     }
     setErr("");
@@ -643,7 +644,6 @@ const OAUTH_LABEL: Record<string, string> = {
 
 // A connection that signs in keeps a key or a token as the other way in, and an app of the
 // person's own as a third; these are their fields.
-const KEY_FIELDS = ["token", "email"];
 const APP_FIELDS = ["client_id", "client_secret"];
 
 // gatewayBase is the gateway's address as the browser reaches it: where a sign-in comes back.
@@ -659,22 +659,44 @@ function FieldInput({
   f,
   value,
   saved,
+  cleared,
   placeholder,
+  alternative,
   onInput,
+  onClear,
 }: {
   f: ConnectorKind["fields"][number];
+  // alternative marks a field of one way among others (a key instead of the sign-in, the app
+  // of the sign-in): not "optional", but needed only for that way.
+  alternative?: boolean;
   value: string;
   saved: boolean;
+  // cleared marks a saved secret the save will forget; onClear toggles it.
+  cleared?: boolean;
   placeholder?: string;
   onInput: (v: string) => void;
+  onClear?: (on: boolean) => void;
 }) {
   const id = "field-" + f.name;
   return (
     <div>
-      <label class={LABEL} for={id}>
-        {f.label}
-        {f.required ? <Required /> : " (optional)"}
-      </label>
+      <div class="flex items-end gap-2">
+        <label class={`${LABEL} flex-1`} for={id}>
+          {f.label}
+          {f.required ? <Required /> : alternative ? "" : " (optional)"}
+        </label>
+        {/* A saved secret is never shown, so it is cleared on purpose rather than by emptying. */}
+        {saved && f.secret && onClear && (
+          <button
+            type="button"
+            class="plain text-xs text-[var(--t3)] hover:text-[var(--t1)] mb-1"
+            onClick={() => onClear(!cleared)}
+            data-testid={`clear-${f.name}`}
+          >
+            {cleared ? "Keep the saved one" : "Clear"}
+          </button>
+        )}
+      </div>
       {f.name === "headers" ? (
         <textarea
           id={id}
@@ -690,10 +712,16 @@ function FieldInput({
           class={`${INPUT} font-mono`}
           type="password"
           autocomplete="off"
-          aria-required={f.required && !saved}
+          aria-required={f.required && (!saved || cleared)}
           value={value}
           onInput={(e) => onInput((e.target as HTMLInputElement).value)}
-          placeholder={saved ? "saved: leave empty to keep it" : placeholder || f.placeholder || ""}
+          placeholder={
+            saved && cleared
+              ? "removed when you save"
+              : saved
+                ? "saved: leave empty to keep it"
+                : placeholder || f.placeholder || ""
+          }
         />
       ) : (
         <input
@@ -761,7 +789,7 @@ function ConnectionForm({
   const set = (k: string, v: string) => setValues({ ...values, [k]: v });
   const finalName = view?.name || name.trim() || uniqueName(def.name, taken);
   const signs = Boolean(def.oauth);
-  const keyFields = signs ? def.fields.filter((f) => KEY_FIELDS.includes(f.name)) : [];
+  const keyFields = signs ? def.fields.filter((f) => f.key) : [];
   const appFields = signs ? def.fields.filter((f) => APP_FIELDS.includes(f.name)) : [];
   const required = def.fields.filter((f) => f.required);
   const optional = def.fields.filter(
@@ -770,24 +798,31 @@ function ConnectionForm({
   const [signedIn, setSignedIn] = useState(Boolean(view?.signed_in));
   const [account, setAccount] = useState(view?.account || "");
   const [waiting, setWaiting] = useState(false);
-  // Signing in needs no app of the person's when Kitties has one or the service needs none.
-  const ready =
-    signs &&
-    (readyList.includes(def.oauth || "") ||
-      Boolean((values.client_id || "").trim()) ||
-      Boolean(view?.settings?.client_id));
+  // Signing in needs no app of the person's when Kitties has one or the service needs none;
+  // that alone decides where the app's fields are, so typing in them never moves them.
+  const builtin = signs && readyList.includes(def.oauth || "");
   const label = OAUTH_LABEL[def.oauth || ""] || def.label;
-  const filled = (n: string) =>
-    Boolean((values[n] || "").trim()) || (view?.secrets_set || []).includes(n);
+  // cleared are the saved secrets the next save forgets.
+  const [cleared, setCleared] = useState<Set<string>>(new Set());
+  const kept = (n: string) => (view?.secrets_set || []).includes(n) && !cleared.has(n);
+  const filled = (n: string) => Boolean((values[n] || "").trim()) || kept(n);
   const missing = required.filter((f) => !filled(f.name));
-  // A service that signs in still needs an account to work: the sign-in, or the key typed
-  // instead (with its email when the service takes one), or Slack's webhook.
-  const noAccount =
-    signs &&
-    !signedIn &&
-    !(keyFields.length > 0 && keyFields.every((f) => filled(f.name))) &&
-    !(def.name === "slack" && filled("url"));
-  const keyWord = def.name === "jira" || def.name === "zendesk" ? "an API token" : "a key";
+  // The sign-in can start with Kitties' app, or the client id of the person's.
+  const hasApp = builtin || filled("client_id");
+  // A service that signs in still needs an account to work: the sign-in, or one group of keys
+  // all filled in (a token, with its email when the service takes one; X's OAuth 1.0 keys), or
+  // Slack's webhook.
+  const keyGroups = [...new Set(keyFields.map((f) => f.key))];
+  const hasKey = keyGroups.some((g) =>
+    keyFields.filter((f) => f.key === g).every((f) => filled(f.name)),
+  );
+  const noAccount = signs && !signedIn && !hasKey && !(def.name === "slack" && filled("url"));
+  const oauth1 = keyGroups.includes("oauth1");
+  const keyWord = oauth1
+    ? "the OAuth 1.0 keys"
+    : def.name === "jira" || def.name === "zendesk"
+      ? "an API token"
+      : "a key";
   const stillNeeded = [
     ...missing.map((f) => f.label),
     noAccount && (keyFields.length ? `sign in, or ${keyWord} instead` : "sign in"),
@@ -798,18 +833,23 @@ function ConnectionForm({
     next.has(n) ? next.delete(n) : next.add(n);
     setWho(next);
   };
+  // typed are the values filled in, trimmed; an empty one is not sent.
+  const typed = () =>
+    Object.fromEntries(
+      Object.entries(values)
+        .map(([k, v]) => [k, v.trim()])
+        .filter(([, v]) => v),
+    );
   // persist saves the connection and who may use it; it reports whether it went through.
   const persist = async (signingIn = false): Promise<boolean> => {
     setBusy(true);
     setErr("");
     try {
-      const settings: Record<string, string> = {};
-      for (const [k, v] of Object.entries(values)) {
-        if (v.trim()) {
-          settings[k] = v.trim();
-        }
-      }
-      await api.setConnector(finalName, { kind: def.name, description, settings }, signingIn);
+      await api.setConnector(
+        finalName,
+        { kind: def.name, description, settings: typed(), clear: [...cleared] },
+        signingIn,
+      );
       // Who may use it: each kitty's own list of connections changes (a kitty that may use all
       // of them has it already).
       const all = await api.connectorNames();
@@ -860,14 +900,44 @@ function ConnectionForm({
       }
     });
   };
+  // signOut forgets the account; the connection stays, and asks for a sign-in or a key.
+  const signOut = async () => {
+    if (!(await ask(`Sign out of ${label}? The kitties stop using this account.`, "Sign out"))) {
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      await api.setConnector(finalName, {
+        kind: def.name,
+        description,
+        settings: typed(),
+        clear: [...cleared, "sign_in"],
+      });
+      setSignedIn(false);
+      setAccount("");
+      onChange();
+    } catch (e) {
+      setErr(errText(e));
+    }
+    setBusy(false);
+  };
   const field = (f: ConnectorKind["fields"][number]) => (
     <FieldInput
       key={f.name}
       f={f}
       value={values[f.name] || ""}
       saved={(view?.secrets_set || []).includes(f.name)}
+      cleared={cleared.has(f.name)}
+      alternative={Boolean(f.key) || appFields.includes(f)}
       placeholder={f.name === "url" && def.name === "motita" ? motitaURL : undefined}
       onInput={(v) => set(f.name, v)}
+      onClear={(on) => {
+        const next = new Set(cleared);
+        on ? next.add(f.name) : next.delete(f.name);
+        setCleared(next);
+        on && set(f.name, "");
+      }}
     />
   );
   return (
@@ -897,17 +967,26 @@ function ConnectionForm({
               >
                 Sign in again
               </button>
+              <button
+                type="button"
+                class="btn-ghost px-3 py-1.5 text-xs"
+                disabled={busy}
+                onClick={signOut}
+                data-testid="connection-sign-out"
+              >
+                Sign out
+              </button>
             </div>
           ) : (
             <>
               <button
                 type="button"
                 class="btn-accent px-4 py-2 text-sm flex items-center gap-2"
-                disabled={busy || waiting || missing.length > 0 || !ready}
+                disabled={busy || waiting || missing.length > 0 || !hasApp}
                 title={
                   missing.length
                     ? `Fill in: ${missing.map((f) => f.label).join(", ")}`
-                    : !ready
+                    : !hasApp
                       ? "Add the client id of your app first"
                       : undefined
                 }
@@ -920,13 +999,15 @@ function ConnectionForm({
               <p class="text-xs text-[var(--t3)] mt-2">
                 {waiting
                   ? "Finish signing in in your browser; this changes by itself."
-                  : ready
+                  : builtin
                     ? "The easy way: sign in and allow Kitties. Nothing to copy."
-                    : `To sign in, ${label} needs an app of your own for now: create one with the redirect address below and paste its client id.`}
+                    : `To sign in, ${label} needs an app of your own for now: add this callback address to it, then paste its client id and secret.`}
               </p>
-              {!ready && (
+              {!builtin && (
                 <>
-                  <code class="command mt-2">{gatewayBase()}/v1/oauth/callback</code>
+                  <code class="command mt-2" data-testid="callback-address">
+                    {gatewayBase()}/v1/oauth/callback
+                  </code>
                   {appFields.map(field)}
                 </>
               )}
@@ -937,16 +1018,22 @@ function ConnectionForm({
       {keyFields.length > 0 && (
         <More
           label={
-            def.name === "jira" || def.name === "zendesk"
-              ? "Use an API token instead"
-              : "Use an API key or a token instead"
+            oauth1
+              ? "Use your app's keys instead (no sign-in)"
+              : def.name === "jira" || def.name === "zendesk"
+                ? "Use an API token instead"
+                : "Use an API key or a token instead"
           }
         >
           {keyFields.map(field)}
         </More>
       )}
-      {ready && appFields.length > 0 && (
-        <More label="Use an app of your own">{appFields.map(field)}</More>
+      {builtin && appFields.length > 0 && (
+        <More label="Use an app of your own">
+          <p class={HELP}>Its callback address:</p>
+          <code class="command mt-1">{gatewayBase()}/v1/oauth/callback</code>
+          {appFields.map(field)}
+        </More>
       )}
       {kitties.length > 0 && (
         <>
@@ -1109,8 +1196,8 @@ function ConnectionRow({
         <button
           class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]"
           aria-label={`Remove ${c.name}`}
-          onClick={() =>
-            confirm(`Remove the connection ${c.label || c.name}? The kitties lose it too.`) &&
+          onClick={async () =>
+            (await ask(`Remove the connection ${c.label || c.name}? The kitties lose it too.`)) &&
             api
               .removeConnector(c.name)
               .then(onChanged)

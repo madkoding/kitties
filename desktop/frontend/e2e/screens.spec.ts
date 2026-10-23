@@ -760,3 +760,76 @@ test("Mastodon and Home Assistant sign in without an app: the address is all the
     "Sign in with Home Assistant",
   );
 });
+
+test("a connection is removed after the page's own question, and a saved key can be cleared", async ({
+  page,
+}) => {
+  await page.request.put(`${GATEWAY}/v1/settings/connectors/scratch`, {
+    headers: { Authorization: "Bearer e2e-token" },
+    data: { kind: "webhook", url: "http://127.0.0.1:1/x" },
+  });
+  await open(page, "#new-connectors");
+  const row = page.getByTestId("connection-scratch");
+  await expect(row).toBeVisible();
+  // The question is the page's own (a webview may not show the browser's): Cancel keeps it.
+  await page.getByRole("button", { name: "Remove scratch" }).click();
+  const dialog = page.getByTestId("confirm");
+  await expect(dialog).toContainText("Remove the connection");
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(row).toBeVisible();
+  await page.getByRole("button", { name: "Remove scratch" }).click();
+  await dialog.getByRole("button", { name: "Remove" }).click();
+  await expect(row).toHaveCount(0);
+
+  // A saved key is never shown; clearing it on purpose leaves the connection without an
+  // account, which the form says, until the key is kept again.
+  await open(page, "#connector/wiki");
+  const form = page.getByTestId("connection-form");
+  await page.getByText("Use an API key or a token instead").click();
+  const save = form.getByRole("button", { name: "Save", exact: true });
+  await expect(save).toBeEnabled();
+  await form.getByTestId("clear-token").click();
+  await expect(form.locator("#field-token")).toHaveAttribute(
+    "placeholder",
+    "removed when you save",
+  );
+  await expect(save).toBeDisabled();
+  await expect(form.getByTestId("missing")).toContainText("sign in, or a key instead");
+  await form.getByTestId("clear-token").click();
+  await expect(save).toBeEnabled();
+});
+
+test("X: the callback address, the app's fields stay put, and the OAuth 1.0 keys", async ({
+  page,
+}) => {
+  await open(page, "#new-connectors-add");
+  await page.getByLabel("Search services").fill("x (twitter)");
+  await page.locator(".service-btn", { hasText: "X (Twitter)" }).click();
+  const form = page.getByTestId("connection-form");
+  await expect(form.getByTestId("callback-address")).toContainText("/v1/oauth/callback");
+  // Typing the client id does not move the field away: the keys go on in the same box.
+  const id = form.locator("#field-client_id");
+  await id.click();
+  await id.pressSequentially("abc");
+  await expect(id).toHaveValue("abc");
+  await expect(id).toBeFocused();
+  await expect(form.getByTestId("callback-address")).toBeVisible();
+  await expect(page.getByTestId("connection-sign-in-button")).toBeEnabled();
+  await id.fill("");
+  // The keys that do not expire stand for the sign-in: all four, or Save waits.
+  await page.getByText("Use your app's keys instead (no sign-in)").click();
+  const save = form.getByRole("button", { name: "Save", exact: true });
+  await expect(form.getByTestId("missing")).toContainText("sign in, or the OAuth 1.0 keys instead");
+  for (const [name, value] of [
+    ["consumer_key", "ck"],
+    ["consumer_secret", "cs"],
+    ["access_token", "42-at"],
+  ]) {
+    await form.locator(`#field-${name}`).fill(value);
+  }
+  await expect(save).toBeDisabled();
+  await form.locator("#field-access_secret").fill("as");
+  await expect(save).toBeEnabled();
+  await expect(form.getByText("OAuth 1.0 Keys → Consumer Key")).toBeVisible();
+  await shot(page, "43-x-keys");
+});
