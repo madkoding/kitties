@@ -388,9 +388,26 @@ are no longer served over CalDAV: on a Mac, the **Mac Calendar, Reminders & Cont
 reaches them through the Reminders app (macOS asks once to allow it). Google and Microsoft accounts
 signed in before contacts and tasks were added need to sign in once more for them.
 
-Spotify, TIDAL and Dropbox sign in with an app of your own (developer.spotify.com,
-developer.tidal.com, dropbox.com/developers) whose redirect address is this gateway's
-`/v1/oauth/callback`. An event created with `attendees` invites them (Google, Outlook and CalDAV
+### Signing in instead of pasting keys
+
+Most connections sign in: **Sign in with …** opens the service, you allow Kitties, and the token
+is kept and renewed on the gateway. An API key or a token stays available under *Use an API key
+or a token instead*.
+
+| Signs in | How |
+| --- | --- |
+| Mastodon, Home Assistant | nothing to set up: Kitties registers itself on the instance, or uses the gateway's own address as its app |
+| Google, Microsoft, Slack, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
+
+Signing in also fills what you would otherwise look up: your Facebook Page and its token (one
+that does not expire), the Instagram account linked to it, your LinkedIn author URN, your X user
+id, your Jira site. Telegram, WhatsApp, email, Stripe, Discord and the webhooks keep their keys:
+those services have no sign-in for this.
+
+The apps a build signs in through come from `OAUTH_APPS` at build time
+(`make OAUTH_APPS="spotify=<client id>,facebook=<id>:<secret>" dist`; the release reads the
+`KITTIES_OAUTH_APPS` repository secret), or from `KITTIES_<SERVICE>_CLIENT_ID` and
+`KITTIES_<SERVICE>_CLIENT_SECRET` on the gateway. An event created with `attendees` invites them (Google, Outlook and CalDAV
 send the invitations), so it asks first. Notion Calendar has no public API: it shows the Google
 or iCloud calendars, which the kitties reach directly.
 

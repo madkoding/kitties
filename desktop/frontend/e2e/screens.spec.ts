@@ -144,13 +144,17 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   await expect(page.locator(".service-btn", { hasText: "Slack" })).toHaveCount(0);
   await page.locator(".service-btn", { hasText: "Google Workspace" }).click();
   await expect(page.getByText("Gmail, Calendar, Drive, Sheets and Docs").first()).toBeVisible();
-  await expect(page.getByText("OAuth client id")).toBeVisible();
-  await expect(page.getByText("Save, then sign in with the button")).toBeVisible();
-  // GitHub takes a token or a sign-in.
+  // Without an app built into Kitties, signing in asks for the person's own, and says where.
+  const signInBox = page.getByTestId("connection-sign-in");
+  await expect(signInBox).toContainText("needs an app of your own");
+  await expect(signInBox).toContainText("/v1/oauth/callback");
+  await expect(signInBox.getByText("Client id of your own app")).toBeVisible();
+  await expect(page.getByTestId("connection-sign-in-button")).toBeDisabled();
+  // GitHub takes a sign-in, or a token instead.
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByLabel("Search services").fill("github");
   await page.locator(".service-btn", { hasText: "GitHub" }).click();
-  await expect(page.getByText("Paste a token below, or save and then sign in")).toBeVisible();
+  await expect(page.getByText("Use an API key or a token instead")).toBeVisible();
   // The saved Google connector shows the sign-in button, which asks the gateway for a consent URL.
   await open(page, "#connector/workspace");
   const signIn = page.getByRole("button", { name: "Sign in with Google" });
@@ -588,7 +592,11 @@ test("Facebook and Instagram: a Page or a professional account, and what waits f
     await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
   }
   await page.locator(".service-btn", { hasText: "Instagram" }).click();
-  await expect(page.getByText("Instagram account id")).toBeVisible();
+  // Signing in with Facebook finds the Page and the Instagram account: nothing to look up.
+  await expect(page.getByTestId("connection-sign-in-button")).toContainText(
+    "Sign in with Facebook",
+  );
+  await expect(page.getByText("Use an API key or a token instead")).toBeVisible();
   await page.getByText("What the kitties can do with it").click();
   await expect(page.locator("li", { hasText: /^Post/ }).first()).toContainText("asks you first");
   await shot(page, "39-instagram");
@@ -680,4 +688,27 @@ test("music, files and the Mac's task managers; the summary can start with the d
   await page.reload();
   await page.getByRole("tab", { name: "Notifications" }).click();
   await expect(page.getByTestId("notify-day")).toBeChecked();
+});
+
+test("Mastodon and Home Assistant sign in without an app: the address is all they need", async ({
+  page,
+}) => {
+  await open(page, "#new-connectors-add");
+  await page.getByLabel("Search services").fill("mastodon");
+  await page.locator(".service-btn", { hasText: "Mastodon" }).click();
+  const button = page.getByTestId("connection-sign-in-button");
+  await expect(button).toContainText("Sign in with Mastodon");
+  // The instance first; then nothing to copy.
+  await expect(button).toBeDisabled();
+  await page.getByLabel("Instance").fill("https://mastodon.social");
+  await expect(button).toBeEnabled();
+  await expect(page.getByTestId("connection-sign-in")).toContainText("Nothing to copy");
+  await expect(page.getByText("Client id of your own app")).toBeHidden();
+  await shot(page, "42-sign-in");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("home assistant");
+  await page.locator(".service-btn", { hasText: "Home Assistant" }).click();
+  await expect(page.getByTestId("connection-sign-in-button")).toContainText(
+    "Sign in with Home Assistant",
+  );
 });

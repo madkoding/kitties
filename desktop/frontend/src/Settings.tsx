@@ -9,7 +9,7 @@ import type {
   ProviderView,
   SettingsView,
 } from "./api";
-import { api, errText, inWails, oauthStart, openExternal } from "./api";
+import { api, errText, inWails, oauthStart, openExternal, savedConnection } from "./api";
 import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,
@@ -610,43 +610,36 @@ const OAUTH_LABEL: Record<string, string> = {
   microsoft: "Microsoft",
   slack: "Slack",
   github: "GitHub",
+  gitlab: "GitLab",
   spotify: "Spotify",
   tidal: "TIDAL",
   dropbox: "Dropbox",
+  notion: "Notion",
+  todoist: "Todoist",
+  linear: "Linear",
+  airtable: "Airtable",
+  figma: "Figma",
+  atlassian: "Atlassian",
+  zendesk: "Zendesk",
+  x: "X",
+  linkedin: "LinkedIn",
+  facebook: "Facebook",
+  mastodon: "Mastodon",
+  "home-assistant": "Home Assistant",
 };
 
-// OAuthButton signs a connector in: it asks the gateway for the consent URL and opens it.
-function OAuthButton({ view, onDone }: { view: ConnectorView; onDone: () => void }) {
-  const [msg, setMsg] = useState("");
-  const go = async () => {
-    try {
-      const url = await oauthStart(view.name);
-      openExternal(url);
-      setMsg("A browser window opened: sign in there, then come back.");
-      const id = setInterval(onDone, 3000);
-      setTimeout(() => clearInterval(id), 120000);
-    } catch (e) {
-      setMsg(errText(e));
-    }
-  };
-  return (
-    <div class="mt-3 flex items-center gap-3 flex-wrap">
-      <button
-        type="button"
-        class={`${view.signed_in ? "btn-ghost" : "btn-accent"} px-4 py-2 text-sm flex items-center gap-2`}
-        onClick={go}
-      >
-        <ConnectorLogo kind={view.kind} size={16} mono />
-        {view.signed_in
-          ? "Sign in again"
-          : `Sign in with ${OAUTH_LABEL[view.oauth || ""] || view.oauth}`}
-      </button>
-      {view.signed_in && (
-        <span class="tag tag-green">signed in{view.account ? " · " + view.account : ""}</span>
-      )}
-      {msg && <span class="text-xs text-[var(--t3)]">{msg}</span>}
-    </div>
-  );
+// A connection that signs in keeps a key or a token as the other way in, and an app of the
+// person's own as a third; these are their fields.
+const KEY_FIELDS = ["token", "email"];
+const APP_FIELDS = ["client_id", "client_secret"];
+
+// gatewayBase is the gateway's address as the browser reaches it: where a sign-in comes back.
+function gatewayBase(): string {
+  const saved = savedConnection().url;
+  if (saved) {
+    return saved.replace(/\/$/, "");
+  }
+  return inWails() ? "http://127.0.0.1:7488" : location.origin;
 }
 
 function FieldInput({
@@ -713,6 +706,7 @@ function ConnectionForm({
   kitties,
   taken,
   motitaURL,
+  ready: readyList = [],
   onSaved,
   onClose,
   onChange,
@@ -723,6 +717,8 @@ function ConnectionForm({
   kitties: Kitty[];
   taken: string[];
   motitaURL?: string;
+  // ready are the services Kitties signs in to without an app of the person's own.
+  ready?: string[];
   onSaved: (s: SettingsView, name: string) => void;
   onClose: () => void;
   onChange: () => void;
@@ -748,8 +744,23 @@ function ConnectionForm({
   const [busy, setBusy] = useState(false);
   const set = (k: string, v: string) => setValues({ ...values, [k]: v });
   const finalName = view?.name || name.trim() || uniqueName(def.name, taken);
+  const signs = Boolean(def.oauth);
+  const keyFields = signs ? def.fields.filter((f) => KEY_FIELDS.includes(f.name)) : [];
+  const appFields = signs ? def.fields.filter((f) => APP_FIELDS.includes(f.name)) : [];
   const required = def.fields.filter((f) => f.required);
-  const optional = def.fields.filter((f) => !f.required);
+  const optional = def.fields.filter(
+    (f) => !f.required && !keyFields.includes(f) && !appFields.includes(f),
+  );
+  const [signedIn, setSignedIn] = useState(Boolean(view?.signed_in));
+  const [account, setAccount] = useState(view?.account || "");
+  const [waiting, setWaiting] = useState(false);
+  // Signing in needs no app of the person's when Kitties has one or the service needs none.
+  const ready =
+    signs &&
+    (readyList.includes(def.oauth || "") ||
+      Boolean((values.client_id || "").trim()) ||
+      Boolean(view?.settings?.client_id));
+  const label = OAUTH_LABEL[def.oauth || ""] || def.label;
   const missing = required.filter(
     (f) => !(values[f.name] || "").trim() && !(view?.secrets_set || []).includes(f.name),
   );
@@ -759,7 +770,8 @@ function ConnectionForm({
     next.has(n) ? next.delete(n) : next.add(n);
     setWho(next);
   };
-  const save = async () => {
+  // persist saves the connection and who may use it; it reports whether it went through.
+  const persist = async (): Promise<boolean> => {
     setBusy(true);
     setErr("");
     try {
@@ -783,11 +795,52 @@ function ConnectionForm({
         }
       }
       onChange();
-      onSaved(await api.settings(), finalName);
+      return true;
     } catch (e) {
       setErr(errText(e));
       setBusy(false);
+      return false;
     }
+  };
+  const save = async () => {
+    if (await persist()) {
+      onSaved(await api.settings(), finalName);
+    }
+  };
+  // signIn saves what is filled in, opens the service's sign-in, and follows it until the
+  // gateway has the account.
+  const signIn = async () => {
+    if (!(await persist())) {
+      return;
+    }
+    try {
+      openExternal(await oauthStart(finalName));
+    } catch (e) {
+      setErr(errText(e));
+      setBusy(false);
+      return;
+    }
+    setBusy(false);
+    setWaiting(true);
+    const until = Date.now() + 3 * 60_000;
+    const look = async () => {
+      const s = await api.settings().catch(() => null);
+      const c = s?.connectors.find((x) => x.name === finalName);
+      if (s && c?.signed_in) {
+        setWaiting(false);
+        setSignedIn(true);
+        setAccount(c.account || "");
+        onChange();
+        onSaved(s, finalName);
+        return;
+      }
+      if (Date.now() < until) {
+        setTimeout(look, 2500);
+      } else {
+        setWaiting(false);
+      }
+    };
+    setTimeout(look, 2500);
   };
   const field = (f: ConnectorKind["fields"][number]) => (
     <FieldInput
@@ -810,15 +863,73 @@ function ConnectionForm({
           <div class="text-xs text-[var(--t3)]">{def.help}</div>
         </div>
       </div>
-      {def.oauth && view && <OAuthButton view={view} onDone={onChange} />}
-      {def.oauth && !view && (
-        <p class="text-xs text-[var(--t3)] mt-3">
-          {def.fields.some((f) => f.name === "token")
-            ? "Paste a token below, or save and then sign in with the button that appears."
-            : "Save, then sign in with the button that appears here."}
-        </p>
-      )}
       {required.map(field)}
+      {signs && (
+        <div class="callout mt-3" data-testid="connection-sign-in">
+          {signedIn ? (
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="flex-1 text-sm">
+                ✓ Signed in{account ? ` as ${account}` : ""}. The kitties use this account.
+              </span>
+              <button
+                type="button"
+                class="btn-ghost px-3 py-1.5 text-xs"
+                disabled={busy || missing.length > 0}
+                onClick={signIn}
+              >
+                Sign in again
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                class="btn-accent px-4 py-2 text-sm flex items-center gap-2"
+                disabled={busy || waiting || missing.length > 0 || !ready}
+                title={
+                  missing.length
+                    ? `Fill in: ${missing.map((f) => f.label).join(", ")}`
+                    : !ready
+                      ? "Add the client id of your app first"
+                      : undefined
+                }
+                onClick={signIn}
+                data-testid="connection-sign-in-button"
+              >
+                <ConnectorLogo kind={def.name} size={16} mono />
+                {waiting ? "Waiting for the browser…" : `Sign in with ${label}`}
+              </button>
+              <p class="text-xs text-[var(--t3)] mt-2">
+                {waiting
+                  ? "Finish signing in in your browser; this changes by itself."
+                  : ready
+                    ? "The easy way: sign in and allow Kitties. Nothing to copy."
+                    : `To sign in, ${label} needs an app of your own for now: create one with the redirect address below and paste its client id.`}
+              </p>
+              {!ready && (
+                <>
+                  <code class="command mt-2">{gatewayBase()}/v1/oauth/callback</code>
+                  {appFields.map(field)}
+                </>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {keyFields.length > 0 && (
+        <More
+          label={
+            def.name === "jira" || def.name === "zendesk"
+              ? "Use an API token instead"
+              : "Use an API key or a token instead"
+          }
+        >
+          {keyFields.map(field)}
+        </More>
+      )}
+      {ready && appFields.length > 0 && (
+        <More label="Use an app of your own">{appFields.map(field)}</More>
+      )}
       {kitties.length > 0 && (
         <>
           <label class={LABEL}>Which kitties may use it</label>
@@ -1306,6 +1417,7 @@ export default function SettingsModal({
                 kitties={kitties}
                 taken={connNames}
                 motitaURL={view.motita_url}
+                ready={view.oauth_ready || []}
                 onSaved={(s, name) => {
                   setView(s);
                   setAdding(false);

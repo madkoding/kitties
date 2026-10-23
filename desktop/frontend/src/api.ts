@@ -295,6 +295,8 @@ export interface SettingsView {
   notify: { connector: string; on: string[]; digest?: string; day?: boolean };
   notify_events: string[];
   accounts: Account[];
+  // oauth_ready are the services a connection signs in to without an app of the person's own.
+  oauth_ready?: string[];
 }
 
 export interface Skill {
@@ -431,6 +433,7 @@ function fixSettings<T>(path: string, data: T): T {
     "connector_categories",
     "notify_events",
     "accounts",
+    "oauth_ready",
   ]) {
     if (!Array.isArray(v[k])) {
       v[k] = [];
