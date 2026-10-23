@@ -1081,3 +1081,49 @@ test("every dialog closes: its X, Escape or the backdrop, and the address forget
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("zoom")).toHaveCount(0);
 });
+
+test("a kitty's desktop opens live from the chat, and the person can take control and give it back", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("open-desktop").first().click();
+  const live = page.getByTestId("live-desktop");
+  await expect(live).toBeVisible();
+  await expect(live.getByTestId("live-frame")).toBeVisible();
+  await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  await shot(page, "48-live-desktop");
+  // Taking control: the clicks, the keys and the text reach the display through the gateway.
+  const held = page.waitForResponse((r) => r.url().includes("/control") && r.status() === 200);
+  await live.getByTestId("take-control").click();
+  await held;
+  await expect(live.getByTestId("live-state")).toContainText("You have the controls");
+  await expect(live.getByTestId("quick-keys")).toBeVisible();
+  const inputs: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/input")) {
+      inputs.push(JSON.parse(r.postData() || "{}").action);
+    }
+  });
+  const clicked = page.waitForResponse((r) => r.url().includes("/input") && r.status() === 200);
+  await live.getByTestId("live-frame").click({ position: { x: 40, y: 30 } });
+  await clicked;
+  await page.keyboard.type("hola");
+  await page.keyboard.press("Enter");
+  await live.getByRole("button", { name: "Alt+Tab" }).click();
+  await expect.poll(() => inputs).toEqual(["click", "type", "key", "key"]);
+  // Escape is a key of the display while the person has it, not a way out.
+  await page.keyboard.press("Escape");
+  await expect(live).toBeVisible();
+  await shot(page, "49-live-desktop-control");
+  await live.getByTestId("give-back").click();
+  await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  await page.keyboard.press("Escape");
+  await expect(live).toHaveCount(0);
+  // From the kitty's drawer too, and its X brings the drawer back.
+  await kittyRow(page, "tom").click();
+  await page.locator("[data-modal]").getByTestId("open-desktop").click();
+  await expect(live).toBeVisible();
+  await live.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(live).toHaveCount(0);
+  await expect(page.locator("[data-modal]")).toHaveCount(1);
+});

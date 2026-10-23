@@ -347,6 +347,28 @@ const dict: Dictionary = {
     "O serviço demorou demais para responder: tente de novo daqui a pouco.",
   "The service could not be reached: check the internet connection, or that it is running.":
     "Não deu para acessar o serviço: confira a conexão com a internet, ou se ele está rodando.",
+  "The desktop did not answer": "A área de trabalho não respondeu",
+  "{name}'s desktop": "Área de trabalho de {name}",
+  "You have the controls: {name} waits": "Você está no controle: {name} espera",
+  "Watching live": "Assistindo ao vivo",
+  "Give it back to {name}": "Devolver para {name}",
+  "Take control": "Assumir o controle",
+  "Connecting to the desktop…": "Conectando à área de trabalho…",
+  "Click, drag, scroll and type on the picture; Ctrl+V pastes your own text.":
+    "Clique, arraste, role e digite sobre a imagem; Ctrl+V cola o seu próprio texto.",
+  "Take control to click and type in it yourself, for what {name} cannot do alone (a password, a captcha). {name} waits meanwhile.":
+    "Assuma o controle para clicar e digitar você mesmo, no que {name} não consegue fazer sozinho (uma senha, um captcha). Enquanto isso, {name} espera.",
+  "See {name}'s desktop live, and take control of it":
+    "Ver a área de trabalho de {name} ao vivo e assumir o controle",
+  "Live and take control": "Ao vivo e assumir o controle",
+  "Dragged on the screen": "Arrastou na tela",
+  "Looked at the open windows": "Olhou as janelas abertas",
+  "Brought “{title}” to the front": "Trouxe “{title}” para a frente",
+  "Brought a window to the front": "Trouxe uma janela para a frente",
+  "Opened a program": "Abriu um programa",
+  "Installed {apps}": "Instalou {apps}",
+  "Installed programs": "Instalou programas",
+  "Waited while you used the desktop": "Esperou enquanto você usava a área de trabalho",
 };
 
 export default dict;

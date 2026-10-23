@@ -990,6 +990,31 @@ func (s *Service) startTask(id string, index int, k *kitty.Kitty, p *pendingTask
 }
 
 // runner is the fleet as a desktop runner, when it is one.
+// holder knows whether the person has taken a kitty's display over (the orchestrator does).
+type holder interface{ Held(id string) bool }
+
+// heldEvery is how often a kitty waiting for its display looks whether it is back.
+var heldEvery = time.Second
+
+// waitWhileHeld waits, before an action on the display, while the person uses it: the two never
+// fight over the mouse. The wait shows in the chat as one step.
+func (s *Service) waitWhileHeld(ctx context.Context, id string, index int, kittyID string) {
+	h, ok := s.fleet.(holder)
+	if !ok || !h.Held(kittyID) {
+		return
+	}
+	s.appendStep(id, index, Step{At: s.now(), Action: "held", Result: "the person is using the desktop: waiting until they give it back"})
+	t := time.NewTicker(heldEvery)
+	defer t.Stop()
+	for h.Held(kittyID) {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
 func (s *Service) runner() desktop.Runner {
 	r, _ := s.fleet.(desktop.Runner)
 	return r
@@ -1102,6 +1127,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 				outs = append(outs, outcome{action: a, text: "finished"})
 				break
 			}
+			s.waitWhileHeld(ctx, id, index, k.ID)
 			out, err := desktop.Run(ctx, runner, k.ID, da)
 			step := Step{At: s.now(), Action: a.name, Args: a.args, Result: out}
 			o := outcome{action: a, text: out}

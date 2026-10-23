@@ -73,6 +73,22 @@ export function stepSentence(action: string, args?: Record<string, unknown>): st
       return t("Pressed {key}", { key: keyName(String(a.keys ?? a.key ?? "")) });
     case "scroll":
       return a.direction === "up" ? t("Scrolled up") : t("Scrolled down");
+    case "drag":
+      return t("Dragged on the screen");
+    case "windows":
+      return t("Looked at the open windows");
+    case "focus":
+      return a.title
+        ? t("Brought “{title}” to the front", { title: String(a.title) })
+        : t("Brought a window to the front");
+    case "launch":
+      return t("Opened a program");
+    case "install": {
+      const list = Array.isArray(a.packages) ? a.packages.join(", ") : String(a.packages ?? "");
+      return list ? t("Installed {apps}", { apps: list }) : t("Installed programs");
+    }
+    case "held":
+      return t("Waited while you used the desktop");
     case "wait":
       return t("Waited a moment");
     case "screenshot":

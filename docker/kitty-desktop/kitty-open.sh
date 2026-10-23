@@ -13,7 +13,13 @@ chmod 700 "$KITTY_PROFILE" 2>/dev/null || true
 # longer exists; Chromium would refuse to start on it. Only remove it when nothing runs.
 if ! pgrep -x chromium >/dev/null 2>&1; then
     rm -f "$KITTY_PROFILE/SingletonLock" "$KITTY_PROFILE/SingletonSocket" "$KITTY_PROFILE/SingletonCookie"
+    # Nor does it ask to restore the pages of a container that was stopped under it.
+    if [ -f "$KITTY_PROFILE/Default/Preferences" ]; then
+        sed -i 's/"exit_type":"Crashed"/"exit_type":"Normal"/' "$KITTY_PROFILE/Default/Preferences" 2>/dev/null || true
+    fi
 fi
-nohup chromium --no-sandbox --disable-gpu --disable-dev-shm-usage --no-first-run \
+# --test-type keeps Chromium from covering the page with a bar about --no-sandbox, which a
+# container needs (it has no user namespaces of its own).
+nohup chromium --no-sandbox --test-type --hide-crash-restore-bubble --disable-gpu --disable-dev-shm-usage --no-first-run \
     --window-size=1280,800 --user-data-dir="$KITTY_PROFILE" "$@" >/tmp/chromium.log 2>&1 &
 echo "opened $* on $DISPLAY (profile $KITTY_PROFILE)"

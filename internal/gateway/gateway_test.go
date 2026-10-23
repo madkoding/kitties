@@ -20,6 +20,7 @@ import (
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/llmauth"
 	"github.com/madkoding/kitties/internal/notify"
@@ -124,6 +125,20 @@ func (f *fakeFleet) Exec(_ context.Context, ref string, argv ...string) (string,
 		return "partial", f.fail
 	}
 	return strings.Join(argv, " "), nil
+}
+func (f *fakeFleet) Hold(ref string, on bool) (bool, error) {
+	if _, err := f.Get(ref); err != nil {
+		return false, err
+	}
+	f.calls = append(f.calls, fmt.Sprintf("hold %v", on))
+	return on, nil
+}
+func (f *fakeFleet) Input(_ context.Context, ref string, a desktop.Action) error {
+	if _, err := f.Get(ref); err != nil {
+		return err
+	}
+	f.calls = append(f.calls, "input "+a.Name)
+	return nil
 }
 func (f *fakeFleet) Screenshot(_ context.Context, ref string) ([]byte, error) {
 	if _, err := f.Get(ref); err != nil {
@@ -438,6 +453,34 @@ func TestKittyRoutes(t *testing.T) {
 	}
 	if code, _, _ := call(t, srv, "GET", "/v1/kitties/zz/screenshot", "tok", nil); code != 404 {
 		t.Error("screenshot unknown")
+	}
+	// The person takes the display over, clicks and types in it, and gives it back.
+	if code, m, _ := call(t, srv, "POST", "/v1/kitties/ana/control", "tok", map[string]any{"hold": true}); code != 200 || m["held"] != true {
+		t.Errorf("control = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/ana/input", "tok", map[string]any{"action": "click", "args": map[string]any{"x": 3, "y": 4}}); code != 200 {
+		t.Error("input click")
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/ana/input", "tok", map[string]any{"action": "key"}); code != 400 {
+		t.Error("input without keys")
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/ana/input", "tok", map[string]any{"action": "run", "args": map[string]any{"argv": []string{"rm"}}}); code != 400 {
+		t.Error("the person's input runs no programs")
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/zz/input", "tok", map[string]any{"action": "type", "args": map[string]any{"text": "a"}}); code != 404 {
+		t.Error("input unknown")
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/ana/input", "tok", "nope"); code != 400 {
+		t.Error("input bad body")
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/kitties/ana/control", "tok", map[string]any{"hold": false}); code != 200 || m["held"] != false {
+		t.Errorf("give back = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/zz/control", "tok", map[string]any{"hold": true}); code != 404 {
+		t.Error("control unknown")
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/ana/control", "tok", "nope"); code != 400 {
+		t.Error("control bad body")
 	}
 	if code, _, _ := call(t, srv, "POST", "/v1/scale/team", "tok", map[string]any{"replicas": 2}); code != 200 {
 		t.Error("scale")

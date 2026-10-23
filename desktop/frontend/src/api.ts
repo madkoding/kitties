@@ -603,6 +603,12 @@ export const api = {
     },
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
   startKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/start`),
+  // controlKitty takes a kitty's display over (hold) or gives it back; inputKitty is a click,
+  // keys or text of the person on it.
+  controlKitty: (ref: string, hold: boolean) =>
+    request<{ held: boolean }>("POST", `/v1/kitties/${ref}/control`, { hold }).then((r) => r.held),
+  inputKitty: (ref: string, action: string, args: Record<string, unknown>) =>
+    request("POST", `/v1/kitties/${ref}/input`, { action, args }),
   stopKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/stop`),
   removeKitty: (ref: string) => request("DELETE", `/v1/kitties/${ref}`),
   // connectorNames are the connections a kitty may be given.

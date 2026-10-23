@@ -22,6 +22,7 @@ import (
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/llmauth"
 	"github.com/madkoding/kitties/internal/notify"
@@ -45,6 +46,10 @@ type Fleet interface {
 	Scale(ctx context.Context, name string, n int) error
 	Exec(ctx context.Context, ref string, argv ...string) (string, error)
 	Screenshot(ctx context.Context, ref string) ([]byte, error)
+	// Hold gives the person a kitty's display, or gives it back; Input is a click, keys or text
+	// of the person on it.
+	Hold(ref string, on bool) (bool, error)
+	Input(ctx context.Context, ref string, a desktop.Action) error
 	Providers() *provider.Registry
 	Connectors() *connector.Registry
 	HasContainers() (bool, error)
@@ -185,6 +190,8 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/kitties/{ref}/stop", api(s.handleStopKitty))
 	s.mux.Handle("POST /v1/kitties/{ref}/exec", api(s.handleExec))
 	s.mux.Handle("GET /v1/kitties/{ref}/screenshot", api(s.handleScreenshot))
+	s.mux.Handle("POST /v1/kitties/{ref}/control", api(s.handleControl))
+	s.mux.Handle("POST /v1/kitties/{ref}/input", api(s.handleInput))
 	s.mux.Handle("POST /v1/scale/{name}", api(s.handleScale))
 	s.mux.Handle("GET /v1/chats", api(s.handleListChats))
 	s.mux.Handle("POST /v1/chats", api(s.handleCreateChat))
@@ -652,6 +659,49 @@ func (s *Server) handleScreenshot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "no-store")
 	_, _ = w.Write(png)
+}
+
+// handleControl takes a kitty's display over ({"hold": true}) or gives it back.
+func (s *Server) handleControl(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Hold bool `json:"hold"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	held, err := s.fleet.Hold(r.PathValue("ref"), body.Hold)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"held": held})
+}
+
+// handleInput is the person's mouse and keys on a kitty's display: {"action": "click", "args":
+// {"x": 10, "y": 20}}.
+func (s *Server) handleInput(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Action string         `json:"action"`
+		Args   map[string]any `json:"args"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if body.Args == nil {
+		body.Args = map[string]any{}
+	}
+	a := desktop.Action{Name: body.Action, Args: body.Args}
+	if _, err := desktop.Person(a); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.fleet.Input(r.Context(), r.PathValue("ref"), a); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) handleScale(w http.ResponseWriter, r *http.Request) {

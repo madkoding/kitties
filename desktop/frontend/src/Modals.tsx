@@ -5,7 +5,8 @@ import { ask } from "./Confirm";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
 import { ProviderLogo } from "./ConnectorLogo";
 import { Shot } from "./Conversation";
-import { IconCamera, IconPlay, IconStop, IconTrash, IconX } from "./icons";
+import { IconCamera, IconMonitor, IconPlay, IconStop, IconTrash, IconX } from "./icons";
+import LiveDesktop from "./LiveDesktop";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import { MemoryPanel } from "./Memory";
 import PixelCat, { BREEDS, CatPicker, COLORS, type Mood } from "./PixelCat";
@@ -584,6 +585,8 @@ export function KittyDrawer({
   onOpenChat: (id: string) => void;
 }) {
   const [tick, setTick] = useState(0);
+  // live opens the desktop live, in place of this drawer until it is closed.
+  const [live, setLive] = useState(false);
   const [err, setErr] = useState("");
   const mood: Mood =
     kitty.status === "running" ? "happy" : kitty.status === "error" ? "error" : "sleeping";
@@ -620,6 +623,9 @@ export function KittyDrawer({
     }
   };
   const soul = kitty.soul || {};
+  if (live) {
+    return <LiveDesktop kitty={kitty} onClose={() => setLive(false)} />;
+  }
   return (
     <Modal title={kitty.name} onClose={onClose} wide>
       <div class="grid md:grid-cols-[1.4fr_1fr] gap-5">
@@ -673,6 +679,15 @@ export function KittyDrawer({
                 onClick={() => setTick((t) => t + 1)}
               >
                 <IconCamera size={12} /> {t("refresh")}
+              </button>
+            )}
+            {kitty.desktop && kitty.status === "running" && (
+              <button
+                class="btn-accent px-2 py-1 text-xs flex items-center gap-1"
+                onClick={() => setLive(true)}
+                data-testid="open-desktop"
+              >
+                <IconMonitor size={12} /> {t("Live and take control")}
               </button>
             )}
           </div>

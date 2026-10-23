@@ -6,7 +6,8 @@ import Login from "./Login";
 import Welcome from "./Welcome";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
-import { IconMenu, IconTrash, IconUsers } from "./icons";
+import { IconMenu, IconMonitor, IconTrash, IconUsers } from "./icons";
+import LiveDesktop from "./LiveDesktop";
 import { ConnectModal, KittyDrawer, NewChatModal, NewKittyModal } from "./Modals";
 import SettingsModal from "./Settings";
 import LibraryModal from "./Library";
@@ -63,6 +64,8 @@ export default function App() {
   const [current, setCurrent] = useState<string | null>(routeFromHash().chat);
   const [kittyOpen, setKittyOpen] = useState<string | null>(routeFromHash().kitty);
   const [modal, setModal] = useState<ModalKind>(routeFromHash().modal);
+  // live is the kitty whose desktop is open live, over the chat.
+  const [live, setLive] = useState<Kitty | null>(null);
   // lastChat is the chat open before a dialog's address took its place, to go back to.
   const lastChat = useRef<string | null>(routeFromHash().chat);
   // connectDismissed: the person closed the gateway dialog while the gateway is away; it is not
@@ -395,6 +398,20 @@ export default function App() {
               {k!.name}
             </span>
           ))}
+          {members
+            .filter((k) => k!.desktop && k!.status === "running")
+            .map((k) => (
+              <button
+                key={"live-" + k!.id}
+                class="btn-ghost px-2 py-1 text-xs flex items-center gap-1"
+                onClick={() => setLive(k!)}
+                title={t("See {name}'s desktop live, and take control of it", { name: k!.name })}
+                data-testid="open-desktop"
+              >
+                <IconMonitor size={13} />
+                <span class="hidden sm:inline">{members.length > 1 ? k!.name : t("Desktop")}</span>
+              </button>
+            ))}
           <span
             class={`state-pill ${working ? "is-working" : online === false ? "is-off" : "is-ok"}`}
           >
@@ -428,6 +445,7 @@ export default function App() {
             </button>
           </div>
         )}
+        {live && <LiveDesktop kitty={live} onClose={() => setLive(null)} />}
         {current ? (
           <Conversation
             session={session}

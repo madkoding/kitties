@@ -638,6 +638,18 @@ select:focus {
 }
 
 /* The desktop drawer's live picture. */
+/* The live desktop: a frame around the picture, cyan while the person has the controls. */
+.live-surface {
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  background: #000;
+}
+.live-surface.is-control {
+  border-color: var(--neon-cyan);
+  box-shadow: var(--glow-cyan);
+}
+.live-surface.is-control img {
+  cursor: crosshair;
+}
 .live-shot {
   width: 100%;
   aspect-ratio: 16 / 10;

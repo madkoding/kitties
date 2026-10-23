@@ -51,11 +51,19 @@ func TestArgv(t *testing.T) {
 		`type {"text": "hello world"}`:                  "xdotool type --delay 20 -- hello world",
 		`key {"keys": "ctrl+l"}`:                        "xdotool key -- ctrl+l",
 		`scroll {"direction": "up", "amount": 2}`:       "xdotool click --repeat 2 --delay 40 4",
-		`scroll {}`:                           "xdotool click --repeat 3 --delay 40 5",
-		`open {"url": "https://example.com"}`: "kitty-open https://example.com",
-		`run {"argv": ["ls", "-la", 2]}`:      "ls -la 2",
-		`run {"command": "echo hi"}`:          "echo hi",
-		`type {"text": 5}`:                    "xdotool type --delay 20 -- 5",
+		`scroll {}`:                                     "xdotool click --repeat 3 --delay 40 5",
+		`open {"url": "https://example.com"}`:           "kitty-open https://example.com",
+		`run {"argv": ["ls", "-la", 2]}`:                "ls -la 2",
+		`run {"command": "echo hi"}`:                    "echo hi",
+		`type {"text": 5}`:                              "xdotool type --delay 20 -- 5",
+		`drag {"x": 1, "y": 2, "to_x": 30, "to_y": 40}`: "xdotool mousemove 1 2 mousedown 1 sleep 0.15 mousemove 15 21 sleep 0.05 mousemove --sync 30 40 sleep 0.15 mouseup 1",
+		`windows {}`:                                    "wmctrl -l",
+		`focus {"title": "Mozilla Firefox"}`:            "wmctrl -a Mozilla Firefox",
+		`launch {"argv": ["xterm", "-e", "top"]}`:       "kitty-launch xterm -e top",
+		`launch {"program": "gimp"}`:                    "kitty-launch gimp",
+		`install {"packages": ["gimp", "g++"]}`:         "kitty-install gimp g++",
+		`install {"packages": "vlc krita"}`:             "kitty-install vlc krita",
+		`install {"package": "vlc"}`:                    "kitty-install vlc",
 	}
 	for line, want := range good {
 		actions, _ := Parse(Prefix + line)
@@ -68,6 +76,8 @@ func TestArgv(t *testing.T) {
 		`click {"y": 1}`, `click {"x": 1}`, `click {"x": "a", "y": 1}`, `click {"x": -1, "y": 1}`, `click {"x": 1, "y": 1, "button": "x"}`,
 		`click {"x": true, "y": 1}`, `type {}`, `key {}`, `key {"keys": "a b"}`, `scroll {"amount": 99}`, `open {"url": "ftp://x"}`,
 		`run {}`, `run {"argv": []}`, `explode {}`,
+		`drag {"x": 1, "y": 2, "to_x": 3}`, `drag {"x": 1, "y": 2, "to_x": 3, "to_y": -4}`, `focus {}`, `launch {}`,
+		`install {}`, `install {"packages": ["-o", "x"]}`, `install {"packages": ["vlc; rm -rf /"]}`,
 	}
 	for _, line := range bad {
 		actions, _ := Parse(Prefix + line)
@@ -136,4 +146,29 @@ func TestSleepHonoursContext(t *testing.T) {
 		t.Error("a cancelled context ends the wait")
 	}
 	realSleep(context.Background(), time.Millisecond)
+}
+
+// The person only uses the mouse and the keys on a display they took over.
+func TestPerson(t *testing.T) {
+	for _, a := range []Action{
+		{Name: "click", Args: map[string]any{"x": 1.0, "y": 2.0}},
+		{Name: "drag", Args: map[string]any{"x": 1.0, "y": 2.0, "to_x": 3.0, "to_y": 4.0}},
+		{Name: "type", Args: map[string]any{"text": "hola"}},
+		{Name: "key", Args: map[string]any{"keys": "ctrl+v"}},
+		{Name: "scroll", Args: map[string]any{"direction": "up"}},
+	} {
+		if _, err := Person(a); err != nil {
+			t.Errorf("%s: %v", a.Name, err)
+		}
+	}
+	for _, a := range []Action{
+		{Name: "run", Args: map[string]any{"argv": []any{"rm"}}},
+		{Name: "install", Args: map[string]any{"packages": []any{"vlc"}}},
+		{Name: "type", Args: map[string]any{"text": strings.Repeat("a", 2001)}},
+		{Name: "key", Args: map[string]any{}},
+	} {
+		if _, err := Person(a); err == nil {
+			t.Errorf("%s must be refused", a.Name)
+		}
+	}
 }

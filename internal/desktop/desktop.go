@@ -1,5 +1,7 @@
 // Package desktop lets a kitty act on the display of its container: look at it, click, type,
-// press keys, scroll, open the browser and run commands. The model asks for an action with one
+// press keys, scroll, drag, handle its windows, open the browser, start and install programs and
+// run commands. The person can take the same display over (Person): they see it live and click
+// and type in it, and the kitty's actions wait meanwhile. The model asks for an action with one
 // line of the form
 //
 //	@tool click {"x": 120, "y": 44}
@@ -14,6 +16,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -44,7 +47,12 @@ var Tools = []struct{ Name, Args, Help string }{
 	{"type", `{"text": "..."}`, "type text where the focus is"},
 	{"key", `{"keys": "ctrl+l"}`, "press a key or a combination (xdotool names: Return, Tab, ctrl+c, alt+F4)"},
 	{"scroll", `{"direction": "down|up", "amount": 3}`, "scroll the wheel at the mouse position"},
+	{"drag", `{"x": 0, "y": 0, "to_x": 0, "to_y": 0}`, "press the left button at a point and let go at another (move a window, select text)"},
+	{"windows", `{}`, "list the open windows (id, workspace, title)"},
+	{"focus", `{"title": "..."}`, "bring to the front the window whose title has this text"},
 	{"open", `{"url": "https://..."}`, "open a URL in the browser on the display"},
+	{"launch", `{"argv": ["xterm"]}`, "start a program with windows and leave it open (run waits for a program to end)"},
+	{"install", `{"packages": ["gimp"]}`, "install applications from Debian's repository; they are installed again when the desktop restarts"},
 	{"run", `{"argv": ["ls", "-la"]}`, "run a program in your working folder (an argument list, no shell)"},
 	{"wait", `{"seconds": 2}`, "wait for something to load (at most 10 seconds)"},
 	{"done", `{"summary": "..."}`, "finish the task and report what you achieved"},
@@ -57,7 +65,11 @@ func Catalogue() string {
 		"one action per line, in order. After the actions run you receive their results and a screenshot, " +
 		"and you continue. Write `@tool done {\"summary\": \"...\"}` when the task is finished, and write " +
 		"no @tool line at all when you only want to talk. Coordinates are pixels of the 1280x800 display, " +
-		"origin top-left. The tools:\n")
+		"origin top-left. The display is a desktop with IceWM: a taskbar at the bottom, its menu at the left " +
+		"corner, a terminal (xterm), the browser, LibreOffice, Inkscape and mtPaint; install what else you need. " +
+		"When something needs the person (a password, a captcha, a code they receive), ask them to take control " +
+		"of your desktop from the chat: they see it live and click and type in it, and your actions wait until " +
+		"they give it back. The tools:\n")
 	for _, t := range Tools {
 		fmt.Fprintf(&b, "- %s %s: %s\n", t.Name, t.Args, t.Help)
 	}
@@ -190,6 +202,43 @@ func Argv(a Action) ([]string, error) {
 			button = "4"
 		}
 		return []string{"xdotool", "click", "--repeat", strconv.Itoa(amount), "--delay", "40", button}, nil
+	case "drag":
+		var p [4]int
+		for i, key := range []string{"x", "y", "to_x", "to_y"} {
+			n, err := num(a.Args, key)
+			if err != nil {
+				return nil, err
+			}
+			if n < 0 || n > 10000 {
+				return nil, errors.New("the point is off the display")
+			}
+			p[i] = n
+		}
+		// A press, a step halfway, the end and a release, with pauses, as from a hand: a window
+		// manager only starts moving a window on a motion after the press.
+		return []string{"xdotool", "mousemove", strconv.Itoa(p[0]), strconv.Itoa(p[1]), "mousedown", "1", "sleep", "0.15",
+			"mousemove", strconv.Itoa((p[0] + p[2]) / 2), strconv.Itoa((p[1] + p[3]) / 2), "sleep", "0.05",
+			"mousemove", "--sync", strconv.Itoa(p[2]), strconv.Itoa(p[3]), "sleep", "0.15", "mouseup", "1"}, nil
+	case "windows":
+		return []string{"wmctrl", "-l"}, nil
+	case "focus":
+		title := str(a.Args, "title", "text")
+		if strings.TrimSpace(title) == "" {
+			return nil, errors.New("title is missing")
+		}
+		return []string{"wmctrl", "-a", title}, nil
+	case "launch":
+		argv, err := argList(a.Args)
+		if err != nil {
+			return nil, err
+		}
+		return append([]string{"kitty-launch"}, argv...), nil
+	case "install":
+		packages, err := packageList(a.Args)
+		if err != nil {
+			return nil, err
+		}
+		return append([]string{"kitty-install"}, packages...), nil
 	case "open":
 		url := str(a.Args, "url", "text")
 		if !strings.HasPrefix(url, "http://") && !strings.HasPrefix(url, "https://") {
@@ -197,21 +246,68 @@ func Argv(a Action) ([]string, error) {
 		}
 		return []string{"kitty-open", url}, nil
 	case "run":
-		raw, ok := a.Args["argv"].([]any)
-		if !ok || len(raw) == 0 {
-			if cmd := str(a.Args, "command", "text"); cmd != "" {
-				return strings.Fields(cmd), nil
-			}
-			return nil, errors.New("argv is a list with the program first")
-		}
-		argv := make([]string, 0, len(raw))
-		for _, v := range raw {
-			argv = append(argv, fmt.Sprint(v))
-		}
-		return argv, nil
+		return argList(a.Args)
 	default:
 		return nil, fmt.Errorf("unknown tool %q", a.Name)
 	}
+}
+
+// argList is a program and its arguments: a list, or a command split on spaces.
+func argList(args map[string]any) ([]string, error) {
+	raw, ok := args["argv"].([]any)
+	if !ok || len(raw) == 0 {
+		if cmd := str(args, "command", "program", "text"); cmd != "" {
+			return strings.Fields(cmd), nil
+		}
+		return nil, errors.New("argv is a list with the program first")
+	}
+	argv := make([]string, 0, len(raw))
+	for _, v := range raw {
+		argv = append(argv, fmt.Sprint(v))
+	}
+	return argv, nil
+}
+
+var packageName = regexp.MustCompile(`^[a-z0-9][a-z0-9+.-]{0,99}$`)
+
+// packageList is the Debian packages to install: names only, so nothing else reaches apt.
+func packageList(args map[string]any) ([]string, error) {
+	var names []string
+	switch v := args["packages"].(type) {
+	case []any:
+		for _, x := range v {
+			names = append(names, fmt.Sprint(x))
+		}
+	case string:
+		names = strings.Fields(v)
+	}
+	if len(names) == 0 {
+		names = strings.Fields(str(args, "package", "text"))
+	}
+	if len(names) == 0 || len(names) > 20 {
+		return nil, errors.New("packages is a list of 1 to 20 Debian package names")
+	}
+	for _, n := range names {
+		if !packageName.MatchString(n) {
+			return nil, fmt.Errorf("%q is not a Debian package name", n)
+		}
+	}
+	return names, nil
+}
+
+// personActions are what the person does on a display they took over: the mouse and the keys.
+var personActions = map[string]bool{"click": true, "double_click": true, "move": true, "type": true, "key": true, "scroll": true, "drag": true}
+
+// Person builds the command for an action of the person on the display; they only use the mouse
+// and the keyboard there, like on a screen of their own.
+func Person(a Action) ([]string, error) {
+	if !personActions[a.Name] {
+		return nil, fmt.Errorf("%q is not something done with the mouse or the keys", a.Name)
+	}
+	if a.Name == "type" && len(str(a.Args, "text")) > 2000 {
+		return nil, errors.New("type at most 2000 characters at a time")
+	}
+	return Argv(a)
 }
 
 // Run executes one action in the kitty's container and returns what it printed.
@@ -245,7 +341,7 @@ func Run(ctx context.Context, r Runner, ref string, a Action) (string, error) {
 		}
 		return out, err
 	}
-	if a.Name == "open" {
+	if a.Name == "open" || a.Name == "launch" {
 		sleep(ctx, 2*time.Second)
 	}
 	return out, nil

@@ -1,0 +1,3 @@
+# The buttons of the taskbar.
+prog "Chromium" chromium kitty-open
+prog "Terminal" utilities-terminal xterm

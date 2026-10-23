@@ -53,6 +53,9 @@ type Manager struct {
 	rtMu sync.RWMutex
 	// detect looks for the runtime again; nil when it is not looked for again.
 	detect func(ctx context.Context) (Containers, error)
+	// holds are the displays the person has taken over, by kitty id, with their last use.
+	holdMu sync.Mutex
+	holds  map[string]time.Time
 
 	mu      sync.RWMutex
 	kitties map[string]*kitty.Kitty

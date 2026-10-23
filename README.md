@@ -303,17 +303,26 @@ connectors:
   (chat completions, responses, Anthropic messages, Gemini), with retries. Profiles are named in
   the configuration and each kitty picks one.
 - **Containers** (`internal/container`): one container per kitty from `docker/kitty-desktop`
-  (Debian, Xvfb, Chromium, xdotool, scrot). Nothing is published on the host; the orchestrator
-  reaches a kitty with `docker exec`, and `kitty-shot` returns a PNG of its display.
+  (Debian, Xvfb, the IceWM desktop with a taskbar, Chromium, a terminal, LibreOffice, Inkscape,
+  xdotool, wmctrl, scrot). Nothing is published on the host; the orchestrator reaches a kitty
+  with `docker exec`, and `kitty-shot` returns a PNG of its display. `kitty-install` adds
+  programs from Debian (sudo only runs the installer, by package name) and remembers them in the
+  workspace, so a container made anew installs them again.
 - **Orchestrator** (`internal/orchestrator`): the fleet, persisted in `~/.kitties/kitties.json`.
   Creates the kitties the configuration lists (`replicas: n` gives `name-1 … name-n`) and scales
   them on demand.
 - **Chat** (`internal/chat`): one-to-one and group threads, persisted as JSON. In a group every
   kitty sees the others' turns labelled by name and answers in turn; `@name` addresses one.
 - **Desktop tasks** (`internal/desktop`): a kitty with a container writes `@tool click {"x": 640,
-  "y": 420}` lines; the runtime executes them (xdotool, the browser, a program), takes a
-  screenshot, shows it to the model and continues in the background until `@tool done`. Every
-  step and picture lands in the thread; the chat can be cancelled.
+  "y": 420}` lines; the runtime executes them (click, type, keys, scroll, drag, list and focus
+  windows, open the browser, launch or install a program, run a command), takes a screenshot,
+  shows it to the model and continues in the background until `@tool done`. Every step and
+  picture lands in the thread; the chat can be cancelled.
+- **Taking the desktop over**: the **Desktop** button of a chat (or *Live and take control* in a
+  kitty's drawer) shows its display live. **Take control** sends your clicks, drags, wheel and
+  keys to it, like a remote screen, for what the kitty cannot do alone (a password, a captcha);
+  the kitty's own actions wait until you give it back, and a hold left idle for five minutes
+  ends by itself. Frames and input go through the gateway's API: no VNC port is opened.
 - **Settings** (`internal/orchestrator/settings.go`): models and connectors edited from the app
   are kept in `settings.json` on top of the YAML, keys included and never shown again.
 - **Demo** (`internal/demo`): a scripted brain and a drawn desktop, for `kitties -demo`.
@@ -492,6 +501,8 @@ renewed before they expire.
 | `POST /v1/kitties/{ref}/start` · `/stop` · `DELETE /v1/kitties/{ref}` | lifecycle, by id or name |
 | `POST /v1/kitties/{ref}/exec` `{argv}`    | run a command in its container                 |
 | `GET /v1/kitties/{ref}/screenshot`        | a PNG of its display                           |
+| `POST /v1/kitties/{ref}/control` `{hold}` | take its display over, or give it back         |
+| `POST /v1/kitties/{ref}/input` `{action, args}` | a click, drag, scroll, key or text of the person on it |
 | `POST /v1/scale/{name}` `{replicas}`      | run n replicas of a configured kitty           |
 | `GET/POST /v1/chats`                      | threads; create `{title, members: [names]}`    |
 | `POST /v1/chats/{id}/members` · `DELETE /v1/chats/{id}/members/{ref}` | who is in the group |
