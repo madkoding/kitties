@@ -426,11 +426,15 @@ func TestOAuthKinds(t *testing.T) {
 	if !gh.KeySet(Settings{"token": "t"}) || gh.KeySet(Settings{}) || !sl.KeySet(Settings{"url": "u"}) || gw.KeySet(Settings{"token": "t"}) {
 		t.Error("KeySet: a token or webhook of the kind's own")
 	}
-	// The email goes with the token where the service pairs them; an instance's address is no key.
+	// Jira's token goes with its email and site; Slack's bot token with its channel, its webhook
+	// alone; an instance's address is no key.
 	jira, _ := LookupKind("jira")
 	masto, _ := LookupKind("mastodon")
-	if jira.KeySet(Settings{"token": "t"}) || !jira.KeySet(Settings{"token": "t", "email": "a@x"}) || masto.KeySet(Settings{"url": "https://m"}) {
-		t.Error("KeySet: the email pairs with the token, and an address is not a key")
+	if jira.KeySet(Settings{"token": "t", "email": "a@x"}) || !jira.KeySet(Settings{"token": "t", "email": "a@x", "url": "https://a.atlassian.net"}) || masto.KeySet(Settings{"url": "https://m"}) {
+		t.Error("KeySet: the email and site pair with Jira's token, and an address is not a key")
+	}
+	if sl.KeySet(Settings{"token": "t"}) || !sl.KeySet(Settings{"token": "t", "channel": "#c"}) || !sl.KeySet(Settings{"url": "https://hooks/x"}) {
+		t.Error("KeySet: Slack's bot token needs its channel, its webhook nothing else")
 	}
 	// A kind with a token field: the typed token wins, a webhook needs no account, and
 	// without either the sign-in's token signs the request.

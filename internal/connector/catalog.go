@@ -136,7 +136,9 @@ func catalog() []Kind {
 	kinds := withReads(withInbound(append(append(append(append(moreKinds(), metaKinds()...), personalKinds()...), mediaKinds()...), []Kind{
 		// ── messaging ──────────────────────────────────────────────────────────────────────────
 		{Name: "slack", Category: CatMessaging, Label: "Slack", Help: "posts messages to a Slack channel, through a webhook, a bot token or a sign-in",
-			Fields: []Field{f("url", "Incoming webhook URL", "from Slack's app settings", false, true), f("token", "Bot token", "xoxb-…, instead of a webhook", false, true), f("channel", "Channel", "#general, used with a bot token or a sign-in", false, false),
+			Fields: []Field{keyed(f("url", "Incoming webhook URL", "from Slack's app settings → Incoming Webhooks; it posts to the one channel it was made for", false, true), keyWebhook),
+				keyed(f("token", "Bot token", "xoxb-…, from Slack's app settings → OAuth & Permissions", false, true), keyToken),
+				keyed(f("channel", "Channel", "#general: where the messages go", false, false), keyToken),
 				f("client_id", "OAuth client id", "to sign in instead of pasting a token: a Slack app of your own", false, false), f("client_secret", "OAuth client secret", "", false, true)},
 			Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeSlack, oauth: "slack"},
 		{Name: "discord", Category: CatMessaging, Label: "Discord", Help: "posts messages to a Discord channel",
@@ -204,7 +206,7 @@ func catalog() []Kind {
 			Fields:  signIn([]Field{f("team", "Team id", "", true, false)}, f("token", "API key", "", false, true), "linear.app/settings/api/applications"),
 			Actions: []Action{{Name: "create_issue", Help: "create an issue", Args: []string{fTitle, "description"}}}, make: makeLinear, oauth: "linear"},
 		{Name: "jira", Category: CatProductivity, Label: "Jira", Help: "issues in Jira Cloud",
-			Fields: signIn([]Field{f("project", "Project key", "KIT", true, false), f("url", "Site", "https://acme.atlassian.net; signing in fills it", false, false),
+			Fields: signIn([]Field{f("project", "Project key", "KIT", true, false), keyed(f("url", "Site", "https://acme.atlassian.net", false, false), keyToken),
 				f("email", "Email", "with an API token", false, false)}, f("token", "API token", "", false, true), "developer.atlassian.com/console/myapps"),
 			Actions: []Action{{Name: "create_issue", Help: "create a task", Args: []string{"summary", "description"}}}, make: makeJira, oauth: "atlassian"},
 		{Name: "google-chat", Category: CatMessaging, Label: "Google Chat", Help: "posts to a Google Chat space through a webhook",
@@ -402,18 +404,22 @@ func (k Kind) Validate(s Settings) error {
 
 // The groups of key fields (Field.Key).
 const (
-	keyToken  = "token"
-	keyOAuth1 = "oauth1"
+	keyToken   = "token"
+	keyOAuth1  = "oauth1"
+	keyWebhook = "webhook"
 )
 
+// keyed puts a field in a group of key fields.
+func keyed(fl Field, key string) Field {
+	fl.Key = key
+	return fl
+}
+
 // KeySet reports whether the settings carry an account an OAuth kind takes instead of a
-// sign-in: one group of key fields all filled in (a token, with its email for the kinds that
-// pair them; X's OAuth 1.0a keys), or Slack's webhook. An instance's address (Mastodon, GitLab,
-// Home Assistant) is not a key.
+// sign-in: one group of key fields all filled in (a token, with its email and site for the kinds
+// that pair them; X's OAuth 1.0a keys; Slack's webhook). An instance's address (Mastodon,
+// GitLab, Home Assistant) is not a key.
 func (k Kind) KeySet(s Settings) bool {
-	if k.Name == "slack" && strings.TrimSpace(s["url"]) != "" {
-		return true
-	}
 	groups := map[string]bool{}
 	for _, f := range k.Fields {
 		if f.Key == "" {
