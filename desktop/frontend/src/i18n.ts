@@ -1,4 +1,5 @@
 import es from "./i18n/es";
+import pt from "./i18n/pt";
 
 // THE PAGE'S LANGUAGE.
 //
@@ -7,15 +8,16 @@ import es from "./i18n/es";
 // is the person's choice (Settings, Preferences), or the system's, kept in this browser; ?lang=
 // in the address picks one for a visit.
 
-export type Lang = "en" | "es";
+export type Lang = "en" | "es" | "pt";
 
 export const LANGS: { id: Lang; label: string }[] = [
   { id: "en", label: "English" },
   { id: "es", label: "Español" },
+  { id: "pt", label: "Português" },
 ];
 
 const KEY = "kitties.lang";
-const dictionaries: Record<Lang, Record<string, string>> = { en: {}, es };
+const dictionaries: Record<Lang, Record<string, string>> = { en: {}, es, pt };
 
 function saved(): string {
   try {
@@ -28,11 +30,18 @@ function saved(): string {
 // detect is the language asked for in the address, chosen before, or the system's.
 function detect(): Lang {
   const asked = new URLSearchParams(location.search).get("lang") || saved();
-  if (asked === "en" || asked === "es") {
-    return asked;
+  if (LANGS.some((l) => l.id === asked)) {
+    return asked as Lang;
   }
+  // The first of the system's languages the page speaks.
   const system = (navigator.languages?.length ? navigator.languages : [navigator.language]) || [];
-  return system.some((l) => l?.toLowerCase().startsWith("es")) ? "es" : "en";
+  for (const l of system) {
+    const code = l?.toLowerCase().slice(0, 2);
+    if (LANGS.some((x) => x.id === code)) {
+      return code as Lang;
+    }
+  }
+  return "en";
 }
 
 let lang: Lang = typeof location === "undefined" ? "en" : detect();

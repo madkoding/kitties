@@ -217,11 +217,13 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   its limiter (`@limit set {"connector": "x", "action": "post", "mode": "ask"}`, or the native
   `limit` tool); you see and change them in the kitty's *Action limits*, or set them there. An
   *ask* action waits in the Approvals screen (*approve*, *approve and stop asking*, *reject with
-  a reason*), a *never* one is refused and the kitty says so. A kitty in `approvals: ask` asks
+  a reason*), a *never* one is refused and the kitty says so. A limit the kitty sets shows in the
+  chat, with *Undo*. A kitty in `approvals: ask` asks
   about everything that reaches other people until yeses in a row earn its trust, sooner for a
   relaxed person (2) than a strict one (12).
-- **Your language, plain words.** The page speaks English and Spanish: the system's language by
-  default, or the one picked in *Settings → Preferences* (`?lang=es` for a visit). The kitties
+- **Your language, plain words.** The page speaks English, Spanish and Portuguese, what the
+  gateway writes into a chat included: the system's language by default, or the one picked in
+  *Settings → Preferences* (`?lang=es` or `?lang=pt` for a visit). The kitties
   answer in the language you write in, in everyday words; *Show technical details* in the same
   place writes out the coordinates, commands, tokens and errors as the services wrote them.
 - **Notifications.** A kitty that needs you does not wait for you to open the app: through any

@@ -976,6 +976,14 @@ test("the page speaks Spanish: the system's language, or the one picked", async 
   await expect(page.getByText("¿Cómo te conectas?")).toBeVisible();
   await shot(page, "46-spanish-connection");
 
+  // What the gateway itself wrote in a chat reads in the page's language too.
+  await page.goto(`/?theme=dark&motion=off&lang=es#chat/${ids.post}`);
+  await expect(page.getByText(/^Aprobado y hecho: team-slack\.send/).first()).toBeVisible();
+  // A Portuguese system gets Portuguese.
+  await page.goto(`/?theme=dark&motion=off&lang=pt#chat/${ids.post}`);
+  await expect(page.locator("aside").getByRole("button", { name: "Novo chat" })).toBeVisible();
+  await expect(page.getByText(/^Aprovado e feito: team-slack\.send/).first()).toBeVisible();
+
   // Picked in Preferences, it stays; English is a choice away.
   await open(page, "#new-preferences");
   await page.getByLabel("Language").selectOption("es");
