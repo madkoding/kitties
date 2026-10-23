@@ -383,6 +383,15 @@ export default function Conversation({ session, kitties, user, pending, waiting 
   const [zoom, setZoom] = useState<string>("");
   const end = useRef<HTMLDivElement>(null);
   const count = session?.turns?.length ?? 0;
+  // Escape closes a screenshot opened big, like a click on it does.
+  useEffect(() => {
+    if (!zoom) {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setZoom("");
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, [zoom]);
   useEffect(() => {
     end.current?.scrollIntoView({ block: "end" });
   }, [count, pending, session?.id]);
@@ -460,6 +469,7 @@ export default function Conversation({ session, kitties, user, pending, waiting 
         <div
           class="fixed inset-0 z-40 bg-black/80 flex items-center justify-center p-6 backdrop"
           onClick={() => setZoom("")}
+          data-testid="zoom"
         >
           <img
             src={zoom}

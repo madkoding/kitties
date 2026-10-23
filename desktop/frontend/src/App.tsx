@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "preact/hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo, Session } from "./api";
 import { ApiError, api, cookieLogin, errText, inWails, watchChat } from "./api";
 import { ConfirmHost, ask } from "./Confirm";
@@ -63,6 +63,16 @@ export default function App() {
   const [current, setCurrent] = useState<string | null>(routeFromHash().chat);
   const [kittyOpen, setKittyOpen] = useState<string | null>(routeFromHash().kitty);
   const [modal, setModal] = useState<ModalKind>(routeFromHash().modal);
+  // lastChat is the chat open before a dialog's address took its place, to go back to.
+  const lastChat = useRef<string | null>(routeFromHash().chat);
+  // connectDismissed: the person closed the gateway dialog while the gateway is away; it is not
+  // opened again by itself until the gateway has come back.
+  const connectDismissed = useRef(false);
+  useEffect(() => {
+    if (current) {
+      lastChat.current = current;
+    }
+  }, [current]);
   const [pending, setPending] = useState<string | null>(null);
   // pendingFrom is how many turns the chat had when the message went: the sending waits for the
   // kitties' answer, but the message itself arrives live before that, and is shown once.
@@ -96,6 +106,7 @@ export default function App() {
         .catch(() => {});
       setOnline(true);
       setError("");
+      connectDismissed.current = false;
       api
         .approvals("pending")
         .then((l) => setWaiting(l.length))
@@ -118,7 +129,9 @@ export default function App() {
         if (app && e instanceof ApiError && e.status === 0) {
           const note = await app.GatewayNote().catch(() => "");
           why = note ? `${why} (${note})` : why;
-          setModal((m) => (m === "none" ? "connect" : m));
+          if (!connectDismissed.current) {
+            setModal((m) => (m === "none" ? "connect" : m));
+          }
         }
         setError(why);
       }
@@ -164,11 +177,12 @@ export default function App() {
     refresh();
     const onHash = () => {
       const r = routeFromHash();
-      setCurrent(r.chat);
+      // A dialog's own address keeps the chat that was open behind it.
+      setCurrent(r.chat || (/^#(new-|connector\/)/.test(location.hash) ? lastChat.current : null));
       setKittyOpen(r.kitty);
-      if (r.modal !== "none") {
-        setModal(r.modal);
-      }
+      // The address decides the dialog: one that no longer names it closes it, except the
+      // sign-in and the gateway's, which the page opens itself.
+      setModal((m) => (r.modal === "none" && (m === "login" || m === "connect") ? m : r.modal));
     };
     addEventListener("hashchange", onHash);
     return () => removeEventListener("hashchange", onHash);
@@ -200,6 +214,7 @@ export default function App() {
     }
     return watchChat(current, (ev) => {
       if (ev.type === "deleted") {
+        lastChat.current = null;
         location.hash = "";
         refresh();
         return;
@@ -251,11 +266,16 @@ export default function App() {
       location.hash = hash;
     }
   };
-  // leave closes a dialog that came from a route, so the address no longer points at it.
-  const leave = () => {
+  // closeModal closes a dialog, and takes it out of the address, so a reload or the same link
+  // does not open it again; the chat that was open stays.
+  const closeModal = () => {
     setModal("none");
-    if (/^#(new-|connector\/)/.test(location.hash)) {
-      location.hash = current ? `#chat/${current}` : "";
+    const h = location.hash;
+    const nested = h.match(/^(#(?:chat|kitty)\/[a-z0-9-]+)\/new-[a-z-]+$/);
+    if (nested) {
+      location.hash = nested[1];
+    } else if (/^#(new-|connector\/)/.test(h)) {
+      location.hash = lastChat.current ? `#chat/${lastChat.current}` : "";
     }
   };
 
@@ -274,6 +294,7 @@ export default function App() {
     setSession(null);
     setChats([]);
     setKitties([]);
+    lastChat.current = null;
     location.hash = "";
     setModal("login");
   };
@@ -308,6 +329,7 @@ export default function App() {
       (await ask(t('Delete the chat "{title}"?', { title: session.title }), t("Delete")))
     ) {
       await api.deleteChat(session.id).catch((e) => setError(e.message));
+      lastChat.current = null;
       location.hash = "";
       refresh();
     }
@@ -441,7 +463,7 @@ export default function App() {
         <NewChatModal
           kitties={kitties}
           onNeedKitty={() => setModal("kitty")}
-          onClose={() => setModal("none")}
+          onClose={closeModal}
           onCreated={(id) => {
             setModal("none");
             refresh();
@@ -456,7 +478,7 @@ export default function App() {
           onNeedModel={() => {
             go("#new-models-add");
           }}
-          onClose={() => setModal("none")}
+          onClose={closeModal}
           onCreated={(note) => {
             setModal("none");
             refresh();
@@ -467,15 +489,13 @@ export default function App() {
       {(modal === "library" || modal === "artifacts") && (
         <LibraryModal
           initial={modal === "artifacts" ? "artifacts" : "skills"}
-          onClose={() => setModal("none")}
+          onClose={closeModal}
         />
       )}
       {modal === "approvals" && (
         <ApprovalsModal
           kitties={kitties}
-          onClose={() => {
-            location.hash = current ? `#chat/${current}` : "";
-          }}
+          onClose={closeModal}
           onChanged={refresh}
           onOpenChat={openChat}
         />
@@ -501,7 +521,7 @@ export default function App() {
           kitties={kitties}
           onKittiesChanged={refresh}
           onClose={() => {
-            leave();
+            closeModal();
             refresh();
           }}
         />
@@ -516,7 +536,10 @@ export default function App() {
       )}
       {modal === "connect" && (
         <ConnectModal
-          onClose={() => setModal("none")}
+          onClose={() => {
+            connectDismissed.current = online === false;
+            closeModal();
+          }}
           reason={
             online === false
               ? error || t("The gateway did not answer or refused the token.")
@@ -534,7 +557,7 @@ export default function App() {
           kitties={kitties}
           onOpenChat={openChat}
           onClose={() => {
-            location.hash = current ? `#chat/${current}` : "";
+            location.hash = lastChat.current ? `#chat/${lastChat.current}` : "";
           }}
           onChanged={refresh}
           onChat={async () => {

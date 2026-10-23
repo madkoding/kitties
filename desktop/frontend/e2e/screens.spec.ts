@@ -1023,3 +1023,61 @@ test("a kitty asked to hold back limits itself, says so in the chat, and it can 
   await expect.poll(rules).toHaveLength(0);
   await page.request.delete(`${GATEWAY}/v1/chats/${chat}`, { headers });
 });
+
+test("every dialog closes: its X, Escape or the backdrop, and the address forgets it", async ({
+  page,
+}) => {
+  const dialog = page.locator("[data-modal]");
+  const chatHash = `#chat/${ids.single}`;
+  await open(page, chatHash);
+  const closeX = () => dialog.getByRole("button", { name: "Close", exact: true }).first().click();
+  // Opened by a button, closed by its X: Approvals, the library, settings, a new chat.
+  for (const [button, how] of [
+    [page.getByTestId("approvals-button"), "x"],
+    [page.locator("aside").getByRole("button", { name: "Library" }), "escape"],
+    [page.locator("aside").getByRole("button", { name: "Settings" }), "x"],
+    [page.locator("aside").getByRole("button", { name: "New chat" }), "backdrop"],
+  ] as const) {
+    await button.click();
+    await expect(dialog).toHaveCount(1);
+    if (how === "x") {
+      await closeX();
+    } else if (how === "escape") {
+      await page.keyboard.press("Escape");
+    } else {
+      await dialog.click({ position: { x: 5, y: 5 } });
+    }
+    await expect(dialog).toHaveCount(0);
+  }
+  // Opened by its address, closed by its X: the address goes back to the chat, which stayed
+  // behind the dialog, and a reload opens nothing.
+  for (const route of [
+    "#new-approvals",
+    "#new-settings",
+    "#new-library",
+    "#new-chat",
+    "#new-kitty",
+    "#new-preferences",
+  ]) {
+    await page.goto(`/${Q}${route}`);
+    await expect(dialog).toHaveCount(1);
+    await closeX();
+    await expect(dialog).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`${chatHash}$`));
+    await expect(page.locator(".msg").first()).toBeVisible();
+    await page.reload();
+    await expect(dialog).toHaveCount(0);
+  }
+  // A kitty's drawer goes back to the chat it was opened from.
+  await kittyRow(page, "mimi").click();
+  await expect(dialog).toHaveCount(1);
+  await closeX();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`${chatHash}$`));
+  // A screenshot opened big closes with Escape.
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator(".shot-thumb").first().click();
+  await expect(page.getByTestId("zoom")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("zoom")).toHaveCount(0);
+});
