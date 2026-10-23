@@ -11,10 +11,14 @@ export default function Login({ onDone }: { onDone: () => void }) {
   const [busy, setBusy] = useState(false);
   const submit = async (e: Event) => {
     e.preventDefault();
+    // Enter sends the form like the button does: only with a token, and once.
+    if (busy || !token.trim()) {
+      return;
+    }
     setBusy(true);
     setErr("");
     try {
-      await api.login(token);
+      await api.login(token.trim());
       setToken("");
       onDone();
     } catch (x) {

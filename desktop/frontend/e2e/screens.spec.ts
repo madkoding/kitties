@@ -637,7 +637,13 @@ test("creating a kitty closes the dialog at once, and a desktop that cannot star
   await expect(page.locator("#kitty-name")).toHaveAttribute("aria-required", "true");
   await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
   await expect(page.getByTestId("missing")).toHaveText("Still needed: a name");
+  // A name another kitty has is said at once, and Create waits for another.
+  await page.getByLabel("Name").fill("Mimi");
+  await expect(page.locator("#kitty-name-taken")).toContainText("already a kitty called mimi");
+  await expect(page.locator("#kitty-name")).toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
   await page.getByLabel("Name").fill("Nube");
+  await expect(page.locator("#kitty-name-taken")).toHaveCount(0);
   // The brain picker is drawn like the other fields, not as the system's button.
   const brain = page.locator("#kitty-brain");
   await expect(brain).toHaveCSS("appearance", "none");

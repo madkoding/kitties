@@ -15,15 +15,21 @@ test("a gateway on a network asks for the token, keeps a session, and signs out"
   await page.evaluate(() => document.fonts.ready);
   await page.screenshot({ path: path.join(SHOTS, "30-sign-in.png"), animations: "disabled" });
 
+  // Enter without a token sends nothing.
+  await login.getByLabel("Token").press("Enter");
+  await expect(login.getByTestId("missing")).toHaveText("Still needed: the token");
+  await expect(login.getByRole("alert")).toHaveCount(0);
+
   // A wrong token is refused and says so; nothing is stored.
   await login.getByLabel("Token").fill("not-the-token");
   await login.getByRole("button", { name: "Sign in" }).click();
   await expect(login.getByRole("alert")).toContainText("not the gateway's token");
   expect(await page.evaluate(() => localStorage.getItem("kitties.gateway"))).toBeNull();
 
-  // The right one opens the page, and the token is not kept by the browser, only a cookie.
+  // The right one opens the page (Enter works like the button), and the token is not kept by
+  // the browser, only a cookie.
   await login.getByLabel("Token").fill(TOKEN);
-  await login.getByRole("button", { name: "Sign in" }).click();
+  await login.getByLabel("Token").press("Enter");
   await expect(login).toBeHidden();
   await expect(
     page.locator("aside").getByRole("button", { name: "mimi", exact: true }),

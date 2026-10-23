@@ -176,6 +176,7 @@ export function NewKittyModal({
   onCreated,
   onNeedModel,
   containers = true,
+  taken = [],
 }: {
   onClose: () => void;
   // onCreated gets what the person should know about the new kitty (a desktop that could not
@@ -183,6 +184,8 @@ export function NewKittyModal({
   onCreated: (note?: string) => void;
   onNeedModel?: () => void;
   containers?: boolean;
+  // taken are the names of the kitties there are already.
+  taken?: string[];
 }) {
   const [providers, setProviders] = useState<ProviderInfo[] | null>(null);
   const [connections, setConnections] = useState<string[]>([]);
@@ -206,6 +209,7 @@ export function NewKittyModal({
       .catch(() => {});
   }, []);
   const name = slugName(raw);
+  const clash = Boolean(name) && taken.includes(name);
   const look = avatar || suggestAvatar(name || "kitty");
   if (providers !== null && providers.length === 0) {
     return (
@@ -263,15 +267,24 @@ export function NewKittyModal({
         id="kitty-name"
         class={INPUT}
         aria-required="true"
+        aria-invalid={clash}
+        aria-describedby={clash ? "kitty-name-taken" : undefined}
         value={raw}
         onInput={(e) => setRaw((e.target as HTMLInputElement).value)}
         placeholder="Luna"
         autofocus
       />
-      {raw && name !== raw && (
-        <p class="text-xs text-[var(--t4)] mt-1">
-          It will be called <b>{name || "…"}</b> (lowercase letters, digits and dashes).
+      {clash ? (
+        <p id="kitty-name-taken" class="text-xs text-[var(--c-red)] mt-1" role="alert">
+          There is already a kitty called <b>{name}</b>: pick another name.
         </p>
+      ) : (
+        raw &&
+        name !== raw && (
+          <p class="text-xs text-[var(--t4)] mt-1">
+            It will be called <b>{name || "…"}</b> (lowercase letters, digits and dashes).
+          </p>
+        )
       )}
       <label class={LABEL} for="kitty-persona">
         Who is it?
@@ -342,11 +355,15 @@ export function NewKittyModal({
         <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
           Cancel
         </button>
-        <button class="btn-accent px-4 py-2 text-sm" disabled={!name || busy} onClick={create}>
+        <button
+          class="btn-accent px-4 py-2 text-sm"
+          disabled={!name || clash || busy}
+          onClick={create}
+        >
           {busy ? "Creating…" : "Create"}
         </button>
       </div>
-      <Missing items={[!name && "a name"]} />
+      <Missing items={[!name && "a name", clash && "a name no other kitty has"]} />
     </Modal>
   );
 }

@@ -418,6 +418,7 @@ export default function App() {
       {modal === "kitty" && (
         <NewKittyModal
           containers={containers}
+          taken={kitties.map((k) => k.name)}
           onNeedModel={() => {
             go("#new-models-add");
           }}
