@@ -233,7 +233,7 @@ func TestSendSingle(t *testing.T) {
 	}
 	sa.err = errors.New("brain down")
 	replies, err = s.Send(context.Background(), sess.ID, "?")
-	if err != nil || !strings.Contains(replies[0].Text, "could not answer: brain down") {
+	if err != nil || !strings.Contains(replies[0].Text, "could not answer: brain down") || replies[0].Detail != "brain down" {
 		t.Errorf("a failing brain is reported in the thread: %+v %v", replies, err)
 	}
 	delete(f.brains, "a1")

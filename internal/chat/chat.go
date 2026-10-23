@@ -61,6 +61,9 @@ type Turn struct {
 	Approvals []ApprovalRef `json:"approvals,omitempty"`
 	// Feedback is what the person said about the turn: "up", "down" or empty.
 	Feedback string `json:"feedback,omitempty"`
+	// Detail is the technical form of what the text says in plain words (an error as the
+	// service wrote it), for whoever asks to see technical details.
+	Detail string `json:"detail,omitempty"`
 }
 
 // ApprovalRef points at an action held for approval.
@@ -722,7 +725,7 @@ func (s *Service) send(ctx context.Context, id, from, fromID, text string) ([]Tu
 	for _, k := range responders {
 		turn, pending, err := s.answer(ctx, id, k, kitties)
 		if err != nil {
-			turn = Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: "(" + k.Name + " could not answer: " + err.Error() + ")"}
+			turn = Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: "(" + k.Name + " could not answer: " + Plain(err.Error()) + ")", Detail: err.Error()}
 		}
 		s.mu.Lock()
 		sess.Turns = append(sess.Turns, turn)
@@ -992,6 +995,8 @@ type taskState struct {
 	rounds    int
 	// pre are the outcomes of the first batch's non-desktop actions, run before the task.
 	pre map[int]outcome
+	// detail is why the task failed, as the error said it.
+	detail string
 }
 
 // runTask drives a desktop task to its end within the kitty's limits: rounds of actions, a
@@ -1023,7 +1028,8 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 	result, needsHelp := "done", false
 	if fail != "" {
 		result = "blocked"
-		st.parts = append(st.parts, "("+k.Name+" could not finish: "+fail+")")
+		st.parts = append(st.parts, "("+k.Name+" could not finish: "+Plain(fail)+")")
+		st.detail = fail
 		if !errors.Is(ctx.Err(), context.Canceled) {
 			// Given up, not stopped by a person: the backup takes over, or the person is asked.
 			var handed string
@@ -1034,6 +1040,9 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 		}
 	}
 	s.closeTask(id, index, k, strings.TrimSpace(strings.Join(st.parts, "\n\n")), needsHelp, result)
+	if st.detail != "" {
+		s.edit(id, index, func(t *Turn) { t.Detail = st.detail })
+	}
 }
 
 // attempt runs rounds until the task is done, the model stops asking for actions, or something
