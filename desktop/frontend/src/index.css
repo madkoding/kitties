@@ -544,6 +544,19 @@ select:focus {
   font-size: 12.5px;
   animation: motion-enter-left var(--motion-base) var(--ease-out) backwards;
 }
+/* A limit a kitty set on itself, in the chat, with its undo. */
+.limit-note {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 13px;
+  color: var(--t2);
+  border: 1px solid rgb(var(--accent-rgb) / 0.3);
+  background: rgb(var(--accent-rgb) / 0.07);
+  border-radius: var(--radius-cut);
+}
 /* The technical details, when the person asked to see them. */
 .tech {
   font-family: var(--font-mono);

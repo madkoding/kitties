@@ -985,3 +985,33 @@ test("the page speaks Spanish: the system's language, or the one picked", async 
   await page.getByLabel("Idioma").selectOption("en");
   await expect(page.getByRole("tab", { name: "Preferences" })).toBeVisible();
 });
+
+test("a kitty asked to hold back limits itself, says so in the chat, and it can be undone", async ({
+  page,
+}) => {
+  const headers = { Authorization: "Bearer e2e-token" };
+  const r = await page.request.post(`${GATEWAY}/v1/chats`, {
+    headers,
+    data: { members: ["luna"], title: "Hold back" },
+  });
+  const chat = ((await r.json()) as { chat: { id: string } }).chat.id;
+  await open(page, `#chat/${chat}`);
+  const box = page.locator("textarea");
+  await box.fill("Please ask me before posting to the team");
+  await box.press("Enter");
+  const note = page.getByTestId("limit-note");
+  await expect(note).toContainText("Limit set: Send on team-slack · asks first");
+  const rules = async () =>
+    (
+      (await (await page.request.get(`${GATEWAY}/v1/approvals/rules`, { headers })).json()) as {
+        rules: { kitty_name: string; connector: string }[];
+      }
+    ).rules.filter((x) => x.kitty_name === "luna");
+  expect(await rules()).toHaveLength(1);
+  await shot(page, "47-limit-note");
+  // Undone, the limit is gone, as if it had never been set.
+  await note.getByTestId("limit-undo").click();
+  await expect(note).toContainText("undone");
+  await expect.poll(rules).toHaveLength(0);
+  await page.request.delete(`${GATEWAY}/v1/chats/${chat}`, { headers });
+});

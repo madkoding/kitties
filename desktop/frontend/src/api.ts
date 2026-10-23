@@ -167,6 +167,8 @@ export interface Turn {
   feedback?: "up" | "down" | "";
   // detail is the technical form of what the text says in plain words (an error as written).
   detail?: string;
+  // limits are the limits the kitty set on itself in this turn (an empty mode lifted one).
+  limits?: { connector: string; action: string; mode: string; previous?: string }[];
   usage?: { input: number; output: number };
 }
 
@@ -702,7 +704,12 @@ export const api = {
     request<{ rules: ApprovalRule[] }>("GET", "/v1/approvals/rules").then((r) => r.rules || []),
   removeRule: (id: string) => request("DELETE", `/v1/approvals/rules/${id}`),
   // setRule limits an action of a kitty (all of the connection's with an empty action).
-  setRule: (kitty: string, connector: string, action: string, mode: "ask" | "never" | "auto") =>
+  setRule: (
+    kitty: string,
+    connector: string,
+    action: string,
+    mode: "ask" | "never" | "auto" | "",
+  ) =>
     request<{ rule: ApprovalRule }>("POST", "/v1/approvals/rules", {
       kitty,
       connector,

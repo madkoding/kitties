@@ -8,6 +8,7 @@ import { useTechDetails } from "./prefs";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
 import { IconHand, IconShield, IconThumbDown, IconThumbUp } from "./icons";
+import { RULE_LABEL, ruleTarget } from "./Approvals";
 
 function Text({ text }: { text: string }) {
   return (
@@ -118,6 +119,62 @@ function turnMood(turn: Turn, latest: boolean): Mood {
   return latest ? "talking" : "idle";
 }
 
+// LimitNote shows a limit the kitty set on itself because the person asked, with a way to take
+// it back: undoing puts back the mode there was before (none, for a new limit).
+function LimitNote({
+  kitty,
+  limit,
+}: {
+  kitty: string;
+  limit: { connector: string; action: string; mode: string; previous?: string };
+}) {
+  const [state, setState] = useState<"" | "busy" | "undone">("");
+  const [err, setErr] = useState("");
+  const target = ruleTarget(limit);
+  const undo = async () => {
+    setState("busy");
+    setErr("");
+    try {
+      const action = limit.action === "*" ? "" : limit.action;
+      await api.setRule(
+        kitty,
+        limit.connector,
+        action,
+        (limit.previous || "") as "ask" | "never" | "",
+      );
+      setState("undone");
+    } catch (e) {
+      setErr((e as Error).message);
+      setState("");
+    }
+  };
+  return (
+    <div class="limit-note" data-testid="limit-note">
+      <IconShield size={13} />
+      <span class="flex-1">
+        {limit.mode
+          ? t("Limit set: {target} · {mode}", {
+              target,
+              mode: RULE_LABEL[limit.mode] || limit.mode,
+            })
+          : t("Limit lifted: {target}", { target })}
+        {state === "undone" && <span class="text-[var(--t3)]"> · {t("undone")}</span>}
+        {err && <span class="text-[var(--c-red)]"> · {err}</span>}
+      </span>
+      {state !== "undone" && (
+        <button
+          class="btn-ghost px-2 py-1 text-xs"
+          disabled={state === "busy"}
+          onClick={undo}
+          data-testid="limit-undo"
+        >
+          {t("Undo")}
+        </button>
+      )}
+    </div>
+  );
+}
+
 // Feedback is the thumbs under what a kitty said: up is kept, down asks for a word on why. They
 // teach the kitty what the person likes and how demanding they are.
 function Feedback({ chat, index, current }: { chat: string; index: number; current: string }) {
@@ -219,6 +276,8 @@ function TurnCard({
         </div>
       )}
       {turn.text && <Text text={turn.text} />}
+      {turn.kitty &&
+        turn.limits?.map((l, i) => <LimitNote key={i} kitty={turn.kitty!} limit={l} />)}
       {tech && turn.detail && (
         <pre class="tech-detail" data-testid="turn-detail">
           {turn.detail}
