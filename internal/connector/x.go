@@ -34,7 +34,7 @@ func xFields() []Field {
 		return fl
 	}
 	token := f("token", "OAuth 2.0 access token", "Keys and tokens → OAuth 2.0 Keys → Access Token; it lasts two hours, so the keys above or the sign-in are better", false, true)
-	token.Key = keyToken
+	token.Key, token.Lifetime = keyToken, 2*60*60
 	return append([]Field{
 		oauth1("consumer_key", "Consumer Key", "Keys and tokens → OAuth 1.0 Keys → Consumer Key (the API key); with the three below, instead of signing in, and they do not expire", false),
 		oauth1("consumer_secret", "Consumer Secret", "shown with the Consumer Key when it is generated", true),

@@ -32,6 +32,9 @@ type Field struct {
 	// kind that signs in: "token" (a token, with its email where the service pairs them) or
 	// "oauth1" (X's OAuth 1.0a keys).
 	Key string `json:"key,omitempty"`
+	// Lifetime is how long, in seconds, a token typed in the field lasts (X's OAuth 2.0 access
+	// token: two hours), so the page can say when it no longer works.
+	Lifetime int `json:"lifetime,omitempty"`
 }
 
 // Action is one thing a kind can do, as the model and the page see it.
@@ -587,35 +590,7 @@ func (a *api) call(ctx context.Context, args map[string]any) (text, name string,
 	if err != nil {
 		return "", "", nil, err
 	}
-	// X's OAuth 1.0a keys sign the request themselves, before the sign-in is looked at.
-	if a.kind.Name == "x" && !req.plain {
-		if keys, ok := xKeysOf(a.s); ok {
-			auth, err := keys.sign(req.method, req.url, nil)
-			if err != nil {
-				return "", "", nil, err
-			}
-			if req.headers == nil {
-				req.headers = map[string]string{}
-			}
-			req.headers["Authorization"] = auth
-		}
-	}
-	// An OAuth kind signs the request with the account's token, unless the request is plain
-	// (a webhook) or already carries a token the person typed.
-	if a.kind.oauth != "" && !req.plain && strings.TrimSpace(a.s["token"]) == "" && strings.TrimSpace(strings.TrimPrefix(req.headers["Authorization"], "Bearer")) == "" {
-		if a.token == nil {
-			return "", "", nil, errors.New("not signed in: connect the account from Settings")
-		}
-		tok, err := a.token(ctx)
-		if err != nil {
-			return "", "", nil, err
-		}
-		if req.headers == nil {
-			req.headers = map[string]string{}
-		}
-		req.headers["Authorization"] = "Bearer " + tok
-	}
-	raw, err := do(ctx, req)
+	raw, err := a.send(ctx, &req)
 	if err != nil {
 		return "", "", nil, err
 	}
@@ -636,6 +611,40 @@ func (a *api) call(ctx context.Context, args map[string]any) (text, name string,
 		return a.render(action, raw), "", nil, nil
 	}
 	return summary(raw), "", nil, nil
+}
+
+// send signs a request with the connector's account and sends it; req.headers end up with
+// the account's Authorization, for a follow-up request.
+func (a *api) send(ctx context.Context, req *request) ([]byte, error) {
+	// X's OAuth 1.0a keys sign the request themselves, before the sign-in is looked at.
+	if a.kind.Name == "x" && !req.plain {
+		if keys, ok := xKeysOf(a.s); ok {
+			auth, err := keys.sign(req.method, req.url, nil)
+			if err != nil {
+				return nil, err
+			}
+			if req.headers == nil {
+				req.headers = map[string]string{}
+			}
+			req.headers["Authorization"] = auth
+		}
+	}
+	// An OAuth kind signs the request with the account's token, unless the request is plain
+	// (a webhook) or already carries a token the person typed.
+	if a.kind.oauth != "" && !req.plain && strings.TrimSpace(a.s["token"]) == "" && strings.TrimSpace(strings.TrimPrefix(req.headers["Authorization"], "Bearer")) == "" {
+		if a.token == nil {
+			return nil, errors.New("not signed in: connect the account from Settings")
+		}
+		tok, err := a.token(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if req.headers == nil {
+			req.headers = map[string]string{}
+		}
+		req.headers["Authorization"] = "Bearer " + tok
+	}
+	return do(ctx, *req)
 }
 
 // Filer is a connector whose call may answer with a file, kept as an artifact.
