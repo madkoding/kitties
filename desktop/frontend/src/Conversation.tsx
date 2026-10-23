@@ -272,10 +272,13 @@ interface Props {
   session: Session | null;
   kitties: Kitty[];
   user: string;
+  // pending is the message being sent, until the chat has it; waiting shows the kitties
+  // thinking until one of them is at work.
   pending: string | null;
+  waiting?: boolean;
 }
 
-export default function Conversation({ session, kitties, user, pending }: Props) {
+export default function Conversation({ session, kitties, user, pending, waiting }: Props) {
   const byId = new Map(kitties.map((k) => [k.id, k]));
   const [zoom, setZoom] = useState<string>("");
   const end = useRef<HTMLDivElement>(null);
@@ -326,11 +329,13 @@ export default function Conversation({ session, kitties, user, pending }: Props)
         />
       ))}
       {pending && (
+        <div class="msg user" data-who={user}>
+          <Text text={pending} />
+        </div>
+      )}
+      {(pending || waiting) && (
         <>
-          <div class="msg user" data-who={user}>
-            <Text text={pending} />
-          </div>
-          <div class="flex items-end gap-2 px-2 mt-2">
+          <div class="flex items-end gap-2 px-2 mt-2" data-testid="thinking">
             {session.members.map((id) => {
               const k = byId.get(id);
               return k ? (

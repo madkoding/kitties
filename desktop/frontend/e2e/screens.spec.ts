@@ -872,3 +872,33 @@ test("a connection says what it uses, is tested from the list and after saving, 
   await expect(page.getByTestId("test-result-tw")).toHaveText("✓ It works as madkoding.");
   await page.request.delete(`${GATEWAY}/v1/settings/connectors/tw`, { headers });
 });
+
+test("a message sent shows once, while the kitties are still answering", async ({ page }) => {
+  const headers = { Authorization: "Bearer e2e-token" };
+  const r = await page.request.post(`${GATEWAY}/v1/chats`, {
+    headers,
+    data: { members: ["mimi"], title: "Once" },
+  });
+  const chat = ((await r.json()) as { chat: { id: string } }).chat.id;
+  // The answer is held back: the message reaches the chat live before the sending ends.
+  let release: () => void = () => {};
+  const held = new Promise<void>((done) => (release = done));
+  await page.route(`**/v1/chats/${chat}/messages`, async (route) => {
+    const answer = await route.fetch();
+    await held;
+    await route.fulfill({ response: answer });
+  });
+  await open(page, `#chat/${chat}`);
+  const box = page.locator("textarea");
+  await box.fill("hello there, only once");
+  await box.press("Enter");
+  const mine = page.locator(".msg.user", { hasText: "hello there, only once" });
+  await expect(mine).toHaveCount(1);
+  // Long enough for the live message to have arrived next to the one being sent.
+  await page.waitForTimeout(1500);
+  await expect(mine).toHaveCount(1);
+  release();
+  await expect(page.getByTestId("thinking")).toHaveCount(0);
+  await expect(mine).toHaveCount(1);
+  await page.request.delete(`${GATEWAY}/v1/chats/${chat}`, { headers });
+});

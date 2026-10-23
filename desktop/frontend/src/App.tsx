@@ -62,6 +62,9 @@ export default function App() {
   const [kittyOpen, setKittyOpen] = useState<string | null>(routeFromHash().kitty);
   const [modal, setModal] = useState<ModalKind>(routeFromHash().modal);
   const [pending, setPending] = useState<string | null>(null);
+  // pendingFrom is how many turns the chat had when the message went: the sending waits for the
+  // kitties' answer, but the message itself arrives live before that, and is shown once.
+  const [pendingFrom, setPendingFrom] = useState(0);
   const [error, setError] = useState("");
   // note is something to know that is not a failure of the page (a desktop that did not start).
   const [note, setNote] = useState("");
@@ -173,6 +176,14 @@ export default function App() {
   }, [current, loadSession]);
 
   const working = useMemo(() => Boolean(session?.turns?.some((t) => t.working)), [session]);
+  // unshown is the message being sent until the chat itself has it.
+  const unshown =
+    pending !== null &&
+    !(session?.turns || [])
+      .slice(pendingFrom)
+      .some((t) => !t.kitty && t.text.trim() === pending.trim())
+      ? pending
+      : null;
 
   // The open chat is watched live: every new turn, step and finish arrives as an event and is
   // merged into the session. A slow poll remains as the safety net.
@@ -264,6 +275,7 @@ export default function App() {
     if (!session) {
       return;
     }
+    setPendingFrom((session.turns || []).length);
     setPending(text);
     setError("");
     try {
@@ -381,7 +393,13 @@ export default function App() {
           </div>
         )}
         {current ? (
-          <Conversation session={session} kitties={kitties} user={user} pending={pending} />
+          <Conversation
+            session={session}
+            kitties={kitties}
+            user={user}
+            pending={unshown}
+            waiting={pending !== null && !working}
+          />
         ) : (
           <Welcome
             models={models}

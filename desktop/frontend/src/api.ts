@@ -768,17 +768,30 @@ export function watchChat(id: string, onEvent: (e: ChatEvent) => void): () => vo
   if (typeof EventSource === "undefined") {
     return () => {};
   }
-  const es = new EventSource(shotURL(`/v1/chats/${id}/events`));
-  for (const type of ["turn", "update", "done", "deleted"]) {
-    es.addEventListener(type, (ev) => {
-      try {
-        onEvent(JSON.parse((ev as MessageEvent).data) as ChatEvent);
-      } catch {
-        /* a malformed event is dropped */
-      }
-    });
-  }
-  return () => es.close();
+  // The stream carries the token in its address: on a first visit the token is fetched first,
+  // or the stream is refused and nothing arrives live until a reload.
+  let es: EventSource | null = null;
+  let closed = false;
+  const conn = savedConnection();
+  void (conn.token ? Promise.resolve(conn) : fetchLocalToken(conn)).then(() => {
+    if (closed) {
+      return;
+    }
+    es = new EventSource(shotURL(`/v1/chats/${id}/events`));
+    for (const type of ["turn", "update", "done", "deleted"]) {
+      es.addEventListener(type, (ev) => {
+        try {
+          onEvent(JSON.parse((ev as MessageEvent).data) as ChatEvent);
+        } catch {
+          /* a malformed event is dropped */
+        }
+      });
+    }
+  });
+  return () => {
+    closed = true;
+    es?.close();
+  };
 }
 
 // artifactText loads a text artifact for reading in the page.
