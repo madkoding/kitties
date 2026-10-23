@@ -172,3 +172,11 @@ func TestPerson(t *testing.T) {
 		}
 	}
 }
+
+// CAPTCHAs go to the person: the catalogue says so.
+func TestCatalogueHandsCaptchasToThePerson(t *testing.T) {
+	c := Catalogue()
+	if !strings.Contains(c, "CAPTCHAs and other checks that a human is there are the person's") || !strings.Contains(c, "ask_help") {
+		t.Error("the catalogue must hand CAPTCHAs to the person")
+	}
+}

@@ -71,7 +71,8 @@ func Catalogue() string {
 		"working folder), a file manager (pcmanfm), LibreOffice, Inkscape and mtPaint; install what else you need. " +
 		"When something needs the person (a password, a captcha, a code they receive), use ask_help: they get a " +
 		"button to take control of your desktop, see it live and click and type in it, and you go on when they " +
-		"give it back. The tools:\n")
+		"give it back. CAPTCHAs and other checks that a human is there are the person's to pass: never try to " +
+		"solve or get around them yourself, ask for help at once. The tools:\n")
 	for _, t := range Tools {
 		fmt.Fprintf(&b, "- %s %s: %s\n", t.Name, t.Args, t.Help)
 	}
