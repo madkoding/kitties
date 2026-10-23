@@ -1,6 +1,7 @@
 import { useState } from "preact/hooks";
 import { api } from "./api";
 import PixelCat from "./PixelCat";
+import { Required } from "./Required";
 
 // Login is what a gateway served on a network shows before anything else: the token it printed
 // when it started, traded for a session cookie so the page never keeps it.
@@ -33,9 +34,11 @@ export default function Login({ onDone }: { onDone: () => void }) {
         </div>
         <label class="block text-xs text-[var(--t3)] mb-1" for="login-token">
           Token
+          <Required />
         </label>
         <input
           id="login-token"
+          aria-required="true"
           class="w-full px-3 py-2 text-sm font-mono bg-transparent border border-white/10 rounded"
           type="password"
           autocomplete="current-password"

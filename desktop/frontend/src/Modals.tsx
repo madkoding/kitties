@@ -8,6 +8,7 @@ import { IconCamera, IconPlay, IconStop, IconTrash, IconX } from "./icons";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import { MemoryPanel } from "./Memory";
 import PixelCat, { BREEDS, CatPicker, COLORS, type Mood } from "./PixelCat";
+import { Required } from "./Required";
 
 // suggestAvatar picks a cat from the name, the way the gateway does when none is chosen.
 function suggestAvatar(name: string): { breed: string; color: string } {
@@ -114,8 +115,11 @@ export function NewChatModal({
       <p class="text-sm text-[var(--t3)]">
         Pick one kitty, or several for a group that works as a team.
       </p>
-      <label class={LABEL}>Kitties</label>
-      <div class="flex flex-col gap-1">
+      <label class={LABEL}>
+        Kitties
+        <Required />
+      </label>
+      <div class="flex flex-col gap-1" role="group" aria-label="Kitties" aria-required="true">
         {kitties.map((k) => (
           <label key={k.id} class={`row cursor-pointer ${picked.has(k.id) ? "on" : ""}`}>
             <input
@@ -252,10 +256,12 @@ export function NewKittyModal({
       </div>
       <label class={LABEL} for="kitty-name">
         Name
+        <Required />
       </label>
       <input
         id="kitty-name"
         class={INPUT}
+        aria-required="true"
         value={raw}
         onInput={(e) => setRaw((e.target as HTMLInputElement).value)}
         placeholder="Luna"
@@ -711,6 +717,15 @@ export function ConnectModal({
     }
   };
   const android = inAndroid();
+  // The address is needed unless the page is served by the gateway itself; the app on a phone
+  // also needs the token, since it cannot read the gateway's file.
+  const needsURL = android || inWails();
+  const missing = [
+    needsURL && !url.trim() && "the address",
+    android && !token.trim() && "the token",
+  ]
+    .filter(Boolean)
+    .join(" and ");
   const body = (
     <>
       {android ? (
@@ -743,9 +758,13 @@ export function ConnectModal({
           {!inWails() && " Leave the address empty when this page is served by the gateway itself."}
         </p>
       )}
-      <label class={LABEL}>Address</label>
+      <label class={LABEL}>
+        Address
+        {needsURL ? <Required /> : " (optional)"}
+      </label>
       <input
         class={INPUT}
+        aria-required={needsURL}
         value={url}
         onInput={(e) => setUrl((e.target as HTMLInputElement).value)}
         placeholder={android ? "http://192.168.1.20:7488" : "http://127.0.0.1:7488"}
@@ -753,9 +772,13 @@ export function ConnectModal({
         autocapitalize="off"
         aria-label="Address"
       />
-      <label class={LABEL}>{android ? "Token" : "Token (remote gateways only)"}</label>
+      <label class={LABEL}>
+        Token
+        {android ? <Required /> : " (remote gateways only)"}
+      </label>
       <input
         class={`${INPUT} font-mono`}
+        aria-required={android}
         value={token}
         onInput={(e) => setToken((e.target as HTMLInputElement).value)}
         placeholder={android ? "paste the gateway's token" : "found on this machine when empty"}
@@ -767,7 +790,12 @@ export function ConnectModal({
         <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
           Cancel
         </button>
-        <button class="btn-accent px-4 py-2 text-sm" disabled={busy} onClick={save}>
+        <button
+          class="btn-accent px-4 py-2 text-sm"
+          disabled={busy || Boolean(missing)}
+          title={missing ? `Fill in ${missing}` : undefined}
+          onClick={save}
+        >
           {busy ? "Checking…" : "Connect"}
         </button>
       </div>

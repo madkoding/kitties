@@ -3,6 +3,7 @@ import type { ConnectorView, Goal, JournalEntry, Kitty, Limits } from "./api";
 import { api } from "./api";
 import { when } from "./format";
 import { IconClock, IconPlay, IconTarget, IconTrash } from "./icons";
+import { Required } from "./Required";
 
 // WHAT A KITTY DOES ON ITS OWN.
 //
@@ -185,9 +186,14 @@ export function GoalsPanel({
       </div>
       {adding ? (
         <div class="mt-3 p-3 border border-[rgb(var(--accent-rgb)/0.3)] bg-[rgb(var(--accent-rgb)/0.05)]">
-          <label class={LABEL}>Title</label>
+          <label class={LABEL}>
+            Title
+            <Required />
+          </label>
           <input
             class={INPUT}
+            aria-required="true"
+            aria-label="Title"
             value={title}
             onInput={(e) => setTitle((e.target as HTMLInputElement).value)}
             placeholder="Triage the new issues"

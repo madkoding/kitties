@@ -3,6 +3,7 @@ import type { ArtifactInfo, Skill } from "./api";
 import { api, artifactText, shotURL } from "./api";
 import { when } from "./format";
 import { IconPlus, IconTrash, IconX } from "./icons";
+import { Required } from "./Required";
 
 type Tab = "skills" | "artifacts";
 
@@ -82,10 +83,10 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
             </div>
             {draft ? (
               <div class="mt-3 p-4 border border-[rgb(var(--accent-rgb)/0.3)] bg-[rgb(var(--accent-rgb)/0.05)]">
-                <label class="block text-xs text-[var(--t3)] mb-1 uppercase tracking-wider font-mono">Name</label>
-                <input class="w-full px-3 py-2 text-sm" value={draft.name} onInput={(e) => setDraft({ ...draft, name: (e.target as HTMLInputElement).value })} placeholder="deploy-to-prod" />
-                <label class="block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono">Document (markdown)</label>
-                <textarea class="w-full px-3 py-2 text-sm font-mono min-h-[160px]" value={draft.body} onInput={(e) => setDraft({ ...draft, body: (e.target as HTMLTextAreaElement).value })} placeholder={"# Title\n\nWhat it is for.\n\n1. Step"} />
+                <label class="block text-xs text-[var(--t3)] mb-1 uppercase tracking-wider font-mono">Name<Required /></label>
+                <input class="w-full px-3 py-2 text-sm" aria-required="true" aria-label="Name" value={draft.name} onInput={(e) => setDraft({ ...draft, name: (e.target as HTMLInputElement).value })} placeholder="deploy-to-prod" />
+                <label class="block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono">Document (markdown)<Required /></label>
+                <textarea class="w-full px-3 py-2 text-sm font-mono min-h-[160px]" aria-required="true" aria-label="Document" value={draft.body} onInput={(e) => setDraft({ ...draft, body: (e.target as HTMLTextAreaElement).value })} placeholder={"# Title\n\nWhat it is for.\n\n1. Step"} />
                 <div class="flex justify-end gap-2 mt-3">
                   <button class="btn-ghost px-4 py-2 text-sm" onClick={() => setDraft(null)}>
                     Cancel

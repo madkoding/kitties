@@ -327,6 +327,13 @@ test("the catalogue marks what asks first, and the new services are there", asyn
     await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
   }
   await page.locator(".service-btn", { hasText: "Stripe" }).click();
+  // The key is marked as required, and Save waits for it.
+  const form = page.getByTestId("connection-form");
+  await expect(form.locator("label[for=field-token] .req")).toBeVisible();
+  const save = form.getByRole("button", { name: "Save", exact: true });
+  await expect(save).toBeDisabled();
+  await form.locator("#field-token").fill("sk_test_demo");
+  await expect(save).toBeEnabled();
   await page.getByText("What the kitties can do with it").click();
   await expect(page.locator("li", { hasText: "Refund" })).toContainText("always asks you");
   await expect(page.locator("li", { hasText: "Send invoice" })).toContainText("asks you first");
@@ -355,9 +362,15 @@ test("adding a model: pick the provider, paste the key, keep the suggested model
   const form = page.getByTestId("model-form");
   await expect(form.getByText("Get a key from Anthropic Claude")).toBeVisible();
   await expect(page.getByLabel("Model")).toHaveValue("claude-sonnet-5-5");
-  // Without a key there is nothing to save yet.
+  // The key and the model are marked as required; without a key there is nothing to save yet.
+  await expect(form.locator("label[for=model-key] .req")).toBeVisible();
+  await expect(form.locator("label[for=model-name] .req")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save and test" })).toBeDisabled();
   await page.getByLabel("API key").fill("sk-ant-demo");
+  await expect(page.getByRole("button", { name: "Save and test" })).toBeEnabled();
+  await page.getByLabel("Model").fill("");
+  await expect(page.getByRole("button", { name: "Save and test" })).toBeDisabled();
+  await page.getByLabel("Model").fill("claude-sonnet-5-5");
   await expect(page.getByRole("button", { name: "Save and test" })).toBeEnabled();
   await shot(page, "34-add-model");
 });
@@ -607,6 +620,10 @@ test("creating a kitty closes the dialog at once, and a desktop that cannot star
 }) => {
   await open(page, "");
   await page.locator("aside").getByRole("button", { name: "New kitty" }).click();
+  // The name is marked as required, and Create waits for it.
+  await expect(page.locator("label[for=kitty-name] .req")).toBeVisible();
+  await expect(page.locator("#kitty-name")).toHaveAttribute("aria-required", "true");
+  await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
   await page.getByLabel("Name").fill("Nube");
   // The brain picker is drawn like the other fields, not as the system's button.
   const brain = page.locator("#kitty-brain");

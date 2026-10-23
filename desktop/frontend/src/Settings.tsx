@@ -28,6 +28,7 @@ import {
 } from "./friendly";
 import { IconPlus, IconTrash, IconX } from "./icons";
 import { ConnectModal } from "./Modals";
+import { Required } from "./Required";
 import { AccountSignIn } from "./SignIn";
 
 // SETTINGS, FOR PEOPLE.
@@ -268,11 +269,12 @@ function ModelForm({
       {way === "key" && (needsKey || kind === "custom") && (
         <>
           <label class={LABEL} for="model-key">
-            API key{needsKey ? "" : " (if the server asks for one)"}
+            API key{needsKey ? <Required /> : " (if the server asks for one)"}
           </label>
           <input
             id="model-key"
             class={`${INPUT} font-mono`}
+            aria-required={missingKey}
             type="password"
             autocomplete="off"
             value={key}
@@ -327,10 +329,12 @@ function ModelForm({
       )}
       <label class={LABEL} for="model-name">
         Model
+        <Required />
       </label>
       <input
         id="model-name"
         class={`${INPUT} font-mono`}
+        aria-required="true"
         list="model-suggestions"
         value={model}
         onInput={(e) => setModel((e.target as HTMLInputElement).value)}
@@ -418,7 +422,13 @@ function ModelForm({
             class="btn-accent px-4 py-2 text-sm"
             disabled={phase !== "edit" || !model.trim() || missingKey || missingLogin}
             title={
-              missingKey ? "Paste the API key first" : missingLogin ? "Sign in first" : undefined
+              !model.trim()
+                ? "Name the model first"
+                : missingKey
+                  ? "Paste the API key first"
+                  : missingLogin
+                    ? "Sign in first"
+                    : undefined
             }
             onClick={save}
           >
@@ -660,12 +670,13 @@ function FieldInput({
     <div>
       <label class={LABEL} for={id}>
         {f.label}
-        {f.required ? "" : " (optional)"}
+        {f.required ? <Required /> : " (optional)"}
       </label>
       {f.name === "headers" ? (
         <textarea
           id={id}
           class={`${INPUT} font-mono`}
+          aria-required={f.required}
           value={value}
           onInput={(e) => onInput((e.target as HTMLTextAreaElement).value)}
           placeholder={f.help}
@@ -676,6 +687,7 @@ function FieldInput({
           class={`${INPUT} font-mono`}
           type="password"
           autocomplete="off"
+          aria-required={f.required && !saved}
           value={value}
           onInput={(e) => onInput((e.target as HTMLInputElement).value)}
           placeholder={saved ? "saved: leave empty to keep it" : placeholder || f.placeholder || ""}
@@ -686,6 +698,7 @@ function FieldInput({
           class={INPUT}
           type="text"
           autocomplete="off"
+          aria-required={f.required}
           value={value}
           onInput={(e) => onInput((e.target as HTMLInputElement).value)}
           placeholder={placeholder || f.placeholder || ""}

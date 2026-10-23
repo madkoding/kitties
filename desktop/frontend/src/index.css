@@ -183,6 +183,11 @@ button.plain:not(:disabled):hover,
 button.row-hit:not(:disabled):hover {
   transform: none;
 }
+.req {
+  color: var(--color-accent);
+  margin-left: 0.25em;
+  font-weight: 700;
+}
 .btn-accent {
   background: var(--color-accent);
   color: var(--on-accent);
