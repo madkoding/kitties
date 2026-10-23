@@ -1,6 +1,6 @@
 module github.com/madkoding/kitties/desktop
 
-go 1.26.0
+go 1.26.10
 
 require github.com/wailsapp/wails/v2 v2.11.0
 
