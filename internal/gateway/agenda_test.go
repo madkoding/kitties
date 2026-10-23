@@ -423,6 +423,17 @@ func (a *fakeApprover) DecideApproval(_ context.Context, id string, approve bool
 }
 
 func (a *fakeApprover) ApprovalRules() ([]approvals.Rule, error) { return a.rules, nil }
+func (a *fakeApprover) SetApprovalRule(kitty, conn, action, mode string) (*approvals.Rule, error) {
+	if kitty != "mimi" {
+		return nil, errors.New("no such kitty " + kitty)
+	}
+	if mode == "maybe" {
+		return nil, errors.New("a limit is ask, never or auto, not \"maybe\"")
+	}
+	r := approvals.Rule{ID: "r" + conn, Kitty: "a1", KittyName: kitty, Connector: conn, Action: action, Mode: mode}
+	a.rules = append(a.rules, r)
+	return &r, nil
+}
 func (a *fakeApprover) RemoveApprovalRule(id string) error {
 	for i, r := range a.rules {
 		if r.ID == id {
@@ -475,6 +486,20 @@ func TestApprovalsAPI(t *testing.T) {
 	if code, m, _ := call(t, srv, "GET", "/v1/approvals/rules", "tok", nil); code != 200 || len(m["rules"].([]any)) != 1 {
 		t.Errorf("rules = %d %v", code, m)
 	}
+	// A limit set by hand: by the kitty's name, refused for an unknown kitty or a bad mode.
+	if code, m, _ := call(t, srv, "POST", "/v1/approvals/rules", "tok", map[string]any{"kitty": "mimi", "connector": "x", "action": "post", "mode": "ask"}); code != 200 || m["rule"].(map[string]any)["mode"] != "ask" {
+		t.Errorf("set rule = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/approvals/rules", "tok", map[string]any{"kitty": "zz", "connector": "x", "mode": "ask"}); code != 404 {
+		t.Errorf("unknown kitty = %d", code)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/approvals/rules", "tok", map[string]any{"kitty": "mimi", "connector": "x", "mode": "maybe"}); code != 400 {
+		t.Errorf("bad mode = %d", code)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/approvals/rules", "tok", "{"); code != 400 {
+		t.Errorf("bad json = %d", code)
+	}
+	ap.rules = ap.rules[:1]
 	if code, _, _ := call(t, srv, "DELETE", "/v1/approvals/rules/r1", "tok", nil); code != 200 || len(ap.rules) != 0 {
 		t.Error("remove rule")
 	}
@@ -488,7 +513,7 @@ func TestApprovalsAPI(t *testing.T) {
 		t.Error("auth")
 	}
 	// A deployment where nothing is held says so everywhere.
-	for _, tc := range []struct{ method, path string }{{"GET", "/v1/approvals"}, {"GET", "/v1/approvals/rules"}, {"DELETE", "/v1/approvals/rules/x"}, {"POST", "/v1/approvals/x/approve"}, {"POST", "/v1/approvals/x/reject"}} {
+	for _, tc := range []struct{ method, path string }{{"GET", "/v1/approvals"}, {"GET", "/v1/approvals/rules"}, {"DELETE", "/v1/approvals/rules/x"}, {"POST", "/v1/approvals/rules"}, {"POST", "/v1/approvals/x/approve"}, {"POST", "/v1/approvals/x/reject"}} {
 		none := httptest.NewServer(New(f, &fakeChats{}, "tok", ""))
 		if code, _, data := call(t, none, tc.method, tc.path, "tok", nil); code != 404 || !strings.Contains(string(data), "no actions for approval") {
 			t.Errorf("%s %s without approvals = %d", tc.method, tc.path, code)

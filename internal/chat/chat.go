@@ -320,6 +320,8 @@ func parseDirectives(text string) ([]Directive, string) {
 			kind = "delegate"
 		case strings.HasPrefix(trimmed, "@memory "):
 			kind = "memory"
+		case strings.HasPrefix(trimmed, "@limit "):
+			kind = "limit"
 		default:
 			kept = append(kept, line)
 			continue
@@ -878,6 +880,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		return Turn{}, nil, err
 	}
 	system += s.memoryPrompt(k, sess)
+	system += s.limitPrompt(allowed)
 	if sess.Summary != "" {
 		system += fmt.Sprintf("\nEarlier in this conversation (a summary of its first %d messages, which you no longer see one by one):\n%s\n", sess.SummaryUpTo, sess.Summary)
 	}

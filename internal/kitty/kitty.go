@@ -42,9 +42,9 @@ type Kitty struct {
 	Limits Limits `json:"limits"`
 	// Backup names the kitty a task is handed to when this one gives up; empty asks the person.
 	Backup string `json:"backup,omitempty"`
-	// Approvals is "ask" (or empty): an action that reaches other people waits for a yes until
-	// the kitty has earned the right to do it alone; "auto": it acts without asking, except
-	// for what is never done unasked.
+	// Approvals is empty (or "auto"): the kitty acts as far as its accounts allow, held back
+	// only by the limits the person set; "ask": an action that reaches other people waits for a
+	// yes until the kitty has earned the right to do it alone.
 	Approvals string `json:"approvals,omitempty"`
 }
 

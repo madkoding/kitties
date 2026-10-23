@@ -13,6 +13,9 @@ type Approver interface {
 	DecideApproval(ctx context.Context, id string, approve bool, reason string, always bool) (*approvals.Approval, error)
 	ApprovalRules() ([]approvals.Rule, error)
 	RemoveApprovalRule(id string) error
+	// SetApprovalRule limits an action of a kitty (ask, never or auto), or lifts the limit with
+	// an empty mode; the kitty is named by its name or id.
+	SetApprovalRule(kitty, connector, action, mode string) (*approvals.Rule, error)
 }
 
 // WithApprovals serves the actions held for approval.
@@ -25,6 +28,7 @@ func (s *Server) approvalRoutes() {
 	api := s.auth
 	s.mux.Handle("GET /v1/approvals", api(s.handleApprovals))
 	s.mux.Handle("GET /v1/approvals/rules", api(s.handleApprovalRules))
+	s.mux.Handle("POST /v1/approvals/rules", api(s.handleSetApprovalRule))
 	s.mux.Handle("DELETE /v1/approvals/rules/{id}", api(s.handleRemoveApprovalRule))
 	s.mux.Handle("POST /v1/approvals/{id}/approve", api(s.handleApprove))
 	s.mux.Handle("POST /v1/approvals/{id}/reject", api(s.handleReject))
@@ -60,6 +64,30 @@ func (s *Server) handleApprovalRules(w http.ResponseWriter, _ *http.Request) {
 		rules = []approvals.Rule{}
 	}
 	reply(w, http.StatusOK, map[string]any{"rules": rules})
+}
+
+// handleSetApprovalRule sets a limit on a kitty's action: {kitty, connector, action, mode}.
+func (s *Server) handleSetApprovalRule(w http.ResponseWriter, r *http.Request) {
+	if s.approver == nil {
+		fail(w, http.StatusNotFound, errNoApprovals)
+		return
+	}
+	var body struct {
+		Kitty     string `json:"kitty"`
+		Connector string `json:"connector"`
+		Action    string `json:"action"`
+		Mode      string `json:"mode"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	rule, err := s.approver.SetApprovalRule(body.Kitty, body.Connector, body.Action, body.Mode)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"rule": rule})
 }
 
 func (s *Server) handleRemoveApprovalRule(w http.ResponseWriter, r *http.Request) {

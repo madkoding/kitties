@@ -488,7 +488,7 @@ func codeFor(err error) int {
 		strings.Contains(msg, "built in"), strings.Contains(msg, "holds"), strings.Contains(msg, " needs "), strings.Contains(msg, "not a valid"),
 		strings.Contains(msg, "does not sign in"), strings.Contains(msg, "no OAuth flow"), strings.Contains(msg, "not signed in"),
 		strings.HasPrefix(msg, "schedule:"), strings.HasPrefix(msg, "on:"), strings.Contains(msg, "a goal "), strings.Contains(msg, "back itself up"),
-		strings.Contains(msg, "limits"), strings.Contains(msg, "not ask or auto"), strings.Contains(msg, "can be for good"), strings.Contains(msg, "always asked"),
+		strings.Contains(msg, "limits"), strings.HasPrefix(msg, "a limit "), strings.Contains(msg, "not ask or auto"), strings.Contains(msg, "can be for good"), strings.Contains(msg, "always asked"),
 		strings.HasPrefix(msg, "notify."), strings.Contains(msg, "rating is"), strings.Contains(msg, "feedback is for"), strings.Contains(msg, "demand is a level"),
 		strings.Contains(msg, "a note needs"), strings.HasPrefix(msg, "scope "), strings.Contains(msg, "the turn is"),
 		strings.HasPrefix(msg, "there is no "), strings.Contains(msg, "still think with"):

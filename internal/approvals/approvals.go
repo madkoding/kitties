@@ -54,15 +54,15 @@ type Approval struct {
 	Error  string `json:"error,omitempty"`
 }
 
-// Rule is what the person decided about a kind of action of a kitty: always allowed, or (after
-// being revoked) asked about again whatever the history says.
+// Rule is how a kind of action of a kitty is limited: always allowed, asked about first, or never
+// done. The person sets it, or the kitty when the person asks it to.
 type Rule struct {
 	ID        string    `json:"id"`
 	Kitty     string    `json:"kitty"`
 	KittyName string    `json:"kitty_name,omitempty"`
 	Connector string    `json:"connector"`
 	Action    string    `json:"action"`
-	Mode      string    `json:"mode"` // auto | ask
+	Mode      string    `json:"mode"` // auto | ask | never
 	Created   time.Time `json:"created"`
 }
 
@@ -75,8 +75,9 @@ type Stat struct {
 
 // Verdict is what Check says about an action about to run.
 type Verdict struct {
-	// Run is true when the action may go ahead without asking.
-	Run bool `json:"run"`
+	// Run is true when the action may go ahead without asking; Blocked when it may not be done.
+	Run     bool `json:"run"`
+	Blocked bool `json:"blocked,omitempty"`
 	// Why says so, for the journal.
 	Why string `json:"why"`
 }
@@ -153,25 +154,24 @@ func (s *Store) save() error {
 
 func statKey(kitty, conn, action string) string { return kitty + "\x00" + conn + "\x00" + action }
 
-// Check says whether an action may run without asking. An action that is never done unasked is
-// asked about whatever the trust; the rest runs when the kitty is in auto mode, the person
-// allowed it for good, or the kitty has earned it with enough yeses in a row.
+// Check says whether an action may run. Nothing is limited unless someone set it, since what
+// an account may do is the service's to limit: a rule for this action of the kitty (or for every
+// action of the connector, "*") says auto, ask or never; without one, a kitty in "ask" mode holds
+// what reaches other people until it earned trust with it, and any other kitty acts.
 func (s *Store) Check(kitty, conn, action, risk, mode string, demand int) Verdict {
-	if risk == "always" {
-		return Verdict{Why: "this kind of action is never done unasked"}
-	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	for _, r := range s.d.Rules {
-		if r.Kitty == kitty && r.Connector == conn && r.Action == action {
-			if r.Mode == "auto" {
-				return Verdict{Run: true, Why: "allowed for good by the person"}
-			}
-			return Verdict{Why: "the person asked to be asked about this"}
+	if r := s.ruleLocked(kitty, conn, action); r != nil {
+		switch r.Mode {
+		case ModeAuto:
+			return Verdict{Run: true, Why: "allowed for good by the person"}
+		case ModeNever:
+			return Verdict{Blocked: true, Why: "the person asked that this is never done"}
 		}
+		return Verdict{Why: "the person asked to be asked about this"}
 	}
-	if mode == "auto" {
-		return Verdict{Run: true, Why: "this kitty is set to act without asking"}
+	if mode != ModeAsk || risk == "" {
+		return Verdict{Run: true, Why: WhyFree}
 	}
 	if st := s.d.Stats[statKey(kitty, conn, action)]; st != nil {
 		if need := Threshold(demand); need > 0 && st.Streak >= need {
@@ -179,6 +179,73 @@ func (s *Store) Check(kitty, conn, action, risk, mode string, demand int) Verdic
 		}
 	}
 	return Verdict{Why: "waiting for the person"}
+}
+
+// WhyFree is the verdict of an action nothing limits.
+const WhyFree = "no limit set"
+
+// The modes of a rule.
+const (
+	ModeAuto  = "auto"
+	ModeAsk   = "ask"
+	ModeNever = "never"
+)
+
+// AnyAction, as a rule's action, covers every action of the connector.
+const AnyAction = "*"
+
+// ruleLocked is the rule for an action: its own, or the connector's for any action.
+func (s *Store) ruleLocked(kitty, conn, action string) *Rule {
+	var any *Rule
+	for _, r := range s.d.Rules {
+		if r.Kitty != kitty || r.Connector != conn {
+			continue
+		}
+		if r.Action == action {
+			return r
+		}
+		if r.Action == AnyAction {
+			any = r
+		}
+	}
+	return any
+}
+
+// SetRule sets how an action of a kitty is limited (auto, ask or never), or takes the limit
+// away with an empty mode. The action "*" covers every action of the connector.
+func (s *Store) SetRule(r Rule) (*Rule, error) {
+	r.Connector, r.Action = strings.TrimSpace(r.Connector), strings.ToLower(strings.TrimSpace(r.Action))
+	if r.Kitty == "" || r.Connector == "" {
+		return nil, errors.New("a limit needs a kitty and a connection")
+	}
+	if r.Action == "" {
+		r.Action = AnyAction
+	}
+	switch r.Mode {
+	case ModeAuto, ModeAsk, ModeNever, "":
+	default:
+		return nil, fmt.Errorf("a limit is ask, never or auto, not %q", r.Mode)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, old := range s.d.Rules {
+		if old.Kitty == r.Kitty && old.Connector == r.Connector && old.Action == r.Action {
+			if r.Mode == "" {
+				s.d.Rules = append(s.d.Rules[:i], s.d.Rules[i+1:]...)
+				return nil, s.save()
+			}
+			old.Mode = r.Mode
+			c := *old
+			return &c, s.save()
+		}
+	}
+	if r.Mode == "" {
+		return nil, nil
+	}
+	r.ID, r.Created = s.id(), s.now()
+	s.d.Rules = append(s.d.Rules, &r)
+	c := r
+	return &c, s.save()
 }
 
 // Request keeps an action to be approved. The same action asked again while it waits is the
@@ -237,9 +304,6 @@ func (s *Store) Decide(id string, approve bool, reason string, always bool) (*Ap
 	}
 	if always && !approve {
 		return nil, errors.New("only a yes can be for good")
-	}
-	if always && a.Risk == "always" {
-		return nil, errors.New("this kind of action cannot be allowed for good: it is always asked")
 	}
 	a.DecidedAt = s.now()
 	key := statKey(a.Kitty, a.Connector, a.Action)

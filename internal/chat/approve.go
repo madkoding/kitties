@@ -68,7 +68,8 @@ func (s *Service) goalOf(id string) string {
 }
 
 // gate decides what happens to a connector action: it runs (ok false), or it is held for the
-// person and the outcome says so (ok true).
+// person, or refused, and the outcome says so (ok true). Nothing is limited unless the person
+// set it (or asked the kitty to): a rule, the kitty's "ask" mode, or its actions for the day.
 func (s *Service) gate(id string, k *kitty.Kitty, a action, turn *Turn) (outcome, bool) {
 	if s.approvals == nil {
 		return outcome{}, false
@@ -83,19 +84,26 @@ func (s *Service) gate(id string, k *kitty.Kitty, a action, turn *Turn) (outcome
 	}
 	kind := kinder.Kind()
 	risk := connector.RiskOfCall(kind, a.args)
-	if risk == connector.RiskNone {
-		return outcome{}, false
-	}
 	action := connector.ActionOf(kind, a.args)
 	summary := approvals.Summarise(a.name, action, a.args)
 	verdict := s.approvals.Check(k.ID, a.name, action, risk.String(), k.Approvals, s.demandOf(k))
-	if verdict.Run && s.overActions(k) {
+	if verdict.Blocked {
+		s.note(k, agenda.KindApproval, s.goalOf(id), id, "did not do it ("+verdict.Why+"): "+summary)
+		return outcome{action: a, err: "not done: the person asked you never to do this (" + summary + "). Tell them plainly; " +
+			"if they want it after all, they can lift the limit, or ask you to."}, true
+	}
+	// What reaches other people counts against the actions of the day, when the person set some.
+	if verdict.Run && risk != connector.RiskNone && s.overActions(k) {
 		verdict = approvals.Verdict{Why: "over the day's actions"}
 		summary = fmt.Sprintf("(over today's %d actions) %s", k.Limits.Or(s.DefaultLimits).DayActions, summary)
 	}
 	if verdict.Run {
-		s.spendAction(k)
-		s.note(k, agenda.KindApproval, s.goalOf(id), id, "went ahead on its own ("+verdict.Why+"): "+summary)
+		if risk != connector.RiskNone {
+			s.spendAction(k)
+		}
+		if verdict.Why != approvals.WhyFree {
+			s.note(k, agenda.KindApproval, s.goalOf(id), id, "went ahead on its own ("+verdict.Why+"): "+summary)
+		}
 		return outcome{}, false
 	}
 	ap, err := s.approvals.Request(approvals.Approval{Kitty: k.ID, KittyName: k.Name, Connector: a.name, Kind: kind, Action: action, Args: a.args, Summary: summary, Risk: risk.String(), Chat: id, Goal: s.goalOf(id)})
@@ -122,6 +130,19 @@ func (s *Service) ApprovalRules() ([]approvals.Rule, error) {
 		return nil, ErrNoApprovals
 	}
 	return s.approvals.Rules(), nil
+}
+
+// SetApprovalRule limits an action of a kitty (ask, never or auto), or lifts the limit with an
+// empty mode. The kitty is named by its name or id.
+func (s *Service) SetApprovalRule(ref, conn, action, mode string) (*approvals.Rule, error) {
+	if s.approvals == nil {
+		return nil, ErrNoApprovals
+	}
+	k, err := s.fleet.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	return s.approvals.SetRule(approvals.Rule{Kitty: k.ID, KittyName: k.Name, Connector: conn, Action: action, Mode: mode})
 }
 
 // RemoveApprovalRule takes a decision back.

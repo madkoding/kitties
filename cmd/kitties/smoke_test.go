@@ -96,6 +96,7 @@ func (o *outside) sawPush() []string {
 	return append([]string(nil), o.push...)
 }
 
+// A kitty the person set to ask first holds a post, tells the person, and posts once on a yes.
 func TestSmokeAKittyAsksBeforePostingAndTellsThePerson(t *testing.T) {
 	withRuntime(t, false)
 	model := &llm{}
@@ -111,7 +112,7 @@ func TestSmokeAKittyAsksBeforePostingAndTellsThePerson(t *testing.T) {
 	cfg := writeConfig(t, modelSrv.URL)
 	text, _ := os.ReadFile(cfg)
 	text = []byte(strings.Replace(string(text), "gateway:\n", "connectors:\n  hook:\n    kind: slack\n    description: posts to the team channel\n    url: "+worldSrv.URL+"/hook\n  phone:\n    kind: ntfy\n    settings: {topic: kitties, url: "+worldSrv.URL+"/push}\nnotify:\n  connector: phone\n  on: [approval]\ngateway:\n", 1))
-	text = []byte(strings.Replace(string(text), "  - name: mimi\n", "  - name: mimi\n    connectors: [hook]\n    desktop: false\n", 1))
+	text = []byte(strings.Replace(string(text), "  - name: mimi\n", "  - name: mimi\n    connectors: [hook]\n    desktop: false\n    approvals: ask\n", 1))
 	if err := os.WriteFile(cfg, text, 0o600); err != nil {
 		t.Fatal(err)
 	}

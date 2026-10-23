@@ -39,8 +39,8 @@ func (b *bell) events() string {
 	return strings.Join(out, ",")
 }
 
-// gated is a service whose kitty ana may use a webhook (an action that is asked about) and a
-// shell connector (never unasked), over a stub that counts the posts it receives.
+// gated is a service whose kitty ana, in "ask" mode, may use a webhook (an action that reaches
+// people) and a shell connector, over a stub that counts the posts it receives.
 func gated(t *testing.T) (*Service, *scripted, *int, *bell, *agenda.Journal) {
 	t.Helper()
 	f, sa, _, _ := fleet(t)
@@ -63,6 +63,7 @@ func gated(t *testing.T) (*Service, *scripted, *int, *bell, *agenda.Journal) {
 	f.conns.Add("sh", shell)
 	ana, _ := f.Get("ana")
 	ana.Connectors = []string{"echo", "hook", "sh"}
+	ana.Approvals = approvals.ModeAsk
 	s := service(t, f)
 	store, err := approvals.Open(filepath.Join(t.TempDir(), "approvals.json"))
 	if err != nil {
@@ -207,20 +208,16 @@ func TestTrustAutoModeAndAlwaysAsked(t *testing.T) {
 	if *posts != before+1 {
 		t.Error("auto mode posts at once")
 	}
+	// Nothing is always asked: the shell the person set up runs too.
 	sa.replies = []string{"@connector sh {\"text\": \"rm\"}", "ok"}
 	_, _ = s.Send(context.Background(), sess.ID, "shell")
-	p, _ := s.ListApprovals(approvals.Pending)
-	if len(p) != 1 || p[0].Risk != "always" {
-		t.Fatalf("a shell command is always asked: %+v", p)
+	if p, _ := s.ListApprovals(approvals.Pending); len(p) != 0 {
+		t.Fatalf("nothing is held in auto mode: %+v", p)
 	}
-	if _, err := s.DecideApproval(context.Background(), p[0].ID, true, "", true); err == nil {
-		t.Error("it cannot be allowed for good")
-	}
-	_, _ = s.DecideApproval(context.Background(), p[0].ID, false, "no", false)
 	// Rules the person made can be listed and taken back.
-	ana.Approvals = ""
+	ana.Approvals = approvals.ModeAsk
 	say("for good")
-	p, _ = s.ListApprovals(approvals.Pending)
+	p, _ := s.ListApprovals(approvals.Pending)
 	if _, err := s.DecideApproval(context.Background(), p[0].ID, true, "", true); err != nil {
 		t.Fatal(err)
 	}
@@ -239,6 +236,70 @@ func TestTrustAutoModeAndAlwaysAsked(t *testing.T) {
 	say("asked again")
 	if p, _ := s.ListApprovals(approvals.Pending); len(p) != 1 {
 		t.Error("asked again after the rule was taken back")
+	}
+}
+
+func TestNoLimitUnlessSet(t *testing.T) {
+	s, sa, posts, _, j := gated(t)
+	ana, _ := s.fleet.Get("ana")
+	ana.Approvals = "" // the default: the service limits the account, not Kitties
+	sess, _ := s.Create("", []string{"ana"})
+	sa.replies = []string{"@connector hook {\"text\": \"hello\"}", "Posted."}
+	if _, err := s.Send(context.Background(), sess.ID, "post hello"); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := s.ListApprovals(approvals.Pending); len(p) != 0 || *posts != 1 {
+		t.Fatalf("acted at once: pending %d posts %d", len(p), *posts)
+	}
+	if strings.Contains(kinds(j, "a1"), "approval") {
+		t.Error("an action nothing limits is not noted as a decision")
+	}
+	// Asked to, the kitty limits itself: ask first for posts, never for the shell.
+	sa.replies = []string{"Sure.\n@limit set {\"connector\": \"hook\", \"action\": \"post\", \"mode\": \"ask\"}\n" +
+		"@limit set {\"connector\": \"sh\", \"mode\": \"never\"}", "From now on I will ask first."}
+	if _, err := s.Send(context.Background(), sess.ID, "ask me before posting, and never use the shell"); err != nil {
+		t.Fatal(err)
+	}
+	rules, _ := s.ApprovalRules()
+	if len(rules) != 2 || rules[0].KittyName != "ana" {
+		t.Fatalf("rules = %+v", rules)
+	}
+	fed := sa.seen[len(sa.seen)-1]
+	if body := fed[len(fed)-1].Content; !strings.Contains(body, "from now on, post on hook waits for the person's yes") || !strings.Contains(body, "any action on sh is never done") {
+		t.Errorf("the kitty is told what it set: %q", body)
+	}
+	sa.replies = []string{"@connector hook {\"text\": \"again\"}\n@connector sh {\"text\": \"ls\"}", "Waiting."}
+	_, _ = s.Send(context.Background(), sess.ID, "post again and list files")
+	if p, _ := s.ListApprovals(approvals.Pending); len(p) != 1 || *posts != 1 {
+		t.Errorf("the post waits: pending %d posts %d", len(p), *posts)
+	}
+	fed = sa.seen[len(sa.seen)-1]
+	if body := fed[len(fed)-1].Content; !strings.Contains(body, "not done: the person asked you never to do this") {
+		t.Errorf("the shell is refused: %q", body)
+	}
+	// And lifts a limit when asked; nonsense is refused.
+	sa.replies = []string{"@limit set {\"connector\": \"sh\", \"mode\": \"none\"}\n@limit set {\"mode\": \"ask\"}\n@limit set {\"connector\": \"nope\", \"mode\": \"ask\"}", "ok"}
+	_, _ = s.Send(context.Background(), sess.ID, "you may use the shell again")
+	if rules, _ := s.ApprovalRules(); len(rules) != 1 {
+		t.Errorf("the shell limit is gone: %+v", rules)
+	}
+	fed = sa.seen[len(sa.seen)-1]
+	if body := fed[len(fed)-1].Content; !strings.Contains(body, "the limit on sh is lifted") || !strings.Contains(body, "which connection") || !strings.Contains(body, "not one of your connections") {
+		t.Errorf("limit answers = %q", body)
+	}
+}
+
+func TestSetApprovalRule(t *testing.T) {
+	s, _, _, _, _ := gated(t)
+	r, err := s.SetApprovalRule("ana", "hook", "post", "never")
+	if err != nil || r.KittyName != "ana" || r.Kitty != "a1" || r.Mode != "never" {
+		t.Fatalf("set = %+v %v", r, err)
+	}
+	if _, err := s.SetApprovalRule("nobody", "hook", "", "ask"); err == nil {
+		t.Error("unknown kitty")
+	}
+	if _, err := (&Service{}).SetApprovalRule("ana", "hook", "", "ask"); err != ErrNoApprovals {
+		t.Error("no store")
 	}
 }
 

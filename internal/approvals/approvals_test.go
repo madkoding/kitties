@@ -55,37 +55,37 @@ func TestRequestDecideAndTrust(t *testing.T) {
 		t.Error("a different one is new")
 	}
 	// Nothing is trusted yet: it waits.
-	if v := s.Check("k1", "slack", "send", "ask", "", 3); v.Run || v.Why != "waiting for the person" {
+	if v := s.Check("k1", "slack", "send", "ask", "ask", 3); v.Run || v.Why != "waiting for the person" {
 		t.Errorf("first check = %+v", v)
 	}
 	// Approving builds the streak; at the threshold for a person of demand 3 (6) it runs alone.
 	for i := 0; i < 6; i++ {
 		x := req(s, "msg "+string(rune('a'+i)))
-		if v := s.Check("k1", "slack", "send", "ask", "", 3); v.Run && i < 5 {
+		if v := s.Check("k1", "slack", "send", "ask", "ask", 3); v.Run && i < 5 {
 			t.Fatalf("trusted too early at %d", i)
 		}
 		if _, err := s.Decide(x.ID, true, "", false); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if v := s.Check("k1", "slack", "send", "ask", "", 3); !v.Run || !strings.Contains(v.Why, "6 approvals in a row") {
+	if v := s.Check("k1", "slack", "send", "ask", "ask", 3); !v.Run || !strings.Contains(v.Why, "6 approvals in a row") {
 		t.Errorf("trusted = %+v", v)
 	}
 	// The same history means less to a stricter person, and nothing to the strictest.
-	if v := s.Check("k1", "slack", "send", "ask", "", 4); v.Run {
+	if v := s.Check("k1", "slack", "send", "ask", "ask", 4); v.Run {
 		t.Error("a demanding person wants twelve")
 	}
-	if v := s.Check("k1", "slack", "send", "ask", "", 5); v.Run {
+	if v := s.Check("k1", "slack", "send", "ask", "ask", 5); v.Run {
 		t.Error("the strictest person never trusts")
 	}
-	if v := s.Check("k1", "slack", "send", "ask", "", 1); !v.Run {
+	if v := s.Check("k1", "slack", "send", "ask", "ask", 1); !v.Run {
 		t.Error("a relaxed person trusts sooner")
 	}
 	// Another kitty or another action has its own history.
-	if v := s.Check("k2", "slack", "send", "ask", "", 3); v.Run {
+	if v := s.Check("k2", "slack", "send", "ask", "ask", 3); v.Run {
 		t.Error("trust is per kitty")
 	}
-	if v := s.Check("k1", "slack", "history", "ask", "", 3); v.Run {
+	if v := s.Check("k1", "slack", "history", "ask", "ask", 3); v.Run {
 		t.Error("trust is per action")
 	}
 	// A no starts the streak over, keeps the reason and counts.
@@ -94,7 +94,7 @@ func TestRequestDecideAndTrust(t *testing.T) {
 	if err != nil || rej.Status != Rejected || rej.Reason != "too informal" || rej.DecidedAt.IsZero() {
 		t.Fatalf("reject = %+v %v", rej, err)
 	}
-	if v := s.Check("k1", "slack", "send", "ask", "", 3); v.Run {
+	if v := s.Check("k1", "slack", "send", "ask", "ask", 3); v.Run {
 		t.Error("a no resets the trust")
 	}
 	if st := s.Stats("k1")["slack.send"]; st.Approved != 6 || st.Rejected != 1 || st.Streak != 0 {
@@ -111,17 +111,51 @@ func TestRequestDecideAndTrust(t *testing.T) {
 	if _, err := s.Decide(m.ID, false, "", true); err == nil {
 		t.Error("a no cannot be for good")
 	}
-	// An action that is never done unasked is asked whatever the history, rules and mode.
-	always, _ := s.Request(Approval{Kitty: "k1", Connector: "pay", Kind: "stripe", Action: "refund", Args: map[string]any{}, Risk: "always"})
-	if _, err := s.Decide(always.ID, true, "", true); err == nil || !strings.Contains(err.Error(), "always asked") {
-		t.Errorf("always cannot be for good: %v", err)
-	}
-	if v := s.Check("k1", "pay", "refund", "always", "auto", 1); v.Run {
-		t.Error("a refund is never unasked, not even in auto mode")
-	}
-	// Auto mode skips the asking for the rest.
+	// Nothing is limited unless someone set it: outside "ask" mode, and without a rule, even a
+	// refund goes ahead; what the account may do is the service's to limit.
 	if v := s.Check("k9", "slack", "send", "ask", "auto", 3); !v.Run {
 		t.Error("auto mode")
+	}
+	if v := s.Check("k1", "pay", "refund", "always", "", 5); !v.Run || v.Why != WhyFree {
+		t.Errorf("no limit set = %+v", v)
+	}
+	if v := s.Check("k1", "slack", "history", "", "ask", 5); !v.Run {
+		t.Error("ask mode holds only what reaches people")
+	}
+}
+
+func TestSetRule(t *testing.T) {
+	s := open(t)
+	// A rule for every action of a connection, and one for an action, which wins.
+	if _, err := s.SetRule(Rule{Kitty: "k1", KittyName: "mimi", Connector: "x", Mode: ModeAsk}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SetRule(Rule{Kitty: "k1", Connector: "x", Action: "Like", Mode: ModeNever}); err != nil {
+		t.Fatal(err)
+	}
+	if v := s.Check("k1", "x", "post", "ask", "", 3); v.Run || v.Blocked {
+		t.Errorf("x.* ask = %+v", v)
+	}
+	if v := s.Check("k1", "x", "like", "ask", "", 3); !v.Blocked || v.Run {
+		t.Errorf("x.like never = %+v", v)
+	}
+	if v := s.Check("k2", "x", "post", "ask", "", 3); !v.Run {
+		t.Error("rules are per kitty")
+	}
+	// Setting again changes the mode; an empty mode takes the limit away.
+	if r, err := s.SetRule(Rule{Kitty: "k1", Connector: "x", Action: "like", Mode: ModeAuto}); err != nil || r.Mode != ModeAuto || len(s.Rules()) != 2 {
+		t.Errorf("change = %+v %v %d", r, err, len(s.Rules()))
+	}
+	if r, err := s.SetRule(Rule{Kitty: "k1", Connector: "x", Action: "*", Mode: ""}); err != nil || r != nil || len(s.Rules()) != 1 {
+		t.Errorf("remove = %+v %v", r, err)
+	}
+	if r, err := s.SetRule(Rule{Kitty: "k1", Connector: "y", Mode: ""}); err != nil || r != nil {
+		t.Error("removing a limit that is not there is no error")
+	}
+	for _, bad := range []Rule{{Connector: "x", Mode: ModeAsk}, {Kitty: "k1", Mode: ModeAsk}, {Kitty: "k1", Connector: "x", Mode: "maybe"}} {
+		if _, err := s.SetRule(bad); err == nil {
+			t.Errorf("%+v is refused", bad)
+		}
 	}
 }
 
@@ -132,7 +166,7 @@ func TestAlwaysRulesAndForgetting(t *testing.T) {
 	if err != nil || !got.Always {
 		t.Fatalf("approve for good = %+v %v", got, err)
 	}
-	if v := s.Check("k1", "slack", "send", "ask", "", 5); !v.Run || v.Why != "allowed for good by the person" {
+	if v := s.Check("k1", "slack", "send", "ask", "ask", 5); !v.Run || v.Why != "allowed for good by the person" {
 		t.Errorf("a rule beats the demand: %+v", v)
 	}
 	rules := s.Rules()
@@ -148,7 +182,7 @@ func TestAlwaysRulesAndForgetting(t *testing.T) {
 	if err := s.RemoveRule(rules[0].ID); err != nil {
 		t.Fatal(err)
 	}
-	if v := s.Check("k1", "slack", "send", "ask", "", 1); v.Run {
+	if v := s.Check("k1", "slack", "send", "ask", "ask", 1); v.Run {
 		t.Error("the streak starts over with the rule gone")
 	}
 	if err := s.RemoveRule("zz"); err == nil {
@@ -157,7 +191,7 @@ func TestAlwaysRulesAndForgetting(t *testing.T) {
 	// A "ask me" rule (set by hand in the file) beats trust.
 	s.d.Rules = append(s.d.Rules, &Rule{ID: "r9", Kitty: "k1", Connector: "slack", Action: "send", Mode: "ask"})
 	s.d.Stats[statKey("k1", "slack", "send")].Streak = 99
-	if v := s.Check("k1", "slack", "send", "ask", "", 1); v.Run || !strings.Contains(v.Why, "asked to be asked") {
+	if v := s.Check("k1", "slack", "send", "ask", "ask", 1); v.Run || !strings.Contains(v.Why, "asked to be asked") {
 		t.Errorf("ask rule = %+v", v)
 	}
 	// Done records the result; Get and List find it; Forget drops a removed kitty's things.

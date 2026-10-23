@@ -19,7 +19,7 @@ import (
 
 // action is one thing the model asked for.
 type action struct {
-	kind   string // tool | connector | skill | artifact | delegate | memory
+	kind   string // tool | connector | skill | artifact | delegate | memory | limit
 	name   string // the tool, the connector, or the verb (skill/artifact)
 	args   map[string]any
 	raw    string
@@ -78,6 +78,11 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 			provider.Tool{Name: "memory_list", Description: "Read your notes, with their ids.", Parameters: obj(map[string]any{})},
 		)
 	}
+	if s.approvals != nil && len(allowed) > 0 {
+		tools = append(tools, provider.Tool{Name: "limit", Description: limitHelp,
+			Parameters: obj(map[string]any{"connector": str("the connection"), "action": str("the action, or empty for all of the connection's"),
+				"mode": str("ask (wait for the person's yes), never, or none (lift the limit)")}, "connector", "mode")})
+	}
 	if s.canDelegate(k) {
 		tools = append(tools, provider.Tool{Name: "delegate", Description: "Hand a subtask to another kitty and get its answer back. For work another kitty is better placed for, never the whole task.",
 			Parameters: obj(map[string]any{"kitty": str("the other kitty's name"), "task": str("what to do, with everything it needs to know")}, "kitty", "task")})
@@ -122,6 +127,8 @@ func fromCalls(calls []provider.ToolCall) []action {
 			a.kind, a.name = "artifact", strings.TrimPrefix(c.Name, prefixArtifact)
 		case strings.HasPrefix(c.Name, "memory_"):
 			a.kind, a.name = "memory", strings.TrimPrefix(c.Name, "memory_")
+		case c.Name == "limit":
+			a.kind, a.name = "limit", "set"
 		case c.Name == "delegate":
 			a.kind = "delegate"
 			a.name, _ = a.args["kitty"].(string)
@@ -194,6 +201,8 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 			out = append(out, s.delegate(ctx, id, a, k, turn))
 		case "memory":
 			out = append(out, s.runMemory(id, a, k))
+		case "limit":
+			out = append(out, s.runLimit(id, a, k, allowed))
 		case "connector":
 			if len(allowed) == 0 {
 				out = append(out, outcome{action: a, err: "this kitty has no connectors"})
