@@ -622,8 +622,13 @@ export const api = {
   signOut: (kind: string) => request<SettingsView>("DELETE", `/v1/settings/accounts/${kind}`),
   setDefaultProvider: (name: string) =>
     request<SettingsView>("PUT", "/v1/settings/default-provider", { name }),
-  setConnector: (name: string, c: Record<string, unknown>) =>
-    request<SettingsView>("PUT", `/v1/settings/connectors/${name}`, c),
+  // signingIn saves a connection that signs in before its sign-in, so without an account yet.
+  setConnector: (name: string, c: Record<string, unknown>, signingIn = false) =>
+    request<SettingsView>(
+      "PUT",
+      `/v1/settings/connectors/${name}${signingIn ? "?sign_in=1" : ""}`,
+      c,
+    ),
   removeConnector: (name: string) =>
     request<SettingsView>("DELETE", `/v1/settings/connectors/${name}`),
   skills: () => request<{ skills: Skill[] }>("GET", "/v1/skills").then((r) => r.skills || []),

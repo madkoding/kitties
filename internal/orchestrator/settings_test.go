@@ -125,34 +125,34 @@ func TestSettingsConnectors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SetConnector("team", config.Connector{Kind: "slack", URL: "https://hooks/x", Description: "team channel"}); err != nil {
+	if err := m.SetConnector("team", config.Connector{Kind: "slack", URL: "https://hooks/x", Description: "team channel"}, false); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := m.Connectors().Get("team"); !ok {
 		t.Error("the connector is live")
 	}
-	if err := m.SetConnector("tg2", config.Connector{Kind: "telegram", ChatID: "1"}); err == nil {
+	if err := m.SetConnector("tg2", config.Connector{Kind: "telegram", ChatID: "1"}, false); err == nil {
 		t.Error("telegram needs a token")
 	}
-	if err := m.SetConnector("gh", config.Connector{Kind: "github", Settings: map[string]string{"token": "t1", "repo": "a/b"}}); err != nil {
+	if err := m.SetConnector("gh", config.Connector{Kind: "github", Settings: map[string]string{"token": "t1", "repo": "a/b"}}, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := m.SetConnector("gh", config.Connector{Kind: "github", Settings: map[string]string{"repo": "a/c"}}); err != nil {
+	if err := m.SetConnector("gh", config.Connector{Kind: "github", Settings: map[string]string{"repo": "a/c"}}, false); err != nil {
 		t.Errorf("an empty secret setting keeps the saved one: %v", err)
 	}
 	if v := findC(m.Settings().Connectors, "gh"); v == nil || v.Settings["repo"] != "a/c" || v.Settings["token"] != "" || len(v.SecretsSet) != 1 || !v.TokenSet || v.Category != "git" {
 		t.Errorf("github view = %+v", v)
 	}
-	if err := m.SetConnector("gh", config.Connector{Kind: "discord"}); err == nil {
+	if err := m.SetConnector("gh", config.Connector{Kind: "discord"}, false); err == nil {
 		t.Error("a change of kind does not carry the old secret")
 	}
-	if err := m.SetConnector("tg", config.Connector{Kind: "telegram", ChatID: "9"}); err != nil {
+	if err := m.SetConnector("tg", config.Connector{Kind: "telegram", ChatID: "9"}, false); err != nil {
 		t.Errorf("an empty token keeps the file's: %v", err)
 	}
 	if v := findC(m.Settings().Connectors, "tg"); v == nil || !v.TokenSet || v.ChatID != "9" || v.FromFile {
 		t.Errorf("edited connector = %+v", v)
 	}
-	if err := m.SetConnector("Bad", config.Connector{Kind: "shell", Command: "x"}); err == nil {
+	if err := m.SetConnector("Bad", config.Connector{Kind: "shell", Command: "x"}, false); err == nil {
 		t.Error("bad name")
 	}
 	if err := m.RemoveConnector("hook"); err != nil {
@@ -173,7 +173,7 @@ func TestSettingsConnectors(t *testing.T) {
 	}
 	empty := config.Config{DataDir: t.TempDir()}
 	e, _ := New(empty)
-	if err := e.SetConnector("w", config.Connector{Kind: "webhook", URL: "http://x"}); err != nil {
+	if err := e.SetConnector("w", config.Connector{Kind: "webhook", URL: "http://x"}, false); err != nil {
 		t.Error(err)
 	}
 	if err := e.SetProvider("l", config.Provider{Kind: "ollama", Model: "m"}); err != nil || e.Config().DefaultProvider != "l" {
@@ -223,6 +223,41 @@ func findC(list []ConnectorView, name string) *ConnectorView {
 	return nil
 }
 
+func TestConnectorNeedsAccount(t *testing.T) {
+	m, err := New(testConfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A service that signs in is refused without an account, unless the sign-in comes next.
+	if err := m.SetConnector("sp", config.Connector{Kind: "spotify"}, false); err == nil || !strings.Contains(err.Error(), "needs a sign-in, or a key instead") {
+		t.Errorf("spotify without an account = %v", err)
+	}
+	if err := m.SetConnector("sp", config.Connector{Kind: "spotify"}, true); err != nil {
+		t.Errorf("spotify before its sign-in = %v", err)
+	}
+	// A key instead of the sign-in, or Slack's webhook, is an account; Mastodon's address is not.
+	if err := m.SetConnector("gh", config.Connector{Kind: "github", Settings: map[string]string{"token": "t"}}, false); err != nil {
+		t.Errorf("github with a token = %v", err)
+	}
+	if err := m.SetConnector("sl", config.Connector{Kind: "slack", URL: "https://hooks/x"}, false); err != nil {
+		t.Errorf("slack with a webhook = %v", err)
+	}
+	if err := m.SetConnector("ma", config.Connector{Kind: "mastodon", URL: "https://m.social"}, false); err == nil {
+		t.Error("mastodon with only its address needs a sign-in")
+	}
+	// Once signed in, an edit keeps the account and goes through.
+	if err := m.SaveOAuthCredentials("sp", oauth.Credentials{AccessToken: "a", RefreshToken: "r"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetConnector("sp", config.Connector{Kind: "spotify", Description: "music"}, false); err != nil {
+		t.Errorf("an edit of a signed-in connector = %v", err)
+	}
+	// Kinds that do not sign in are not asked for one.
+	if err := m.SetConnector("dc", config.Connector{Kind: "discord", URL: "https://discord/x"}, false); err != nil {
+		t.Errorf("discord = %v", err)
+	}
+}
+
 func TestOAuthStore(t *testing.T) {
 	cfg := testConfig(t)
 	m, err := New(cfg)
@@ -232,7 +267,7 @@ func TestOAuthStore(t *testing.T) {
 	if m.OAuth() == nil {
 		t.Fatal("the manager has an OAuth manager")
 	}
-	if err := m.SetConnector("gw", config.Connector{Kind: "google-workspace", Settings: map[string]string{"client_id": "cid", "client_secret": "sec"}}); err != nil {
+	if err := m.SetConnector("gw", config.Connector{Kind: "google-workspace", Settings: map[string]string{"client_id": "cid", "client_secret": "sec"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	app, err := m.OAuthApp("gw")
@@ -296,7 +331,7 @@ func TestOAuthStore(t *testing.T) {
 		t.Errorf("view = %+v", v)
 	}
 	// An edit of the other fields keeps the sign-in; the token source reads it back.
-	if err := m.SetConnector("gw", config.Connector{Kind: "google-workspace", Description: "mail", Settings: map[string]string{"client_id": "cid2"}}); err != nil {
+	if err := m.SetConnector("gw", config.Connector{Kind: "google-workspace", Description: "mail", Settings: map[string]string{"client_id": "cid2"}}, false); err != nil {
 		t.Fatal(err)
 	}
 	if c, _ := m.OAuthCredentials("gw"); !c.SignedIn() || c.Account != "me@x" {

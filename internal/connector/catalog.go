@@ -375,15 +375,23 @@ func (k Kind) Validate(s Settings) error {
 	return nil
 }
 
-// TokenSet reports whether the settings carry a token or webhook of their own, so an OAuth
-// kind with one works without a sign-in.
-func (k Kind) TokenSet(s Settings) bool {
+// KeySet reports whether the settings carry the key an OAuth kind takes instead of a sign-in:
+// its token (with the email, for the kinds that pair them), or Slack's webhook. An instance's
+// address (Mastodon, GitLab, Home Assistant) is not a key.
+func (k Kind) KeySet(s Settings) bool {
+	if k.Name == "slack" && strings.TrimSpace(s["url"]) != "" {
+		return true
+	}
+	token, email := false, true
 	for _, f := range k.Fields {
-		if (f.Name == "token" || f.Name == "url") && strings.TrimSpace(s[f.Name]) != "" {
-			return true
+		switch f.Name {
+		case "token":
+			token = strings.TrimSpace(s["token"]) != ""
+		case "email":
+			email = strings.TrimSpace(s["email"]) != ""
 		}
 	}
-	return false
+	return token && email
 }
 
 // Kinder is a connector that knows its kind in the catalogue (the page shows its logo).

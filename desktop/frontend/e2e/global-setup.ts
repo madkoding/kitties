@@ -102,7 +102,8 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     description: "the team wiki",
     settings: { token: "secret_demo", parent: "abc123" },
   });
-  await api("PUT", "/v1/settings/connectors/workspace", {
+  // Saved as the step before its sign-in: it has no account yet, and the page offers it.
+  await api("PUT", "/v1/settings/connectors/workspace?sign_in=1", {
     kind: "google-workspace",
     description: "mail, calendar and drive of the team account",
     settings: { client_id: "1234-demo.apps.googleusercontent.com" },

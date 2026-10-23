@@ -799,7 +799,7 @@ function ConnectionForm({
     setWho(next);
   };
   // persist saves the connection and who may use it; it reports whether it went through.
-  const persist = async (): Promise<boolean> => {
+  const persist = async (signingIn = false): Promise<boolean> => {
     setBusy(true);
     setErr("");
     try {
@@ -809,7 +809,7 @@ function ConnectionForm({
           settings[k] = v.trim();
         }
       }
-      await api.setConnector(finalName, { kind: def.name, description, settings });
+      await api.setConnector(finalName, { kind: def.name, description, settings }, signingIn);
       // Who may use it: each kitty's own list of connections changes (a kitty that may use all
       // of them has it already).
       const all = await api.connectorNames();
@@ -838,7 +838,7 @@ function ConnectionForm({
   // signIn saves what is filled in, opens the service's sign-in, and follows it until the
   // gateway has the account.
   const signIn = async () => {
-    if (!(await persist())) {
+    if (!(await persist(true))) {
       return;
     }
     try {

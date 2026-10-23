@@ -53,7 +53,9 @@ type Fleet interface {
 	RemoveProvider(name string) error
 	SetDefaultProvider(name string) error
 	TestProvider(ctx context.Context, name string) (string, error)
-	SetConnector(name string, c config.Connector) error
+	// SetConnector saves a connector; signingIn lets one that signs in be saved without an account
+	// yet, as the step before its sign-in.
+	SetConnector(name string, c config.Connector, signingIn bool) error
 	RemoveConnector(name string) error
 	OAuth() *oauth.Manager
 	// Accounts are the AI sign-ins (ChatGPT, Copilot, Google, Claude) of the profiles.
@@ -800,7 +802,7 @@ func (s *Server) handleSetConnector(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.fleet.SetConnector(r.PathValue("name"), c); err != nil {
+	if err := s.fleet.SetConnector(r.PathValue("name"), c, r.URL.Query().Get("sign_in") == "1"); err != nil {
 		fail(w, codeFor(err), err)
 		return
 	}

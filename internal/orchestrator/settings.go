@@ -198,7 +198,7 @@ func connectorView(name string, c config.Connector, fromFile bool) ConnectorView
 	creds := oauth.FromSettings(all)
 	return ConnectorView{Name: name, Kind: c.Kind, Category: kind.Category, Label: kind.Label, Description: c.Description, URL: shown["url"],
 		TokenSet: c.Token != "" || all["token"] != "", ChatID: c.ChatID, Command: c.Command, Settings: shown, SecretsSet: secrets, FromFile: fromFile,
-		OAuth: kind.OAuth, SignedIn: kind.OAuth != "" && creds.SignedIn(), NeedsSignIn: kind.OAuth != "" && !creds.SignedIn() && !kind.TokenSet(all), Account: creds.Account}
+		OAuth: kind.OAuth, SignedIn: kind.OAuth != "" && creds.SignedIn(), NeedsSignIn: kind.OAuth != "" && !creds.SignedIn() && !kind.KeySet(all), Account: creds.Account}
 }
 
 // usersLocked names, sorted, the kitties a test picks; callers hold the lock.
@@ -428,7 +428,9 @@ func (m *Manager) TestProvider(ctx context.Context, name string) (string, error)
 }
 
 // SetConnector adds or replaces a connector and saves the overlay. An empty token keeps the one it had.
-func (m *Manager) SetConnector(name string, c config.Connector) error {
+// A connector that signs in needs an account (the sign-in, or a key instead) unless signingIn says
+// the sign-in comes next.
+func (m *Manager) SetConnector(name string, c config.Connector, signingIn bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if old, ok := m.cfg.Connectors[name]; ok && old.Kind == c.Kind {
@@ -459,6 +461,9 @@ func (m *Manager) SetConnector(name string, c config.Connector) error {
 	if err := config.ValidateConnector(name, c, m.cfg.Motita.URL); err != nil {
 		return err
 	}
+	if err := needsAccount(name, c, signingIn); err != nil {
+		return err
+	}
 	if m.overlay.Connectors == nil {
 		m.overlay.Connectors = map[string]config.Connector{}
 	}
@@ -470,6 +475,21 @@ func (m *Manager) SetConnector(name string, c config.Connector) error {
 	m.cfg.Connectors[name] = c
 	m.connectors.Add(name, m.buildConnector(name, c))
 	return m.saveSettings()
+}
+
+// needsAccount refuses a connector that signs in but has neither a sign-in nor a key: it would
+// be saved, and fail at its first use.
+func needsAccount(name string, c config.Connector, signingIn bool) error {
+	kind, ok := connector.LookupKind(c.Kind)
+	if !ok || kind.OAuth == "" || signingIn {
+		return nil
+	}
+	s := c.ConnectorSettings()
+	creds := oauth.FromSettings(s)
+	if kind.KeySet(s) || creds.AccessToken != "" || creds.RefreshToken != "" {
+		return nil
+	}
+	return fmt.Errorf("connectors.%s: %s needs a sign-in, or a key instead", name, kind.Label)
 }
 
 // RemoveConnector forgets a connector.

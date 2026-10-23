@@ -34,6 +34,8 @@ type fakeFleet struct {
 	fail    error
 	calls   []string
 	notify  notify.Config
+	// signingIn is what the last SetConnector was told.
+	signingIn bool
 	// accounts keeps the AI sign-ins in a folder of the test's own.
 	accounts *llmauth.Manager
 }
@@ -158,7 +160,8 @@ func (f *fakeFleet) TestProvider(_ context.Context, name string) (string, error)
 	}
 	return "hello", nil
 }
-func (f *fakeFleet) SetConnector(name string, c config.Connector) error {
+func (f *fakeFleet) SetConnector(name string, c config.Connector, signingIn bool) error {
+	f.signingIn = signingIn
 	return config.ValidateConnector(name, c, "")
 }
 func (f *fakeFleet) RemoveConnector(name string) error {
@@ -531,7 +534,7 @@ func TestChatRoutes(t *testing.T) {
 }
 
 func TestSettingsRoutes(t *testing.T) {
-	srv, _, _ := setup(t)
+	srv, f, _ := setup(t)
 	if code, m, _ := call(t, srv, "GET", "/v1/settings", "tok", nil); code != 200 || m["default_provider"] != "p" {
 		t.Errorf("settings = %v", m)
 	}
@@ -570,6 +573,12 @@ func TestSettingsRoutes(t *testing.T) {
 	}
 	if code, m, _ := call(t, srv, "PUT", "/v1/settings/connectors/c", "tok", map[string]any{"kind": "webhook"}); code != 400 {
 		t.Errorf("connector needs a url: %d %v", code, m)
+	}
+	if f.signingIn {
+		t.Error("a plain save is not a sign-in")
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/connectors/c?sign_in=1", "tok", map[string]any{"kind": "webhook", "url": "http://x"}); code != 200 || !f.signingIn {
+		t.Errorf("a save before a sign-in says so: %d %v", code, f.signingIn)
 	}
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/connectors/c", "tok", "{"); code != 400 {
 		t.Error("connector bad json")

@@ -423,8 +423,14 @@ func TestOAuthKinds(t *testing.T) {
 	gh, _ := LookupKind("github")
 	sl, _ := LookupKind("slack")
 	gw, _ := LookupKind("google-workspace")
-	if !gh.TokenSet(Settings{"token": "t"}) || gh.TokenSet(Settings{}) || !sl.TokenSet(Settings{"url": "u"}) || gw.TokenSet(Settings{"token": "t"}) {
-		t.Error("TokenSet: a token or webhook of the kind's own")
+	if !gh.KeySet(Settings{"token": "t"}) || gh.KeySet(Settings{}) || !sl.KeySet(Settings{"url": "u"}) || gw.KeySet(Settings{"token": "t"}) {
+		t.Error("KeySet: a token or webhook of the kind's own")
+	}
+	// The email goes with the token where the service pairs them; an instance's address is no key.
+	jira, _ := LookupKind("jira")
+	masto, _ := LookupKind("mastodon")
+	if jira.KeySet(Settings{"token": "t"}) || !jira.KeySet(Settings{"token": "t", "email": "a@x"}) || masto.KeySet(Settings{"url": "https://m"}) {
+		t.Error("KeySet: the email pairs with the token, and an address is not a key")
 	}
 	// A kind with a token field: the typed token wins, a webhook needs no account, and
 	// without either the sign-in's token signs the request.
