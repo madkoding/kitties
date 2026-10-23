@@ -971,10 +971,11 @@ function NotifyForm({
     view.notify?.on?.length ? view.notify.on : ["help", "approval"],
   );
   const [digest, setDigest] = useState(view.notify?.digest || "");
+  const [day, setDay] = useState(Boolean(view.notify?.day));
   const [msg, flash] = useFlash();
   const [err, setErr] = useState("");
   const toggle = (e: string) => setOn(on.includes(e) ? on.filter((x) => x !== e) : [...on, e]);
-  const body = { connector, on, digest };
+  const body = { connector, on, digest, day };
   const save = async () => {
     setErr("");
     try {
@@ -1079,6 +1080,19 @@ function NotifyForm({
         What each kitty did, what it spent, and what waits for your yes. Leave it empty for no
         summary.
       </p>
+      <label class="flex items-start gap-2 mt-3 text-sm cursor-pointer">
+        <input
+          type="checkbox"
+          class="mt-1"
+          checked={day}
+          onChange={() => setDay(!day)}
+          data-testid="notify-day"
+        />
+        <span>
+          Start it with my day: what is on the calendar, the reminders still to do and the weather,
+          from my connections (calendar, reminders, weather).
+        </span>
+      </label>
       <div class="flex items-center gap-2 mt-4 flex-wrap">
         <button class="btn-accent px-4 py-2 text-sm" onClick={save}>
           Save

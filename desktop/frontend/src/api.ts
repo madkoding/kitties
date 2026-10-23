@@ -291,7 +291,8 @@ export interface SettingsView {
   connector_catalog: ConnectorKind[];
   connector_categories: string[];
   motita_url?: string;
-  notify: { connector: string; on: string[]; digest?: string };
+  // day starts the summary with the person's day: calendar, reminders and weather.
+  notify: { connector: string; on: string[]; digest?: string; day?: boolean };
   notify_events: string[];
   accounts: Account[];
 }

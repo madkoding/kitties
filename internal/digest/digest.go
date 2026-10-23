@@ -41,6 +41,9 @@ type Source struct {
 	Config func() notify.Config
 	// Deliver sends the summary.
 	Deliver func(ctx context.Context, n notify.Notification) error
+	// Day is the person's day (calendar, reminders, weather), when Config.Day asks for it;
+	// empty when there is nothing to say.
+	Day func(ctx context.Context) string
 }
 
 // Reporter builds and sends the summaries.
@@ -133,6 +136,20 @@ func (r *Reporter) Build(now time.Time) notify.Notification {
 	return notify.Notification{Event: notify.Digest, Title: "Your kitties, last 24 hours", Body: body}
 }
 
+// compose is the summary to send: the kitties' last day, after the person's own day when the
+// settings ask for it.
+func (r *Reporter) compose(ctx context.Context, now time.Time) notify.Notification {
+	n := r.Build(now)
+	if !r.src.Config().Day || r.src.Day == nil {
+		return n
+	}
+	if day := r.src.Day(ctx); day != "" {
+		n.Title = "Your day, and your kitties"
+		n.Body = day + "\n\nYour kitties, last 24 hours:\n" + n.Body
+	}
+	return n
+}
+
 // short writes a count as 1.2k or 3.4M.
 func short(n int) string {
 	switch {
@@ -149,7 +166,7 @@ func (r *Reporter) SendNow(ctx context.Context) error {
 	if r.src.Config().Connector == "" {
 		return errors.New("choose a notification channel first")
 	}
-	return r.src.Deliver(ctx, r.Build(r.now()))
+	return r.src.Deliver(ctx, r.compose(ctx, r.now()))
 }
 
 // Tick sends today's summary when its time has come and it was not sent yet. It reports whether
@@ -168,7 +185,7 @@ func (r *Reporter) Tick(ctx context.Context) (bool, error) {
 	if now.Before(due) || now.Sub(due) > Window || r.last == day {
 		return false, nil
 	}
-	if err := r.src.Deliver(ctx, r.Build(now)); err != nil {
+	if err := r.src.Deliver(ctx, r.compose(ctx, now)); err != nil {
 		return false, err
 	}
 	r.last = day

@@ -61,6 +61,9 @@ type Config struct {
 	// Digest is the time of day ("09:00", the gateway's clock) a summary of the last day is
 	// sent; empty sends none.
 	Digest string `json:"digest,omitempty" yaml:"digest"`
+	// Day starts the summary with the person's day: what is on the calendar, the reminders
+	// still to do and the weather, from the connections that have them.
+	Day bool `json:"day,omitempty" yaml:"day"`
 }
 
 // DigestAt parses Digest into hour and minute; ok is false when none is set.

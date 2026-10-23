@@ -251,6 +251,7 @@ func (a *app) open(cmd string) error {
 		Today:   a.budget.Today,
 		Config:  fleet.Notify,
 		Deliver: a.notifier.Deliver,
+		Day:     digest.MyDay(fleet.Connectors()),
 	}, filepath.Join(dataDir, "digest.json"))
 	// A removed kitty takes its held actions and its memory along.
 	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget, chats.LeaveChats)
