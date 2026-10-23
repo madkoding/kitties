@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"slices"
+	"sort"
 	"strings"
 
 	"github.com/madkoding/kitties/internal/config"
