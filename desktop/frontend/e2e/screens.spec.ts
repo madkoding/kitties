@@ -155,6 +155,16 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   await page.getByLabel("Search services").fill("github");
   await page.locator(".service-btn", { hasText: "GitHub" }).click();
   await expect(page.getByText("Use an API key or a token instead")).toBeVisible();
+  // Without an account it cannot be saved, and the form says so under the button.
+  const gh = page.getByTestId("connection-form");
+  await expect(gh.getByTestId("required-legend")).toBeVisible();
+  const save = gh.getByRole("button", { name: "Save", exact: true });
+  await expect(save).toBeDisabled();
+  await expect(gh.getByTestId("missing")).toContainText("sign in, or a key instead");
+  await page.getByText("Use an API key or a token instead").click();
+  await gh.locator("#field-token").fill("ghp_demo");
+  await expect(save).toBeEnabled();
+  await expect(gh.getByTestId("missing")).toHaveCount(0);
   // The saved Google connector shows the sign-in button, which asks the gateway for a consent URL.
   await open(page, "#connector/workspace");
   const signIn = page.getByRole("button", { name: "Sign in with Google" });
@@ -365,11 +375,13 @@ test("adding a model: pick the provider, paste the key, keep the suggested model
   // The key and the model are marked as required; without a key there is nothing to save yet.
   await expect(form.locator("label[for=model-key] .req")).toBeVisible();
   await expect(form.locator("label[for=model-name] .req")).toBeVisible();
+  await expect(form.getByTestId("missing")).toHaveText("Still needed: the API key");
   await expect(page.getByRole("button", { name: "Save and test" })).toBeDisabled();
   await page.getByLabel("API key").fill("sk-ant-demo");
   await expect(page.getByRole("button", { name: "Save and test" })).toBeEnabled();
   await page.getByLabel("Model").fill("");
   await expect(page.getByRole("button", { name: "Save and test" })).toBeDisabled();
+  await expect(form.getByTestId("missing")).toHaveText("Still needed: the model");
   await page.getByLabel("Model").fill("claude-sonnet-5-5");
   await expect(page.getByRole("button", { name: "Save and test" })).toBeEnabled();
   await shot(page, "34-add-model");
@@ -624,6 +636,7 @@ test("creating a kitty closes the dialog at once, and a desktop that cannot star
   await expect(page.locator("label[for=kitty-name] .req")).toBeVisible();
   await expect(page.locator("#kitty-name")).toHaveAttribute("aria-required", "true");
   await expect(page.getByRole("button", { name: "Create", exact: true })).toBeDisabled();
+  await expect(page.getByTestId("missing")).toHaveText("Still needed: a name");
   await page.getByLabel("Name").fill("Nube");
   // The brain picker is drawn like the other fields, not as the system's button.
   const brain = page.locator("#kitty-brain");
@@ -666,7 +679,7 @@ test("calendars, reminders and contacts: iCloud and others over CalDAV, the Mac'
     await expect(page.locator(".service-btn", { hasText: name })).toBeVisible();
   }
   await page.locator(".service-btn", { hasText: "Calendar & reminders (CalDAV)" }).click();
-  await expect(page.getByText("App password")).toBeVisible();
+  await expect(page.getByLabel("App password")).toBeVisible();
   await expect(page.getByText("caldav.icloud.com").first()).toBeVisible();
   await page.getByText("What the kitties can do with it").click();
   await expect(page.locator("li", { hasText: "Add reminder" })).toBeVisible();
@@ -688,6 +701,9 @@ test("music, files and the Mac's task managers; the summary can start with the d
   }
   await page.locator(".service-btn", { hasText: "TIDAL" }).click();
   await expect(page.getByText("no remote playback")).toBeVisible();
+  // TIDAL takes only a sign-in: until then there is nothing to save.
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
+  await expect(page.getByTestId("missing")).toHaveText("Still needed: sign in");
   await shot(page, "41-music");
   await page.getByRole("button", { name: "Cancel" }).click();
   await page.getByRole("button", { name: "All", exact: true }).click();

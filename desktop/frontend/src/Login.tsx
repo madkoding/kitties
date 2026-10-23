@@ -1,7 +1,7 @@
 import { useState } from "preact/hooks";
 import { api } from "./api";
 import PixelCat from "./PixelCat";
-import { Required } from "./Required";
+import { Missing, Required } from "./Required";
 
 // Login is what a gateway served on a network shows before anything else: the token it printed
 // when it started, traded for a session cookie so the page never keeps it.
@@ -59,6 +59,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
         >
           {busy ? "Checking…" : "Sign in"}
         </button>
+        <Missing items={[!token.trim() && "the token"]} />
         <p class="text-xs text-[var(--t4)] mt-3">
           The token stays on the server: this browser keeps only a session that you can end with
           Sign out.

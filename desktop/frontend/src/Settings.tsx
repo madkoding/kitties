@@ -28,7 +28,7 @@ import {
 } from "./friendly";
 import { IconPlus, IconTrash, IconX } from "./icons";
 import { ConnectModal } from "./Modals";
-import { Required } from "./Required";
+import { Missing, Required, RequiredLegend } from "./Required";
 import { AccountSignIn } from "./SignIn";
 
 // SETTINGS, FOR PEOPLE.
@@ -221,6 +221,11 @@ function ModelForm({
   };
   const missingKey = needsKey && !key.trim() && !(view?.api_key_set && view.kind === kind);
   const missingLogin = way === "login" && (!account?.signed_in || Boolean(signIn?.unavailable));
+  const stillNeeded = [
+    missingKey && "the API key",
+    missingLogin && "sign in",
+    !model.trim() && "the model",
+  ].filter(Boolean) as string[];
   return (
     <div class="form-card" data-testid="model-form">
       <div class="flex items-start gap-3">
@@ -414,27 +419,25 @@ function ModelForm({
         <Err text={err} />
       )}
       {phase !== "failed" && (
-        <div class="flex justify-end gap-2 mt-4">
-          <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            class="btn-accent px-4 py-2 text-sm"
-            disabled={phase !== "edit" || !model.trim() || missingKey || missingLogin}
-            title={
-              !model.trim()
-                ? "Name the model first"
-                : missingKey
-                  ? "Paste the API key first"
-                  : missingLogin
-                    ? "Sign in first"
-                    : undefined
-            }
-            onClick={save}
-          >
-            {phase === "saving" ? "Saving…" : phase === "testing" ? "Checking…" : "Save and test"}
-          </button>
-        </div>
+        <>
+          <div class="flex items-center justify-end gap-2 mt-4">
+            <span class="flex-1">
+              <RequiredLegend />
+            </span>
+            <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
+              Cancel
+            </button>
+            <button
+              class="btn-accent px-4 py-2 text-sm"
+              disabled={phase !== "edit" || stillNeeded.length > 0}
+              title={stillNeeded.length ? `Still needed: ${stillNeeded.join(", ")}` : undefined}
+              onClick={save}
+            >
+              {phase === "saving" ? "Saving…" : phase === "testing" ? "Checking…" : "Save and test"}
+            </button>
+          </div>
+          <Missing items={stillNeeded} />
+        </>
       )}
     </div>
   );
@@ -774,9 +777,21 @@ function ConnectionForm({
       Boolean((values.client_id || "").trim()) ||
       Boolean(view?.settings?.client_id));
   const label = OAUTH_LABEL[def.oauth || ""] || def.label;
-  const missing = required.filter(
-    (f) => !(values[f.name] || "").trim() && !(view?.secrets_set || []).includes(f.name),
-  );
+  const filled = (n: string) =>
+    Boolean((values[n] || "").trim()) || (view?.secrets_set || []).includes(n);
+  const missing = required.filter((f) => !filled(f.name));
+  // A service that signs in still needs an account to work: the sign-in, or the key typed
+  // instead (with its email when the service takes one), or Slack's webhook.
+  const noAccount =
+    signs &&
+    !signedIn &&
+    !(keyFields.length > 0 && keyFields.every((f) => filled(f.name))) &&
+    !(def.name === "slack" && filled("url"));
+  const keyWord = def.name === "jira" || def.name === "zendesk" ? "an API token" : "a key";
+  const stillNeeded = [
+    ...missing.map((f) => f.label),
+    noAccount && (keyFields.length ? `sign in, or ${keyWord} instead` : "sign in"),
+  ].filter(Boolean) as string[];
   const toggle = (n: string) => {
     setTouched(true);
     const next = new Set(who);
@@ -999,19 +1014,23 @@ function ConnectionForm({
         />
       </More>
       <Err text={err} />
-      <div class="flex justify-end gap-2 mt-4">
+      <div class="flex items-center justify-end gap-2 mt-4">
+        <span class="flex-1">
+          <RequiredLegend />
+        </span>
         <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
           Cancel
         </button>
         <button
           class="btn-accent px-4 py-2 text-sm"
-          disabled={busy || missing.length > 0}
-          title={missing.length ? `Fill in: ${missing.map((f) => f.label).join(", ")}` : undefined}
+          disabled={busy || stillNeeded.length > 0}
+          title={stillNeeded.length ? `Still needed: ${stillNeeded.join(", ")}` : undefined}
           onClick={save}
         >
           {busy ? "Saving…" : "Save"}
         </button>
       </div>
+      <Missing items={stillNeeded} />
     </div>
   );
 }

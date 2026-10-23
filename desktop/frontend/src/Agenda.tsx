@@ -3,7 +3,7 @@ import type { ConnectorView, Goal, JournalEntry, Kitty, Limits } from "./api";
 import { api } from "./api";
 import { when } from "./format";
 import { IconClock, IconPlay, IconTarget, IconTrash } from "./icons";
-import { Required } from "./Required";
+import { Missing, Required } from "./Required";
 
 // WHAT A KITTY DOES ON ITS OWN.
 //
@@ -258,6 +258,7 @@ export function GoalsPanel({
               Add goal
             </button>
           </div>
+          <Missing items={[!title.trim() && "the title"]} />
         </div>
       ) : (
         <button class="btn-outline px-3 py-1.5 text-xs mt-2" onClick={() => setAdding(true)}>

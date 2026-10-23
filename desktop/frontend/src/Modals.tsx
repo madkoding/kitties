@@ -8,7 +8,7 @@ import { IconCamera, IconPlay, IconStop, IconTrash, IconX } from "./icons";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import { MemoryPanel } from "./Memory";
 import PixelCat, { BREEDS, CatPicker, COLORS, type Mood } from "./PixelCat";
-import { Required } from "./Required";
+import { Missing, Required } from "./Required";
 
 // suggestAvatar picks a cat from the name, the way the gateway does when none is chosen.
 function suggestAvatar(name: string): { breed: string; color: string } {
@@ -152,6 +152,7 @@ export function NewChatModal({
           {picked.size > 1 ? "Start group chat" : "Start chat"}
         </button>
       </div>
+      <Missing items={[picked.size === 0 && "a kitty"]} />
     </Modal>
   );
 }
@@ -345,6 +346,7 @@ export function NewKittyModal({
           {busy ? "Creating…" : "Create"}
         </button>
       </div>
+      <Missing items={[!name && "a name"]} />
     </Modal>
   );
 }
@@ -723,9 +725,7 @@ export function ConnectModal({
   const missing = [
     needsURL && !url.trim() && "the address",
     android && !token.trim() && "the token",
-  ]
-    .filter(Boolean)
-    .join(" and ");
+  ].filter(Boolean) as string[];
   const body = (
     <>
       {android ? (
@@ -792,13 +792,14 @@ export function ConnectModal({
         </button>
         <button
           class="btn-accent px-4 py-2 text-sm"
-          disabled={busy || Boolean(missing)}
-          title={missing ? `Fill in ${missing}` : undefined}
+          disabled={busy || missing.length > 0}
+          title={missing.length ? `Still needed: ${missing.join(", ")}` : undefined}
           onClick={save}
         >
           {busy ? "Checking…" : "Connect"}
         </button>
       </div>
+      <Missing items={missing} />
     </>
   );
   if (embedded) {

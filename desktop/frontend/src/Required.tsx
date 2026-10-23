@@ -6,3 +6,29 @@ export function Required() {
     </span>
   );
 }
+
+// RequiredLegend explains the mark, for the longer forms.
+export function RequiredLegend() {
+  return (
+    <span class="req-legend" data-testid="required-legend">
+      <span class="req" aria-hidden="true">
+        *
+      </span>{" "}
+      required
+    </span>
+  );
+}
+
+// Missing says what a form still waits for, next to its disabled button: a tooltip is not seen
+// on a phone.
+export function Missing({ items }: { items: (string | false | null | undefined)[] }) {
+  const left = items.filter(Boolean) as string[];
+  if (!left.length) {
+    return null;
+  }
+  return (
+    <p class="missing" role="status" data-testid="missing">
+      Still needed: {left.join(", ")}
+    </p>
+  );
+}

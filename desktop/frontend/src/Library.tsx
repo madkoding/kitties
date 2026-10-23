@@ -3,7 +3,7 @@ import type { ArtifactInfo, Skill } from "./api";
 import { api, artifactText, shotURL } from "./api";
 import { when } from "./format";
 import { IconPlus, IconTrash, IconX } from "./icons";
-import { Required } from "./Required";
+import { Missing, Required } from "./Required";
 
 type Tab = "skills" | "artifacts";
 
@@ -95,6 +95,7 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
                     Save
                   </button>
                 </div>
+                <Missing items={[!draft.name.trim() && "the name", !draft.body.trim() && "the document"]} />
               </div>
             ) : (
               <button class="btn-outline mt-3 flex items-center gap-2 px-3 py-2 text-sm" onClick={() => setDraft({ name: "", body: "" })}>
