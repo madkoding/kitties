@@ -143,7 +143,7 @@ func TestSettingsConnectors(t *testing.T) {
 	if v := findC(m.Settings().Connectors, "gh"); v == nil || v.Settings["repo"] != "a/c" || v.Settings["token"] != "" || len(v.SecretsSet) != 1 || !v.TokenSet || v.Category != "git" {
 		t.Errorf("github view = %+v", v)
 	}
-	if err := m.SetConnector("gh", config.Connector{Kind: "gitlab", URL: "https://g"}); err == nil {
+	if err := m.SetConnector("gh", config.Connector{Kind: "discord"}); err == nil {
 		t.Error("a change of kind does not carry the old secret")
 	}
 	if err := m.SetConnector("tg", config.Connector{Kind: "telegram", ChatID: "9"}); err != nil {
@@ -235,18 +235,28 @@ func TestOAuthStore(t *testing.T) {
 	if err := m.SetConnector("gw", config.Connector{Kind: "google-workspace", Settings: map[string]string{"client_id": "cid", "client_secret": "sec"}}); err != nil {
 		t.Fatal(err)
 	}
-	prov, id, secret, err := m.OAuthApp("gw")
-	if err != nil || prov != "google" || id != "cid" || secret != "sec" {
-		t.Errorf("OAuthApp = %s %s %s %v", prov, id, secret, err)
+	app, err := m.OAuthApp("gw")
+	if err != nil || app.Provider != "google" || app.Kind != "google-workspace" || app.ClientID != "cid" || app.ClientSecret != "sec" {
+		t.Errorf("OAuthApp = %+v %v", app, err)
 	}
-	if _, _, _, err := m.OAuthApp("zz"); err == nil {
+	if _, err := m.OAuthApp("zz"); err == nil {
 		t.Error("unknown connector")
 	}
-	if _, _, _, err := m.OAuthApp("dc"); err == nil {
+	if _, err := m.OAuthApp("dc"); err == nil {
 		t.Error("discord does not sign in")
 	}
-	if prov, _, _, err := m.OAuthApp("sl"); err != nil || prov != "slack" {
-		t.Errorf("slack signs in too: %s %v", prov, err)
+	if app, err := m.OAuthApp("sl"); err != nil || app.Provider != "slack" {
+		t.Errorf("slack signs in too: %+v %v", app, err)
+	}
+	// What a sign-in learns goes into the settings, next to what was there.
+	if err := m.SaveOAuthSettings("gw", map[string]string{"page_id": "P1"}); err != nil {
+		t.Fatal(err)
+	}
+	if app, _ := m.OAuthApp("gw"); app.Settings["page_id"] != "P1" || app.ClientID != "cid" {
+		t.Errorf("learned = %+v", app)
+	}
+	if err := m.SaveOAuthSettings("zz", nil); err == nil {
+		t.Error("an unknown connector learns nothing")
 	}
 	if names := m.OAuthConnectors(); strings.Join(names, ",") != "gw,sl" {
 		t.Errorf("OAuthConnectors = %v", names)
@@ -292,7 +302,7 @@ func TestOAuthStore(t *testing.T) {
 	if c, _ := m.OAuthCredentials("gw"); !c.SignedIn() || c.Account != "me@x" {
 		t.Errorf("sign-in survives an edit: %+v", c)
 	}
-	if _, _, secret, _ := m.OAuthApp("gw"); secret != "sec" {
+	if app, _ := m.OAuthApp("gw"); app.ClientSecret != "sec" {
 		t.Error("the secret survives an edit")
 	}
 	if tok, err := m.OAuth().Token(context.Background(), "gw"); err != nil || tok != "at" {
@@ -322,6 +332,9 @@ func TestSettingsAccounts(t *testing.T) {
 	v := find(m.Settings().Providers, "plan")
 	if v == nil || v.Auth != "login" || v.Error != "" || v.Describe != "codex/gpt-5.5-codex" {
 		t.Errorf("signed-in profile = %+v", v)
+	}
+	if ready := strings.Join(m.Settings().OAuthReady, ","); !strings.Contains(ready, "home-assistant") || !strings.Contains(ready, "mastodon") {
+		t.Errorf("ready = %s", ready)
 	}
 	if len(m.Settings().Accounts) == 0 || m.Accounts() == nil {
 		t.Error("the page lists the accounts")

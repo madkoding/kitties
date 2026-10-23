@@ -228,6 +228,9 @@ type SettingsView struct {
 	NotifyEvents []string      `json:"notify_events"`
 	// Accounts are the sign-ins a profile can think on instead of a key.
 	Accounts []llmauth.Account `json:"accounts"`
+	// OAuthReady are the services a connection signs in to without an app of the person's own
+	// (Kitties was built with one, or the service needs none).
+	OAuthReady []string `json:"oauth_ready"`
 }
 
 // Settings describes the profiles and connectors, secrets left out.
@@ -235,7 +238,13 @@ func (m *Manager) Settings() SettingsView {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	view := SettingsView{DefaultProvider: m.cfg.DefaultProvider, ConnectorKinds: config.ConnectorKinds, Catalog: connector.Kinds(),
-		Categories: connector.Categories, MotitaURL: m.cfg.Motita.URL, Notify: m.cfg.Notify, Accounts: m.accounts.Accounts()}
+		Categories: connector.Categories, MotitaURL: m.cfg.Motita.URL, Notify: m.cfg.Notify, Accounts: m.accounts.Accounts(), OAuthReady: []string{}}
+	for name, p := range oauth.Providers {
+		if p.Ready() {
+			view.OAuthReady = append(view.OAuthReady, name)
+		}
+	}
+	sort.Strings(view.OAuthReady)
 	for _, e := range notify.Events {
 		view.NotifyEvents = append(view.NotifyEvents, string(e))
 	}

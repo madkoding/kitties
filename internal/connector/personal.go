@@ -645,12 +645,12 @@ func personalKinds() []Kind {
 		{Name: "home-assistant", Category: CatHome, Label: "Home Assistant", Help: "the house through Home Assistant: what the lights, sensors, heating and doors say, and acting on them; an automation can tell the kitties what happens (a rest_command posting to /v1/hooks/<name>)",
 			Fields: []Field{
 				f("url", "Address", "http://homeassistant.local:8123", true, false),
-				f("token", "Long-lived access token", "your profile in Home Assistant → Security → Long-lived access tokens", true, true),
+				f("token", "Long-lived access token", "instead of signing in: your profile in Home Assistant → Security → Long-lived access tokens", false, true),
 			},
 			Actions: []Action{
 				{Name: "states", Help: "devices and their state", Args: []string{"query (optional: kitchen, temperature…)", "domain (optional: light, sensor, climate…)"}},
 				{Name: "call_service", Help: "act on a device: turn a light on, set the heating, lock a door", Args: []string{"service (light.turn_on, climate.set_temperature…)", "entity_id", "data (optional object: brightness_pct, temperature…)"}},
-			}, make: makeHomeAssistant},
+			}, make: makeHomeAssistant, oauth: "home-assistant"},
 		{Name: "rss", Category: CatHome, Label: "News feeds (RSS)", Help: "the latest from the RSS and Atom feeds a person follows: blogs, news, releases, podcasts",
 			Fields:  []Field{f("feeds", "Feeds", "their addresses, separated by commas or one per line", true, false)},
 			Actions: []Action{{Name: "news", Help: "the newest items of every feed (or of one)", Args: []string{"query (optional)", "feed (optional)", fLimit}}}, make: makeFeeds},

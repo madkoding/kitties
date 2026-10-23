@@ -82,6 +82,25 @@ func f(name, label, help string, required, secret bool) Field {
 	return Field{Name: name, Label: label, Help: help, Required: required, Secret: secret}
 }
 
+// fApp are the fields of an app of the person's own for a service that signs in: empty when
+// Kitties signs in with its own app (or needs none).
+func fApp(where string) []Field {
+	return []Field{f("client_id", "Client id of your own app", "only to sign in through an app of your own at "+where+"; empty: Kitties' own", false, false),
+		f("client_secret", "Client secret of your own app", "", false, true)}
+}
+
+// signIn is a kind's sign-in fields after its own: the person's token (instead of signing in),
+// then an app of their own.
+func signIn(own []Field, token Field, where string) []Field {
+	token.Required = false
+	if token.Help == "" {
+		token.Help = "instead of signing in"
+	} else {
+		token.Help += "; instead of signing in"
+	}
+	return append(append(own, token), fApp(where)...)
+}
+
 var (
 	fURL     = f("url", "URL", "", true, false)
 	fToken   = f("token", "Token", "", true, true)
@@ -124,17 +143,17 @@ func catalog() []Kind {
 			Actions: []Action{{Name: "send", Help: "send a message", Args: []string{fText}}}, make: makeMatrix},
 		// ── social media ───────────────────────────────────────────────────────────────────────
 		{Name: "mastodon", Category: CatSocial, Label: "Mastodon", Help: "posts to a Mastodon account",
-			Fields:  []Field{f("url", "Instance", "https://mastodon.social", true, false), f("token", "Access token", "", true, true)},
-			Actions: []Action{{Name: "post", Help: "publish a status", Args: []string{fText}}}, make: makeMastodon},
+			Fields:  []Field{f("url", "Instance", "https://mastodon.social", true, false), f("token", "Access token", "instead of signing in", false, true)},
+			Actions: []Action{{Name: "post", Help: "publish a status", Args: []string{fText}}}, make: makeMastodon, oauth: "mastodon"},
 		{Name: "bluesky", Category: CatSocial, Label: "Bluesky", Help: "posts to a Bluesky account",
 			Fields:  []Field{f("handle", "Handle", "name.bsky.social", true, false), f("password", "App password", "", true, true)},
 			Actions: []Action{{Name: "post", Help: "publish a post", Args: []string{fText}}}, make: makeBluesky},
 		{Name: "x", Category: CatSocial, Label: "X (Twitter)", Help: "posts to an X account",
-			Fields:  []Field{f("token", "OAuth 2.0 user token", "with tweet.write", true, true)},
-			Actions: []Action{{Name: "post", Help: "publish a post", Args: []string{fText}}}, make: makeX},
+			Fields:  signIn(nil, f("token", "OAuth 2.0 user token", "with tweet.write", false, true), "developer.x.com"),
+			Actions: []Action{{Name: "post", Help: "publish a post", Args: []string{fText}}}, make: makeX, oauth: "x"},
 		{Name: "linkedin", Category: CatSocial, Label: "LinkedIn", Help: "shares a post from a LinkedIn member",
-			Fields:  []Field{fToken, f("author", "Author URN", "urn:li:person:…", true, false)},
-			Actions: []Action{{Name: "post", Help: "share a post", Args: []string{fText}}}, make: makeLinkedIn},
+			Fields:  signIn([]Field{f("author", "Author URN", "urn:li:person:…; signing in fills it", false, false)}, fToken, "linkedin.com/developers"),
+			Actions: []Action{{Name: "post", Help: "share a post", Args: []string{fText}}}, make: makeLinkedIn, oauth: "linkedin"},
 		// ── git ────────────────────────────────────────────────────────────────────────────────
 		{Name: "github", Category: CatGit, Label: "GitHub", Help: "issues, pull requests and files on GitHub, with a token or a sign-in",
 			Fields: []Field{f("token", "Token", "a fine-grained or classic token; leave empty to sign in", false, true), f("repo", "Default repository", "owner/name", false, false),
@@ -146,11 +165,11 @@ func catalog() []Kind {
 				{Name: "get_file", Help: "read a file of the repository", Args: []string{fRepo, "path", "ref (optional)"}},
 			}, make: makeGitHub, oauth: "github"},
 		{Name: "gitlab", Category: CatGit, Label: "GitLab", Help: "issues and merge requests on GitLab",
-			Fields: []Field{f("url", "Instance", "https://gitlab.com when empty", false, false), f("token", "Token", "", true, true), f("project", "Default project", "group/name", false, false)},
+			Fields: signIn([]Field{f("url", "Instance", "https://gitlab.com when empty", false, false), f("project", "Default project", "group/name", false, false)}, f("token", "Token", "", false, true), "your GitLab: Preferences → Applications"),
 			Actions: []Action{
 				{Name: "create_issue", Help: "open an issue", Args: []string{"project", fTitle, "description"}},
 				{Name: "comment", Help: "comment on an issue", Args: []string{"project", "iid", fText}},
-			}, make: makeGitLab},
+			}, make: makeGitLab, oauth: "gitlab"},
 		{Name: "gitea", Category: CatGit, Label: "Gitea / Forgejo", Help: "issues on a Gitea or Forgejo server",
 			Fields:  []Field{fURL, fToken, f("repo", "Default repository", "owner/name", false, false)},
 			Actions: []Action{{Name: "create_issue", Help: "open an issue", Args: []string{fRepo, fTitle, fBody}}}, make: makeGitea},
@@ -159,30 +178,31 @@ func catalog() []Kind {
 			Actions: []Action{{Name: "run", Help: "run a task", Args: []string{"task"}}}},
 		// ── productivity ───────────────────────────────────────────────────────────────────────
 		{Name: "notion", Category: CatProductivity, Label: "Notion", Help: "pages in a Notion workspace",
-			Fields: []Field{f("token", "Integration token", "", true, true), f("parent", "Default parent page id", "", false, false)},
+			Fields: signIn([]Field{f("parent", "Default parent page id", "", false, false)}, f("token", "Integration token", "", false, true), "notion.so/my-integrations (a public integration)"),
 			Actions: []Action{
 				{Name: "create_page", Help: "create a page with a paragraph", Args: []string{fTitle, fText, "parent (page id, optional)"}},
 				{Name: "append", Help: "append a paragraph to a page", Args: []string{"page", fText}},
-			}, make: makeNotion},
+			}, make: makeNotion, oauth: "notion"},
 		{Name: "trello", Category: CatProductivity, Label: "Trello", Help: "cards on a Trello board",
 			Fields:  []Field{f("key", "API key", "", true, true), fToken, f("list", "Default list id", "", false, false)},
 			Actions: []Action{{Name: "create_card", Help: "add a card", Args: []string{"name", "desc", "list (optional)"}}}, make: makeTrello},
 		{Name: "todoist", Category: CatProductivity, Label: "Todoist", Help: "tasks in Todoist",
-			Fields:  []Field{f("token", "API token", "", true, true), f("project", "Default project id", "", false, false)},
-			Actions: []Action{{Name: "add_task", Help: "add a task", Args: []string{"content", "due (natural language, optional)"}}}, make: makeTodoist},
+			Fields:  signIn([]Field{f("project", "Default project id", "", false, false)}, f("token", "API token", "", false, true), "developer.todoist.com/appconsole.html"),
+			Actions: []Action{{Name: "add_task", Help: "add a task", Args: []string{"content", "due (natural language, optional)"}}}, make: makeTodoist, oauth: "todoist"},
 		{Name: "linear", Category: CatProductivity, Label: "Linear", Help: "issues in Linear",
-			Fields:  []Field{f("token", "API key", "", true, true), f("team", "Team id", "", true, false)},
-			Actions: []Action{{Name: "create_issue", Help: "create an issue", Args: []string{fTitle, "description"}}}, make: makeLinear},
+			Fields:  signIn([]Field{f("team", "Team id", "", true, false)}, f("token", "API key", "", false, true), "linear.app/settings/api/applications"),
+			Actions: []Action{{Name: "create_issue", Help: "create an issue", Args: []string{fTitle, "description"}}}, make: makeLinear, oauth: "linear"},
 		{Name: "jira", Category: CatProductivity, Label: "Jira", Help: "issues in Jira Cloud",
-			Fields:  []Field{f("url", "Site", "https://acme.atlassian.net", true, false), f("email", "Email", "", true, false), f("token", "API token", "", true, true), f("project", "Project key", "KIT", true, false)},
-			Actions: []Action{{Name: "create_issue", Help: "create a task", Args: []string{"summary", "description"}}}, make: makeJira},
+			Fields: signIn([]Field{f("project", "Project key", "KIT", true, false), f("url", "Site", "https://acme.atlassian.net; signing in fills it", false, false),
+				f("email", "Email", "with an API token", false, false)}, f("token", "API token", "", false, true), "developer.atlassian.com/console/myapps"),
+			Actions: []Action{{Name: "create_issue", Help: "create a task", Args: []string{"summary", "description"}}}, make: makeJira, oauth: "atlassian"},
 		{Name: "google-chat", Category: CatMessaging, Label: "Google Chat", Help: "posts to a Google Chat space through a webhook",
 			Fields: []Field{f("url", "Webhook URL", "", true, true)}, Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeGoogleChat},
 		{Name: "teams", Category: CatMessaging, Label: "Microsoft Teams", Help: "posts to a Teams channel through a workflow webhook",
 			Fields: []Field{f("url", "Webhook URL", "", true, true)}, Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeTeams},
 		// ── office ─────────────────────────────────────────────────────────────────────────────
 		{Name: "google-workspace", Category: CatOffice, Label: "Google Workspace", Help: "Gmail, Calendar, Drive, Sheets and Docs of a Google account, signed in with OAuth",
-			Fields: []Field{f("client_id", "OAuth client id", "a Desktop or Web client of your Google Cloud project", true, false), f("client_secret", "OAuth client secret", "", false, true)},
+			Fields: fApp("console.cloud.google.com (a Desktop or Web client)"),
 			Actions: []Action{
 				{Name: "send_mail", Help: "send a mail from the account", Args: []string{"to", "subject", fText}},
 				{Name: "create_event", Help: "add a calendar event; with attendees it invites them (that asks you first)", Args: []string{"summary", "start (RFC 3339)", "end (RFC 3339)", "description (optional)", "attendees (optional emails)"}},
@@ -191,15 +211,15 @@ func catalog() []Kind {
 				{Name: "create_doc", Help: "create a document with text", Args: []string{fTitle, fText}},
 			}, make: makeGoogleWorkspace, oauth: "google"},
 		{Name: "microsoft-365", Category: CatOffice, Label: "Microsoft 365", Help: "Outlook mail, Calendar and OneDrive of a Microsoft account, signed in with OAuth",
-			Fields: []Field{f("client_id", "Application (client) id", "an app registration in Entra ID with a public client or a secret", true, false), f("client_secret", "Client secret", "", false, true)},
+			Fields: fApp("entra.microsoft.com (an app registration)"),
 			Actions: []Action{
 				{Name: "send_mail", Help: "send a mail from the account", Args: []string{"to", "subject", fText}},
 				{Name: "create_event", Help: "add a calendar event; with attendees it invites them (that asks you first)", Args: []string{"subject", "start (RFC 3339)", "end (RFC 3339)", "body (optional)", "attendees (optional emails)"}},
 				{Name: "upload", Help: "create a text file in OneDrive", Args: []string{"name", fContent}},
 			}, make: makeMicrosoft365, oauth: "microsoft"},
 		{Name: "airtable", Category: CatOffice, Label: "Airtable", Help: "records in an Airtable table",
-			Fields:  []Field{f("token", "Personal access token", "", true, true), f("base", "Base id", "app…", true, false), f("table", "Table", "", true, false)},
-			Actions: []Action{{Name: "add_record", Help: "add a record", Args: []string{"fields (an object of column: value)"}}}, make: makeAirtable},
+			Fields:  signIn([]Field{f("base", "Base id", "app…", true, false), f("table", "Table", "", true, false)}, f("token", "Personal access token", "", false, true), "airtable.com/create/oauth"),
+			Actions: []Action{{Name: "add_record", Help: "add a record", Args: []string{"fields (an object of column: value)"}}}, make: makeAirtable, oauth: "airtable"},
 		{Name: "nextcloud", Category: CatOffice, Label: "Nextcloud", Help: "files in a Nextcloud (WebDAV) folder",
 			Fields:  []Field{f("url", "Server", "https://cloud.example.com", true, false), f("user", "User", "", true, false), f("password", "App password", "", true, true), f("folder", "Folder", "Kitties", false, false)},
 			Actions: []Action{{Name: "upload", Help: "write a text file", Args: []string{"name", fContent}}, {Name: "download", Help: "read a file", Args: []string{"name"}}}, make: makeNextcloud},
@@ -211,8 +231,8 @@ func catalog() []Kind {
 			Fields:  []Field{f("url", "Server", "https://kroki.io (the default)", false, false)},
 			Actions: []Action{{Name: "render", Help: "render a diagram", Args: []string{"type (mermaid, plantuml, graphviz, d2, …)", "source", "name (file name, optional)"}}}, make: makeKroki},
 		{Name: "figma", Category: CatDrawing, Label: "Figma", Help: "reads and comments on Figma files",
-			Fields:  []Field{f("token", "Personal access token", "", true, true)},
-			Actions: []Action{{Name: "comment", Help: "comment on a file", Args: []string{"file (key)", fText}}, {Name: "get_file", Help: "read a file's structure (names of pages and frames)", Args: []string{"file (key)"}}}, make: makeFigma},
+			Fields:  signIn(nil, f("token", "Personal access token", "", false, true), "figma.com/developers/apps"),
+			Actions: []Action{{Name: "comment", Help: "comment on a file", Args: []string{"file (key)", fText}}, {Name: "get_file", Help: "read a file's structure (names of pages and frames)", Args: []string{"file (key)"}}}, make: makeFigma, oauth: "figma"},
 		{Name: "excalidraw", Category: CatDrawing, Label: "Excalidraw", Help: "saves an Excalidraw scene (JSON elements) as an artifact to open at excalidraw.com",
 			Fields: []Field{}, Actions: []Action{{Name: "save", Help: "save a scene", Args: []string{"name", "elements (the scene's elements, a list)"}}}, make: makeExcalidraw},
 		// ── generic ────────────────────────────────────────────────────────────────────────────
@@ -528,7 +548,7 @@ func (a *api) call(ctx context.Context, args map[string]any) (text, name string,
 	}
 	// An OAuth kind signs the request with the account's token, unless the request is plain
 	// (a webhook) or already carries a token the person typed.
-	if a.kind.oauth != "" && !req.plain && strings.TrimSpace(strings.TrimPrefix(req.headers["Authorization"], "Bearer")) == "" {
+	if a.kind.oauth != "" && !req.plain && strings.TrimSpace(a.s["token"]) == "" && strings.TrimSpace(strings.TrimPrefix(req.headers["Authorization"], "Bearer")) == "" {
 		if a.token == nil {
 			return "", "", nil, errors.New("not signed in: connect the account from Settings")
 		}
@@ -645,6 +665,24 @@ func str(args map[string]any, keys ...string) string {
 		}
 	}
 	return ""
+}
+
+// keyHeader carries a typed key in the header a service wants it in; none when the connector
+// signs in instead (the account's token goes as a bearer).
+func keyHeader(name, key string) map[string]string {
+	if key == "" {
+		return map[string]string{}
+	}
+	return map[string]string{name: key}
+}
+
+// jiraTarget is where Jira calls go: the site with an email and an API token, or through
+// Atlassian's gateway for the signed-in site.
+func jiraTarget(s Settings) (string, [2]string) {
+	if s["token"] == "" && s["cloud_id"] != "" {
+		return "https://api.atlassian.com/ex/jira/" + url.PathEscape(s["cloud_id"]), [2]string{}
+	}
+	return base(s, ""), [2]string{s["email"], s["token"]}
 }
 
 func bearer(token string) map[string]string {
@@ -950,6 +988,9 @@ func makeLinkedIn(s Settings) Connector {
 		if err != nil {
 			return request{}, err
 		}
+		if s["author"] == "" {
+			return request{}, errors.New("the author is not set: sign in with LinkedIn (it fills it), or type the author URN")
+		}
 		headers := bearer(s["token"])
 		headers["X-Restli-Protocol-Version"] = "2.0.0"
 		return request{method: "POST", url: "https://api.linkedin.com/v2/ugcPosts", headers: headers, body: map[string]any{
@@ -1053,7 +1094,7 @@ func makeGitLab(s Settings) Connector {
 				return request{}, err
 			}
 			return request{method: "POST", url: base(s, "https://gitlab.com") + "/api/v4/projects/" + url.PathEscape(project) + "/issues",
-				headers: map[string]string{"PRIVATE-TOKEN": s["token"]}, body: map[string]any{"title": title, "description": str(a, "description", "body", "text")}}, nil
+				headers: keyHeader("PRIVATE-TOKEN", s["token"]), body: map[string]any{"title": title, "description": str(a, "description", "body", "text")}}, nil
 		},
 		"comment": func(s Settings, a map[string]any) (request, error) {
 			project, err := repoOf(a, s, "project")
@@ -1069,7 +1110,7 @@ func makeGitLab(s Settings) Connector {
 				return request{}, err
 			}
 			return request{method: "POST", url: base(s, "https://gitlab.com") + "/api/v4/projects/" + url.PathEscape(project) + "/issues/" + iid + "/notes",
-				headers: map[string]string{"PRIVATE-TOKEN": s["token"]}, body: map[string]any{"body": text}}, nil
+				headers: keyHeader("PRIVATE-TOKEN", s["token"]), body: map[string]any{"body": text}}, nil
 		},
 	}, "create_issue")
 }
@@ -1187,7 +1228,8 @@ func makeJira(s Settings) Connector {
 		if d := str(a, "description", "body"); d != "" {
 			fields["description"] = map[string]any{"type": "doc", "version": 1, "content": []map[string]any{{"type": "paragraph", "content": []map[string]any{{"type": "text", "text": d}}}}}
 		}
-		return request{method: "POST", url: base(s, "") + "/rest/api/3/issue", basic: [2]string{s["email"], s["token"]}, body: map[string]any{"fields": fields}}, nil
+		root, basic := jiraTarget(s)
+		return request{method: "POST", url: root + "/rest/api/3/issue", basic: basic, body: map[string]any{"fields": fields}}, nil
 	}}, "create_issue")
 }
 
@@ -1421,7 +1463,7 @@ func makeKroki(s Settings) Connector {
 }
 
 func makeFigma(s Settings) Connector {
-	fh := func(s Settings) map[string]string { return map[string]string{"X-Figma-Token": s["token"]} }
+	fh := func(s Settings) map[string]string { return keyHeader("X-Figma-Token", s["token"]) }
 	c := newAPI("figma", s, map[string]actionFn{
 		"comment": func(s Settings, a map[string]any) (request, error) {
 			file, err := need(a, "file", "key")

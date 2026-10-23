@@ -43,10 +43,8 @@ func graphNode(s Settings, id, edge string) string {
 func metaKinds() []Kind {
 	return []Kind{
 		{Name: "facebook", Category: CatSocial, Label: "Facebook Page", Help: "publishes on a Facebook Page, reads its posts and comments, answers them and the Page's Messenger inbox",
-			Fields: []Field{
-				f("page_id", "Page id", "in the Page's About, or Meta Business Suite → Settings", true, false),
-				f("token", "Page access token", "a long-lived Page token (pages_manage_posts, pages_read_engagement, pages_manage_engagement, pages_messaging): Graph API Explorer → your app → Get Page Access Token", true, true),
-			},
+			Fields: signIn([]Field{f("page_id", "Page id", "signing in picks your Page (the first one, or this one)", false, false)},
+				f("token", "Page access token", "a long-lived Page token (pages_manage_posts, pages_read_engagement, pages_manage_engagement, pages_messaging)", false, true), "developers.facebook.com"),
 			Actions: []Action{
 				{Name: "post", Help: "publish on the Page: text, a link, or a picture from a public image URL", Args: []string{fText, "link (optional)", "image_url (optional, a public https URL)"}},
 				{Name: "posts", Help: "the Page's latest posts", Args: []string{fLimit}},
@@ -55,18 +53,16 @@ func metaKinds() []Kind {
 				{Name: "like", Help: "like a post or a comment as the Page", Args: []string{"id"}},
 				{Name: "inbox", Help: "the latest Messenger conversations: who wrote and their last message", Args: []string{fLimit}},
 				{Name: "send", Help: "answer someone in Messenger (within 24 hours of their last message)", Args: []string{"to (their id, from inbox)", fText}},
-			}, make: makeFacebook},
+			}, make: makeFacebook, oauth: "facebook"},
 		{Name: "instagram", Category: CatSocial, Label: "Instagram", Help: "publishes pictures and reels on an Instagram professional account, reads its posts and comments and answers them",
-			Fields: []Field{
-				f("account_id", "Instagram account id", "the professional account's id (Graph API Explorer: me/accounts?fields=instagram_business_account, or me with an Instagram Login token)", true, false),
-				f("token", "Access token", "a Facebook Page token with instagram_basic and instagram_content_publish (instagram_manage_comments to answer), or an Instagram Login token (IG…)", true, true),
-			},
+			Fields: signIn([]Field{f("account_id", "Instagram account id", "signing in with Facebook finds the professional account linked to your Page", false, false)},
+				f("token", "Access token", "a Facebook Page token with instagram_basic and instagram_content_publish, or an Instagram Login token (IG…)", false, true), "developers.facebook.com"),
 			Actions: []Action{
 				{Name: "post", Help: "publish a picture (or a reel) from a public URL with a caption", Args: []string{"image_url (a public https JPEG) or video_url (a reel)", "text (the caption)"}},
 				{Name: "posts", Help: "the account's latest posts, with likes and comments", Args: []string{fLimit}},
 				{Name: "comments", Help: "the comments on a post", Args: []string{"id (the post's)", fLimit}},
 				{Name: "reply", Help: "answer a comment", Args: []string{"id (the comment's)", fText}},
-			}, make: makeInstagram},
+			}, make: makeInstagram, oauth: "facebook"},
 	}
 }
 
@@ -89,10 +85,21 @@ func metaList(kind, action string, data []byte) string {
 
 func limitQuery(a map[string]any) string { return "limit=" + strconv.Itoa(limitOf(a)) }
 
+// pageOf is the Facebook Page the connector acts as; signing in fills it.
+func pageOf(s Settings) (string, error) {
+	if s["page_id"] == "" {
+		return "", errors.New("the Page is not set: sign in with Facebook (it picks your Page), or type the Page id")
+	}
+	return s["page_id"], nil
+}
+
 func makeFacebook(s Settings) Connector {
 	auth := bearer(s["token"])
 	c := newAPI("facebook", s, map[string]actionFn{
 		"post": func(s Settings, a map[string]any) (request, error) {
+			if _, err := pageOf(s); err != nil {
+				return request{}, err
+			}
 			text := str(a, "text", "message")
 			if img := str(a, "image_url", "image"); img != "" {
 				return request{method: "POST", url: graphNode(s, s["page_id"], "photos"), headers: auth, body: map[string]any{"url": img, "caption": text}}, nil
@@ -108,6 +115,9 @@ func makeFacebook(s Settings) Connector {
 			return request{method: "POST", url: graphNode(s, s["page_id"], "feed"), headers: auth, body: body}, nil
 		},
 		"posts": func(s Settings, a map[string]any) (request, error) {
+			if _, err := pageOf(s); err != nil {
+				return request{}, err
+			}
 			return request{method: "GET", url: graphNode(s, s["page_id"], "posts") + "?fields=id,message,created_time,permalink_url&" + limitQuery(a), headers: auth}, nil
 		},
 		"comments": func(s Settings, a map[string]any) (request, error) {
@@ -136,10 +146,16 @@ func makeFacebook(s Settings) Connector {
 			return request{method: "POST", url: graphNode(s, id, "likes"), headers: auth}, nil
 		},
 		"inbox": func(s Settings, a map[string]any) (request, error) {
+			if _, err := pageOf(s); err != nil {
+				return request{}, err
+			}
 			fields := url.QueryEscape("updated_time,messages.limit(1){message,from}")
 			return request{method: "GET", url: graphNode(s, s["page_id"], "conversations") + "?platform=messenger&fields=" + fields + "&" + limitQuery(a), headers: auth}, nil
 		},
 		"send": func(s Settings, a map[string]any) (request, error) {
+			if _, err := pageOf(s); err != nil {
+				return request{}, err
+			}
 			to, err := need(a, "to", "id")
 			if err != nil {
 				return request{}, err
@@ -156,14 +172,23 @@ func makeFacebook(s Settings) Connector {
 	return c
 }
 
+// errAccount is an Instagram connection that does not know its account yet.
+var errAccount = errors.New("the Instagram account is not set: sign in with Facebook (it finds the account linked to your Page), or type its id")
+
 // igPoll is how often a reel's upload is checked while Instagram processes it.
 var igPoll = 3 * time.Second
 
 func makeInstagram(s Settings) Connector {
 	auth := bearer(s["token"])
 	account := s["account_id"]
+	if account == "" && strings.HasPrefix(s["token"], "IG") {
+		account = "me" // an Instagram Login token speaks for its own account
+	}
 	c := newAPI("instagram", s, map[string]actionFn{
 		"post": func(s Settings, a map[string]any) (request, error) {
+			if account == "" {
+				return request{}, errAccount
+			}
 			body := map[string]any{"caption": str(a, "text", "caption")}
 			switch img, video := str(a, "image_url", "image"), str(a, "video_url", "video"); {
 			case video != "":
@@ -177,10 +202,13 @@ func makeInstagram(s Settings) Connector {
 			// Instagram has fetched (and, for a reel, processed) the file.
 			return request{method: "POST", url: graphNode(s, account, "media"), headers: auth, body: body,
 				follow: func(ctx context.Context, raw []byte, headers map[string]string) (string, error) {
-					return igPublish(ctx, s, raw, headers)
+					return igPublish(ctx, s, account, raw, headers)
 				}}, nil
 		},
 		"posts": func(s Settings, a map[string]any) (request, error) {
+			if account == "" {
+				return request{}, errAccount
+			}
 			return request{method: "GET", url: graphNode(s, account, "media") + "?fields=id,caption,media_type,permalink,timestamp,like_count,comments_count&" + limitQuery(a), headers: auth}, nil
 		},
 		"comments": func(s Settings, a map[string]any) (request, error) {
@@ -207,7 +235,7 @@ func makeInstagram(s Settings) Connector {
 }
 
 // igPublish waits for the container to be ready, publishes it and says where the post is.
-func igPublish(ctx context.Context, s Settings, raw []byte, headers map[string]string) (string, error) {
+func igPublish(ctx context.Context, s Settings, account string, raw []byte, headers map[string]string) (string, error) {
 	var container struct {
 		ID string `json:"id"`
 	}
@@ -236,7 +264,7 @@ func igPublish(ctx context.Context, s Settings, raw []byte, headers map[string]s
 		case <-time.After(igPoll):
 		}
 	}
-	out, err := do(ctx, request{method: "POST", url: graphNode(s, s["account_id"], "media_publish"), headers: headers, body: map[string]any{"creation_id": container.ID}})
+	out, err := do(ctx, request{method: "POST", url: graphNode(s, account, "media_publish"), headers: headers, body: map[string]any{"creation_id": container.ID}})
 	if err != nil {
 		return "", err
 	}

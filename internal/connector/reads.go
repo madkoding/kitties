@@ -374,7 +374,8 @@ func jiraSearch(s Settings, a map[string]any) (request, error) {
 	if jql == "" {
 		jql = "project = " + pick(a, s, "project") + " AND statusCategory != Done ORDER BY updated DESC"
 	}
-	return request{method: "GET", url: base(s, "") + "/rest/api/3/search/jql?fields=summary,status,assignee&maxResults=" + strconv.Itoa(limitOf(a)) + "&jql=" + url.QueryEscape(jql), basic: [2]string{s["email"], s["token"]}}, nil
+	root, basic := jiraTarget(s)
+	return request{method: "GET", url: root + "/rest/api/3/search/jql?fields=summary,status,assignee&maxResults=" + strconv.Itoa(limitOf(a)) + "&jql=" + url.QueryEscape(jql), basic: basic}, nil
 }
 
 // ── mail and calendar ──────────────────────────────────────────────────────────────────────
@@ -596,7 +597,11 @@ func stripeBalance(data []byte) string {
 
 func makeZendesk(s Settings) Connector {
 	root := "https://" + s["subdomain"] + ".zendesk.com/api/v2"
-	basic := [2]string{s["email"] + "/token", s["token"]}
+	// An agent's email and API token, or the signed-in account (its token goes as a bearer).
+	var basic [2]string
+	if s["token"] != "" {
+		basic = [2]string{s["email"] + "/token", s["token"]}
+	}
 	return newAPI("zendesk", s, map[string]actionFn{
 		"list_tickets": func(s Settings, a map[string]any) (request, error) {
 			q := str(a, "query")
@@ -668,12 +673,13 @@ func moreKinds() []Kind {
 				{Name: "refund", Help: "refund a payment, all of it or an amount in cents", Args: []string{"payment (pi_…)", "amount (cents, optional)"}},
 			}, make: makeStripe},
 		{Name: "zendesk", Category: CatProductivity, Label: "Zendesk", Help: "support tickets in Zendesk: watch what customers write and answer them",
-			Fields: []Field{f("subdomain", "Subdomain", "acme for acme.zendesk.com", true, false), f("email", "Agent email", "", true, false), f("token", "API token", "", true, true)},
+			Fields: signIn([]Field{f("subdomain", "Subdomain", "acme for acme.zendesk.com", true, false), f("email", "Agent email", "with an API token", false, false)},
+				f("token", "API token", "", false, true), "Admin Center → Apps and integrations → APIs → OAuth clients"),
 			Actions: []Action{
 				{Name: "list_tickets", Help: "tickets matching a search (the unsolved ones by default)", Args: []string{"query (Zendesk search, optional)"}},
 				{Name: "read_ticket", Help: "the comments of a ticket", Args: []string{"id"}},
 				{Name: "reply", Help: "answer a ticket", Args: []string{"id", fText, "public (false for an internal note)"}},
-			}, make: makeZendesk},
+			}, make: makeZendesk, oauth: "zendesk"},
 		{Name: "ntfy", Category: CatMessaging, Label: "ntfy (push)", Help: "push notifications to a phone or a browser through ntfy.sh or a server of your own",
 			Fields:  []Field{f("topic", "Topic", "a hard-to-guess name: anyone who knows it can read it", true, false), f("url", "Server", "https://ntfy.sh when empty", false, false), f("token", "Access token", "for a protected topic", false, true)},
 			Actions: []Action{{Name: "send", Help: "push a message", Args: []string{fText, "title (optional)", "priority (1-5, optional)", "click (a URL to open, optional)"}}}, make: makeNtfy},

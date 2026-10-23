@@ -100,7 +100,7 @@ func TestInstagramPublish(t *testing.T) {
 	(&capture{answer: []string{`{"status_code":"IN_PROGRESS"}`}}).install(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := igPublish(ctx, ig, []byte(`{"id":"C5"}`), nil); err == nil || !strings.Contains(err.Error(), "still processing") {
+	if _, err := igPublish(ctx, ig, "IG1", []byte(`{"id":"C5"}`), nil); err == nil || !strings.Contains(err.Error(), "still processing") {
 		t.Errorf("a cancelled publish = %v", err)
 	}
 }
@@ -141,7 +141,7 @@ func TestMetaRisks(t *testing.T) {
 			t.Errorf("%s reading asks", kind)
 		}
 		k, ok := LookupKind(kind)
-		if !ok || k.Category != CatSocial || len(k.Fields) != 2 || k.Inbound {
+		if !ok || k.Category != CatSocial || len(k.Fields) != 4 || k.Inbound || k.OAuth != "facebook" {
 			t.Errorf("%s = %+v", kind, k)
 		}
 	}

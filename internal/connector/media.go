@@ -507,12 +507,9 @@ func (m *macTasks) Call(ctx context.Context, args map[string]any) (string, error
 
 // mediaKinds are the music, file and Mac task kinds of the catalogue.
 func mediaKinds() []Kind {
-	oauthApp := func(where string) []Field {
-		return []Field{f("client_id", "Client id", "an app of your own at "+where, true, false), f("client_secret", "Client secret", "leave empty when the app uses PKCE only", false, true)}
-	}
 	return []Kind{
 		{Name: "spotify", Category: CatMusic, Label: "Spotify", Help: "Spotify: what is playing, play, pause and skip (Premium), search music, keep playlists",
-			Fields: oauthApp("developer.spotify.com (redirect: this gateway's /v1/oauth/callback)"),
+			Fields: fApp("developer.spotify.com (redirect: this gateway's /v1/oauth/callback)"),
 			Actions: []Action{
 				{Name: "now_playing", Help: "what is playing now"},
 				{Name: "play", Help: "play the best match of a query, a spotify: uri, or resume", Args: []string{"query or uri (optional)"}},
@@ -524,7 +521,7 @@ func mediaKinds() []Kind {
 				{Name: "add_to_playlist", Help: "add tracks to a playlist", Args: []string{"playlist (id)", "uris (spotify:track:…, separated by commas)"}},
 			}, make: makeSpotify, oauth: "spotify"},
 		{Name: "tidal", Category: CatMusic, Label: "TIDAL", Help: "TIDAL: search the catalogue and keep playlists (TIDAL's public API has no remote playback)",
-			Fields: append(oauthApp("developer.tidal.com (redirect: this gateway's /v1/oauth/callback)"), f("country", "Country", "two letters for the catalogue: US, CL, ES…", false, false)),
+			Fields: append([]Field{f("country", "Country", "two letters for the catalogue: US, CL, ES…", false, false)}, fApp("developer.tidal.com (redirect: this gateway's /v1/oauth/callback)")...),
 			Actions: []Action{
 				{Name: "search", Help: "find music; the ids go into playlists", Args: []string{"query", "type (track, album, artist, playlist)"}},
 				{Name: "playlists", Help: "the account's playlists"},
@@ -532,8 +529,7 @@ func mediaKinds() []Kind {
 				{Name: "add_to_playlist", Help: "add tracks to a playlist", Args: []string{"playlist (id)", "tracks (ids, separated by commas)"}},
 			}, make: makeTidal, oauth: "tidal"},
 		{Name: "dropbox", Category: CatOffice, Label: "Dropbox", Help: "files in Dropbox: list, search, read, save text files and share a link",
-			Fields: []Field{f("token", "Access token", "a token from your Dropbox app's settings; leave empty to sign in", false, true),
-				f("client_id", "App key", "to sign in instead of pasting a token: an app of your own at dropbox.com/developers", false, false), f("client_secret", "App secret", "", false, true)},
+			Fields: signIn(nil, f("token", "Access token", "a token from your Dropbox app's settings", false, true), "dropbox.com/developers"),
 			Actions: []Action{
 				{Name: "list", Help: "what is in a folder", Args: []string{"path (optional; the root)"}},
 				{Name: "search", Help: "find files by name or content", Args: []string{"query", fLimit}},

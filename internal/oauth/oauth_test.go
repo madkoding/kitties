@@ -15,13 +15,37 @@ import (
 
 type memStore struct {
 	provider, id, secret string
+	kind                 string
+	settings             map[string]string
 	mu                   sync.Mutex
 	creds                Credentials
 	appErr, saveErr      error
+	learnErr             error
 }
 
-func (m *memStore) OAuthApp(string) (string, string, string, error) {
-	return m.provider, m.id, m.secret, m.appErr
+func (m *memStore) OAuthApp(string) (App, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := map[string]string{}
+	for k, v := range m.settings {
+		s[k] = v
+	}
+	id, secret := m.id, m.secret
+	if s["client_id"] != "" {
+		id, secret = s["client_id"], s["client_secret"]
+	}
+	return App{Provider: m.provider, Kind: m.kind, ClientID: id, ClientSecret: secret, Settings: s}, m.appErr
+}
+func (m *memStore) SaveOAuthSettings(_ string, learned map[string]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.settings == nil {
+		m.settings = map[string]string{}
+	}
+	for k, v := range learned {
+		m.settings[k] = v
+	}
+	return m.learnErr
 }
 func (m *memStore) OAuthCredentials(string) (Credentials, error) {
 	m.mu.Lock()
@@ -181,7 +205,7 @@ func TestFailures(t *testing.T) {
 	if len(randomText(8)) == 0 {
 		t.Error("randomText")
 	}
-	if _, err := m.token(context.Background(), Provider{TokenURL: "::bad"}, url.Values{}); err == nil {
+	if _, err := m.token(context.Background(), Provider{TokenURL: "::bad"}, App{}, "", map[string]string{}); err == nil {
 		t.Error("bad token url")
 	}
 }

@@ -141,20 +141,46 @@ func (m *Manager) Accounts() *llmauth.Manager { return m.accounts }
 // OAuth is the sign-in manager of the connectors.
 func (m *Manager) OAuth() *oauth.Manager { return m.oauth }
 
-// OAuthApp implements oauth.Store: the connector's identity service and OAuth app.
-func (m *Manager) OAuthApp(name string) (string, string, string, error) {
+// OAuthApp implements oauth.Store: the connector's identity service, OAuth app and settings.
+func (m *Manager) OAuthApp(name string) (oauth.App, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	c, ok := m.cfg.Connectors[name]
 	if !ok {
-		return "", "", "", fmt.Errorf("%w: connector %q", ErrNotFound, name)
+		return oauth.App{}, fmt.Errorf("%w: connector %q", ErrNotFound, name)
 	}
 	kind, ok := connector.LookupKind(c.Kind)
 	if !ok || kind.OAuth == "" {
-		return "", "", "", fmt.Errorf("connector %q does not sign in with OAuth", name)
+		return oauth.App{}, fmt.Errorf("connector %q does not sign in with OAuth", name)
 	}
 	s := c.ConnectorSettings()
-	return kind.OAuth, s["client_id"], s["client_secret"], nil
+	return oauth.App{Provider: kind.OAuth, Kind: c.Kind, ClientID: s["client_id"], ClientSecret: s["client_secret"], Settings: s}, nil
+}
+
+// SaveOAuthSettings implements oauth.Store: what a sign-in learned (an app it registered, a
+// page, an account id) goes into the connector's settings.
+func (m *Manager) SaveOAuthSettings(name string, learned map[string]string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.cfg.Connectors[name]
+	if !ok {
+		return fmt.Errorf("%w: connector %q", ErrNotFound, name)
+	}
+	settings := map[string]string{}
+	for k, v := range c.Settings {
+		settings[k] = v
+	}
+	for k, v := range learned {
+		settings[k] = v
+	}
+	c.Settings = settings
+	if m.overlay.Connectors == nil {
+		m.overlay.Connectors = map[string]config.Connector{}
+	}
+	m.overlay.Connectors[name] = c
+	m.cfg.Connectors[name] = c
+	m.connectors.Add(name, m.buildConnector(name, c))
+	return m.saveSettings()
 }
 
 // OAuthConnectors lists the connectors that sign in with OAuth, for the token refresh loop.

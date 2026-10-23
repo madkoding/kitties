@@ -1,7 +1,14 @@
-// Package oauth signs a connector in with OAuth 2.0 (authorization code with PKCE), the way
-// Google Workspace and Microsoft 365 want it: the person's own OAuth app (client id and
-// secret), a browser window to consent, the callback on the gateway, and a refresh token kept
-// in the connector's settings so the kitties never ask again.
+// Package oauth signs a connector in with OAuth 2.0 (authorization code with PKCE): a browser
+// window to consent, the callback on the gateway, and a refresh token kept in the connector's
+// settings so the kitties never ask again.
+//
+// Signing in is meant to be the easy way in, so the app it signs in through comes from the first
+// place that has one: the connector's own settings (an app of the person's), the app Kitties was
+// built with (Builtin), an app the service registers on the spot (Mastodon), or none at all
+// (Home Assistant takes the gateway's own address as the app). Some services hand out a token
+// that is not yet the one the connector needs; a provider's Finish turns it into that one (a
+// Facebook Page's token) and fills in what the person would otherwise look up (the page, the
+// account, the site).
 package oauth
 
 import (
@@ -15,10 +22,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 	"time"
 )
+
+// HTTPDo sends a request; tests answer without a network.
+type HTTPDo func(*http.Request) (*http.Response, error)
 
 // Provider is one identity service.
 type Provider struct {
@@ -34,44 +45,73 @@ type Provider struct {
 	// NoExpiry marks a service whose tokens last until revoked (Slack bots, GitHub OAuth
 	// apps): an answer without expires_in is kept for good instead of an hour.
 	NoExpiry bool `json:"-"`
+	// Basic sends the client secret as HTTP Basic authentication instead of in the form.
+	Basic bool `json:"-"`
+	// JSONBody posts the token request as JSON (Notion) instead of a form.
+	JSONBody bool `json:"-"`
+	// Defaults fill the {url} or {subdomain} of the addresses when the settings leave them
+	// empty (GitLab's own site).
+	Defaults map[string]string `json:"-"`
+	// SelfClient takes the gateway's own address as the app (Home Assistant's IndieAuth): no app
+	// to register anywhere.
+	SelfClient bool `json:"-"`
+	// Register makes an app on the service when there is none (Mastodon lets anyone).
+	Register func(ctx context.Context, do HTTPDo, app App, redirect string) (id, secret string, err error) `json:"-"`
+	// Finish turns the service's answer into the token the connector uses, and says what it
+	// learned for the settings (the page, the account id, the site).
+	Finish func(ctx context.Context, do HTTPDo, app App, c Credentials) (Credentials, map[string]string, error) `json:"-"`
 }
 
-// Providers are the services with an OAuth flow.
-var Providers = map[string]Provider{
-	"google": {
-		Name: "google", Label: "Google", AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: "https://oauth2.googleapis.com/token",
-		Scopes: []string{"https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/calendar.events", "https://www.googleapis.com/auth/drive.file", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/documents", "https://www.googleapis.com/auth/contacts", "https://www.googleapis.com/auth/tasks"},
-		Extra:  map[string]string{"access_type": "offline", "prompt": "consent"},
-	},
-	"microsoft": {
-		Name: "microsoft", Label: "Microsoft", AuthURL: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", TokenURL: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
-		Scopes: []string{"offline_access", "Mail.Send", "Mail.Read", "Calendars.ReadWrite", "Files.ReadWrite", "User.Read", "Contacts.ReadWrite", "Tasks.ReadWrite"},
-	},
-	"slack": {
-		Name: "slack", Label: "Slack", AuthURL: "https://slack.com/oauth/v2/authorize", TokenURL: "https://slack.com/api/oauth.v2.access",
-		Scopes: []string{"chat:write", "chat:write.public", "channels:read"}, ScopeSep: ",", NoExpiry: true,
-	},
-	"spotify": {
-		Name: "spotify", Label: "Spotify", AuthURL: "https://accounts.spotify.com/authorize", TokenURL: "https://accounts.spotify.com/api/token",
-		Scopes: []string{"user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "playlist-read-private", "playlist-modify-private", "playlist-modify-public"},
-	},
-	"tidal": {
-		Name: "tidal", Label: "TIDAL", AuthURL: "https://login.tidal.com/authorize", TokenURL: "https://auth.tidal.com/v1/oauth2/token",
-		Scopes: []string{"search.read", "playlists.read", "playlists.write", "collection.read", "user.read"},
-	},
-	"dropbox": {
-		Name: "dropbox", Label: "Dropbox", AuthURL: "https://www.dropbox.com/oauth2/authorize", TokenURL: "https://api.dropboxapi.com/oauth2/token",
-		Scopes: []string{"files.metadata.read", "files.content.read", "files.content.write", "sharing.write"},
-		Extra:  map[string]string{"token_access_type": "offline"},
-	},
-	"github": {
-		Name: "github", Label: "GitHub", AuthURL: "https://github.com/login/oauth/authorize", TokenURL: "https://github.com/login/oauth/access_token",
-		Scopes: []string{"repo"}, NoExpiry: true,
-	},
+// Ready reports whether a person can sign in to the service without an app of their own.
+func (p Provider) Ready() bool {
+	id, _ := Builtin(p.Name)
+	return id != "" || p.SelfClient || p.Register != nil
+}
+
+// address fills a provider address's {url} and {subdomain} from the settings.
+func (p Provider) address(raw string, s map[string]string) (string, error) {
+	out := raw
+	for _, key := range []string{"url", "subdomain"} {
+		ph := "{" + key + "}"
+		if !strings.Contains(out, ph) {
+			continue
+		}
+		v := strings.TrimRight(strings.TrimSpace(s[key]), "/")
+		if v == "" {
+			v = p.Defaults[key]
+		}
+		if v == "" {
+			return "", fmt.Errorf("%s needs its %s before signing in", p.Label, key)
+		}
+		out = strings.ReplaceAll(out, ph, v)
+	}
+	return out, nil
 }
 
 // forever is how long a token without expiry is kept: until the service revokes it.
 const forever = 100 * 365 * 24 * time.Hour
+
+// builtin are the apps Kitties is built with, as "provider=id" or "provider=id:secret" pairs
+// separated by commas: set at build time (-ldflags "-X .../oauth.builtin=spotify=abc,...") so
+// a person signs in without making an app. Empty in a build that has none.
+var builtin = ""
+
+// Builtin is the app Kitties signs in to provider with when the connector names none:
+// KITTIES_<PROVIDER>_CLIENT_ID (and _SECRET) on the gateway, else the one it was built with.
+func Builtin(provider string) (id, secret string) {
+	env := "KITTIES_" + strings.ToUpper(strings.ReplaceAll(provider, "-", "_"))
+	if id := os.Getenv(env + "_CLIENT_ID"); id != "" {
+		return id, os.Getenv(env + "_CLIENT_SECRET")
+	}
+	for _, pair := range strings.Split(builtin, ",") {
+		name, value, ok := strings.Cut(strings.TrimSpace(pair), "=")
+		if ok && name == provider {
+			id, secret, _ = strings.Cut(value, ":")
+			return id, secret
+		}
+	}
+	return "", ""
+}
 
 // Credentials is what a signed-in connector holds, in its settings.
 type Credentials struct {
@@ -114,14 +154,24 @@ func (c Credentials) SignedIn() bool {
 	return c.RefreshToken != "" || (c.AccessToken != "" && time.Now().Before(c.Expiry))
 }
 
+// App is what signing a connector in starts from: its identity service, its kind, the OAuth
+// app it names (empty for none) and its settings.
+type App struct {
+	Provider, Kind         string
+	ClientID, ClientSecret string
+	Settings               map[string]string
+}
+
 // Store is where the gateway keeps a connector's credentials and app: the orchestrator's settings.
 type Store interface {
-	// OAuthApp returns the connector's provider name, client id and secret.
-	OAuthApp(connector string) (provider, clientID, clientSecret string, err error)
+	// OAuthApp returns the connector's sign-in.
+	OAuthApp(connector string) (App, error)
 	// OAuthCredentials returns what is saved for the connector.
 	OAuthCredentials(connector string) (Credentials, error)
 	// SaveOAuthCredentials keeps new credentials.
 	SaveOAuthCredentials(connector string, c Credentials) error
+	// SaveOAuthSettings keeps what a sign-in learned: an app it registered, a page, an id.
+	SaveOAuthSettings(connector string, settings map[string]string) error
 }
 
 // Manager runs the flows.
@@ -131,7 +181,7 @@ type Manager struct {
 	// pending are the flows waiting for their callback, by state.
 	pending map[string]flow
 	now     func() time.Time
-	httpDo  func(*http.Request) (*http.Response, error)
+	httpDo  HTTPDo
 	rand    func(n int) string
 }
 
@@ -141,6 +191,8 @@ type flow struct {
 	verifier  string
 	redirect  string
 	started   time.Time
+	// clientID and secret are the app the flow signs in with, wherever it came from.
+	clientID, secret string
 }
 
 // New creates the manager over the store.
@@ -155,18 +207,59 @@ func randomText(n int) string {
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
+// origin is the scheme and host of an address, with a slash: the gateway as an app.
+func origin(redirect string) string {
+	u, err := url.Parse(redirect)
+	if err != nil {
+		return redirect
+	}
+	return u.Scheme + "://" + u.Host + "/"
+}
+
+// client is the app a connector signs in with: its own, the gateway itself, the one Kitties was
+// built with, or one the service registers now (kept in the settings for the next time).
+func (m *Manager) client(ctx context.Context, connector string, p Provider, app App, redirect string) (id, secret string, err error) {
+	switch {
+	case app.ClientID != "":
+		return app.ClientID, app.ClientSecret, nil
+	case p.SelfClient:
+		return origin(redirect), "", nil
+	}
+	if id, secret := Builtin(p.Name); id != "" {
+		return id, secret, nil
+	}
+	if p.Register == nil {
+		return "", "", fmt.Errorf("signing in to %s needs an app: create one (its redirect address is %s) and put its client id in the connection, or paste a token instead", p.Label, redirect)
+	}
+	id, secret, err = p.Register(ctx, m.httpDo, app, redirect)
+	if err != nil {
+		return "", "", fmt.Errorf("%s did not register Kitties: %w", p.Label, err)
+	}
+	if err := m.store.SaveOAuthSettings(connector, map[string]string{"client_id": id, "client_secret": secret}); err != nil {
+		return "", "", err
+	}
+	return id, secret, nil
+}
+
 // Start begins a sign-in for the connector and returns the consent URL to open.
 func (m *Manager) Start(connector, redirect string) (string, error) {
-	providerName, clientID, _, err := m.store.OAuthApp(connector)
+	app, err := m.store.OAuthApp(connector)
 	if err != nil {
 		return "", err
 	}
-	p, ok := Providers[providerName]
+	p, ok := Providers[app.Provider]
 	if !ok {
-		return "", fmt.Errorf("%q has no OAuth flow", providerName)
+		return "", fmt.Errorf("%q has no OAuth flow", app.Provider)
 	}
-	if clientID == "" {
-		return "", errors.New("the connector needs a client id (an OAuth app of your own)")
+	authURL, err := p.address(p.AuthURL, app.Settings)
+	if err != nil {
+		return "", err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	clientID, secret, err := m.client(ctx, connector, p, app, redirect)
+	if err != nil {
+		return "", err
 	}
 	state := m.rand(24)
 	verifier := m.rand(48)
@@ -177,20 +270,23 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 			delete(m.pending, k)
 		}
 	}
-	m.pending[state] = flow{connector: connector, provider: p, verifier: verifier, redirect: redirect, started: m.now()}
+	m.pending[state] = flow{connector: connector, provider: p, verifier: verifier, redirect: redirect, started: m.now(), clientID: clientID, secret: secret}
 	m.mu.Unlock()
 	sep := p.ScopeSep
 	if sep == "" {
 		sep = " "
 	}
 	q := url.Values{
-		"client_id": {clientID}, "redirect_uri": {redirect}, "response_type": {"code"}, "scope": {strings.Join(p.Scopes, sep)},
+		"client_id": {clientID}, "redirect_uri": {redirect}, "response_type": {"code"},
 		"state": {state}, "code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "code_challenge_method": {"S256"},
+	}
+	if len(p.Scopes) > 0 {
+		q.Set("scope", strings.Join(p.Scopes, sep))
 	}
 	for k, v := range p.Extra {
 		q.Set(k, v)
 	}
-	return p.AuthURL + "?" + q.Encode(), nil
+	return authURL + "?" + q.Encode(), nil
 }
 
 // Exchange finishes a sign-in with the code the callback received, and saves the credentials.
@@ -202,17 +298,36 @@ func (m *Manager) Exchange(ctx context.Context, state, code string) (string, err
 	if !ok {
 		return "", errors.New("unknown or expired sign-in; start again from Settings")
 	}
-	_, clientID, clientSecret, err := m.store.OAuthApp(f.connector)
+	app, err := m.store.OAuthApp(f.connector)
 	if err != nil {
 		return "", err
 	}
-	form := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "redirect_uri": {f.redirect}, "client_id": {clientID}, "code_verifier": {f.verifier}}
-	if clientSecret != "" {
-		form.Set("client_secret", clientSecret)
-	}
-	creds, err := m.token(ctx, f.provider, form)
+	values := map[string]string{"grant_type": "authorization_code", "code": code, "redirect_uri": f.redirect, "client_id": f.clientID, "code_verifier": f.verifier}
+	creds, err := m.token(ctx, f.provider, app, f.secret, values)
 	if err != nil {
 		return "", err
+	}
+	if f.provider.Finish != nil {
+		var learned map[string]string
+		if creds, learned, err = f.provider.Finish(ctx, m.httpDo, app, creds); err != nil {
+			return "", err
+		}
+		if f.provider.SelfClient {
+			if learned == nil {
+				learned = map[string]string{}
+			}
+			learned["client_id"] = f.clientID
+		}
+		if len(learned) > 0 {
+			if err := m.store.SaveOAuthSettings(f.connector, learned); err != nil {
+				return "", err
+			}
+		}
+	} else if f.provider.SelfClient {
+		// The gateway's address is the app: the refresh needs it again.
+		if err := m.store.SaveOAuthSettings(f.connector, map[string]string{"client_id": f.clientID}); err != nil {
+			return "", err
+		}
 	}
 	if err := m.store.SaveOAuthCredentials(f.connector, creds); err != nil {
 		return "", err
@@ -221,54 +336,82 @@ func (m *Manager) Exchange(ctx context.Context, state, code string) (string, err
 }
 
 // token posts a token request and reads the answer.
-func (m *Manager) token(ctx context.Context, p Provider, form url.Values) (Credentials, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.TokenURL, strings.NewReader(form.Encode()))
+func (m *Manager) token(ctx context.Context, p Provider, app App, secret string, values map[string]string) (Credentials, error) {
+	tokenURL, err := p.address(p.TokenURL, app.Settings)
 	if err != nil {
 		return Credentials{}, err
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if secret != "" && !p.Basic {
+		values["client_secret"] = secret
+	}
+	var body io.Reader
+	ctype := "application/x-www-form-urlencoded"
+	if p.JSONBody {
+		data, _ := json.Marshal(values)
+		body, ctype = strings.NewReader(string(data)), "application/json"
+	} else {
+		form := url.Values{}
+		for k, v := range values {
+			form.Set(k, v)
+		}
+		body = strings.NewReader(form.Encode())
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenURL, body)
+	if err != nil {
+		return Credentials{}, err
+	}
+	req.Header.Set("Content-Type", ctype)
 	// GitHub answers in form encoding unless asked for JSON; the others ignore the header.
 	req.Header.Set("Accept", "application/json")
+	if secret != "" && p.Basic {
+		req.SetBasicAuth(values["client_id"], secret)
+	}
 	resp, err := m.httpDo(req)
 	if err != nil {
 		return Credentials{}, fmt.Errorf("%s did not answer: %w", p.Label, err)
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	var body struct {
+	var answer struct {
 		AccessToken  string `json:"access_token"`
 		RefreshToken string `json:"refresh_token"`
 		ExpiresIn    int    `json:"expires_in"`
-		Error        string `json:"error"`
+		Error        any    `json:"error"`
 		Description  string `json:"error_description"`
-		// Team is the Slack workspace that installed the app: the account shown.
+		// Team is the Slack workspace that installed the app, and WorkspaceName Notion's: the
+		// account shown.
 		Team struct {
 			Name string `json:"name"`
 		} `json:"team"`
+		WorkspaceName string `json:"workspace_name"`
 	}
-	_ = json.Unmarshal(data, &body)
-	if resp.StatusCode >= 400 || body.Error != "" {
-		msg := body.Description
-		if msg == "" {
-			msg = body.Error
+	_ = json.Unmarshal(data, &answer)
+	if resp.StatusCode >= 400 || (answer.Error != nil && answer.Error != false && answer.Error != "") {
+		msg := answer.Description
+		if msg == "" && answer.Error != nil {
+			msg = fmt.Sprint(answer.Error)
 		}
 		if msg == "" {
 			msg = strings.TrimSpace(string(data))
 		}
 		return Credentials{}, fmt.Errorf("%s refused: %s", p.Label, msg)
 	}
-	if body.AccessToken == "" {
+	if answer.AccessToken == "" {
 		return Credentials{}, fmt.Errorf("%s returned no token", p.Label)
 	}
-	ttl := time.Duration(body.ExpiresIn) * time.Second
+	ttl := time.Duration(answer.ExpiresIn) * time.Second
 	switch {
-	case body.ExpiresIn > 0:
+	case answer.ExpiresIn > 0:
 	case p.NoExpiry:
 		ttl = forever
 	default:
 		ttl = time.Hour
 	}
-	return Credentials{AccessToken: body.AccessToken, RefreshToken: body.RefreshToken, Expiry: m.now().Add(ttl), Account: body.Team.Name}, nil
+	account := answer.Team.Name
+	if account == "" {
+		account = answer.WorkspaceName
+	}
+	return Credentials{AccessToken: answer.AccessToken, RefreshToken: answer.RefreshToken, Expiry: m.now().Add(ttl), Account: account}, nil
 }
 
 // refreshAhead is how long before expiry a token is refreshed: before it fails, not after.
@@ -329,19 +472,19 @@ func (m *Manager) refresh(ctx context.Context, connector string, creds Credentia
 	if creds.RefreshToken == "" {
 		return "", errors.New("not signed in: connect the account from Settings")
 	}
-	providerName, clientID, clientSecret, err := m.store.OAuthApp(connector)
+	app, err := m.store.OAuthApp(connector)
 	if err != nil {
 		return "", err
 	}
-	p, ok := Providers[providerName]
+	p, ok := Providers[app.Provider]
 	if !ok {
-		return "", fmt.Errorf("%q has no OAuth flow", providerName)
+		return "", fmt.Errorf("%q has no OAuth flow", app.Provider)
 	}
-	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {creds.RefreshToken}, "client_id": {clientID}}
-	if clientSecret != "" {
-		form.Set("client_secret", clientSecret)
+	clientID, secret := app.ClientID, app.ClientSecret
+	if clientID == "" {
+		clientID, secret = Builtin(p.Name)
 	}
-	fresh, err := m.token(ctx, p, form)
+	fresh, err := m.token(ctx, p, app, secret, map[string]string{"grant_type": "refresh_token", "refresh_token": creds.RefreshToken, "client_id": clientID})
 	if err != nil {
 		return "", err
 	}

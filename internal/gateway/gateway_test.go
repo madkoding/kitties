@@ -171,12 +171,13 @@ func (f *fakeFleet) RemoveConnector(name string) error {
 // oauthStore is a fleet's OAuth side for the tests: one connector "g" with a Google app.
 type oauthStore struct{ creds oauth.Credentials }
 
-func (o *oauthStore) OAuthApp(name string) (string, string, string, error) {
+func (o *oauthStore) OAuthApp(name string) (oauth.App, error) {
 	if name != "g" {
-		return "", "", "", errors.New("connector \"x\" does not sign in with OAuth")
+		return oauth.App{}, errors.New("connector \"x\" does not sign in with OAuth")
 	}
-	return "google", "cid", "sec", nil
+	return oauth.App{Provider: "google", ClientID: "cid", ClientSecret: "sec"}, nil
 }
+func (o *oauthStore) SaveOAuthSettings(string, map[string]string) error  { return nil }
 func (o *oauthStore) OAuthCredentials(string) (oauth.Credentials, error) { return o.creds, nil }
 func (o *oauthStore) SaveOAuthCredentials(_ string, c oauth.Credentials) error {
 	o.creds = c
