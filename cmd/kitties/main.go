@@ -387,6 +387,13 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	for _, k := range a.fleet.List() {
 		fmt.Fprintf(a.out, "  %-16s %-8s %s\n", k.Name, k.Status, k.Provider)
 	}
+	// A connection that signs in but has no account (one from the file, or a sign-in never
+	// finished) would fail at its first use: it is said now.
+	for _, c := range a.fleet.Settings().Connectors {
+		if c.NeedsSignIn {
+			fmt.Fprintf(a.err, "kitties: the connection %s (%s) has no account yet: sign in from Settings, Connections, or give it a key\n", c.Name, c.Label)
+		}
+	}
 	g := a.cfg.Gateway
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
 		WithApprovals(a.chats).WithMemory(a.chats).WithNotifier(a.notifier).WithDigest(a.digest).

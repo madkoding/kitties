@@ -116,8 +116,15 @@ func TestGatewayServesTheWebInterface(t *testing.T) {
 		t.Errorf("exit %d", c)
 	}
 
-	// Without a build inside, the gateway says so and serves its built-in page.
+	// Without a build inside, the gateway says so and serves its built-in page. A connection of
+	// the file that signs in but has no account is said too.
 	webFS = func() (fs.FS, bool) { return nil, false }
+	f, err := os.OpenFile(cfg, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString("connectors:\n  music:\n    kind: spotify\n  code:\n    kind: github\n    token: ghp_x\n")
+	_ = f.Close()
 	addr, _, errOut, stop := serve(t, "-config", cfg, "gateway")
 	if code, body, _ := get(t, "http://"+addr+"/"); code != 200 || !strings.Contains(body, "<title>Kitties</title>") {
 		t.Errorf("built-in page = %d", code)
@@ -125,6 +132,9 @@ func TestGatewayServesTheWebInterface(t *testing.T) {
 	stop()
 	if !strings.Contains(errOut.String(), "no web interface inside") {
 		t.Errorf("the missing build is reported: %s", errOut.String())
+	}
+	if !strings.Contains(errOut.String(), "the connection music (Spotify) has no account yet") || strings.Contains(errOut.String(), "connection code") {
+		t.Errorf("the connection without an account is reported, and only it: %s", errOut.String())
 	}
 }
 
