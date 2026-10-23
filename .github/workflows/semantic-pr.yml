@@ -1,0 +1,30 @@
+name: semantic pr
+
+# A pull request's title is the commit a squash merge makes, and what the next version is read
+# from (scripts/next-version.sh): it has to be a semantic commit, like "feat(chat): …",
+# "fix: …" or "feat!: …" for a breaking change.
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  title:
+    name: semantic title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: the title is a semantic commit
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          types='feat|fix|perf|refactor|docs|test|build|ci|chore|style|revert'
+          if printf '%s' "$TITLE" | grep -qE "^($types)(\([a-z0-9./_ -]+\))?!?: .+"; then
+            echo "ok: $TITLE"
+          else
+            echo "::error::The title \"$TITLE\" is not a semantic commit: write it as type(scope): what, with type one of ${types//|/, } (and ! before the colon for a breaking change)."
+            exit 1
+          fi

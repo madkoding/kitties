@@ -525,7 +525,15 @@ On a tag CI also publishes the `kitty-desktop` image to `ghcr.io/madkoding/kitty
 release next to the CLI binaries.
 
 The project builds with the Go standard library only. Commits follow
-[Conventional Commits](https://www.conventionalcommits.org/); releases are cut from tags.
+[Conventional Commits](https://www.conventionalcommits.org/), and a pull request's title must be
+one too (the *semantic pr* check): a squash merge makes it the commit.
+
+**Releases tag themselves.** When CI passes on `main`, the *tag* workflow reads the semantic
+commits since the last tag (`scripts/next-version.sh`): `feat` bumps the minor, `fix` and `perf`
+the patch, a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) the major (the minor while
+it is 0.x); `docs`, `ci`, `chore`, `test`, `style`, `build` and `refactor` alone make no release.
+It tags the commit and runs CI on the tag, which publishes the release. A tag pushed by hand
+still releases as before.
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design in more depth.
 
 Free software under [GPL-3.0-or-later](LICENSE) · © 2026 madkoding

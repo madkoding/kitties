@@ -11,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -30,6 +30,8 @@ jobs:
         run: make vet
       - name: go test -race
         run: make test
+      - name: release scripts
+        run: scripts/next-version_test.sh
       - name: coverage gate
         run: make cover
 
@@ -201,7 +203,7 @@ jobs:
   wails:
     name: desktop app · ${{ matrix.os }}
     # On tags, and by hand (Actions → ci → Run workflow) to try the packaging without a release.
-    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     needs: [check, desktop]
     strategy:
       fail-fast: false
@@ -314,7 +316,7 @@ jobs:
   # The kitty-desktop image, published to GitHub's registry on tags (latest and the version).
   publish-image:
     name: publish kitty-desktop image
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [image]
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -341,7 +343,7 @@ jobs:
   # The gateway image, published next to the kitty-desktop one on tags.
   publish-gateway-image:
     name: publish gateway image
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [gateway-image, check]
     runs-on: ubuntu-latest
     timeout-minutes: 40
@@ -371,7 +373,7 @@ jobs:
   # for a branch, a pull request or a manual run. Everything else above only checks and builds.
   release:
     name: release
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v')
     needs: [check, build, wails, android, publish-image, publish-gateway-image]
     runs-on: ubuntu-latest
     permissions:
