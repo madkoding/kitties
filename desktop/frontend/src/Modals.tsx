@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
 import { api, errText, inAndroid, inWails, saveConnection, savedConnection } from "./api";
 import { ask } from "./Confirm";
@@ -32,7 +32,7 @@ function Modal({
   children: preact.ComponentChildren;
   wide?: boolean;
 }) {
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);

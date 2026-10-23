@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useState } from "preact/hooks";
 import { t } from "./i18n";
 
 // The page asks before it removes something with a dialog of its own: window.confirm is not
@@ -33,7 +33,7 @@ export function ConfirmHost() {
     q?.answer(ok);
     setQ(null);
   };
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!q) {
       return;
     }

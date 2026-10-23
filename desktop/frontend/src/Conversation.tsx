@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Kitty, Session, Step, Turn } from "./api";
 import { api, shotData, shotURL } from "./api";
 import { inline, stepArgs, stepSentence, when } from "./format";
@@ -384,7 +384,7 @@ export default function Conversation({ session, kitties, user, pending, waiting 
   const end = useRef<HTMLDivElement>(null);
   const count = session?.turns?.length ?? 0;
   // Escape closes a screenshot opened big, like a click on it does.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!zoom) {
       return;
     }

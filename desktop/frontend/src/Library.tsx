@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useState } from "preact/hooks";
 import type { ArtifactInfo, Skill } from "./api";
 import { api, artifactText, shotURL } from "./api";
 import { ask } from "./Confirm";
@@ -25,7 +25,7 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
     api.artifacts().then(setArts).catch((e) => setErr((e as Error).message));
   };
   useEffect(load, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);

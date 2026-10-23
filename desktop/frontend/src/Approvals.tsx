@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useLayoutEffect, useState } from "preact/hooks";
 import type { Approval, ApprovalRule, Kitty } from "./api";
 import { actionLabel } from "./friendly";
 import { api } from "./api";
@@ -174,7 +174,7 @@ export default function ApprovalsModal({
       .catch((e) => setErr((e as Error).message));
   };
   useEffect(load, []);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);

@@ -1,5 +1,5 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useErrorBoundary, useMemo, useState } from "preact/hooks";
+import { useEffect, useErrorBoundary, useLayoutEffect, useMemo, useState } from "preact/hooks";
 import type {
   Account,
   ConnectorKind,
@@ -1702,7 +1702,7 @@ export default function SettingsModal({
       }
     });
   }, [editConnector]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
