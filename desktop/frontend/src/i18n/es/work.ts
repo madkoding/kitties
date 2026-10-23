@@ -389,6 +389,10 @@ const dict: Dictionary = {
   "Asked you for help on its desktop": "Te pidió ayuda en su escritorio",
   "Desktop look": "Aspecto del escritorio",
   "{name}'s desktop now wears {theme}.": "El escritorio de {name} ahora usa {theme}.",
+  "{name} ran out of budget for this task; it can go on from where it was.":
+    "A {name} se le acabó el presupuesto de esta tarea; puede seguir desde donde quedó.",
+  Continue: "Continuar",
+  "Continue where you left off.": "Continúa desde donde quedaste.",
 };
 
 export default dict;

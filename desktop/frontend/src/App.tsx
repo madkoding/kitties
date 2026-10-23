@@ -453,6 +453,7 @@ export default function App() {
             user={user}
             pending={unshown}
             waiting={pending !== null && !working}
+            onSend={send}
           />
         ) : (
           <Welcome

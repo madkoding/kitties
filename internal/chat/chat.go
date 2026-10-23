@@ -55,6 +55,9 @@ type Turn struct {
 	Working bool `json:"working,omitempty"`
 	// NeedsHelp is true when the kitty gave up on this turn and asked the person.
 	NeedsHelp bool `json:"needs_help,omitempty"`
+	// Resumable is true when the task stopped on its budget (time, tokens or rounds) and can go
+	// on from where it was: the kitty's next answer gets the steps it had taken.
+	Resumable bool `json:"resumable,omitempty"`
 	// Delegations are the subtasks the kitty handed to other kitties in this turn.
 	Delegations []Delegation `json:"delegations,omitempty"`
 	// Approvals are the actions this turn held for the person's yes.
@@ -1123,8 +1126,37 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 	}
 	s.closeTask(id, index, k, strings.TrimSpace(strings.Join(st.parts, "\n\n")), needsHelp, result)
 	if st.detail != "" {
-		s.edit(id, index, func(t *Turn) { t.Detail = st.detail })
+		s.edit(id, index, func(t *Turn) {
+			t.Detail = st.detail
+			t.Resumable = strings.HasPrefix(fail, "stopped")
+		})
 	}
+}
+
+// recapSteps is how many of its last steps a kitty is reminded of when it goes on with a task.
+const recapSteps = 30
+
+// recap is what a kitty did in a task that stopped on its budget, for it to go on from there
+// rather than start again: why it stopped, and its last steps with their results.
+func recap(t Turn) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "(The task above stopped before it was finished: %s. The desktop is as I left it. My last steps were:", t.Detail)
+	steps := t.Steps
+	if len(steps) > recapSteps {
+		steps = steps[len(steps)-recapSteps:]
+	}
+	for _, st := range steps {
+		args, _ := json.Marshal(st.Args)
+		line := "\n- " + st.Action + " " + string(args)
+		if st.Error != "" {
+			line += " -> failed: " + clip(st.Error, 160)
+		} else if r := strings.TrimSpace(st.Result); r != "" {
+			line += " -> " + clip(strings.ReplaceAll(r, "\n", " "), 160)
+		}
+		b.WriteString(line)
+	}
+	b.WriteString("\nWhen asked to go on, look at the screen first and continue from there, without repeating what worked.)")
+	return b.String()
 }
 
 // attempt runs rounds until the task is done, the model stops asking for actions, or something
@@ -1369,7 +1401,11 @@ func (s *Service) transcript(system string, turns []Turn, k *kitty.Kitty) []prov
 	for _, t := range turns {
 		if t.Kitty == k.ID {
 			flush()
-			messages = append(messages, provider.Message{Role: "assistant", Content: t.Text})
+			content := t.Text
+			if t.Resumable {
+				content += "\n\n" + recap(t)
+			}
+			messages = append(messages, provider.Message{Role: "assistant", Content: content})
 			continue
 		}
 		label := t.From

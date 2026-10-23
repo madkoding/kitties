@@ -177,6 +177,8 @@ export interface Turn {
   steps?: Step[];
   artifacts?: string[];
   skills?: string[];
+  // resumable: the task stopped on its budget and can go on from where it was.
+  resumable?: boolean;
   working?: boolean;
   needs_help?: boolean;
   delegations?: Delegation[];

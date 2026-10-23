@@ -242,6 +242,7 @@ function TurnCard({
   latest,
   onOpen,
   onHelp,
+  onContinue,
 }: {
   turn: Turn;
   index: number;
@@ -252,6 +253,8 @@ function TurnCard({
   onOpen: (src: string) => void;
   // onHelp opens the kitty's desktop with the controls, when it asked for help.
   onHelp?: () => void;
+  // onContinue has a task that stopped on its budget go on from where it was.
+  onContinue?: () => void;
 }) {
   const mine = turn.from === "user";
   // The scheduler's wake-up call and the answer to an approval read like the person's side,
@@ -293,6 +296,18 @@ function TurnCard({
           {turn.steps.map((s, i) => (
             <StepRow key={i} step={s} chat={chat} onOpen={onOpen} />
           ))}
+        </div>
+      )}
+      {turn.resumable && !turn.working && latest && onContinue && (
+        <div class="callout flex items-center gap-2 mt-2" data-testid="resume-callout">
+          <span class="flex-1">
+            {t("{name} ran out of budget for this task; it can go on from where it was.", {
+              name: kitty?.name || t("The kitty"),
+            })}
+          </span>
+          <button class="btn-accent px-3 py-1.5 text-sm" onClick={onContinue} data-testid="resume">
+            {t("Continue")}
+          </button>
         </div>
       )}
       {turn.working && turn.steps?.[turn.steps.length - 1]?.action === "ask_help" && onHelp && (
@@ -390,6 +405,8 @@ function TurnCard({
 
 interface Props {
   session: Session | null;
+  // onSend posts a message in the chat (the Continue button of a task stopped on its budget).
+  onSend?: (text: string) => void;
   kitties: Kitty[];
   user: string;
   // pending is the message being sent, until the chat has it; waiting shows the kitties
@@ -398,7 +415,7 @@ interface Props {
   waiting?: boolean;
 }
 
-export default function Conversation({ session, kitties, user, pending, waiting }: Props) {
+export default function Conversation({ session, kitties, user, pending, waiting, onSend }: Props) {
   const byId = new Map(kitties.map((k) => [k.id, k]));
   const [zoom, setZoom] = useState<string>("");
   // helping is the kitty whose desktop is open because it asked for help.
@@ -464,6 +481,15 @@ export default function Conversation({ session, kitties, user, pending, waiting 
               setHelping(k);
             }
           }}
+          onContinue={
+            onSend
+              ? () => {
+                  const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+                  const who = k && session.members.length > 1 ? `@${k.name} ` : "";
+                  onSend(who + t("Continue where you left off."));
+                }
+              : undefined
+          }
         />
       ))}
       {pending && (
