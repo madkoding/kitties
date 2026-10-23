@@ -29,7 +29,6 @@ const NAMED: Record<string, string> = {
   ArrowDown: "Down",
   ArrowLeft: "Left",
   ArrowRight: "Right",
-  " ": "space",
 };
 
 // xKeys turns a key press into what xdotool presses, or "" when it is plain text to type.
@@ -54,7 +53,7 @@ export function xKeys(e: {
     e.metaKey && "super",
     e.shiftKey && named && "shift",
   ].filter(Boolean);
-  const key = named || (e.key.length === 1 ? e.key.toLowerCase() : e.key);
+  const key = named || (e.key === " " ? "space" : e.key.length === 1 ? e.key.toLowerCase() : e.key);
   return [...mods, key].join("+");
 }
 
@@ -98,6 +97,9 @@ export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose:
   const typed = useRef("");
   const typeTimer = useRef<number | undefined>(undefined);
   const wheelAt = useRef(0);
+  // queue sends the inputs one after another, in the order they were made: typed text and keys
+  // sent side by side would reach the display mixed up.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
 
   // The frames: one after another, never two at once.
   useEffect(() => {
@@ -142,7 +144,9 @@ export default function LiveDesktop({ kitty, onClose }: { kitty: Kitty; onClose:
   }, [onClose]);
 
   const send = (action: string, args: Record<string, unknown>) => {
-    api.inputKitty(kitty.id, action, args).catch((e) => setErr(plainError((e as Error).message)));
+    queue.current = queue.current.then(() =>
+      api.inputKitty(kitty.id, action, args).catch((e) => setErr(plainError((e as Error).message))),
+    );
   };
 
   const take = async (on: boolean) => {

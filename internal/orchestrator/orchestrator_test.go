@@ -238,8 +238,12 @@ func TestLifecycle(t *testing.T) {
 	if got, _ := m.Get("mimi"); got.Status != kitty.StatusRunning || !f.running["kitty-mimi"] {
 		t.Error("Start creates and runs the container")
 	}
-	if _, err := os.Stat(k.Workspace); err != nil {
-		t.Error("the workspace folder is created")
+	// The container's user writes in its workspace; the root keeps everyone else out.
+	if st, err := os.Stat(k.Workspace); err != nil || st.Mode().Perm() != 0o777 {
+		t.Errorf("the workspace folder is created, open to the container: %v %v", st, err)
+	}
+	if st, err := os.Stat(filepath.Dir(k.Workspace)); err != nil || st.Mode().Perm() != 0o700 {
+		t.Errorf("the workspaces' root is the gateway's alone: %v %v", st, err)
 	}
 	if err := m.Start(ctx, "mimi"); err != nil || strings.Count(strings.Join(f.calls, ","), "up") != 1 {
 		t.Error("a running kitty is left alone")

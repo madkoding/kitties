@@ -471,6 +471,27 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 	return k, nil
 }
 
+// makeWorkspace creates a kitty's workspace so its container can write in it. The container's
+// user (kitty, uid 1000) is seldom the gateway's (root, or uid 10001 in its image), so the
+// folder itself is open to everyone, inside a root that is the gateway's alone (0700): no other
+// user of the host reaches it.
+func (m *Manager) makeWorkspace(dir string) error {
+	root := filepath.Dir(dir)
+	if err := os.MkdirAll(root, 0o700); err != nil {
+		return err
+	}
+	// The default root is Kitties' own: one made before by a looser umask is closed again.
+	if m.cfg.Containers.Workspace == "" {
+		if err := os.Chmod(root, 0o700); err != nil {
+			return err
+		}
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return os.Chmod(dir, 0o777) //nolint:gosec // see above: the root keeps everyone else out
+}
+
 func (m *Manager) workspaceRoot() string {
 	if m.cfg.Containers.Workspace != "" {
 		return m.cfg.Containers.Workspace
@@ -561,6 +582,10 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	if !k.Desktop {
 		return m.setStatus(k.ID, kitty.StatusRunning, "")
 	}
+	// Made, or opened to the container when an older version made it closed.
+	if err := m.makeWorkspace(k.Workspace); err != nil {
+		return m.fail(k.ID, fmt.Errorf("create the workspace: %w", err))
+	}
 	exists, running, err := m.containerState(ctx, k.Container)
 	if err != nil {
 		return m.fail(k.ID, err)
@@ -572,9 +597,6 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 			return m.fail(k.ID, err)
 		}
 	default:
-		if err := os.MkdirAll(k.Workspace, 0o700); err != nil {
-			return m.fail(k.ID, fmt.Errorf("create the workspace: %w", err))
-		}
 		c := m.cfg.Containers
 		spec := container.Spec{
 			Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: c.MemoryMB, CPUs: c.CPUs,
