@@ -3,6 +3,7 @@ import type { Kitty, Session, Step, Turn } from "./api";
 import { api, shotData, shotURL } from "./api";
 import { inline, stepArgs, stepSentence, when } from "./format";
 import { actionLabel, plainError } from "./friendly";
+import { gatewayText } from "./gatewayText";
 import { t } from "./i18n";
 import { useTechDetails } from "./prefs";
 import PixelCat, { type Mood } from "./PixelCat";
@@ -275,7 +276,7 @@ function TurnCard({
           <IconHand size={14} /> {t("{name} needs your help with this one.", { name: turn.from })}
         </div>
       )}
-      {turn.text && <Text text={turn.text} />}
+      {turn.text && <Text text={mine ? turn.text : gatewayText(turn.text)} />}
       {turn.kitty &&
         turn.limits?.map((l, i) => <LimitNote key={i} kitty={turn.kitty!} limit={l} />)}
       {tech && turn.detail && (

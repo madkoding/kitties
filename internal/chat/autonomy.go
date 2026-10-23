@@ -256,7 +256,7 @@ func (s *Service) giveUp(id string, index int, k *kitty.Kitty, fail string) (res
 		}
 	}
 	s.note(k, agenda.KindEscalated, "", id, fail)
-	return "escalated", true, "(" + k.Name + " needs help: " + fail + ")"
+	return "escalated", true, "(" + k.Name + " needs help: " + Plain(fail) + ")"
 }
 
 // lastRequest is what the thread asked for before the turn at index: the last message that
