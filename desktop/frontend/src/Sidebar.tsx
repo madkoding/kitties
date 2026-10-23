@@ -12,6 +12,7 @@ import {
   IconLogOut,
 } from "./icons";
 import PixelCat, { type Mood } from "./PixelCat";
+import { t } from "./i18n";
 
 // moodOf is how a kitty looks in a list, from its state.
 export function moodOf(k: Kitty, working?: boolean): Mood {
@@ -65,14 +66,16 @@ export default function Sidebar(p: Props) {
           <span class="text-accent text-lg">🐱</span>
           <h1 class="text-base font-semibold tracking-wide">Kitties</h1>
           <span class="text-[10px] text-[var(--t4)] font-mono mt-0.5">{p.version}</span>
-          <button class="plain ml-auto p-1.5 md:hidden" onClick={p.onClose} aria-label="Close">
+          <button class="plain ml-auto p-1.5 md:hidden" onClick={p.onClose} aria-label={t("Close")}>
             <IconX />
           </button>
         </div>
 
         <div class="flex-1 overflow-y-auto px-2 pb-2 scroll-thin">
-          <div class="section-title">Chats</div>
-          {p.chats.length === 0 && <div class="px-3 text-xs text-[var(--t4)]">No chats yet.</div>}
+          <div class="section-title">{t("Chats")}</div>
+          {p.chats.length === 0 && (
+            <div class="px-3 text-xs text-[var(--t4)]">{t("No chats yet.")}</div>
+          )}
           {p.chats.map((c, i) => (
             <div
               key={c.id}
@@ -95,8 +98,8 @@ export default function Sidebar(p: Props) {
                 })}
               </span>
               <span class="flex-1 min-w-0 truncate text-sm">{c.title}</span>
-              {c.needs_help && <span class="tag tag-amber">help</span>}
-              {c.goal && !c.needs_help && <span class="tag tag-magenta">goal</span>}
+              {c.needs_help && <span class="tag tag-amber">{t("help")}</span>}
+              {c.goal && !c.needs_help && <span class="tag tag-magenta">{t("goal")}</span>}
               <span class="tag">
                 {c.members.length > 1 ? <IconUsers size={10} /> : null}
                 {c.members.length > 1 ? c.members.length : (byId.get(c.members[0])?.name ?? "1")}
@@ -107,12 +110,12 @@ export default function Sidebar(p: Props) {
             class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm"
             onClick={p.onNewChat}
           >
-            <IconPlus size={14} /> New chat
+            <IconPlus size={14} /> {t("New chat")}
           </button>
 
-          <div class="section-title">Kitties</div>
+          <div class="section-title">{t("Kitties")}</div>
           {p.kitties.length === 0 && (
-            <div class="px-3 text-xs text-[var(--t4)]">No kitties yet.</div>
+            <div class="px-3 text-xs text-[var(--t4)]">{t("No kitties yet.")}</div>
           )}
           {p.kitties.map((k, i) => (
             <div key={k.id} class="row" style={`animation-delay: ${Math.min(i, 10) * 30}ms`}>
@@ -139,7 +142,7 @@ export default function Sidebar(p: Props) {
             class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm"
             onClick={p.onNewKitty}
           >
-            <IconPlus size={14} /> New kitty
+            <IconPlus size={14} /> {t("New kitty")}
           </button>
         </div>
 
@@ -150,8 +153,12 @@ export default function Sidebar(p: Props) {
               onClick={p.onApprovals}
               data-testid="approvals-button"
             >
-              <IconShield size={14} /> Approvals
-              {p.approvals > 0 && <span class="tag tag-amber ml-auto">{p.approvals} waiting</span>}
+              <IconShield size={14} /> {t("Approvals")}
+              {p.approvals > 0 && (
+                <span class="tag tag-amber ml-auto">
+                  {t("{count} waiting", { count: p.approvals })}
+                </span>
+              )}
             </button>
           </div>
         )}
@@ -160,23 +167,23 @@ export default function Sidebar(p: Props) {
             class="btn-ghost flex-1 flex items-center gap-2 px-3 py-2 text-xs"
             onClick={p.onLibrary}
           >
-            <IconBook size={14} /> Library
+            <IconBook size={14} /> {t("Library")}
           </button>
           <button
             class="btn-ghost flex-1 flex items-center gap-2 px-3 py-2 text-xs"
             onClick={p.onSettings}
           >
-            <IconSettings size={14} /> Settings
+            <IconSettings size={14} /> {t("Settings")}
           </button>
-          <button class="btn-ghost px-3 py-2 text-xs" onClick={p.onTheme} aria-label="Theme">
+          <button class="btn-ghost px-3 py-2 text-xs" onClick={p.onTheme} aria-label={t("Theme")}>
             <IconSun size={14} />
           </button>
           {p.onSignOut && (
             <button
               class="btn-ghost px-3 py-2 text-xs"
               onClick={p.onSignOut}
-              aria-label="Sign out"
-              title="Sign out"
+              aria-label={t("Sign out")}
+              title={t("Sign out")}
             >
               <IconLogOut size={14} />
             </button>

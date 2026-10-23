@@ -3,6 +3,7 @@ import type { Kitty, Session, Step, Turn } from "./api";
 import { api, shotData, shotURL } from "./api";
 import { inline, stepArgs, stepSentence, when } from "./format";
 import { actionLabel, plainError } from "./friendly";
+import { t } from "./i18n";
 import { useTechDetails } from "./prefs";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
@@ -48,10 +49,14 @@ export function Shot({
     return <div class={big ? "live-shot" : "shot-thumb"} />;
   }
   if (big) {
-    return <img class="live-shot" src={src} alt="The kitty's display" />;
+    return <img class="live-shot" src={src} alt={t("The kitty's display")} />;
   }
   return (
-    <button class="plain shot-thumb" onClick={() => onOpen?.(src)} aria-label="Open the screenshot">
+    <button
+      class="plain shot-thumb"
+      onClick={() => onOpen?.(src)}
+      aria-label={t("Open the screenshot")}
+    >
       <img src={src} alt="" class="w-full h-full object-cover" />
     </button>
   );
@@ -87,7 +92,7 @@ function StepRow({
         {step.error && (
           <span class="text-[var(--c-red)]">
             {" "}
-            — it did not work: {tech ? step.error : plainError(step.error)}
+            — {t("it did not work: {error}", { error: tech ? step.error : plainError(step.error) })}
           </span>
         )}
       </span>
@@ -136,7 +141,7 @@ function Feedback({ chat, index, current }: { chat: string; index: number; curre
     <span class="feedback" data-testid="feedback">
       <button
         class={`plain fb ${rating === "up" ? "on up" : ""}`}
-        aria-label="Good answer"
+        aria-label={t("Good answer")}
         aria-pressed={rating === "up"}
         onClick={() => send(rating === "up" ? "" : "up")}
       >
@@ -144,7 +149,7 @@ function Feedback({ chat, index, current }: { chat: string; index: number; curre
       </button>
       <button
         class={`plain fb ${rating === "down" ? "on down" : ""}`}
-        aria-label="Not good"
+        aria-label={t("Not good")}
         aria-pressed={rating === "down"}
         onClick={() => (rating === "down" ? send("") : setAsking(true))}
       >
@@ -154,13 +159,13 @@ function Feedback({ chat, index, current }: { chat: string; index: number; curre
         <span class="feedback-ask">
           <input
             value={note}
-            aria-label="What was wrong"
-            placeholder="what was wrong? (it learns from this)"
+            aria-label={t("What was wrong")}
+            placeholder={t("what was wrong? (it learns from this)")}
             onInput={(e) => setNote((e.target as HTMLInputElement).value)}
             onKeyDown={(e) => e.key === "Enter" && send("down", note.trim())}
           />
           <button class="btn-ghost px-2 py-0.5 text-xs" onClick={() => send("down", note.trim())}>
-            send
+            {t("send")}
           </button>
         </span>
       )}
@@ -210,7 +215,7 @@ function TurnCard({
       )}
       {turn.needs_help && (
         <div class="help-line">
-          <IconHand size={14} /> {turn.from} needs your help with this one.
+          <IconHand size={14} /> {t("{name} needs your help with this one.", { name: turn.from })}
         </div>
       )}
       {turn.text && <Text text={turn.text} />}
@@ -220,7 +225,7 @@ function TurnCard({
         </pre>
       )}
       {turn.steps && turn.steps.length > 0 && (
-        <div class="trail" aria-label="steps">
+        <div class="trail" aria-label={t("steps")}>
           {turn.steps.map((s, i) => (
             <StepRow key={i} step={s} chat={chat} onOpen={onOpen} />
           ))}
@@ -228,7 +233,7 @@ function TurnCard({
       )}
       {turn.working && (
         <div class="working-line">
-          <span class="spinner" /> working on its computer…
+          <span class="spinner" /> {t("working on its computer…")}
         </div>
       )}
       {(turn.calls?.length || turn.usage?.input || turn.artifacts?.length || !mine) && (
@@ -236,7 +241,10 @@ function TurnCard({
           <span
             title={
               turn.usage && (turn.usage.input || turn.usage.output)
-                ? `${turn.usage.input} → ${turn.usage.output} tokens`
+                ? t("{input} → {output} tokens", {
+                    input: turn.usage.input,
+                    output: turn.usage.output,
+                  })
                 : undefined
             }
           >
@@ -254,12 +262,16 @@ function TurnCard({
           ))}
           {tech && turn.usage && (turn.usage.input || turn.usage.output) ? (
             <span data-testid="tokens">
-              {turn.usage.input}→{turn.usage.output} tokens
+              {t("{input}→{output} tokens", { input: turn.usage.input, output: turn.usage.output })}
             </span>
           ) : null}
           {turn.approvals?.map((a) => (
             <a key={a.id} class="tag tag-amber tag-logo" href="#new-approvals" title={a.summary}>
-              <IconShield size={11} /> waiting for your yes: {actionLabel(a.action)} ({a.connector})
+              <IconShield size={11} />{" "}
+              {t("waiting for your yes: {action} ({connector})", {
+                action: actionLabel(a.action),
+                connector: a.connector,
+              })}
             </a>
           ))}
           {turn.delegations?.map((d, i) => (
@@ -274,7 +286,7 @@ function TurnCard({
           ))}
           {turn.skills?.map((n) => (
             <span key={"s" + n} class="tag tag-amber">
-              skill · {n}
+              {t("skill · {name}", { name: n })}
             </span>
           ))}
           {turn.artifacts?.map((n) => (
@@ -320,10 +332,11 @@ export default function Conversation({ session, kitties, user, pending, waiting 
       <main class="flex-1 flex items-center justify-center p-6">
         <div class="empty-card max-w-md p-6 text-center">
           <div class="text-3xl mb-2">🐱</div>
-          <h2 class="font-mono text-lg mb-1">No chat open</h2>
+          <h2 class="font-mono text-lg mb-1">{t("No chat open")}</h2>
           <p class="text-sm text-[var(--t3)]">
-            Pick a chat on the left, or start one with the kitties you want in it. In a group, write
-            @name to pick who answers.
+            {t(
+              "Pick a chat on the left, or start one with the kitties you want in it. In a group, write @name to pick who answers.",
+            )}
           </p>
         </div>
       </main>
@@ -339,19 +352,19 @@ export default function Conversation({ session, kitties, user, pending, waiting 
           <div class="text-2xl mb-1">👋</div>
           <p class="text-sm text-[var(--t2)]">
             {session.members.length > 1
-              ? "Say hello to the team, or give them a task. Write @name to pick who answers."
-              : "Say hello, ask a question, or give it a task to work on."}
+              ? t("Say hello to the team, or give them a task. Write @name to pick who answers.")
+              : t("Say hello, ask a question, or give it a task to work on.")}
           </p>
         </div>
       )}
-      {(session.turns || []).map((t, i, all) => (
+      {(session.turns || []).map((turn, i, all) => (
         <TurnCard
           key={i}
-          turn={t}
+          turn={turn}
           index={i}
           chat={session.id}
           user={user}
-          kitty={t.kitty ? byId.get(t.kitty) : undefined}
+          kitty={turn.kitty ? byId.get(turn.kitty) : undefined}
           latest={i >= all.length - session.members.length}
           onOpen={setZoom}
         />
@@ -377,7 +390,7 @@ export default function Conversation({ session, kitties, user, pending, waiting 
               ) : null;
             })}
             <span class="working-line !mt-0">
-              <span class="spinner" /> thinking…
+              <span class="spinner" /> {t("thinking…")}
             </span>
           </div>
         </>
@@ -390,7 +403,7 @@ export default function Conversation({ session, kitties, user, pending, waiting 
         >
           <img
             src={zoom}
-            alt="Screenshot"
+            alt={t("Screenshot")}
             class="max-w-full max-h-full border border-[var(--neon-cyan)] shadow-[var(--glow-cyan)]"
           />
         </div>

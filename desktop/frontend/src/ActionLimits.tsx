@@ -3,6 +3,7 @@ import type { ApprovalRule, Kitty, SettingsView } from "./api";
 import { api } from "./api";
 import { RULE_LABEL, ruleTarget } from "./Approvals";
 import { actionLabel, mayUse } from "./friendly";
+import { t } from "./i18n";
 import { Missing, Required } from "./Required";
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";
@@ -52,10 +53,12 @@ export default function ActionLimits({ kitty }: { kitty: Kitty }) {
       .catch((e) => setErr((e as Error).message));
   return (
     <div data-testid="action-limits">
-      <div class="section-title !mx-0 mt-5">Action limits</div>
+      <div class="section-title !mx-0 mt-5">{t("Action limits")}</div>
       <p class="text-xs text-[var(--t4)]">
-        {kitty.name} does what its connections allow. Tell it in a chat (“ask me before posting”)
-        and it adds the limit here, or add one yourself.
+        {t(
+          "{name} does what its connections allow. Tell it in a chat (“ask me before posting”) and it adds the limit here, or add one yourself.",
+          { name: kitty.name },
+        )}
       </p>
       {rules.length > 0 && (
         <div class="flex flex-col gap-1 mt-2" data-testid="kitty-rules">
@@ -64,7 +67,7 @@ export default function ActionLimits({ kitty }: { kitty: Kitty }) {
               <span class={`tag ${TAG[r.mode]}`}>{RULE_LABEL[r.mode]}</span>
               <span class="flex-1 truncate">{ruleTarget(r)}</span>
               <button class="btn-ghost px-2 py-1 text-xs" onClick={() => remove(r.id)}>
-                remove
+                {t("remove")}
               </button>
             </div>
           ))}
@@ -75,7 +78,7 @@ export default function ActionLimits({ kitty }: { kitty: Kitty }) {
           <div class="grid grid-cols-3 gap-2 items-end">
             <div>
               <label class={LABEL} for="rule-connector">
-                Connection
+                {t("Connection")}
                 <Required />
               </label>
               <select
@@ -88,7 +91,7 @@ export default function ActionLimits({ kitty }: { kitty: Kitty }) {
                   setAction("");
                 }}
               >
-                <option value="">pick one</option>
+                <option value="">{t("pick one")}</option>
                 {mine.map((c) => (
                   <option key={c.name} value={c.name}>
                     {c.label}
@@ -99,7 +102,7 @@ export default function ActionLimits({ kitty }: { kitty: Kitty }) {
             </div>
             <div>
               <label class={LABEL} for="rule-action">
-                Action
+                {t("Action")}
               </label>
               <select
                 id="rule-action"
@@ -107,7 +110,7 @@ export default function ActionLimits({ kitty }: { kitty: Kitty }) {
                 value={action}
                 onChange={(e) => setAction((e.target as HTMLSelectElement).value)}
               >
-                <option value="">everything</option>
+                <option value="">{t("everything")}</option>
                 {(kind?.actions || []).map((a) => (
                   <option key={a.name} value={a.name}>
                     {actionLabel(a.name)}
@@ -117,7 +120,7 @@ export default function ActionLimits({ kitty }: { kitty: Kitty }) {
             </div>
             <div>
               <label class={LABEL} for="rule-mode">
-                It
+                {t("It")}
               </label>
               <select
                 id="rule-mode"
@@ -125,8 +128,8 @@ export default function ActionLimits({ kitty }: { kitty: Kitty }) {
                 value={mode}
                 onChange={(e) => setMode((e.target as HTMLSelectElement).value as "ask" | "never")}
               >
-                <option value="ask">asks me first</option>
-                <option value="never">never does it</option>
+                <option value="ask">{t("asks me first")}</option>
+                <option value="never">{t("never does it")}</option>
               </select>
             </div>
           </div>
@@ -136,9 +139,9 @@ export default function ActionLimits({ kitty }: { kitty: Kitty }) {
             onClick={add}
             data-testid="add-limit"
           >
-            Add limit
+            {t("Add limit")}
           </button>
-          <Missing items={[!conn && "a connection"]} />
+          <Missing items={[!conn && t("a connection")]} />
         </>
       )}
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}

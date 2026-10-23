@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+
 // Words for people: what the gateway calls openai, messaging or create_issue, as the screens
 // say it. Everything here is display only; the API keeps its own names.
 
@@ -14,62 +16,66 @@ export interface ProviderMeta {
 export const PROVIDERS: Record<string, ProviderMeta> = {
   anthropic: {
     label: "Anthropic Claude",
-    blurb: "Claude models: careful, strong at long tasks and tools.",
+    blurb: t("Claude models: careful, strong at long tasks and tools."),
     keyURL: "https://console.anthropic.com/settings/keys",
     models: ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"],
   },
   openai: {
     label: "OpenAI",
-    blurb: "GPT models, the most widely used.",
+    blurb: t("GPT models, the most widely used."),
     keyURL: "https://platform.openai.com/api-keys",
   },
   gemini: {
     label: "Google Gemini",
-    blurb: "Gemini models, with a free tier to start.",
+    blurb: t("Gemini models, with a free tier to start."),
     keyURL: "https://aistudio.google.com/app/apikey",
   },
   ollama: {
-    label: "Ollama on this computer",
-    blurb: "Free models that run on your own machine. No key needed.",
+    label: t("Ollama on this computer"),
+    blurb: t("Free models that run on your own machine. No key needed."),
     keyURL: "https://ollama.com/download",
     address: true,
   },
   "ollama-cloud": {
     label: "Ollama Cloud",
-    blurb: "Open models, hosted by Ollama.",
+    blurb: t("Open models, hosted by Ollama."),
     keyURL: "https://ollama.com/settings/keys",
   },
   openrouter: {
     label: "OpenRouter",
-    blurb: "One key for hundreds of models.",
+    blurb: t("One key for hundreds of models."),
     keyURL: "https://openrouter.ai/keys",
   },
-  groq: { label: "Groq", blurb: "Very fast open models.", keyURL: "https://console.groq.com/keys" },
+  groq: {
+    label: "Groq",
+    blurb: t("Very fast open models."),
+    keyURL: "https://console.groq.com/keys",
+  },
   deepseek: {
     label: "DeepSeek",
-    blurb: "DeepSeek models, low cost.",
+    blurb: t("DeepSeek models, low cost."),
     keyURL: "https://platform.deepseek.com/api_keys",
   },
   mistral: {
     label: "Mistral",
-    blurb: "Mistral models, from Europe.",
+    blurb: t("Mistral models, from Europe."),
     keyURL: "https://console.mistral.ai/api-keys",
   },
-  qwen: { label: "Qwen (Alibaba)", blurb: "Qwen models through DashScope." },
+  qwen: { label: "Qwen (Alibaba)", blurb: t("Qwen models through DashScope.") },
   codex: {
     label: "OpenAI Codex",
-    blurb: "OpenAI models tuned for code.",
+    blurb: t("OpenAI models tuned for code."),
     keyURL: "https://platform.openai.com/api-keys",
   },
-  copilot: { label: "GitHub Copilot", blurb: "The models of your Copilot plan." },
+  copilot: { label: "GitHub Copilot", blurb: t("The models of your Copilot plan.") },
   "claude-code": {
-    label: "Claude subscription",
-    blurb: "Claude on your Pro or Max plan, through Claude Code.",
+    label: t("Claude subscription"),
+    blurb: t("Claude on your Pro or Max plan, through Claude Code."),
     models: ["sonnet", "opus", "haiku"],
   },
   custom: {
-    label: "Another server",
-    blurb: "Anything that speaks the OpenAI API: LM Studio, vLLM, a company gateway.",
+    label: t("Another server"),
+    blurb: t("Anything that speaks the OpenAI API: LM Studio, vLLM, a company gateway."),
     address: true,
   },
 };
@@ -111,20 +117,24 @@ export interface SignIn {
 
 const CHATGPT: SignIn = {
   kind: "codex",
-  label: "ChatGPT plan",
-  plans: "Plus, Pro, Business or Enterprise",
+  label: t("ChatGPT plan"),
+  plans: t("Plus, Pro, Business or Enterprise"),
   how: "browser",
-  help: "Sign in with your ChatGPT account: your plan pays for the answers, no API key or credits needed.",
+  help: t(
+    "Sign in with your ChatGPT account: your plan pays for the answers, no API key or credits needed.",
+  ),
   models: ["gpt-5.5-codex", "gpt-5.5"],
 };
 
 export const SIGN_IN: Record<string, SignIn> = {
   anthropic: {
     kind: "claude-code",
-    label: "Claude subscription",
-    plans: "Pro or Max",
+    label: t("Claude subscription"),
+    plans: t("Pro or Max"),
     how: "cli",
-    help: "Your Claude plan pays for the answers. Anthropic allows it only through its own Claude Code program: Kitties runs it for you, signed in with your account.",
+    help: t(
+      "Your Claude plan pays for the answers. Anthropic allows it only through its own Claude Code program: Kitties runs it for you, signed in with your account.",
+    ),
     setupURL: "https://claude.com/product/claude-code",
     models: ["sonnet", "opus", "haiku"],
   },
@@ -133,27 +143,32 @@ export const SIGN_IN: Record<string, SignIn> = {
   copilot: {
     kind: "copilot",
     label: "GitHub Copilot",
-    plans: "any Copilot plan, Free included",
+    plans: t("any Copilot plan, Free included"),
     how: "device",
-    help: "Sign in with GitHub: open the link, type the code shown here, and your Copilot plan pays for the answers.",
+    help: t(
+      "Sign in with GitHub: open the link, type the code shown here, and your Copilot plan pays for the answers.",
+    ),
     models: ["gpt-4.1", "gpt-5-mini", "claude-sonnet-4", "gemini-2.5-pro"],
   },
   gemini: {
     kind: "gemini",
-    label: "Google account",
-    plans: "a Google Cloud project",
+    label: t("Google account"),
+    plans: t("a Google Cloud project"),
     how: "gcloud",
-    help: "Uses the Google login of the gcloud program on this computer, billed to your Cloud project.",
+    help: t(
+      "Uses the Google login of the gcloud program on this computer, billed to your Cloud project.",
+    ),
     setupURL: "https://cloud.google.com/sdk/docs/install",
   },
   qwen: {
     kind: "qwen",
-    label: "qwen.ai account",
+    label: t("qwen.ai account"),
     plans: "",
     how: "device",
     help: "",
-    unavailable:
+    unavailable: t(
       "Qwen ended its account sign-in on April 15, 2026. Use a DashScope (Alibaba Cloud Model Studio) API key instead.",
+    ),
   },
 };
 
@@ -174,22 +189,22 @@ export function signedInWith(kind: string, auth?: string): string {
   if (kind === "claude-code") {
     return SIGN_IN.anthropic.label;
   }
-  return auth === "login" ? SIGN_IN[kind]?.label || "account" : "";
+  return auth === "login" ? SIGN_IN[kind]?.label || t("account") : "";
 }
 
 // CATEGORY says what a connector category holds.
 export const CATEGORY: Record<string, string> = {
-  messaging: "Chat & messages",
-  "social media": "Social media",
-  personal: "Calendar, reminders & contacts",
-  home: "Home, news & weather",
-  music: "Music",
-  git: "Code",
-  productivity: "Productivity",
-  office: "Office & files",
-  finance: "Finance",
-  drawing: "Drawing",
-  generic: "Other",
+  messaging: t("Chat & messages"),
+  "social media": t("Social media"),
+  personal: t("Calendar, reminders & contacts"),
+  home: t("Home, news & weather"),
+  music: t("Music"),
+  git: t("Code"),
+  productivity: t("Productivity"),
+  office: t("Office & files"),
+  finance: t("Finance"),
+  drawing: t("Drawing"),
+  generic: t("Other"),
 };
 
 export const categoryLabel = (c: string): string => CATEGORY[c] || c;
@@ -197,7 +212,7 @@ export const categoryLabel = (c: string): string => CATEGORY[c] || c;
 // actionLabel turns create_issue into "Create issue".
 export function actionLabel(name: string): string {
   const words = name.replace(/_/g, " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
+  return t(words.charAt(0).toUpperCase() + words.slice(1));
 }
 
 // uniqueName is base, or base-2, base-3... whichever is free.
@@ -222,13 +237,13 @@ export function people(names: string[]): string {
   if (names.length <= 1) {
     return names.join("");
   }
-  return names.slice(0, -1).join(", ") + " and " + names[names.length - 1];
+  return names.slice(0, -1).join(", ") + " " + t("and") + " " + names[names.length - 1];
 }
 
 // friendlyError rewrites the gateway's technical reasons a person meets most often.
 export function friendlyError(msg: string): string {
   if (/API key is missing|api key is missing/i.test(msg)) {
-    return "It needs an API key: paste one in the form.";
+    return t("It needs an API key: paste one in the form.");
   }
   // An account that is not signed in says how to sign in; that beats "the key was refused".
   const account = msg.match(
@@ -238,13 +253,13 @@ export function friendlyError(msg: string): string {
     return account[1].charAt(0).toUpperCase() + account[1].slice(1);
   }
   if (/401|unauthori[sz]ed|invalid.*key|incorrect api key/i.test(msg)) {
-    return "The key was refused: check that it is complete and still valid.";
+    return t("The key was refused: check that it is complete and still valid.");
   }
   if (/connection refused|no such host|does not answer|dial tcp/i.test(msg)) {
-    return "The server did not answer: check the address, and that it is running.";
+    return t("The server did not answer: check the address, and that it is running.");
   }
   if (/model.*not.*found|does not exist|404/i.test(msg)) {
-    return "That model name was not found at this provider: check its spelling.";
+    return t("That model name was not found at this provider: check its spelling.");
   }
   return plainError(msg);
 }
@@ -255,33 +270,41 @@ export function friendlyError(msg: string): string {
 export function plainError(msg: string): string {
   const status = msg.match(/\bHTTP (\d{3})\b/)?.[1];
   if (status === "401") {
-    return "The service did not accept the key or the sign-in: connect it again in Settings, Connections.";
+    return t(
+      "The service did not accept the key or the sign-in: connect it again in Settings, Connections.",
+    );
   }
   if (status === "403") {
-    return "The account is not allowed to do that: its permissions or its plan do not include it.";
+    return t(
+      "The account is not allowed to do that: its permissions or its plan do not include it.",
+    );
   }
   if (status === "404") {
-    return "The service did not find it.";
+    return t("The service did not find it.");
   }
   if (status === "429") {
-    return "The service asks to wait a moment: too many requests in a short time.";
+    return t("The service asks to wait a moment: too many requests in a short time.");
   }
   if (status?.startsWith("5")) {
-    return "The service is having trouble right now: try again in a while.";
+    return t("The service is having trouble right now: try again in a while.");
   }
   if (/not signed in|could not be renewed/i.test(msg)) {
-    return "The account is not connected any more: sign in again in Settings, Connections.";
+    return t("The account is not connected any more: sign in again in Settings, Connections.");
   }
   if (/unauthori[sz]ed|invalid api key|incorrect api key|invalid_auth/i.test(msg)) {
-    return "The service did not accept the key or the sign-in: connect it again in Settings, Connections.";
+    return t(
+      "The service did not accept the key or the sign-in: connect it again in Settings, Connections.",
+    );
   }
   if (/deadline exceeded|time(d)? ?out/i.test(msg)) {
-    return "The service took too long to answer: try again in a while.";
+    return t("The service took too long to answer: try again in a while.");
   }
   if (
     /connection refused|no such host|network is unreachable|dial tcp|failed to fetch/i.test(msg)
   ) {
-    return "The service could not be reached: check the internet connection, or that it is running.";
+    return t(
+      "The service could not be reached: check the internet connection, or that it is running.",
+    );
   }
   return msg;
 }

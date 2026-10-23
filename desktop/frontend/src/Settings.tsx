@@ -34,6 +34,7 @@ import { ConnectModal } from "./Modals";
 import { Missing, Required, RequiredLegend } from "./Required";
 import { AccountSignIn } from "./SignIn";
 import { ask } from "./Confirm";
+import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 
 // SETTINGS, FOR PEOPLE.
 //
@@ -63,7 +64,7 @@ function useFlash(): [string, (msg: string) => void] {
 
 function More({
   children,
-  label = "More options",
+  label = t("More options"),
 }: {
   children: ComponentChildren;
   label?: string;
@@ -111,7 +112,7 @@ function ProviderPicker({ kinds, onPick }: { kinds: ProviderKind[]; onPick: (k: 
             <span class="text-xs text-[var(--t3)]">{PROVIDERS[n]?.blurb || n}</span>
             {SIGN_IN[n] && !SIGN_IN[n].unavailable && (
               <span class="text-xs text-[var(--color-accent)]">
-                API key or your {SIGN_IN[n].label}
+                {t("API key or your {plan}", { plan: SIGN_IN[n].label })}
               </span>
             )}
           </span>
@@ -177,15 +178,16 @@ function ModelForm({
   if (!picked) {
     return (
       <div class="form-card">
-        <div class="font-semibold">Which provider?</div>
+        <div class="font-semibold">{t("Which provider?")}</div>
         <p class="text-xs text-[var(--t3)]">
-          Pick where the brain comes from. Pay with an API key, or sign in with a subscription you
-          already have (Claude, ChatGPT, GitHub Copilot). Ollama on this computer is free.
+          {t(
+            "Pick where the brain comes from. Pay with an API key, or sign in with a subscription you already have (Claude, ChatGPT, GitHub Copilot). Ollama on this computer is free.",
+          )}
         </p>
         <ProviderPicker kinds={kinds} onPick={pick} />
         <div class="flex justify-end mt-4">
           <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-            Cancel
+            {t("Cancel")}
           </button>
         </div>
       </div>
@@ -213,9 +215,9 @@ function ModelForm({
       setPhase("testing");
       const r = await api.testProvider(finalName).catch((e) => ({ ok: false, error: errText(e) }));
       if (r.ok) {
-        onSaved(s, `${meta.label} answered: it works.`);
+        onSaved(s, t("{name} answered: it works.", { name: meta.label }));
       } else {
-        setErr(friendlyError((r as { error?: string }).error || "it did not answer"));
+        setErr(friendlyError((r as { error?: string }).error || t("it did not answer")));
         setPhase("failed");
       }
     } catch (e) {
@@ -226,9 +228,9 @@ function ModelForm({
   const missingKey = needsKey && !key.trim() && !(view?.api_key_set && view.kind === kind);
   const missingLogin = way === "login" && (!account?.signed_in || Boolean(signIn?.unavailable));
   const stillNeeded = [
-    missingKey && "the API key",
-    missingLogin && "sign in",
-    !model.trim() && "the model",
+    missingKey && t("the API key"),
+    missingLogin && t("sign in"),
+    !model.trim() && t("the model"),
   ].filter(Boolean) as string[];
   return (
     <div class="form-card" data-testid="model-form">
@@ -242,12 +244,12 @@ function ModelForm({
         </div>
         {!view && (
           <button type="button" class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setPicked("")}>
-            change
+            {t("change")}
           </button>
         )}
       </div>
       {signIn && (
-        <div class="flex gap-2 mt-3" role="radiogroup" aria-label="How to pay for it">
+        <div class="flex gap-2 mt-3" role="radiogroup" aria-label={t("How to pay for it")}>
           <button
             type="button"
             role="radio"
@@ -255,8 +257,8 @@ function ModelForm({
             class={`plain way ${way === "key" ? "on" : ""}`}
             onClick={() => choose("key")}
           >
-            <div class="text-sm font-semibold">API key</div>
-            <div class="text-xs text-[var(--t3)]">Pay per use with a key</div>
+            <div class="text-sm font-semibold">{t("API key")}</div>
+            <div class="text-xs text-[var(--t3)]">{t("Pay per use with a key")}</div>
           </button>
           <button
             type="button"
@@ -267,7 +269,7 @@ function ModelForm({
           >
             <div class="text-sm font-semibold">{signIn.label}</div>
             <div class="text-xs text-[var(--t3)]">
-              {signIn.unavailable ? "Not available" : "Sign in with your subscription"}
+              {signIn.unavailable ? t("Not available") : t("Sign in with your subscription")}
             </div>
           </button>
         </div>
@@ -278,7 +280,8 @@ function ModelForm({
       {way === "key" && (needsKey || kind === "custom") && (
         <>
           <label class={LABEL} for="model-key">
-            API key{needsKey ? <Required /> : " (if the server asks for one)"}
+            {t("API key")}
+            {needsKey ? <Required /> : t(" (if the server asks for one)")}
           </label>
           <input
             id="model-key"
@@ -288,10 +291,12 @@ function ModelForm({
             autocomplete="off"
             value={key}
             onInput={(e) => setKey((e.target as HTMLInputElement).value)}
-            placeholder={view?.api_key_set ? "saved: leave empty to keep it" : "paste the key here"}
+            placeholder={
+              view?.api_key_set ? t("saved: leave empty to keep it") : t("paste the key here")
+            }
           />
           <p class={HELP}>
-            Kept on your gateway and never shown again.{" "}
+            {t("Kept on your gateway and never shown again.")}{" "}
             {meta.keyURL && (
               <a
                 href={meta.keyURL}
@@ -300,7 +305,7 @@ function ModelForm({
                   openExternal(meta.keyURL!);
                 }}
               >
-                Get a key from {meta.label} ↗
+                {t("Get a key from {name} ↗", { name: meta.label })}
               </a>
             )}
           </p>
@@ -309,7 +314,7 @@ function ModelForm({
       {showAddress && (
         <>
           <label class={LABEL} for="model-address">
-            Server address
+            {t("Server address")}
           </label>
           <input
             id="model-address"
@@ -320,8 +325,8 @@ function ModelForm({
           />
           <p class={HELP}>
             {kind === "ollama"
-              ? "Leave it empty when Ollama runs on this computer. "
-              : "The address of the server's API, usually ending in /v1. "}
+              ? t("Leave it empty when Ollama runs on this computer. ")
+              : t("The address of the server's API, usually ending in /v1. ")}
             {kind === "ollama" && meta.keyURL && (
               <a
                 href={meta.keyURL}
@@ -330,14 +335,14 @@ function ModelForm({
                   openExternal(meta.keyURL!);
                 }}
               >
-                Download Ollama ↗
+                {t("Download Ollama ↗")}
               </a>
             )}
           </p>
         </>
       )}
       <label class={LABEL} for="model-name">
-        Model
+        {t("Model")}
         <Required />
       </label>
       <input
@@ -347,7 +352,7 @@ function ModelForm({
         list="model-suggestions"
         value={model}
         onInput={(e) => setModel((e.target as HTMLInputElement).value)}
-        placeholder={info?.DefaultModel || "model name"}
+        placeholder={info?.DefaultModel || t("model name")}
       />
       <datalist id="model-suggestions">
         {[
@@ -361,10 +366,10 @@ function ModelForm({
           <option key={m} value={m} />
         ))}
       </datalist>
-      <p class={HELP}>Not sure? Keep the suggested one.</p>
+      <p class={HELP}>{t("Not sure? Keep the suggested one.")}</p>
       <More>
         <label class={LABEL} for="model-id">
-          Name in Kitties
+          {t("Name in Kitties")}
         </label>
         <input
           id="model-id"
@@ -374,11 +379,11 @@ function ModelForm({
           onInput={(e) => setName((e.target as HTMLInputElement).value)}
           placeholder={uniqueName(kind, taken)}
         />
-        <p class={HELP}>How the kitties and the configuration file call it.</p>
+        <p class={HELP}>{t("How the kitties and the configuration file call it.")}</p>
         {!showAddress && way === "key" && (
           <>
             <label class={LABEL} for="model-base">
-              Server address
+              {t("Server address")}
             </label>
             <input
               id="model-base"
@@ -387,11 +392,11 @@ function ModelForm({
               onInput={(e) => setBase((e.target as HTMLInputElement).value)}
               placeholder={info?.BaseURL}
             />
-            <p class={HELP}>Only to reach it through a proxy or a compatible service.</p>
+            <p class={HELP}>{t("Only to reach it through a proxy or a compatible service.")}</p>
           </>
         )}
         <label class={LABEL} for="model-max">
-          Longest answer (tokens)
+          {t("Longest answer (tokens)")}
         </label>
         <input
           id="model-max"
@@ -405,17 +410,18 @@ function ModelForm({
       {phase === "failed" ? (
         <div class="callout callout-warn mt-3">
           <div>
-            Saved, but the test did not pass: <b>{err}</b>
+            {t("Saved, but the test did not pass: ")}
+            <b>{err}</b>
           </div>
           <div class="flex gap-2 mt-2">
             <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setPhase("edit")}>
-              Change something
+              {t("Change something")}
             </button>
             <button
               class="btn-ghost px-3 py-1.5 text-xs"
-              onClick={() => saved && onSaved(saved, "Saved without a passing test.")}
+              onClick={() => saved && onSaved(saved, t("Saved without a passing test."))}
             >
-              Keep it anyway
+              {t("Keep it anyway")}
             </button>
           </div>
         </div>
@@ -429,15 +435,23 @@ function ModelForm({
               <RequiredLegend />
             </span>
             <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-              Cancel
+              {t("Cancel")}
             </button>
             <button
               class="btn-accent px-4 py-2 text-sm"
               disabled={phase !== "edit" || stillNeeded.length > 0}
-              title={stillNeeded.length ? `Still needed: ${stillNeeded.join(", ")}` : undefined}
+              title={
+                stillNeeded.length
+                  ? t("Still needed: {items}", { items: stillNeeded.join(", ") })
+                  : undefined
+              }
               onClick={save}
             >
-              {phase === "saving" ? "Saving…" : phase === "testing" ? "Checking…" : "Save and test"}
+              {phase === "saving"
+                ? t("Saving…")
+                : phase === "testing"
+                  ? t("Checking…")
+                  : t("Save and test")}
             </button>
           </div>
           <Missing items={stillNeeded} />
@@ -466,7 +480,9 @@ function ModelRow({
     setTest("");
     try {
       const r = await api.testProvider(p.name);
-      setTest(r.ok ? "✓ It answered: it works." : "✗ " + friendlyError(r.error || "no answer"));
+      setTest(
+        r.ok ? t("✓ It answered: it works.") : "✗ " + friendlyError(r.error || t("no answer")),
+      );
     } catch (e) {
       setTest("✗ " + friendlyError(errText(e)));
     }
@@ -475,9 +491,9 @@ function ModelRow({
   const remove = async () => {
     const users = p.used_by || [];
     const what = users.length
-      ? `${people(users)} will switch to another model.`
-      : "No kitty uses it.";
-    if (!(await ask(`Remove ${label} (${p.model})? ${what}`))) {
+      ? t("{names} will switch to another model.", { names: people(users) })
+      : t("No kitty uses it.");
+    if (!(await ask(t("Remove {name} ({model})? {what}", { name: label, model: p.model, what })))) {
       return;
     }
     setErr("");
@@ -498,19 +514,21 @@ function ModelRow({
         <div class="flex items-center gap-2 flex-wrap">
           <span class="text-sm font-semibold">{label}</span>
           <span class="text-xs font-mono text-[var(--t3)] truncate">{p.model}</span>
-          {p.default && <span class="tag tag-green">default</span>}
+          {p.default && <span class="tag tag-green">{t("default")}</span>}
           {plan && <span class="tag">{plan}</span>}
         </div>
         <div class="text-xs text-[var(--t3)] mt-0.5">
           {p.error ? (
             <span class="text-[var(--c-red)]">{friendlyError(p.error)}</span>
           ) : users.length ? (
-            `Used by ${people(users)}`
+            t("Used by {names}", { names: people(users) })
           ) : (
-            "No kitty uses it yet"
+            t("No kitty uses it yet")
           )}
           {p.name !== p.kind && <span class="text-[var(--t4)]"> · {p.name}</span>}
-          {p.from_file && <span class="text-[var(--t4)]"> · from the configuration file</span>}
+          {p.from_file && (
+            <span class="text-[var(--t4)]">{t(" · from the configuration file")}</span>
+          )}
         </div>
         {test && (
           <div
@@ -523,7 +541,7 @@ function ModelRow({
       </div>
       <div class="flex gap-1 flex-none flex-wrap justify-end">
         <button class="btn-ghost px-2 py-1 text-xs" disabled={busy} onClick={run}>
-          {busy ? "Testing…" : "Test"}
+          {busy ? t("Testing…") : t("Test")}
         </button>
         {!p.default && !p.error && (
           <button
@@ -535,15 +553,19 @@ function ModelRow({
                 .catch((e) => setErr(errText(e)))
             }
           >
-            Make default
+            {t("Make default")}
           </button>
         )}
-        <button class="btn-ghost px-2 py-1 text-xs" onClick={onEdit} aria-label={`Edit ${p.name}`}>
-          Edit
+        <button
+          class="btn-ghost px-2 py-1 text-xs"
+          onClick={onEdit}
+          aria-label={t("Edit {name}", { name: p.name })}
+        >
+          {t("Edit")}
         </button>
         <button
           class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]"
-          aria-label={`Remove ${p.name}`}
+          aria-label={t("Remove {name}", { name: p.name })}
           onClick={remove}
         >
           <IconTrash size={12} />
@@ -572,17 +594,17 @@ function ServiceGrid({
     (k) =>
       (!cat || k.category === cat) &&
       (!words ||
-        k.label.toLowerCase().includes(words) ||
+        t(k.label).toLowerCase().includes(words) ||
         k.name.includes(words) ||
-        k.help.toLowerCase().includes(words)),
+        t(k.help).toLowerCase().includes(words)),
   );
   return (
     <div class="service-grid">
       <input
         class={`${INPUT} mt-2`}
         type="search"
-        aria-label="Search services"
-        placeholder="Search: Slack, Gmail, GitHub, Stripe…"
+        aria-label={t("Search services")}
+        placeholder={t("Search: Slack, Gmail, GitHub, Stripe…")}
         value={q}
         onInput={(e) => setQ((e.target as HTMLInputElement).value)}
       />
@@ -594,7 +616,7 @@ function ServiceGrid({
             class={`chip ${cat === c ? "on" : ""}`}
             onClick={() => setCat(c)}
           >
-            {c ? categoryLabel(c) : "All"}
+            {c ? t(categoryLabel(c)) : t("All")}
           </button>
         ))}
       </div>
@@ -606,15 +628,15 @@ function ServiceGrid({
             class="plain service-btn"
             style={`--brand:${logoColor(k.name)}`}
             onClick={() => onPick(k)}
-            title={k.help}
+            title={t(k.help)}
           >
             <ConnectorLogo kind={k.name} size={26} />
-            <span>{k.label}</span>
-            {k.oauth && <span class="service-oauth">sign in</span>}
+            <span>{t(k.label)}</span>
+            {k.oauth && <span class="service-oauth">{t("sign in")}</span>}
           </button>
         ))}
         {shown.length === 0 && (
-          <p class="text-sm text-[var(--t4)]">Nothing matches: try another word.</p>
+          <p class="text-sm text-[var(--t4)]">{t("Nothing matches: try another word.")}</p>
         )}
       </div>
     </div>
@@ -656,32 +678,32 @@ const SIGN_IN_FIELDS: Record<string, string[]> = { slack: ["channel"] };
 function wayLabel(kind: string, way: string, service: string): string {
   switch (way) {
     case "signin":
-      return `Sign in with ${service}`;
+      return t("Sign in with {name}", { name: service });
     case "oauth1":
-      return "App keys";
+      return t("App keys");
     case "webhook":
-      return "Webhook";
+      return t("Webhook");
   }
   if (kind === "slack") {
-    return "Bot token";
+    return t("Bot token");
   }
   if (kind === "x") {
-    return "Access token";
+    return t("Access token");
   }
-  return kind === "jira" || kind === "zendesk" ? "API token" : "API key or token";
+  return kind === "jira" || kind === "zendesk" ? t("API token") : t("API key or token");
 }
 
 // wayHint says in a line what a way to connect asks for.
 function wayHint(way: string, builtin: boolean): string {
   switch (way) {
     case "signin":
-      return builtin ? "Allow Kitties in your browser" : "Through an app of yours";
+      return builtin ? t("Allow Kitties in your browser") : t("Through an app of yours");
     case "oauth1":
-      return "Four keys from your app's page; they do not expire";
+      return t("Four keys from your app's page; they do not expire");
     case "webhook":
-      return "Posts to one channel, nothing to sign in";
+      return t("Posts to one channel, nothing to sign in");
   }
-  return "Created in the service's settings";
+  return t("Created in the service's settings");
 }
 
 // gatewayBase is the gateway's address as the browser reaches it: where a sign-in comes back.
@@ -722,8 +744,8 @@ function FieldInput({
     <div>
       <div class="flex items-end gap-2">
         <label class={`${LABEL} flex-1`} for={id}>
-          {f.label}
-          {f.required || need ? <Required /> : alternative ? "" : " (optional)"}
+          {t(f.label)}
+          {f.required || need ? <Required /> : alternative ? "" : t(" (optional)")}
         </label>
         {/* A saved secret is never shown, so it is cleared on purpose rather than by emptying. */}
         {saved && f.secret && onClear && (
@@ -733,7 +755,7 @@ function FieldInput({
             onClick={() => onClear(!cleared)}
             data-testid={`clear-${f.name}`}
           >
-            {cleared ? "Keep the saved one" : "Clear"}
+            {cleared ? t("Keep the saved one") : t("Clear")}
           </button>
         )}
       </div>
@@ -744,7 +766,7 @@ function FieldInput({
           aria-required={f.required}
           value={value}
           onInput={(e) => onInput((e.target as HTMLTextAreaElement).value)}
-          placeholder={f.help}
+          placeholder={f.help && t(f.help)}
         />
       ) : f.secret ? (
         <input
@@ -757,9 +779,9 @@ function FieldInput({
           onInput={(e) => onInput((e.target as HTMLInputElement).value)}
           placeholder={
             saved && cleared
-              ? "removed when you save"
+              ? t("removed when you save")
               : saved
-                ? "saved: leave empty to keep it"
+                ? t("saved: leave empty to keep it")
                 : placeholder || f.placeholder || ""
           }
         />
@@ -775,7 +797,7 @@ function FieldInput({
           placeholder={placeholder || f.placeholder || ""}
         />
       )}
-      {f.help && <p class={HELP}>{f.help}</p>}
+      {f.help && <p class={HELP}>{t(f.help)}</p>}
     </div>
   );
 }
@@ -840,7 +862,7 @@ function ConnectionForm({
   const [waiting, setWaiting] = useState(false);
   // Signing in needs no app of the person's when Kitties has one or the service needs none.
   const builtin = signs && readyList.includes(def.oauth || "");
-  const label = OAUTH_LABEL[def.oauth || ""] || def.label;
+  const label = OAUTH_LABEL[def.oauth || ""] || t(def.label);
   // cleared are the saved secrets the next save forgets.
   const [cleared, setCleared] = useState<Set<string>>(new Set());
   const kept = (n: string) => (view?.secrets_set || []).includes(n) && !cleared.has(n);
@@ -868,9 +890,9 @@ function ConnectionForm({
   const hasApp = builtin || filled("client_id");
   const wayMissing =
     way === "signin"
-      ? [...signInMissing.map((f) => f.label), ...(signedIn ? [] : ["sign in"])]
-      : (group?.fields || []).filter((f) => !filled(f.name)).map((f) => f.label);
-  const stillNeeded = [...missing.map((f) => f.label), ...wayMissing];
+      ? [...signInMissing.map((f) => t(f.label)), ...(signedIn ? [] : [t("sign in")])]
+      : (group?.fields || []).filter((f) => !filled(f.name)).map((f) => t(f.label));
+  const stillNeeded = [...missing.map((f) => t(f.label)), ...wayMissing];
   const toggle = (n: string) => {
     setTouched(true);
     const next = new Set(who);
@@ -946,7 +968,12 @@ function ConnectionForm({
   };
   // signOut forgets the account; the connection stays, and asks for a sign-in or a key.
   const signOut = async () => {
-    if (!(await ask(`Sign out of ${label}? The kitties stop using this account.`, "Sign out"))) {
+    if (
+      !(await ask(
+        t("Sign out of {name}? The kitties stop using this account.", { name: label }),
+        t("Sign out"),
+      ))
+    ) {
       return;
     }
     setBusy(true);
@@ -992,18 +1019,18 @@ function ConnectionForm({
           <ConnectorLogo kind={def.name} size={28} />
         </span>
         <div class="flex-1 min-w-0">
-          <div class="font-semibold">{def.label}</div>
-          <div class="text-xs text-[var(--t3)]">{def.help}</div>
+          <div class="font-semibold">{t(def.label)}</div>
+          <div class="text-xs text-[var(--t3)]">{t(def.help)}</div>
         </div>
       </div>
       {required.map((f) => field(f))}
       {ways.length > 1 && (
         <>
           <label class={LABEL}>
-            How do you connect?
+            {t("How do you connect?")}
             <Required />
           </label>
-          <div class="ways" role="radiogroup" aria-label="How do you connect?">
+          <div class="ways" role="radiogroup" aria-label={t("How do you connect?")}>
             {ways.map((w) => (
               <button
                 key={w}
@@ -1016,7 +1043,9 @@ function ConnectionForm({
               >
                 <div class="text-sm font-semibold">
                   {wayLabel(def.name, w, label)}
-                  {w === "signin" && builtin && <span class="tag tag-green ml-2">easiest</span>}
+                  {w === "signin" && builtin && (
+                    <span class="tag tag-green ml-2">{t("easiest")}</span>
+                  )}
                 </div>
                 <div class="text-xs text-[var(--t3)]">{wayHint(w, builtin)}</div>
               </button>
@@ -1030,7 +1059,9 @@ function ConnectionForm({
           {signedIn ? (
             <div class="flex items-center gap-2 flex-wrap mt-1">
               <span class="flex-1 text-sm">
-                ✓ Signed in{account ? ` as ${account}` : ""}. The kitties use this account.
+                {account
+                  ? t("✓ Signed in as {account}. The kitties use this account.", { account })
+                  : t("✓ Signed in. The kitties use this account.")}
               </span>
               <button
                 type="button"
@@ -1038,7 +1069,7 @@ function ConnectionForm({
                 disabled={busy || missing.length > 0 || signInMissing.length > 0}
                 onClick={signIn}
               >
-                Sign in again
+                {t("Sign in again")}
               </button>
               <button
                 type="button"
@@ -1047,7 +1078,7 @@ function ConnectionForm({
                 onClick={signOut}
                 data-testid="connection-sign-out"
               >
-                Sign out
+                {t("Sign out")}
               </button>
             </div>
           ) : (
@@ -1055,8 +1086,10 @@ function ConnectionForm({
               {!builtin && (
                 <>
                   <p class={`text-xs text-[var(--t3)] ${signInFields.length ? "mt-3" : ""}`}>
-                    {label} needs an app of your own for now: add this callback address to it, then
-                    paste its client id (and its secret, if it has one).
+                    {t(
+                      "{name} needs an app of your own for now: add this callback address to it, then paste its client id (and its secret, if it has one).",
+                      { name: label },
+                    )}
                   </p>
                   <code class="command mt-2" data-testid="callback-address">
                     {gatewayBase()}/v1/oauth/callback
@@ -1074,20 +1107,22 @@ function ConnectionForm({
                 data-testid="connection-sign-in-button"
               >
                 <ConnectorLogo kind={def.name} size={16} mono />
-                {waiting ? "Waiting for the browser…" : `Sign in with ${label}`}
+                {waiting
+                  ? t("Waiting for the browser…")
+                  : t("Sign in with {name}", { name: label })}
               </button>
               <p class="text-xs text-[var(--t3)] mt-2">
                 {waiting
-                  ? "Finish signing in in your browser; this changes by itself."
+                  ? t("Finish signing in in your browser; this changes by itself.")
                   : builtin
-                    ? "Sign in and allow Kitties. Nothing to copy."
-                    : "It opens your browser; this page follows by itself."}
+                    ? t("Sign in and allow Kitties. Nothing to copy.")
+                    : t("It opens your browser; this page follows by itself.")}
               </p>
             </>
           )}
           {builtin && appFields.length > 0 && !signedIn && (
-            <More label="Use an app of your own">
-              <p class={HELP}>Its callback address:</p>
+            <More label={t("Use an app of your own")}>
+              <p class={HELP}>{t("Its callback address:")}</p>
               <code class="command mt-1">{gatewayBase()}/v1/oauth/callback</code>
               {appFields.map((f) => field(f))}
             </More>
@@ -1101,16 +1136,16 @@ function ConnectionForm({
       )}
       {view?.token_expires && Date.parse(view.token_expires) <= Date.now() && (
         <div class="callout callout-warn mt-3" data-testid="token-expired">
-          The token pasted here has expired: it lasts a short time. Sign in, or{" "}
+          {t("The token pasted here has expired: it lasts a short time. Sign in, or")}{" "}
           {groups.some((g) => g.id === "oauth1")
-            ? "use the app keys, which do not expire"
-            : "paste a new one"}
-          , and clear the old token so it does not stand in the way.
+            ? t("use the app keys, which do not expire")
+            : t("paste a new one")}
+          {t(", and clear the old token so it does not stand in the way.")}
         </div>
       )}
       {kitties.length > 0 && (
         <>
-          <label class={LABEL}>Which kitties may use it</label>
+          <label class={LABEL}>{t("Which kitties may use it")}</label>
           <div class="flex flex-wrap gap-2" data-testid="connection-kitties">
             {kitties.map((k) => (
               <label key={k.id} class={`chip ${who.has(k.name) ? "on" : ""}`}>
@@ -1127,11 +1162,11 @@ function ConnectionForm({
         </>
       )}
       {def.actions.length > 0 && (
-        <More label="What the kitties can do with it">
+        <More label={t("What the kitties can do with it")}>
           <ul class="text-xs text-[var(--t3)] flex flex-col gap-1 mt-1">
             {def.actions.map((a) => (
               <li key={a.name}>
-                <b class="text-[var(--t2)]">{actionLabel(a.name)}</b>: {a.help}
+                <b class="text-[var(--t2)]">{actionLabel(a.name)}</b>: {t(a.help)}
               </li>
             ))}
           </ul>
@@ -1140,7 +1175,7 @@ function ConnectionForm({
       <More>
         {optional.map((f) => field(f))}
         <label class={LABEL} for="connection-name">
-          Name in Kitties
+          {t("Name in Kitties")}
         </label>
         <input
           id="connection-name"
@@ -1151,14 +1186,14 @@ function ConnectionForm({
           placeholder={uniqueName(def.name, taken)}
         />
         <label class={LABEL} for="connection-description">
-          What the kitties are told it is for
+          {t("What the kitties are told it is for")}
         </label>
         <input
           id="connection-description"
           class={INPUT}
           value={description}
           onInput={(e) => setDescription((e.target as HTMLInputElement).value)}
-          placeholder={def.help}
+          placeholder={t(def.help)}
         />
       </More>
       <Err text={err} />
@@ -1167,15 +1202,19 @@ function ConnectionForm({
           <RequiredLegend />
         </span>
         <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-          Cancel
+          {t("Cancel")}
         </button>
         <button
           class="btn-accent px-4 py-2 text-sm"
           disabled={busy || stillNeeded.length > 0}
-          title={stillNeeded.length ? `Still needed: ${stillNeeded.join(", ")}` : undefined}
+          title={
+            stillNeeded.length
+              ? t("Still needed: {items}", { items: stillNeeded.join(", ") })
+              : undefined
+          }
           onClick={save}
         >
-          {busy ? "Saving…" : "Save"}
+          {busy ? t("Saving…") : t("Save")}
         </button>
       </div>
       <Missing items={stillNeeded} />
@@ -1204,21 +1243,23 @@ function followSignIn(name: string, done: (s?: SettingsView, c?: ConnectorView) 
 
 // AUTH_LABEL says what a connection that signs in uses instead of the sign-in.
 const AUTH_LABEL: Record<string, string> = {
-  keys: "uses the OAuth 1.0 keys",
-  token: "uses a token",
-  webhook: "uses a webhook",
+  keys: t("uses the OAuth 1.0 keys"),
+  token: t("uses a token"),
+  webhook: t("uses a webhook"),
 };
 
 // expiresIn says how long a token has left, or that it is gone.
 function expiresIn(at: string, now: number): { gone: boolean; text: string } {
   const left = Date.parse(at) - now;
   if (left <= 0) {
-    return { gone: true, text: "token expired" };
+    return { gone: true, text: t("token expired") };
   }
   const min = Math.ceil(left / 60_000);
   return {
     gone: false,
-    text: `token expires in ${min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`}`,
+    text: t("token expires in {time}", {
+      time: min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min}m`,
+    }),
   };
 }
 
@@ -1286,21 +1327,26 @@ function ConnectionRow({
       </span>
       <div class="flex-1 min-w-0">
         <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-sm font-semibold">{c.label || c.kind}</span>
+          <span class="text-sm font-semibold">{c.label ? t(c.label) : c.kind}</span>
           {c.name !== c.kind && <span class="text-xs text-[var(--t4)]">{c.name}</span>}
           {c.signed_in && (
-            <span class="tag tag-green">signed in{c.account ? " · " + c.account : ""}</span>
+            <span class="tag tag-green">
+              {t("signed in")}
+              {c.account ? " · " + c.account : ""}
+            </span>
           )}
-          {c.needs_sign_in && <span class="tag tag-amber">sign in needed</span>}
+          {c.needs_sign_in && <span class="tag tag-amber">{t("sign in needed")}</span>}
           {c.auth && AUTH_LABEL[c.auth] && (
-            <span class="tag" title="What the kitties use to reach the account">
+            <span class="tag" title={t("What the kitties use to reach the account")}>
               {AUTH_LABEL[c.auth]}
             </span>
           )}
           {expiry && (
             <span
               class="tag tag-amber"
-              title="A pasted token of this service lasts a short time: sign in, or use keys that do not expire"
+              title={t(
+                "A pasted token of this service lasts a short time: sign in, or use keys that do not expire",
+              )}
               data-testid={`expiry-${c.name}`}
             >
               {expiry.text}
@@ -1308,8 +1354,12 @@ function ConnectionRow({
           )}
         </div>
         <div class="text-xs text-[var(--t3)] mt-0.5">
-          {users.length ? `Used by ${people(users)}` : "No kitty may use it yet"}
-          {c.from_file && <span class="text-[var(--t4)]"> · from the configuration file</span>}
+          {users.length
+            ? t("Used by {names}", { names: people(users) })
+            : t("No kitty may use it yet")}
+          {c.from_file && (
+            <span class="text-[var(--t4)]">{t(" · from the configuration file")}</span>
+          )}
         </div>
         {test && test !== "busy" && (
           <div
@@ -1317,10 +1367,16 @@ function ConnectionRow({
             data-testid={`test-result-${c.name}`}
           >
             {!test.ok
-              ? `✗ It does not work: ${tech ? test.error : plainError(test.error || "")}`
+              ? t("✗ It does not work: {error}", {
+                  error: String(tech ? test.error : plainError(test.error || "")),
+                })
               : test.tested
-                ? `✓ It works${test.account ? ` as ${test.account}` : ""}.`
-                : "It cannot be tested without acting: it is tried the first time a kitty uses it."}
+                ? test.account
+                  ? t("✓ It works as {account}.", { account: test.account })
+                  : t("✓ It works.")
+                : t(
+                    "It cannot be tested without acting: it is tried the first time a kitty uses it.",
+                  )}
           </div>
         )}
         <Err text={err} />
@@ -1333,7 +1389,7 @@ function ConnectionRow({
             onClick={finish}
             data-testid={`finish-sign-in-${c.name}`}
           >
-            {waiting ? "Waiting for the browser…" : "Sign in"}
+            {waiting ? t("Waiting for the browser…") : t("Sign in")}
           </button>
         )}
         <button
@@ -1342,16 +1398,24 @@ function ConnectionRow({
           onClick={runTest}
           data-testid={`test-${c.name}`}
         >
-          {test === "busy" ? "Testing…" : "Test"}
+          {test === "busy" ? t("Testing…") : t("Test")}
         </button>
-        <button class="btn-ghost px-2 py-1 text-xs" onClick={onEdit} aria-label={`Edit ${c.name}`}>
-          Edit
+        <button
+          class="btn-ghost px-2 py-1 text-xs"
+          onClick={onEdit}
+          aria-label={t("Edit {name}", { name: c.name })}
+        >
+          {t("Edit")}
         </button>
         <button
           class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]"
-          aria-label={`Remove ${c.name}`}
+          aria-label={t("Remove {name}", { name: c.name })}
           onClick={async () =>
-            (await ask(`Remove the connection ${c.label || c.name}? The kitties lose it too.`)) &&
+            (await ask(
+              t("Remove the connection {name}? The kitties lose it too.", {
+                name: c.label ? t(c.label) : c.name,
+              }),
+            )) &&
             api
               .removeConnector(c.name)
               .then(onChanged)
@@ -1369,12 +1433,12 @@ function ConnectionRow({
 
 // NOTIFY_LABELS say what each event is, as the page offers it.
 const NOTIFY_LABELS: Record<string, string> = {
-  help: "A kitty gave up and needs my help",
-  approval: "An action is waiting for my yes",
-  goal_done: "A goal finished",
-  goal_blocked: "A goal could not finish",
-  recovered: "A kitty's container was brought back",
-  budget: "A kitty spent its day's tokens",
+  help: t("A kitty gave up and needs my help"),
+  approval: t("An action is waiting for my yes"),
+  goal_done: t("A goal finished"),
+  goal_blocked: t("A goal could not finish"),
+  recovered: t("A kitty's container was brought back"),
+  budget: t("A kitty spent its day's tokens"),
 };
 
 // NotifyForm chooses where the kitties tell you what happened while you were away (a push to
@@ -1403,7 +1467,7 @@ function NotifyForm({
     setErr("");
     try {
       onSaved(await api.setNotify(body));
-      flash("Saved.");
+      flash(t("Saved."));
     } catch (e) {
       setErr(errText(e));
     }
@@ -1414,8 +1478,8 @@ function NotifyForm({
       await api.setNotify(body);
       const r = await api.testNotify(connector);
       r.ok
-        ? flash("Sent: look at your phone or channel.")
-        : setErr(r.error || "It did not go through.");
+        ? flash(t("Sent: look at your phone or channel."))
+        : setErr(r.error || t("It did not go through."));
     } catch (e) {
       setErr(errText(e));
     }
@@ -1425,7 +1489,7 @@ function NotifyForm({
     try {
       await api.setNotify(body);
       const r = await api.sendDigest();
-      r.ok ? flash("Summary sent.") : setErr(r.error || "The summary did not go through.");
+      r.ok ? flash(t("Summary sent.")) : setErr(r.error || t("The summary did not go through."));
     } catch (e) {
       setErr(errText(e));
     }
@@ -1433,23 +1497,25 @@ function NotifyForm({
   return (
     <div data-testid="notify">
       <p class="text-sm text-[var(--t3)]">
-        The kitties work while you are away. Choose how they reach you outside this window: a push
-        to your phone is the quickest, and Telegram, Slack or email work too.
+        {t(
+          "The kitties work while you are away. Choose how they reach you outside this window: a push to your phone is the quickest, and Telegram, Slack or email work too.",
+        )}
       </p>
       {channels.length === 0 && (
         <div class="callout mt-3">
-          <div class="font-semibold text-sm">Get alerts on your phone</div>
+          <div class="font-semibold text-sm">{t("Get alerts on your phone")}</div>
           <p class="text-xs text-[var(--t3)] mt-1">
-            Install the free ntfy app on your phone, choose a topic name and subscribe to it. Then
-            connect the same topic here.
+            {t(
+              "Install the free ntfy app on your phone, choose a topic name and subscribe to it. Then connect the same topic here.",
+            )}
           </p>
           <button class="btn-accent px-3 py-1.5 text-xs mt-2" onClick={onSetUp}>
-            Set up phone notifications
+            {t("Set up phone notifications")}
           </button>
         </div>
       )}
       <label class={LABEL} for="notify-connector">
-        Send through
+        {t("Send through")}
       </label>
       <select
         id="notify-connector"
@@ -1457,15 +1523,15 @@ function NotifyForm({
         value={connector}
         onChange={(e) => setConnector((e.target as HTMLSelectElement).value)}
       >
-        <option value="">nowhere: notifications are off</option>
+        <option value="">{t("nowhere: notifications are off")}</option>
         {channels.map((c) => (
           <option key={c.name} value={c.name}>
-            {c.label}
+            {t(c.label)}
             {c.name !== c.kind ? ` (${c.name})` : ""}
           </option>
         ))}
       </select>
-      <label class={LABEL}>Tell me when</label>
+      <label class={LABEL}>{t("Tell me when")}</label>
       <div class="flex flex-col gap-1">
         {view.notify_events.map((e) => (
           <label key={e} class="flex items-center gap-2 text-sm">
@@ -1475,7 +1541,7 @@ function NotifyForm({
         ))}
       </div>
       <label class={LABEL} for="notify-digest">
-        A summary of the last day, every day at
+        {t("A summary of the last day, every day at")}
       </label>
       <div class="flex items-center gap-2 flex-wrap">
         <input
@@ -1487,7 +1553,7 @@ function NotifyForm({
         />
         {digest && (
           <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setDigest("")}>
-            none
+            {t("none")}
           </button>
         )}
         <button
@@ -1496,12 +1562,13 @@ function NotifyForm({
           onClick={sendDigest}
           data-testid="send-digest"
         >
-          Send one now
+          {t("Send one now")}
         </button>
       </div>
       <p class={HELP}>
-        What each kitty did, what it spent, and what waits for your yes. Leave it empty for no
-        summary.
+        {t(
+          "What each kitty did, what it spent, and what waits for your yes. Leave it empty for no summary.",
+        )}
       </p>
       <label class="flex items-start gap-2 mt-3 text-sm cursor-pointer">
         <input
@@ -1512,16 +1579,17 @@ function NotifyForm({
           data-testid="notify-day"
         />
         <span>
-          Start it with my day: what is on the calendar, the reminders still to do and the weather,
-          from my connections (calendar, reminders, weather).
+          {t(
+            "Start it with my day: what is on the calendar, the reminders still to do and the weather, from my connections (calendar, reminders, weather).",
+          )}
         </span>
       </label>
       <div class="flex items-center gap-2 mt-4 flex-wrap">
         <button class="btn-accent px-4 py-2 text-sm" onClick={save}>
-          Save
+          {t("Save")}
         </button>
         <button class="btn-ghost px-4 py-2 text-sm" disabled={!connector} onClick={test}>
-          Send a test
+          {t("Send a test")}
         </button>
         {msg && <span class="tag tag-green">{msg}</span>}
       </div>
@@ -1535,7 +1603,23 @@ function Preferences() {
   const tech = useTechDetails();
   return (
     <div data-testid="preferences">
-      <label class="flex items-start gap-2 mt-2 text-sm cursor-pointer">
+      <label class={LABEL} for="pref-lang">
+        {t("Language")}
+      </label>
+      <select
+        id="pref-lang"
+        class={`${INPUT} !w-56`}
+        value={currentLang()}
+        onChange={(e) => setLang((e.target as HTMLSelectElement).value as Lang)}
+      >
+        {LANGS.map((l) => (
+          <option key={l.id} value={l.id}>
+            {l.label}
+          </option>
+        ))}
+      </select>
+      <p class={HELP}>{t("The system's language is used until you pick one.")}</p>
+      <label class="flex items-start gap-2 mt-4 text-sm cursor-pointer">
         <input
           type="checkbox"
           class="mt-1"
@@ -1544,10 +1628,11 @@ function Preferences() {
           data-testid="tech-details"
         />
         <span>
-          Show technical details
+          {t("Show technical details")}
           <span class="block text-xs text-[var(--t3)]">
-            What a kitty did exactly (coordinates, commands, results), the tokens each answer used,
-            and errors as the services wrote them.
+            {t(
+              "What a kitty did exactly (coordinates, commands, results), the tokens each answer used, and errors as the services wrote them.",
+            )}
           </span>
         </span>
       </label>
@@ -1624,11 +1709,11 @@ export default function SettingsModal({
   }, [onClose]);
   const kindOf = (name: string) => view?.connector_catalog.find((k) => k.name === name);
   const tabs: { id: Tab; label: string }[] = [
-    { id: "models", label: "Models" },
-    { id: "connectors", label: "Connections" },
-    { id: "notifications", label: "Notifications" },
-    { id: "gateway", label: inWails() ? "Gateway" : "Connection" },
-    { id: "preferences", label: "Preferences" },
+    { id: "models", label: t("Models") },
+    { id: "connectors", label: t("Connections") },
+    { id: "notifications", label: t("Notifications") },
+    { id: "gateway", label: inWails() ? t("Gateway") : t("Connection") },
+    { id: "preferences", label: t("Preferences") },
   ];
   const modelNames = useMemo(() => (view?.providers || []).map((p) => p.name), [view]);
   const connNames = useMemo(() => (view?.connectors || []).map((c) => c.name), [view]);
@@ -1651,43 +1736,46 @@ export default function SettingsModal({
         role="dialog"
       >
         <div class="flex items-center justify-between mb-4">
-          <h2 class="font-mono text-base tracking-wide">Settings</h2>
+          <h2 class="font-mono text-base tracking-wide">{t("Settings")}</h2>
           <button
             class="plain p-1 text-[var(--t3)] hover:text-[var(--t1)]"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
           >
             <IconX />
           </button>
         </div>
         <div class="flex gap-1 border-b border-white/5 mb-3 overflow-x-auto" role="tablist">
-          {tabs.map((t) => (
+          {tabs.map((x) => (
             <button
-              key={t.id}
+              key={x.id}
               role="tab"
-              aria-selected={tab === t.id}
-              class={`plain px-4 py-2 text-sm border-b-2 whitespace-nowrap ${tab === t.id ? "border-[var(--color-accent)] text-[var(--t1)]" : "border-transparent text-[var(--t3)]"}`}
-              onClick={() => setTab(t.id)}
+              aria-selected={tab === x.id}
+              class={`plain px-4 py-2 text-sm border-b-2 whitespace-nowrap ${tab === x.id ? "border-[var(--color-accent)] text-[var(--t1)]" : "border-transparent text-[var(--t3)]"}`}
+              onClick={() => setTab(x.id)}
             >
-              {t.label}
+              {x.label}
             </button>
           ))}
         </div>
         <Err text={err} />
         {crash && (
           <p class="text-sm text-[var(--c-red)] mb-2" role="alert">
-            Settings could not be drawn: {crash.message}. The gateway may be older than this app:
-            update it and reopen.
+            {t(
+              "Settings could not be drawn: {error}. The gateway may be older than this app: update it and reopen.",
+              { error: crash.message },
+            )}
           </p>
         )}
         {note && <div class="callout callout-ok mb-3">{note}</div>}
-        {!view && !err && !crash && <p class="text-sm text-[var(--t4)]">Loading…</p>}
+        {!view && !err && !crash && <p class="text-sm text-[var(--t4)]">{t("Loading…")}</p>}
 
         {tab === "models" && view && (
           <div>
             <p class="text-sm text-[var(--t3)]">
-              Models are the brains your kitties think with. Add one to start; you can add others
-              later and give each kitty the one it should use.
+              {t(
+                "Models are the brains your kitties think with. Add one to start; you can add others later and give each kitty the one it should use.",
+              )}
             </p>
             <div class="flex flex-col gap-2 mt-3">
               {view.providers.map((p) => (
@@ -1703,10 +1791,11 @@ export default function SettingsModal({
               ))}
               {view.providers.length === 0 && model === null && (
                 <div class="callout">
-                  <div class="font-semibold text-sm">No model yet</div>
+                  <div class="font-semibold text-sm">{t("No model yet")}</div>
                   <p class="text-xs text-[var(--t3)] mt-1">
-                    Your kitties need a brain to think with. Add one from a provider you have an
-                    account with, or Ollama to run free models on this computer.
+                    {t(
+                      "Your kitties need a brain to think with. Add one from a provider you have an account with, or Ollama to run free models on this computer.",
+                    )}
                   </p>
                 </div>
               )}
@@ -1732,7 +1821,7 @@ export default function SettingsModal({
                 class="btn-outline mt-3 flex items-center gap-2 px-3 py-2 text-sm"
                 onClick={() => setModel("new")}
               >
-                <IconPlus size={14} /> Add a model
+                <IconPlus size={14} /> {t("Add a model")}
               </button>
             )}
           </div>
@@ -1741,10 +1830,9 @@ export default function SettingsModal({
         {tab === "connectors" && view && (
           <div>
             <p class="text-sm text-[var(--t3)]">
-              Connections let your kitties act in other services: send messages, read email, open
-              issues, post. You choose which kitties may use each one, and they act as far as each
-              account allows. To have a kitty ask you first, or never do something, tell it, or set
-              it in its limits.
+              {t(
+                "Connections let your kitties act in other services: send messages, read email, open issues, post. You choose which kitties may use each one, and they act as far as each account allows. To have a kitty ask you first, or never do something, tell it, or set it in its limits.",
+              )}
             </p>
             {conn ? (
               <ConnectionForm
@@ -1763,10 +1851,10 @@ export default function SettingsModal({
                   // A service that signs in stays open on its button; the rest close.
                   if (saved?.needs_sign_in) {
                     setConn({ view: saved, kind: conn.kind });
-                    flash("Saved: now sign in.");
+                    flash(t("Saved: now sign in."));
                   } else {
                     setConn(null);
-                    flash(`${conn.kind.label} is saved: testing it…`);
+                    flash(t("{name} is saved: testing it…", { name: t(conn.kind.label) }));
                     setTested({ name, n: Date.now() });
                   }
                 }}
@@ -1778,7 +1866,7 @@ export default function SettingsModal({
               />
             ) : (
               <>
-                <div class="section-title !mx-0 mt-4">Your connections</div>
+                <div class="section-title !mx-0 mt-4">{t("Your connections")}</div>
                 <div class="flex flex-col gap-2">
                   {view.connectors.map((c) => (
                     <ConnectionRow
@@ -1796,12 +1884,12 @@ export default function SettingsModal({
                     />
                   ))}
                   {view.connectors.length === 0 && (
-                    <p class="text-sm text-[var(--t4)]">None yet: pick a service below.</p>
+                    <p class="text-sm text-[var(--t4)]">{t("None yet: pick a service below.")}</p>
                   )}
                 </div>
                 {adding || view.connectors.length === 0 ? (
                   <>
-                    <div class="section-title !mx-0 mt-5">Add a connection</div>
+                    <div class="section-title !mx-0 mt-5">{t("Add a connection")}</div>
                     <ServiceGrid
                       catalog={view.connector_catalog}
                       categories={view.connector_categories}
@@ -1813,7 +1901,7 @@ export default function SettingsModal({
                     class="btn-outline mt-3 flex items-center gap-2 px-3 py-2 text-sm"
                     onClick={() => setAdding(true)}
                   >
-                    <IconPlus size={14} /> Add a connection
+                    <IconPlus size={14} /> {t("Add a connection")}
                   </button>
                 )}
               </>

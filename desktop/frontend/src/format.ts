@@ -1,3 +1,5 @@
+import { t } from "./i18n";
+
 // Small helpers for what the page shows.
 
 export function when(iso: string): string {
@@ -53,30 +55,32 @@ export function stepSentence(action: string, args?: Record<string, unknown>): st
       } catch {
         /* not an address: said as it is */
       }
-      return host ? `Opened ${host}` : "Opened a page";
+      return host ? t("Opened {host}", { host }) : t("Opened a page");
     }
     case "click":
-      return "Clicked on the screen";
+      return t("Clicked on the screen");
     case "double_click":
-      return "Double-clicked on the screen";
+      return t("Double-clicked on the screen");
     case "move":
-      return "Moved the pointer";
+      return t("Moved the pointer");
     case "type": {
       const text = String(a.text ?? "");
-      return text ? `Typed “${text.length > 40 ? text.slice(0, 40) + "…" : text}”` : "Typed";
+      return text
+        ? t("Typed “{text}”", { text: text.length > 40 ? text.slice(0, 40) + "…" : text })
+        : t("Typed");
     }
     case "key":
-      return `Pressed ${keyName(String(a.keys ?? a.key ?? ""))}`;
+      return t("Pressed {key}", { key: keyName(String(a.keys ?? a.key ?? "")) });
     case "scroll":
-      return a.direction === "up" ? "Scrolled up" : "Scrolled down";
+      return a.direction === "up" ? t("Scrolled up") : t("Scrolled down");
     case "wait":
-      return "Waited a moment";
+      return t("Waited a moment");
     case "screenshot":
-      return "Looked at the screen";
+      return t("Looked at the screen");
     case "run":
-      return "Ran a program";
+      return t("Ran a program");
     case "done":
-      return "Finished";
+      return t("Finished");
   }
   const words = action.replace(/_/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
@@ -85,7 +89,7 @@ export function stepSentence(action: string, args?: Record<string, unknown>): st
 // keyName says a key combination as it reads on a keyboard: Return is Enter, ctrl+l is Ctrl+L.
 function keyName(keys: string): string {
   if (!keys) {
-    return "a key";
+    return t("a key");
   }
   return keys
     .split("+")

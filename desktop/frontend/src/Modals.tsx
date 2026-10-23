@@ -10,6 +10,7 @@ import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import { MemoryPanel } from "./Memory";
 import PixelCat, { BREEDS, CatPicker, COLORS, type Mood } from "./PixelCat";
 import { Missing, Required } from "./Required";
+import { t } from "./i18n";
 
 // suggestAvatar picks a cat from the name, the way the gateway does when none is chosen.
 function suggestAvatar(name: string): { breed: string; color: string } {
@@ -52,7 +53,7 @@ function Modal({
           <button
             class="plain p-1 text-[var(--t3)] hover:text-[var(--t1)]"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
           >
             <IconX />
           </button>
@@ -95,32 +96,33 @@ export function NewChatModal({
   };
   if (kitties.length === 0) {
     return (
-      <Modal title="New chat" onClose={onClose}>
+      <Modal title={t("New chat")} onClose={onClose}>
         <p class="text-sm text-[var(--t3)]" data-testid="chat-needs-kitty">
-          A chat is a conversation with your kitties, and there is none yet. Create a kitty first,
-          then chat with it.
+          {t(
+            "A chat is a conversation with your kitties, and there is none yet. Create a kitty first, then chat with it.",
+          )}
         </p>
         <div class="flex justify-end gap-2 mt-5">
           <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button class="btn-accent px-4 py-2 text-sm" onClick={onNeedKitty}>
-            Create a kitty
+            {t("Create a kitty")}
           </button>
         </div>
       </Modal>
     );
   }
   return (
-    <Modal title="New chat" onClose={onClose}>
+    <Modal title={t("New chat")} onClose={onClose}>
       <p class="text-sm text-[var(--t3)]">
-        Pick one kitty, or several for a group that works as a team.
+        {t("Pick one kitty, or several for a group that works as a team.")}
       </p>
       <label class={LABEL}>
-        Kitties
+        {t("Kitties")}
         <Required />
       </label>
-      <div class="flex flex-col gap-1" role="group" aria-label="Kitties" aria-required="true">
+      <div class="flex flex-col gap-1" role="group" aria-label={t("Kitties")} aria-required="true">
         {kitties.map((k) => (
           <label key={k.id} class={`row cursor-pointer ${picked.has(k.id) ? "on" : ""}`}>
             <input
@@ -137,23 +139,23 @@ export function NewChatModal({
           </label>
         ))}
       </div>
-      <label class={LABEL}>Title (optional)</label>
+      <label class={LABEL}>{t("Title (optional)")}</label>
       <input
         class={INPUT}
         value={title}
         onInput={(e) => setTitle((e.target as HTMLInputElement).value)}
-        placeholder="Launch planning"
+        placeholder={t("Launch planning")}
       />
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
       <div class="flex justify-end gap-2 mt-5">
         <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-          Cancel
+          {t("Cancel")}
         </button>
         <button class="btn-accent px-4 py-2 text-sm" disabled={picked.size === 0} onClick={create}>
-          {picked.size > 1 ? "Start group chat" : "Start chat"}
+          {picked.size > 1 ? t("Start group chat") : t("Start chat")}
         </button>
       </div>
-      <Missing items={[picked.size === 0 && "a kitty"]} />
+      <Missing items={[picked.size === 0 && t("a kitty")]} />
     </Modal>
   );
 }
@@ -214,20 +216,21 @@ export function NewKittyModal({
   const look = avatar || suggestAvatar(name || "kitty");
   if (providers !== null && providers.length === 0) {
     return (
-      <Modal title="New kitty" onClose={onClose}>
+      <Modal title={t("New kitty")} onClose={onClose}>
         <div class="avatar-stage">
           <PixelCat breed={look.breed} color={look.color} mood="sleeping" size={80} />
         </div>
         <p class="text-sm text-[var(--t3)] mt-3" data-testid="kitty-needs-model">
-          A kitty needs a brain to think with, and there is no model yet. Add one in Settings (it
-          takes a minute: pick a provider and paste its key), then come back.
+          {t(
+            "A kitty needs a brain to think with, and there is no model yet. Add one in Settings (it takes a minute: pick a provider and paste its key), then come back.",
+          )}
         </p>
         <div class="flex justify-end gap-2 mt-5">
           <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-            Cancel
+            {t("Cancel")}
           </button>
           <button class="btn-accent px-4 py-2 text-sm" onClick={onNeedModel}>
-            Add a model
+            {t("Add a model")}
           </button>
         </div>
       </Modal>
@@ -247,7 +250,10 @@ export function NewKittyModal({
       });
       onCreated(
         r.warning
-          ? `${name} was created, but ${r.warning.replace(/^created but /, "")}`
+          ? t("{name} was created, but {why}", {
+              name,
+              why: r.warning.replace(/^created but /, ""),
+            })
           : undefined,
       );
     } catch (e) {
@@ -256,12 +262,12 @@ export function NewKittyModal({
     }
   };
   return (
-    <Modal title="New kitty" onClose={onClose} wide>
+    <Modal title={t("New kitty")} onClose={onClose} wide>
       <div class="avatar-stage">
         <PixelCat breed={look.breed} color={look.color} mood="happy" size={96} />
       </div>
       <label class={LABEL} for="kitty-name">
-        Name
+        {t("Name")}
         <Required />
       </label>
       <input
@@ -284,43 +290,47 @@ export function NewKittyModal({
       />
       {clash ? (
         <p id="kitty-name-taken" class="text-xs text-[var(--c-red)] mt-1" role="alert">
-          There is already a kitty called <b>{name}</b>: pick another name.
+          {t("There is already a kitty called ")}
+          <b>{name}</b>
+          {t(": pick another name.")}
         </p>
       ) : (
         raw &&
         name !== raw && (
           <p class="text-xs text-[var(--t4)] mt-1">
-            It will be called <b>{name || "…"}</b> (lowercase letters, digits and dashes).
+            {t("It will be called ")}
+            <b>{name || "…"}</b>
+            {t(" (lowercase letters, digits and dashes).")}
           </p>
         )
       )}
       <label class={LABEL} for="kitty-persona">
-        Who is it?
+        {t("Who is it?")}
       </label>
       <input
         id="kitty-persona"
         class={INPUT}
         value={persona}
         onInput={(e) => setPersona((e.target as HTMLInputElement).value)}
-        placeholder="a planner who keeps the team on track"
+        placeholder={t("a planner who keeps the team on track")}
       />
       <p class="text-xs text-[var(--t4)] mt-1">
-        A line about its job and character. Empty makes a helpful all-rounder.
+        {t("A line about its job and character. Empty makes a helpful all-rounder.")}
       </p>
       <label class={LABEL} for="kitty-tone">
-        How does it talk?
+        {t("How does it talk?")}
       </label>
       <input
         id="kitty-tone"
         class={INPUT}
         value={tone}
         onInput={(e) => setTone((e.target as HTMLInputElement).value)}
-        placeholder="calm and structured"
+        placeholder={t("calm and structured")}
       />
-      <label class={LABEL}>Looks</label>
+      <label class={LABEL}>{t("Looks")}</label>
       <CatPicker breed={look.breed} color={look.color} onChange={setAvatar} />
       <label class={LABEL} for="kitty-brain">
-        Brain
+        {t("Brain")}
       </label>
       <select
         id="kitty-brain"
@@ -328,7 +338,7 @@ export function NewKittyModal({
         value={provider}
         onChange={(e) => setProvider((e.target as HTMLSelectElement).value)}
       >
-        <option value="">the default model</option>
+        <option value="">{t("the default model")}</option>
         {(providers || []).map((p) => (
           <option key={p.name} value={p.name}>
             {modelLabel(p)}
@@ -338,7 +348,9 @@ export function NewKittyModal({
       {connections.length > 0 && (
         <label class="flex items-center gap-2 mt-4 text-sm cursor-pointer">
           <input type="checkbox" checked={useAll} onChange={() => setUseAll(!useAll)} />
-          Let it use my connections ({connections.join(", ")}, and the ones I add later)
+          {t("Let it use my connections ({list}, and the ones I add later)", {
+            list: connections.join(", "),
+          })}
         </label>
       )}
       <label
@@ -350,28 +362,29 @@ export function NewKittyModal({
           disabled={!containers}
           onChange={() => setDesktop(!desktop)}
         />
-        Give it a computer of its own (a desktop with a browser it can use)
+        {t("Give it a computer of its own (a desktop with a browser it can use)")}
       </label>
       {!containers && (
         <p class="text-xs text-[var(--t4)] mt-1">
-          Needs Docker running on the gateway's machine. Without it the kitty still thinks, talks
-          and uses connections.
+          {t(
+            "Needs Docker running on the gateway's machine. Without it the kitty still thinks, talks and uses connections.",
+          )}
         </p>
       )}
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
       <div class="flex justify-end gap-2 mt-5">
         <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-          Cancel
+          {t("Cancel")}
         </button>
         <button
           class="btn-accent px-4 py-2 text-sm"
           disabled={!name || clash || busy}
           onClick={create}
         >
-          {busy ? "Creating…" : "Create"}
+          {busy ? t("Creating…") : t("Create")}
         </button>
       </div>
-      <Missing items={[!name && "a name", clash && "a name no other kitty has"]} />
+      <Missing items={[!name && t("a name"), clash && t("a name no other kitty has")]} />
     </Modal>
   );
 }
@@ -425,13 +438,15 @@ function KittyBasics({
     const on = !mayUse(mine, c);
     save(
       { connectors: withConnection(mine, c, on, connections) },
-      on ? `${kitty.name} may use ${c}.` : `${kitty.name} no longer uses ${c}.`,
+      on
+        ? t("{name} may use {connection}.", { name: kitty.name, connection: c })
+        : t("{name} no longer uses {connection}.", { name: kitty.name, connection: c }),
     );
   };
   const dirty = persona !== (kitty.soul?.persona || "") || tone !== (kitty.soul?.tone || "");
   return (
     <div data-testid="kitty-basics">
-      <div class="section-title !mx-0">Brain</div>
+      <div class="section-title !mx-0">{t("Brain")}</div>
       <div class="flex items-center gap-2">
         <span class="provider-badge">
           <ProviderLogo
@@ -441,16 +456,22 @@ function KittyBasics({
         </span>
         <select
           class={INPUT}
-          aria-label="Brain"
+          aria-label={t("Brain")}
           value={kitty.provider}
           onChange={(e) => {
             const v = (e.target as HTMLSelectElement).value;
             const p = models.find((m) => m.name === v);
-            save({ provider: v }, `${kitty.name} now thinks with ${p ? modelLabel(p) : v}.`);
+            save(
+              { provider: v },
+              t("{name} now thinks with {model}.", {
+                name: kitty.name,
+                model: p ? modelLabel(p) : v,
+              }),
+            );
           }}
         >
           {!models.some((m) => m.name === kitty.provider) && (
-            <option value={kitty.provider}>{kitty.provider || "no model"}</option>
+            <option value={kitty.provider}>{kitty.provider || t("no model")}</option>
           )}
           {models.map((p) => (
             <option key={p.name} value={p.name}>
@@ -459,9 +480,9 @@ function KittyBasics({
           ))}
         </select>
       </div>
-      <div class="section-title !mx-0 mt-4">Personality</div>
+      <div class="section-title !mx-0 mt-4">{t("Personality")}</div>
       <label class="block text-xs text-[var(--t4)] mb-1" for="drawer-persona">
-        Who is it?
+        {t("Who is it?")}
       </label>
       <textarea
         id="drawer-persona"
@@ -470,7 +491,7 @@ function KittyBasics({
         onInput={(e) => setPersona((e.target as HTMLTextAreaElement).value)}
       />
       <label class="block text-xs text-[var(--t4)] mb-1 mt-2" for="drawer-tone">
-        How does it talk?
+        {t("How does it talk?")}
       </label>
       <input
         id="drawer-tone"
@@ -481,9 +502,11 @@ function KittyBasics({
       {dirty && (
         <button
           class="btn-outline px-3 py-1.5 text-xs mt-2"
-          onClick={() => save({ soul: { persona: persona.trim(), tone: tone.trim() } }, "Saved.")}
+          onClick={() =>
+            save({ soul: { persona: persona.trim(), tone: tone.trim() } }, t("Saved."))
+          }
         >
-          Save personality
+          {t("Save personality")}
         </button>
       )}
       {(kitty.soul?.traits?.length || 0) > 0 && (
@@ -495,16 +518,18 @@ function KittyBasics({
           ))}
         </div>
       )}
-      <div class="section-title !mx-0 mt-4">Connections</div>
+      <div class="section-title !mx-0 mt-4">{t("Connections")}</div>
       {connections.length === 0 ? (
         <p class="text-xs text-[var(--t4)]">
-          None yet. Add services in Settings, Connections, and choose the kitties that may use them.
+          {t(
+            "None yet. Add services in Settings, Connections, and choose the kitties that may use them.",
+          )}
         </p>
       ) : (
         <div class="flex flex-wrap gap-2" data-testid="kitty-connections">
           <label
             class={`chip ${all ? "on" : ""}`}
-            title="Every connection, including the ones you add later"
+            title={t("Every connection, including the ones you add later")}
           >
             <input
               type="checkbox"
@@ -512,11 +537,17 @@ function KittyBasics({
               checked={all}
               onChange={() =>
                 all
-                  ? save({ connectors: [NONE] }, `${kitty.name} uses no connection.`)
-                  : save({ connectors: [] }, `${kitty.name} may use every connection.`)
+                  ? save(
+                      { connectors: [NONE] },
+                      t("{name} uses no connection.", { name: kitty.name }),
+                    )
+                  : save(
+                      { connectors: [] },
+                      t("{name} may use every connection.", { name: kitty.name }),
+                    )
               }
             />
-            All, new ones too
+            {t("All, new ones too")}
           </label>
           {connections.map((c) => (
             <label key={c} class={`chip ${mayUse(mine, c) ? "on" : ""}`}>
@@ -603,7 +634,7 @@ export function KittyDrawer({
           </div>
           <div class="mood-row">
             <button class="btn-ghost px-2 py-1" onClick={() => setLooks(!looks)}>
-              {looks ? "done" : "change looks"}
+              {looks ? t("done") : t("change looks")}
             </button>
           </div>
           {looks && (
@@ -615,12 +646,12 @@ export function KittyDrawer({
               />
             </div>
           )}
-          <div class="section-title !mx-0 mt-4">Desktop</div>
+          <div class="section-title !mx-0 mt-4">{t("Desktop")}</div>
           {kitty.desktop ? (
             <Shot key={tick} path={`/v1/kitties/${kitty.id}/screenshot?t=${tick}`} big />
           ) : (
             <div class="live-shot flex items-center justify-center text-[var(--t4)] text-sm">
-              brain only, no desktop
+              {t("brain only, no desktop")}
             </div>
           )}
           <div class="flex gap-2 mt-3 flex-wrap">
@@ -632,7 +663,7 @@ export function KittyDrawer({
             <span class="tag tag-accent">
               {(() => {
                 const p = models.find((m) => m.name === kitty.provider);
-                return p ? modelLabel(p) : kitty.provider || "no model";
+                return p ? modelLabel(p) : kitty.provider || t("no model");
               })()}
             </span>
             {kitty.desktop && <span class="tag">{kitty.container}</span>}
@@ -641,7 +672,7 @@ export function KittyDrawer({
                 class="btn-ghost px-2 py-1 text-xs flex items-center gap-1"
                 onClick={() => setTick((t) => t + 1)}
               >
-                <IconCamera size={12} /> refresh
+                <IconCamera size={12} /> {t("refresh")}
               </button>
             )}
           </div>
@@ -660,34 +691,34 @@ export function KittyDrawer({
               ))}
             </div>
           )}
-          <div class="section-title !mx-0 mt-5">Actions</div>
+          <div class="section-title !mx-0 mt-5">{t("Actions")}</div>
           <div class="flex flex-col gap-2">
             <button class="btn-accent px-3 py-2 text-sm" onClick={onChat}>
-              Chat with {kitty.name}
+              {t("Chat with {name}", { name: kitty.name })}
             </button>
             {kitty.status === "running" ? (
               <button
                 class="btn-ghost px-3 py-2 text-sm flex items-center gap-2"
                 onClick={() => act(() => api.stopKitty(kitty.id))}
               >
-                <IconStop size={14} /> Stop
+                <IconStop size={14} /> {t("Stop")}
               </button>
             ) : (
               <button
                 class="btn-ghost px-3 py-2 text-sm flex items-center gap-2"
                 onClick={() => act(() => api.startKitty(kitty.id))}
               >
-                <IconPlay size={14} /> Start
+                <IconPlay size={14} /> {t("Start")}
               </button>
             )}
             <button
               class="btn-danger px-3 py-2 text-sm flex items-center gap-2"
               onClick={async () =>
-                (await ask(`Remove ${kitty.name} and its container?`)) &&
+                (await ask(t("Remove {name} and its container?", { name: kitty.name }))) &&
                 act(() => api.removeKitty(kitty.id).then(onClose))
               }
             >
-              <IconTrash size={14} /> Remove
+              <IconTrash size={14} /> {t("Remove")}
             </button>
           </div>
           {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
@@ -748,44 +779,49 @@ export function ConnectModal({
   // also needs the token, since it cannot read the gateway's file.
   const needsURL = android || inWails();
   const missing = [
-    needsURL && !url.trim() && "the address",
-    android && !token.trim() && "the token",
+    needsURL && !url.trim() && t("the address"),
+    android && !token.trim() && t("the token"),
   ].filter(Boolean) as string[];
   const body = (
     <>
       {android ? (
         <div class="text-sm text-[var(--t3)]" data-testid="android-connect">
           <p>
-            The app is a remote for the Kitties gateway running on your computer or server. Type its
-            address on the network and its token.
+            {t(
+              "The app is a remote for the Kitties gateway running on your computer or server. Type its address on the network and its token.",
+            )}
           </p>
           <ol class="steps text-xs mt-2">
             <li>
-              Let the gateway listen on the network, not only on the computer:{" "}
-              <code class="font-mono">KITTIES_LISTEN=0.0.0.0:7488 kitties gateway</code> (or a
-              server with HTTPS, see DEPLOY.md).
+              {t("Let the gateway listen on the network, not only on the computer:")}{" "}
+              <code class="font-mono">KITTIES_LISTEN=0.0.0.0:7488 kitties gateway</code>
+              {t(" (or a server with HTTPS, see DEPLOY.md).")}
             </li>
             <li>
-              The address is the computer's, like{" "}
+              {t("The address is the computer's, like")}{" "}
               <code class="font-mono">http://192.168.1.20:7488</code>.
             </li>
             <li>
-              The token is in <code class="font-mono">~/.kitties/gateway.token</code> on that
-              computer.
+              {t("The token is in ")}
+              <code class="font-mono">~/.kitties/gateway.token</code>
+              {t(" on that computer.")}
             </li>
           </ol>
         </div>
       ) : (
         <p class="text-sm text-[var(--t3)]">
-          The address of the kitties gateway. On this machine the token is found on its own (the
-          gateway leaves it in <code class="font-mono">~/.kitties/gateway.token</code>); a remote
-          gateway needs the token it printed when it started.
-          {!inWails() && " Leave the address empty when this page is served by the gateway itself."}
+          {t(
+            "The address of the kitties gateway. On this machine the token is found on its own (the gateway leaves it in ",
+          )}
+          <code class="font-mono">~/.kitties/gateway.token</code>
+          {t("); a remote gateway needs the token it printed when it started.")}
+          {!inWails() &&
+            t(" Leave the address empty when this page is served by the gateway itself.")}
         </p>
       )}
       <label class={LABEL}>
-        Address
-        {needsURL ? <Required /> : " (optional)"}
+        {t("Address")}
+        {needsURL ? <Required /> : t(" (optional)")}
       </label>
       <input
         class={INPUT}
@@ -795,33 +831,37 @@ export function ConnectModal({
         placeholder={android ? "http://192.168.1.20:7488" : "http://127.0.0.1:7488"}
         inputMode="url"
         autocapitalize="off"
-        aria-label="Address"
+        aria-label={t("Address")}
       />
       <label class={LABEL}>
-        Token
-        {android ? <Required /> : " (remote gateways only)"}
+        {t("Token")}
+        {android ? <Required /> : t(" (remote gateways only)")}
       </label>
       <input
         class={`${INPUT} font-mono`}
         aria-required={android}
         value={token}
         onInput={(e) => setToken((e.target as HTMLInputElement).value)}
-        placeholder={android ? "paste the gateway's token" : "found on this machine when empty"}
+        placeholder={
+          android ? t("paste the gateway's token") : t("found on this machine when empty")
+        }
         autocapitalize="off"
-        aria-label="Token"
+        aria-label={t("Token")}
       />
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
       <div class="flex justify-end gap-2 mt-5">
         <button class="btn-ghost px-4 py-2 text-sm" onClick={onClose}>
-          Cancel
+          {t("Cancel")}
         </button>
         <button
           class="btn-accent px-4 py-2 text-sm"
           disabled={busy || missing.length > 0}
-          title={missing.length ? `Still needed: ${missing.join(", ")}` : undefined}
+          title={
+            missing.length ? t("Still needed: {items}", { items: missing.join(", ") }) : undefined
+          }
           onClick={save}
         >
-          {busy ? "Checking…" : "Connect"}
+          {busy ? t("Checking…") : t("Connect")}
         </button>
       </div>
       <Missing items={missing} />
@@ -831,7 +871,7 @@ export function ConnectModal({
     return body;
   }
   return (
-    <Modal title="Gateway" onClose={onClose}>
+    <Modal title={t("Gateway")} onClose={onClose}>
       {body}
     </Modal>
   );

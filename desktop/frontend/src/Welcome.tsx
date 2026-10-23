@@ -1,5 +1,6 @@
 import type { Kitty, ProviderInfo, Session } from "./api";
 import PixelCat from "./PixelCat";
+import { t } from "./i18n";
 
 // Welcome is what the main area shows with no chat open. Until the basics are in place it is a
 // short checklist, each step with the one button that does it; after that, a few shortcuts.
@@ -25,25 +26,27 @@ export default function Welcome({
   const steps = [
     {
       done: models.length > 0,
-      title: "Give your kitties a brain",
-      text: "Add a model from a provider you have an account with (Claude, OpenAI, Gemini…), or Ollama to run free models on this computer.",
-      action: "Add a model",
+      title: t("Give your kitties a brain"),
+      text: t(
+        "Add a model from a provider you have an account with (Claude, OpenAI, Gemini…), or Ollama to run free models on this computer.",
+      ),
+      action: t("Add a model"),
       onClick: onAddModel,
       ready: true,
     },
     {
       done: kitties.length > 0,
-      title: "Create your first kitty",
-      text: "Give it a name, a personality and a look. It starts working at once.",
-      action: "Create a kitty",
+      title: t("Create your first kitty"),
+      text: t("Give it a name, a personality and a look. It starts working at once."),
+      action: t("Create a kitty"),
       onClick: onNewKitty,
       ready: models.length > 0,
     },
     {
       done: chats.length > 0,
-      title: "Start a chat",
-      text: "Ask it anything, or give it a task. Several kitties in one chat work as a team.",
-      action: "Start a chat",
+      title: t("Start a chat"),
+      text: t("Ask it anything, or give it a task. Several kitties in one chat work as a team."),
+      action: t("Start a chat"),
       onClick: onNewChat,
       ready: kitties.length > 0,
     },
@@ -55,11 +58,15 @@ export default function Welcome({
         <div class="flex items-center gap-3 mb-2">
           <PixelCat breed="tabby" color="orange" mood={left ? "idle" : "happy"} size={44} />
           <div>
-            <h2 class="font-mono text-lg">{left ? "Welcome to Kitties" : "No chat open"}</h2>
+            <h2 class="font-mono text-lg">{left ? t("Welcome to Kitties") : t("No chat open")}</h2>
             <p class="text-sm text-[var(--t3)]">
               {left
-                ? `${left === 1 ? "One step" : `${left} steps`} to get your kitties working.`
-                : "Pick a chat on the left, or start a new one. In a group, write @name to pick who answers."}
+                ? left === 1
+                  ? t("One step to get your kitties working.")
+                  : t("{count} steps to get your kitties working.", { count: left })
+                : t(
+                    "Pick a chat on the left, or start a new one. In a group, write @name to pick who answers.",
+                  )}
             </p>
           </div>
         </div>
@@ -90,14 +97,14 @@ export default function Welcome({
         <div class="flex flex-wrap gap-2 mt-4">
           {left === 0 && (
             <button class="btn-accent px-3 py-1.5 text-xs" onClick={onNewChat}>
-              New chat
+              {t("New chat")}
             </button>
           )}
           <button class="btn-ghost px-3 py-1.5 text-xs" onClick={onConnections}>
-            Connect a service
+            {t("Connect a service")}
           </button>
           <button class="btn-ghost px-3 py-1.5 text-xs" onClick={onNotifications}>
-            Get alerts on your phone
+            {t("Get alerts on your phone")}
           </button>
         </div>
       </div>

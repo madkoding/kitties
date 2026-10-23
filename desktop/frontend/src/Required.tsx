@@ -1,7 +1,9 @@
+import { t } from "./i18n";
+
 // Required marks a field the form cannot go on without; the field itself carries aria-required.
 export function Required() {
   return (
-    <span class="req" title="Required" aria-hidden="true">
+    <span class="req" title={t("Required")} aria-hidden="true">
       *
     </span>
   );
@@ -14,7 +16,7 @@ export function RequiredLegend() {
       <span class="req" aria-hidden="true">
         *
       </span>{" "}
-      required
+      {t("required")}
     </span>
   );
 }
@@ -28,7 +30,7 @@ export function Missing({ items }: { items: (string | false | null | undefined)[
   }
   return (
     <p class="missing" role="status" data-testid="missing">
-      Still needed: {left.join(", ")}
+      {t("Still needed: {items}", { items: left.join(", ") })}
     </p>
   );
 }

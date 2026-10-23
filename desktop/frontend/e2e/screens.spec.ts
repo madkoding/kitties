@@ -958,3 +958,30 @@ test("a message sent shows once, while the kitties are still answering", async (
   await expect(mine).toHaveCount(1);
   await page.request.delete(`${GATEWAY}/v1/chats/${chat}`, { headers });
 });
+
+test("the page speaks Spanish: the system's language, or the one picked", async ({ page }) => {
+  // ?lang=es stands for a Spanish system for one visit.
+  await page.goto(`/?theme=dark&motion=off&lang=es#chat/${ids.desktop}`);
+  await expect(page.locator("aside").getByRole("button", { name: "Nuevo chat" })).toBeVisible();
+  await expect(page.locator("textarea")).toHaveAttribute("placeholder", "Escribe algo…");
+  const trail = page.locator(".trail").first();
+  await expect(trail.getByText("Abrió example.com", { exact: true })).toBeVisible();
+  await expect(trail.getByText("Terminó", { exact: true })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "es");
+  await shot(page, "45-spanish");
+  await page.goto(`/?theme=dark&motion=off&lang=es#new-connectors-add`);
+  await expect(page.getByRole("tab", { name: "Conexiones" })).toBeVisible();
+  await page.getByLabel("Buscar servicios").fill("github");
+  await page.locator(".service-btn", { hasText: "GitHub" }).click();
+  await expect(page.getByText("¿Cómo te conectas?")).toBeVisible();
+  await shot(page, "46-spanish-connection");
+
+  // Picked in Preferences, it stays; English is a choice away.
+  await open(page, "#new-preferences");
+  await page.getByLabel("Language").selectOption("es");
+  await expect(page.getByRole("tab", { name: "Preferencias" })).toBeVisible();
+  await page.goto(`/?theme=dark&motion=off#new-preferences`);
+  await expect(page.getByRole("tab", { name: "Preferencias" })).toBeVisible();
+  await page.getByLabel("Idioma").selectOption("en");
+  await expect(page.getByRole("tab", { name: "Preferences" })).toBeVisible();
+});

@@ -14,6 +14,7 @@ import ApprovalsModal from "./Approvals";
 import Sidebar, { moodOf } from "./Sidebar";
 import PixelCat from "./PixelCat";
 import { cycleMode } from "./theme";
+import { t } from "./i18n";
 
 type ModalKind =
   | "none"
@@ -80,7 +81,7 @@ export default function App() {
   const [models, setModels] = useState<ProviderInfo[]>([]);
   const [containers, setContainers] = useState(true);
 
-  const user = "You";
+  const user = t("You");
 
   const refresh = useCallback(async () => {
     try {
@@ -143,9 +144,14 @@ export default function App() {
   // Whatever the page fails to do and nobody caught (a screen that cannot be drawn, a promise
   // nobody handled) is said in the banner, so a blank or stuck screen always has a reason.
   useEffect(() => {
-    const onError = (e: ErrorEvent) => setError(`Something broke in the page: ${e.message}`);
+    const onError = (e: ErrorEvent) =>
+      setError(t("Something broke in the page: {message}", { message: e.message }));
     const onRejection = (e: PromiseRejectionEvent) =>
-      setError(`Something failed: ${(e.reason as Error)?.message || String(e.reason)}`);
+      setError(
+        t("Something failed: {message}", {
+          message: (e.reason as Error)?.message || String(e.reason),
+        }),
+      );
     addEventListener("error", onError);
     addEventListener("unhandledrejection", onRejection);
     return () => {
@@ -297,7 +303,10 @@ export default function App() {
   };
 
   const deleteChat = async () => {
-    if (session && (await ask(`Delete the chat "${session.title}"?`, "Delete"))) {
+    if (
+      session &&
+      (await ask(t('Delete the chat "{title}"?', { title: session.title }), t("Delete")))
+    ) {
       await api.deleteChat(session.id).catch((e) => setError(e.message));
       location.hash = "";
       refresh();
@@ -338,7 +347,11 @@ export default function App() {
       />
       <div class="flex-1 flex flex-col min-w-0">
         <header class="titlebar frosted flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-white/5 flex-none z-10">
-          <button class="plain p-1.5 md:hidden" onClick={() => setSidebar(true)} aria-label="Menu">
+          <button
+            class="plain p-1.5 md:hidden"
+            onClick={() => setSidebar(true)}
+            aria-label={t("Menu")}
+          >
             <IconMenu />
           </button>
           <h1 class="text-sm sm:text-base font-semibold tracking-wide truncate min-w-0 flex-1">
@@ -346,7 +359,7 @@ export default function App() {
           </h1>
           {session && session.members.length > 1 && (
             <span class="tag tag-accent">
-              <IconUsers size={10} /> group
+              <IconUsers size={10} /> {t("group")}
             </span>
           )}
           {members.map((k) => (
@@ -364,10 +377,10 @@ export default function App() {
             class={`state-pill ${working ? "is-working" : online === false ? "is-off" : "is-ok"}`}
           >
             {working && <span class="spinner" />}
-            {working ? "working" : online === false ? "offline" : "connected"}
+            {working ? t("working") : online === false ? t("offline") : t("connected")}
           </span>
           {session && (
-            <button class="btn-ghost p-2" onClick={deleteChat} aria-label="Delete chat">
+            <button class="btn-ghost p-2" onClick={deleteChat} aria-label={t("Delete chat")}>
               <IconTrash size={14} />
             </button>
           )}
@@ -387,7 +400,7 @@ export default function App() {
             <button
               class="plain text-xs text-[var(--t3)]"
               onClick={() => setNote("")}
-              aria-label="Dismiss"
+              aria-label={t("Dismiss")}
             >
               ✕
             </button>
@@ -506,7 +519,7 @@ export default function App() {
           onClose={() => setModal("none")}
           reason={
             online === false
-              ? error || "The gateway did not answer or refused the token."
+              ? error || t("The gateway did not answer or refused the token.")
               : undefined
           }
           onDone={() => {

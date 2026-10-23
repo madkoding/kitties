@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Kitty, MemoryView } from "./api";
 import { api } from "./api";
+import { t } from "./i18n";
 import { IconTrash } from "./icons";
 
 // WHAT A KITTY KNOWS ABOUT YOU.
@@ -49,9 +50,11 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
   const p = view.profile;
   return (
     <div data-testid="memory">
-      <div class="section-title !mx-0 mt-5">What {kitty.name} knows about you</div>
-      <label class={LABEL}>How demanding you are</label>
-      <div class="flex gap-1 flex-wrap" role="group" aria-label="How demanding you are">
+      <div class="section-title !mx-0 mt-5">
+        {t("What {name} knows about you", { name: kitty.name })}
+      </div>
+      <label class={LABEL}>{t("How demanding you are")}</label>
+      <div class="flex gap-1 flex-wrap" role="group" aria-label={t("How demanding you are")}>
         {LEVELS.map((name, i) => (
           <button
             key={name}
@@ -60,7 +63,7 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
             disabled={busy}
             onClick={() => act(() => api.setProfile(kitty.id, i + 1, p.auto))}
           >
-            {i + 1} · {name}
+            {i + 1} · {t(name)}
           </button>
         ))}
       </div>
@@ -75,19 +78,22 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
             act(() => api.setProfile(kitty.id, p.demand, (e.target as HTMLInputElement).checked))
           }
         />{" "}
-        let it follow my feedback ({p.up} up, {p.down} down)
+        {t("let it follow my feedback ({up} up, {down} down)", { up: p.up, down: p.down })}
       </label>
       {view.trust && Object.keys(view.trust).length > 0 && (
         <>
-          <label class={LABEL}>On its way to acting alone</label>
+          <label class={LABEL}>{t("On its way to acting alone")}</label>
           <div class="flex flex-col gap-1 text-xs" data-testid="trust">
-            {Object.entries(view.trust).map(([name, t]) => (
+            {Object.entries(view.trust).map(([name, tr]) => (
               <div key={name} class="flex items-center gap-2">
                 <code class="font-mono flex-1 truncate">{name}</code>
                 <span class="text-[var(--t3)]">
-                  {t.needs === 0
-                    ? "never alone for you"
-                    : `${t.streak} of ${t.needs} yeses in a row`}
+                  {tr.needs === 0
+                    ? t("never alone for you")
+                    : t("{streak} of {needs} yeses in a row", {
+                        streak: tr.streak,
+                        needs: tr.needs,
+                      })}
                 </span>
               </div>
             ))}
@@ -96,7 +102,7 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
       )}
       {view.spent && (
         <>
-          <label class={LABEL}>Today</label>
+          <label class={LABEL}>{t("Today")}</label>
           <div class="flex flex-col gap-1 text-xs" data-testid="spent">
             {(
               [
@@ -105,37 +111,39 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
               ] as [string, number, number][]
             ).map(([name, used, max]) => (
               <div key={name} class="flex items-center gap-2">
-                <span class="flex-1">{name}</span>
+                <span class="flex-1">{t(name)}</span>
                 <span class={max > 0 && used >= max ? "text-[var(--c-red)]" : "text-[var(--t3)]"}>
                   {used.toLocaleString("en-US")}
-                  {max > 0 ? ` of ${max.toLocaleString("en-US")}` : " (no limit)"}
+                  {max > 0
+                    ? " " + t("of {max}", { max: max.toLocaleString("en-US") })
+                    : " " + t("(no limit)")}
                 </span>
               </div>
             ))}
           </div>
         </>
       )}
-      <label class={LABEL}>Notes</label>
+      <label class={LABEL}>{t("Notes")}</label>
       {view.notes.length === 0 && (
         <p class="text-xs text-[var(--t4)]">
-          Nothing yet. It learns from your thumbs, your yes and no, and what it notices.
+          {t("Nothing yet. It learns from your thumbs, your yes and no, and what it notices.")}
         </p>
       )}
       <div class="flex flex-col gap-1" data-testid="notes">
         {view.notes.map((n) => (
           <div key={n.id} class="flex items-start gap-2 text-sm">
             <span class={`tag ${SCOPE_TAG[n.scope] || "tag-magenta"}`}>
-              {n.scope.replace("project:", "")}
+              {n.scope.startsWith("project:") ? n.scope.replace("project:", "") : t(n.scope)}
             </span>
             <span class="flex-1 min-w-0">{n.text}</span>
             {n.pinned && (
-              <span class="tag" title="You wrote it: a consolidation never drops it">
-                yours
+              <span class="tag" title={t("You wrote it: a consolidation never drops it")}>
+                {t("yours")}
               </span>
             )}
             <button
               class="plain text-[var(--t3)] hover:text-[var(--c-red)] p-1"
-              aria-label={`Forget: ${n.text}`}
+              aria-label={t("Forget: {note}", { note: n.text })}
               onClick={() => act(() => api.forgetNote(kitty.id, n.id))}
             >
               <IconTrash size={12} />
@@ -146,19 +154,19 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
       <div class="flex gap-2 mt-2">
         <select
           class="px-2 py-2 text-sm"
-          aria-label="Scope of the note"
+          aria-label={t("Scope of the note")}
           value={scope}
           onChange={(e) => setScope((e.target as HTMLSelectElement).value)}
         >
-          <option value="user">about me</option>
-          <option value="work">about the work</option>
+          <option value="user">{t("about me")}</option>
+          <option value="work">{t("about the work")}</option>
         </select>
         <input
           class={INPUT}
           value={text}
           onInput={(e) => setText((e.target as HTMLInputElement).value)}
-          placeholder="Always answer in Spanish"
-          aria-label="A note for it to keep"
+          placeholder={t("Always answer in Spanish")}
+          aria-label={t("A note for it to keep")}
         />
         <button
           class="btn-outline px-3 py-1.5 text-xs whitespace-nowrap"
@@ -170,16 +178,17 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
             })
           }
         >
-          Add note
+          {t("Add note")}
         </button>
       </div>
       <button
         class="btn-ghost px-3 py-1.5 text-xs mt-2"
         disabled={busy || p.up + p.down === 0}
         onClick={() => act(() => api.distill(kitty.id))}
-        title="Its own brain merges the notes and the feedback into a short list"
+        title={t("Its own brain merges the notes and the feedback into a short list")}
       >
-        Consolidate now{p.pending > 0 ? ` (${p.pending} new)` : ""}
+        {t("Consolidate now")}
+        {p.pending > 0 ? " " + t("({n} new)", { n: p.pending }) : ""}
       </button>
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
     </div>

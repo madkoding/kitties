@@ -1,5 +1,6 @@
 import { useState } from "preact/hooks";
 import { api } from "./api";
+import { t } from "./i18n";
 import PixelCat from "./PixelCat";
 import { Missing, Required } from "./Required";
 
@@ -33,11 +34,11 @@ export default function Login({ onDone }: { onDone: () => void }) {
           <PixelCat breed="tabby" color="orange" mood="idle" size={40} />
           <div>
             <h1 class="text-lg font-semibold tracking-wide">Kitties</h1>
-            <p class="text-xs text-[var(--t4)]">sign in to this gateway</p>
+            <p class="text-xs text-[var(--t4)]">{t("sign in to this gateway")}</p>
           </div>
         </div>
         <label class="block text-xs text-[var(--t3)] mb-1" for="login-token">
-          Token
+          {t("Token")}
           <Required />
         </label>
         <input
@@ -48,7 +49,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
           autocomplete="current-password"
           value={token}
           onInput={(e) => setToken((e.target as HTMLInputElement).value)}
-          placeholder="the gateway's token"
+          placeholder={t("the gateway's token")}
           autofocus
         />
         {err && (
@@ -61,12 +62,13 @@ export default function Login({ onDone }: { onDone: () => void }) {
           type="submit"
           disabled={busy || !token.trim()}
         >
-          {busy ? "Checking…" : "Sign in"}
+          {busy ? t("Checking…") : t("Sign in")}
         </button>
-        <Missing items={[!token.trim() && "the token"]} />
+        <Missing items={[!token.trim() && t("the token")]} />
         <p class="text-xs text-[var(--t4)] mt-3">
-          The token stays on the server: this browser keeps only a session that you can end with
-          Sign out.
+          {t(
+            "The token stays on the server: this browser keeps only a session that you can end with Sign out.",
+          )}
         </p>
       </form>
     </div>

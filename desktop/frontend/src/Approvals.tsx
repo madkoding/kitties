@@ -3,6 +3,7 @@ import type { Approval, ApprovalRule, Kitty } from "./api";
 import { actionLabel } from "./friendly";
 import { api } from "./api";
 import { when } from "./format";
+import { t } from "./i18n";
 import { IconShield, IconX } from "./icons";
 import PixelCat from "./PixelCat";
 
@@ -58,7 +59,7 @@ function ApprovalCard({
         />
         <div class="min-w-0 flex-1">
           <div class="text-sm">
-            <b>{a.kitty_name}</b> wants to{" "}
+            <b>{a.kitty_name}</b> {t("wants to")}{" "}
             <code class="font-mono">
               {a.connector}.{a.action}
             </code>
@@ -68,31 +69,31 @@ function ApprovalCard({
       </div>
       <p class="approval-summary">{a.summary}</p>
       <details class="text-xs text-[var(--t3)]">
-        <summary>the exact request</summary>
+        <summary>{t("the exact request")}</summary>
         <pre class="approval-args">{JSON.stringify(a.args, null, 2)}</pre>
       </details>
       {rejecting ? (
         <div class="mt-2">
           <label class="block text-xs text-[var(--t3)] mb-1" for={"why-" + a.id}>
-            Why not? {a.kitty_name} reads this and learns from it.
+            {t("Why not? {name} reads this and learns from it.", { name: a.kitty_name })}
           </label>
           <input
             id={"why-" + a.id}
             class={INPUT}
             value={reason}
             onInput={(e) => setReason((e.target as HTMLInputElement).value)}
-            placeholder="too informal, wrong channel, not today…"
+            placeholder={t("too informal, wrong channel, not today…")}
           />
           <div class="flex gap-2 mt-2 justify-end">
             <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setRejecting(false)}>
-              Back
+              {t("Back")}
             </button>
             <button
               class="btn-danger px-3 py-1.5 text-xs"
               disabled={busy}
               onClick={() => decide(() => api.reject(a.id, reason.trim()))}
             >
-              Reject
+              {t("Reject")}
             </button>
           </div>
         </div>
@@ -103,26 +104,26 @@ function ApprovalCard({
             disabled={busy}
             onClick={() => decide(() => api.approve(a.id, false))}
           >
-            Approve
+            {t("Approve")}
           </button>
           <button
             class="btn-outline px-3 py-1.5 text-xs"
             disabled={busy}
             onClick={() => decide(() => api.approve(a.id, true))}
-            title={`From now on ${a.kitty_name} does this without asking`}
+            title={t("From now on {name} does this without asking", { name: a.kitty_name })}
           >
-            Approve, don't ask again
+            {t("Approve, don't ask again")}
           </button>
           <button
             class="btn-ghost px-3 py-1.5 text-xs"
             disabled={busy}
             onClick={() => setRejecting(true)}
           >
-            Reject…
+            {t("Reject…")}
           </button>
           {a.chat && (
             <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => onOpenChat(a.chat!)}>
-              open chat
+              {t("open chat")}
             </button>
           )}
         </div>
@@ -134,17 +135,17 @@ function ApprovalCard({
 
 // A rule is how an action of a kitty is limited, as the lists say it.
 export const RULE_LABEL: Record<string, string> = {
-  auto: "allowed",
-  ask: "asks first",
-  never: "never",
+  auto: t("allowed"),
+  ask: t("asks first"),
+  never: t("never"),
 };
 const RULE_TAG: Record<string, string> = { auto: "tag-green", ask: "tag-amber", never: "tag-red" };
 
 // ruleTarget says what a rule covers: an action of a connection, or all of it.
 export function ruleTarget(r: { connector: string; action: string }): string {
   return r.action === "*" || !r.action
-    ? `anything on ${r.connector}`
-    : `${actionLabel(r.action)} on ${r.connector}`;
+    ? t("anything on {connector}", { connector: r.connector })
+    : t("{action} on {connector}", { action: actionLabel(r.action), connector: r.connector });
 }
 
 export default function ApprovalsModal({
@@ -195,24 +196,24 @@ export default function ApprovalsModal({
       >
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-mono text-base tracking-wide flex items-center gap-2">
-            <IconShield size={16} /> Approvals
+            <IconShield size={16} /> {t("Approvals")}
           </h2>
           <button
             class="plain p-1 text-[var(--t3)] hover:text-[var(--t1)]"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
           >
             <IconX />
           </button>
         </div>
         <p class="text-xs text-[var(--t3)] mb-3">
-          Actions that reach other people or move money wait here until you say yes. A kitty you
-          keep saying yes to earns the right to do that kind of thing alone: sooner if you are
-          relaxed, later if you are demanding.
+          {t(
+            "Actions that reach other people or move money wait here until you say yes. A kitty you keep saying yes to earns the right to do that kind of thing alone: sooner if you are relaxed, later if you are demanding.",
+          )}
         </p>
         {err && <p class="text-sm text-[var(--c-red)] mb-2">{err}</p>}
-        <div class="section-title !mx-0">Waiting for you</div>
-        {pending.length === 0 && <p class="text-sm text-[var(--t4)]">Nothing is waiting.</p>}
+        <div class="section-title !mx-0">{t("Waiting for you")}</div>
+        {pending.length === 0 && <p class="text-sm text-[var(--t4)]">{t("Nothing is waiting.")}</p>}
         <div class="flex flex-col gap-3" data-testid="pending">
           {pending.map((a) => (
             <ApprovalCard
@@ -229,7 +230,7 @@ export default function ApprovalsModal({
         </div>
         {rules.length > 0 && (
           <>
-            <div class="section-title !mx-0 mt-5">Limits</div>
+            <div class="section-title !mx-0 mt-5">{t("Limits")}</div>
             <div class="flex flex-col gap-1" data-testid="rules">
               {rules.map((r) => (
                 <div key={r.id} class="flex items-center gap-2 text-sm">
@@ -246,7 +247,7 @@ export default function ApprovalsModal({
                         .catch((e) => setErr((e as Error).message))
                     }
                   >
-                    remove
+                    {t("remove")}
                   </button>
                 </div>
               ))}
@@ -255,11 +256,11 @@ export default function ApprovalsModal({
         )}
         {recent.length > 0 && (
           <>
-            <div class="section-title !mx-0 mt-5">Decided</div>
+            <div class="section-title !mx-0 mt-5">{t("Decided")}</div>
             <div class="flex flex-col gap-1" data-testid="decided">
               {recent.map((a) => (
                 <div key={a.id} class="flex items-center gap-2 text-sm min-w-0">
-                  <span class={`tag ${statusTag(a)}`}>{a.error ? "failed" : a.status}</span>
+                  <span class={`tag ${statusTag(a)}`}>{a.error ? t("failed") : t(a.status)}</span>
                   <span
                     class="flex-1 min-w-0 truncate"
                     title={a.reason || a.error || a.result || a.summary}

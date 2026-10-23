@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { ConnectorView, Goal, JournalEntry, Kitty, Limits } from "./api";
 import { api } from "./api";
 import { when } from "./format";
+import { t } from "./i18n";
 import { IconClock, IconPlay, IconTarget, IconTrash } from "./icons";
 import ActionLimits from "./ActionLimits";
 import { Missing, Required } from "./Required";
@@ -37,7 +38,7 @@ export function describeEvery(every?: string): string {
       (p.every === "@daily" && every === "0 9 * * *") ||
       (p.every === "@weekly" && every === "0 9 * * 1"),
   );
-  return hit ? hit.label : every;
+  return hit ? t(hit.label) : every;
 }
 
 function resultTag(r?: string): string {
@@ -112,21 +113,23 @@ export function GoalsPanel({
   return (
     <div>
       <div class="section-title !mx-0 mt-5 flex items-center gap-2">
-        <IconTarget size={12} /> Goals
+        <IconTarget size={12} /> {t("Goals")}
       </div>
       {goals.length === 0 && !adding && (
-        <p class="text-xs text-[var(--t4)]">No goals yet: {kitty.name} only works when asked.</p>
+        <p class="text-xs text-[var(--t4)]">
+          {t("No goals yet: {name} only works when asked.", { name: kitty.name })}
+        </p>
       )}
       <div class="flex flex-col gap-2" data-testid="goals">
         {goals.map((g) => (
           <div key={g.id} class={`goal ${g.enabled ? "" : "off"}`}>
             <div class="flex items-center gap-2 min-w-0">
               <span class="font-semibold truncate">{g.title}</span>
-              {g.from_file && <span class="tag">file</span>}
+              {g.from_file && <span class="tag">{t("file")}</span>}
               {g.last_result && (
-                <span class={`tag ${resultTag(g.last_result)}`}>{g.last_result}</span>
+                <span class={`tag ${resultTag(g.last_result)}`}>{t(g.last_result)}</span>
               )}
-              {!g.enabled && <span class="tag tag-amber">paused</span>}
+              {!g.enabled && <span class="tag tag-amber">{t("paused")}</span>}
             </div>
             <div class="text-xs text-[var(--t3)] mt-0.5 flex flex-wrap gap-x-3">
               {g.every && (
@@ -134,24 +137,24 @@ export function GoalsPanel({
                   <IconClock size={11} /> {describeEvery(g.every)}
                 </span>
               )}
-              {g.on && g.on.length > 0 && <span>on events from {g.on.join(", ")}</span>}
-              {g.next_run && g.enabled && g.every && <span>next {when(g.next_run)}</span>}
-              {g.runs > 0 && (
-                <span>
-                  {g.runs} run{g.runs === 1 ? "" : "s"}
-                </span>
+              {g.on && g.on.length > 0 && (
+                <span>{t("on events from {names}", { names: g.on.join(", ") })}</span>
               )}
+              {g.next_run && g.enabled && g.every && (
+                <span>{t("next {time}", { time: when(g.next_run) })}</span>
+              )}
+              {g.runs > 0 && <span>{t(g.runs === 1 ? "{n} run" : "{n} runs", { n: g.runs })}</span>}
             </div>
             <div class="flex gap-1 mt-1.5 flex-wrap">
               <button
                 class="btn-outline px-2 py-1 text-xs flex items-center gap-1"
                 onClick={() => act(() => api.runGoal(g.id).then((c) => c && onOpenChat(c)))}
               >
-                <IconPlay size={10} /> run now
+                <IconPlay size={10} /> {t("run now")}
               </button>
               {g.chat && (
                 <button class="btn-ghost px-2 py-1 text-xs" onClick={() => onOpenChat(g.chat!)}>
-                  open chat
+                  {t("open chat")}
                 </button>
               )}
               {!g.from_file && (
@@ -169,14 +172,14 @@ export function GoalsPanel({
                     )
                   }
                 >
-                  {g.enabled ? "pause" : "resume"}
+                  {g.enabled ? t("pause") : t("resume")}
                 </button>
               )}
               {!g.from_file && (
                 <button
                   class="btn-ghost px-2 py-1 text-xs text-[var(--c-red)]"
                   onClick={() => act(() => api.removeGoal(g.id))}
-                  aria-label="Remove the goal"
+                  aria-label={t("Remove the goal")}
                 >
                   <IconTrash size={11} />
                 </button>
@@ -188,26 +191,26 @@ export function GoalsPanel({
       {adding ? (
         <div class="mt-3 p-3 border border-[rgb(var(--accent-rgb)/0.3)] bg-[rgb(var(--accent-rgb)/0.05)]">
           <label class={LABEL}>
-            Title
+            {t("Title")}
             <Required />
           </label>
           <input
             class={INPUT}
             aria-required="true"
-            aria-label="Title"
+            aria-label={t("Title")}
             value={title}
             onInput={(e) => setTitle((e.target as HTMLInputElement).value)}
-            placeholder="Triage the new issues"
+            placeholder={t("Triage the new issues")}
           />
-          <label class={LABEL}>What to do (optional)</label>
+          <label class={LABEL}>{t("What to do (optional)")}</label>
           <textarea
             class={INPUT}
             rows={2}
             value={text}
             onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
-            placeholder="Read each new issue, label it and answer the easy ones."
+            placeholder={t("Read each new issue, label it and answer the easy ones.")}
           />
-          <label class={LABEL}>When</label>
+          <label class={LABEL}>{t("When")}</label>
           <div class="flex flex-wrap gap-1">
             {PRESETS.map((p) => (
               <button
@@ -216,7 +219,7 @@ export function GoalsPanel({
                 class={`${preset === p.every ? "btn-outline" : "btn-ghost"} px-2 py-1 text-xs`}
                 onClick={() => setPreset(p.every)}
               >
-                {p.label}
+                {t(p.label)}
               </button>
             ))}
           </div>
@@ -225,12 +228,12 @@ export function GoalsPanel({
               class={`${INPUT} font-mono mt-2`}
               value={custom}
               onInput={(e) => setCustom((e.target as HTMLInputElement).value)}
-              placeholder="cron: minute hour day month weekday (leave empty for events only)"
+              placeholder={t("cron: minute hour day month weekday (leave empty for events only)")}
             />
           )}
           {connectors.length > 0 && (
             <>
-              <label class={LABEL}>Also when these services report something</label>
+              <label class={LABEL}>{t("Also when these services report something")}</label>
               <div class="flex flex-wrap gap-1">
                 {connectors.map((c) => (
                   <button
@@ -246,24 +249,25 @@ export function GoalsPanel({
                 ))}
               </div>
               <p class="text-xs text-[var(--t4)] mt-1">
-                A service posts to /v1/hooks/&lt;connector&gt; with the connector's incoming events
-                secret.
+                {t(
+                  "A service posts to /v1/hooks/<connector> with the connector's incoming events secret.",
+                )}
               </p>
             </>
           )}
           <div class="flex justify-end gap-2 mt-3">
             <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => setAdding(false)}>
-              Cancel
+              {t("Cancel")}
             </button>
             <button class="btn-accent px-3 py-1.5 text-xs" disabled={!title.trim()} onClick={add}>
-              Add goal
+              {t("Add goal")}
             </button>
           </div>
-          <Missing items={[!title.trim() && "the title"]} />
+          <Missing items={[!title.trim() && t("the title")]} />
         </div>
       ) : (
         <button class="btn-outline px-3 py-1.5 text-xs mt-2" onClick={() => setAdding(true)}>
-          + New goal
+          + {t("New goal")}
         </button>
       )}
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
@@ -299,15 +303,15 @@ export function JournalPanel({
   }, [kitty.id]);
   return (
     <div>
-      <div class="section-title !mx-0 mt-5">Journal</div>
-      {entries.length === 0 && <p class="text-xs text-[var(--t4)]">Nothing yet.</p>}
+      <div class="section-title !mx-0 mt-5">{t("Journal")}</div>
+      {entries.length === 0 && <p class="text-xs text-[var(--t4)]">{t("Nothing yet.")}</p>}
       <div class="journal" data-testid="journal">
         {entries.map((e, i) => (
           <div key={i} class="journal-line">
             <span class="text-[var(--t4)] font-mono text-[10px] whitespace-nowrap">
               {when(e.at)}
             </span>
-            <span class={`tag ${KIND_TAG[e.kind] || ""}`}>{e.kind}</span>
+            <span class={`tag ${KIND_TAG[e.kind] || ""}`}>{t(e.kind)}</span>
             <span class="min-w-0 truncate flex-1" title={e.text}>
               {e.text}
             </span>
@@ -316,7 +320,7 @@ export function JournalPanel({
                 class="plain text-[var(--color-accent)] text-xs"
                 onClick={() => onOpenChat(e.chat!)}
               >
-                open
+                {t("open")}
               </button>
             )}
           </div>
@@ -364,20 +368,22 @@ export function LimitsForm({
   const others = kitties.filter((k) => k.id !== kitty.id);
   return (
     <div>
-      <div class="section-title !mx-0 mt-5">Limits & backup</div>
+      <div class="section-title !mx-0 mt-5">{t("Limits & backup")}</div>
       <p class="text-xs text-[var(--t4)]">
-        How much one task may spend before {kitty.name} stops and says so, and how much it may spend
-        in a day. Leave a box empty for the default.
+        {t(
+          "How much one task may spend before {name} stops and says so, and how much it may spend in a day. Leave a box empty for the default.",
+          { name: kitty.name },
+        )}
       </p>
       <div class="grid grid-cols-2 gap-x-3">
         {(
           [
-            ["max_tokens", "Tokens per task"],
-            ["max_seconds", "Seconds per task"],
-            ["max_rounds", "Rounds per task"],
-            ["retries", "Retries (another way)"],
-            ["day_tokens", "Tokens per day"],
-            ["day_actions", "Actions per day"],
+            ["max_tokens", t("Tokens per task")],
+            ["max_seconds", t("Seconds per task")],
+            ["max_rounds", t("Rounds per task")],
+            ["retries", t("Retries (another way)")],
+            ["day_tokens", t("Tokens per day")],
+            ["day_actions", t("Actions per day")],
           ] as [keyof Limits, string][]
         ).map(([k, label]) => (
           <div key={k}>
@@ -390,14 +396,14 @@ export function LimitsForm({
               type="number"
               min={0}
               value={limits[k] || ""}
-              placeholder={k.startsWith("day_") ? "no limit" : "default"}
+              placeholder={k.startsWith("day_") ? t("no limit") : t("default")}
               onInput={(e) => set(k, (e.target as HTMLInputElement).value)}
             />
           </div>
         ))}
       </div>
       <label class={LABEL} for="limit-backup">
-        Backup (takes over a task {kitty.name} gives up on)
+        {t("Backup (takes over a task {name} gives up on)", { name: kitty.name })}
       </label>
       <select
         id="limit-backup"
@@ -405,7 +411,7 @@ export function LimitsForm({
         value={backup}
         onChange={(e) => setBackup((e.target as HTMLSelectElement).value)}
       >
-        <option value="">nobody: ask me instead</option>
+        <option value="">{t("nobody: ask me instead")}</option>
         {others.map((k) => (
           <option key={k.id} value={k.name}>
             {k.name}
@@ -413,7 +419,7 @@ export function LimitsForm({
         ))}
       </select>
       <label class={LABEL} for="limit-approvals">
-        When it wants to publish, send or spend
+        {t("When it wants to publish, send or spend")}
       </label>
       <select
         id="limit-approvals"
@@ -421,14 +427,14 @@ export function LimitsForm({
         value={approvals}
         onChange={(e) => setApprovals((e.target as HTMLSelectElement).value as "ask" | "")}
       >
-        <option value="">act on its own, as far as the account allows</option>
-        <option value="ask">ask me first (until I trust it with that)</option>
+        <option value="">{t("act on its own, as far as the account allows")}</option>
+        <option value="ask">{t("ask me first (until I trust it with that)")}</option>
       </select>
       <div class="flex items-center gap-2 mt-3">
         <button class="btn-outline px-3 py-1.5 text-xs" onClick={save}>
-          Save limits
+          {t("Save limits")}
         </button>
-        {saved && <span class="tag tag-green">saved</span>}
+        {saved && <span class="tag tag-green">{t("saved")}</span>}
       </div>
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
       <ActionLimits kitty={kitty} />

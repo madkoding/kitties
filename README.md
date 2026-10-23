@@ -220,6 +220,10 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   a reason*), a *never* one is refused and the kitty says so. A kitty in `approvals: ask` asks
   about everything that reaches other people until yeses in a row earn its trust, sooner for a
   relaxed person (2) than a strict one (12).
+- **Your language, plain words.** The page speaks English and Spanish: the system's language by
+  default, or the one picked in *Settings → Preferences* (`?lang=es` for a visit). The kitties
+  answer in the language you write in, in everyday words; *Show technical details* in the same
+  place writes out the coordinates, commands, tokens and errors as the services wrote them.
 - **Notifications.** A kitty that needs you does not wait for you to open the app: through any
   messaging connector (an [ntfy](https://ntfy.sh) topic pushes to your phone) it tells you when it
   needs help, when an action waits for a yes, and optionally when a goal finishes, gets blocked or

@@ -2,6 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { Account, LoginFlow } from "./api";
 import { api, errText, openExternal } from "./api";
 import type { SignIn } from "./friendly";
+import { t } from "./i18n";
 
 // SIGNING IN WITH A SUBSCRIPTION.
 //
@@ -27,7 +28,7 @@ function Command({ text }: { text: string }) {
             .catch(() => {})
         }
       >
-        {copied ? "Copied" : "Copy"}
+        {copied ? t("Copied") : t("Copy")}
       </button>
     </div>
   );
@@ -77,7 +78,7 @@ export function AccountSignIn({
           if (f.status === "connected") {
             onAccounts();
           } else if (f.status === "failed") {
-            setErr(f.error || "the sign-in failed");
+            setErr(f.error || t("the sign-in failed"));
           }
         })
         .catch((e) => {
@@ -153,22 +154,22 @@ export function AccountSignIn({
         {signIn.how === "cli" ? (
           <>
             <div>
-              ✓ Claude Code is on this computer
+              ✓ {t("Claude Code is on this computer")}
               {account.who && <span class="font-mono text-xs"> ({account.who})</span>}.
             </div>
             <p class="text-xs mt-1">
-              If it is not signed in yet, run this once in a terminal and follow the browser:
+              {t("If it is not signed in yet, run this once in a terminal and follow the browser:")}
             </p>
             <Command text="claude auth login" />
           </>
         ) : (
           <div class="flex items-center gap-2 flex-wrap">
             <span class="flex-1">
-              ✓ Signed in{account.who ? ` as ${account.who}` : ""}. Your {signIn.label} pays for the
-              answers.
+              ✓ {account.who ? t("Signed in as {who}.", { who: account.who }) : t("Signed in.")}{" "}
+              {t("Your {plan} pays for the answers.", { plan: signIn.label })}
             </span>
             <button type="button" class="btn-ghost px-2 py-1 text-xs" onClick={signOut}>
-              Sign out
+              {t("Sign out")}
             </button>
           </div>
         )}
@@ -181,19 +182,21 @@ export function AccountSignIn({
     <div class="callout mt-3" data-testid="sign-in">
       <p class="text-xs text-[var(--t2)]">
         {signIn.help}
-        {signIn.plans && <span class="text-[var(--t4)]"> Works with {signIn.plans}.</span>}
+        {signIn.plans && (
+          <span class="text-[var(--t4)]"> {t("Works with {plans}.", { plans: signIn.plans })}</span>
+        )}
       </p>
 
       {signIn.how === "cli" && (
         <ol class="steps text-xs mt-2">
           <li>
-            Install Claude Code on this computer:{" "}
+            {t("Install Claude Code on this computer:")}{" "}
             <Link href={signIn.setupURL || "https://claude.com/product/claude-code"}>
-              how to install ↗
+              {t("how to install ↗")}
             </Link>
           </li>
           <li>
-            Sign it in once, in a terminal:
+            {t("Sign it in once, in a terminal:")}
             <Command text="claude auth login" />
           </li>
           <li>
@@ -203,7 +206,7 @@ export function AccountSignIn({
               disabled={busy}
               onClick={start}
             >
-              {busy ? "Looking…" : "Done: find Claude Code"}
+              {busy ? t("Looking…") : t("Done: find Claude Code")}
             </button>
           </li>
         </ol>
@@ -213,22 +216,22 @@ export function AccountSignIn({
         <>
           <ol class="steps text-xs mt-2">
             <li>
-              Install gcloud: <Link href={signIn.setupURL!}>Google Cloud CLI ↗</Link>
+              {t("Install gcloud:")} <Link href={signIn.setupURL!}>Google Cloud CLI ↗</Link>
             </li>
             <li>
-              Sign it in once, in a terminal:
+              {t("Sign it in once, in a terminal:")}
               <Command text={GCLOUD} />
             </li>
           </ol>
           <label class="block text-xs text-[var(--t3)] mb-1 mt-3" for="sign-in-project">
-            Google Cloud project ID
+            {t("Google Cloud project ID")}
           </label>
           <input
             id="sign-in-project"
             class="w-full px-3 py-2 text-sm font-mono"
             value={project}
             onInput={(e) => setProject((e.target as HTMLInputElement).value)}
-            placeholder="leave empty to use gcloud's quota project"
+            placeholder={t("leave empty to use gcloud's quota project")}
           />
           <button
             type="button"
@@ -236,7 +239,7 @@ export function AccountSignIn({
             disabled={busy}
             onClick={start}
           >
-            {busy ? "Checking…" : "Use my Google login"}
+            {busy ? t("Checking…") : t("Use my Google login")}
           </button>
         </>
       )}
@@ -249,17 +252,23 @@ export function AccountSignIn({
           onClick={start}
           data-testid="sign-in-start"
         >
-          {busy ? "Opening…" : `Sign in with ${signIn.how === "device" ? "GitHub" : "ChatGPT"}`}
+          {busy
+            ? t("Opening…")
+            : t("Sign in with {service}", {
+                service: signIn.how === "device" ? "GitHub" : "ChatGPT",
+              })}
         </button>
       )}
 
       {pending && flow?.method === "device" && (
         <div class="mt-2" data-testid="sign-in-code">
-          <div class="text-xs">Type this code on GitHub:</div>
+          <div class="text-xs">{t("Type this code on GitHub:")}</div>
           <Command text={flow.code || ""} />
           <p class="text-xs mt-1">
-            <Link href={flow.url || "https://github.com/login/device"}>Open github.com ↗</Link> ·
-            waiting for you…
+            <Link href={flow.url || "https://github.com/login/device"}>
+              {t("Open github.com ↗")}
+            </Link>{" "}
+            · {t("waiting for you…")}
           </p>
         </div>
       )}
@@ -267,14 +276,15 @@ export function AccountSignIn({
       {pending && flow?.method === "browser" && (
         <div class="mt-2" data-testid="sign-in-waiting">
           <p class="text-xs">
-            Finish signing in in your browser, then come back: this changes by itself.{" "}
-            {flow.url && <Link href={flow.url}>Open the page again ↗</Link>}
+            {t("Finish signing in in your browser, then come back: this changes by itself.")}{" "}
+            {flow.url && <Link href={flow.url}>{t("Open the page again ↗")}</Link>}
           </p>
           {flow.paste && (
             <>
               <p class="text-xs text-[var(--t4)] mt-2">
-                Did the browser end on a page that does not load (localhost:1455)? Copy its whole
-                address and paste it here:
+                {t(
+                  "Did the browser end on a page that does not load (localhost:1455)? Copy its whole address and paste it here:",
+                )}
               </p>
               <div class="flex gap-2 mt-1">
                 <input
@@ -282,7 +292,7 @@ export function AccountSignIn({
                   value={pasted}
                   onInput={(e) => setPasted((e.target as HTMLInputElement).value)}
                   placeholder="http://localhost:1455/auth/callback?code=…"
-                  aria-label="Address the browser landed on"
+                  aria-label={t("Address the browser landed on")}
                 />
                 <button
                   type="button"
@@ -290,7 +300,7 @@ export function AccountSignIn({
                   disabled={!pasted.trim()}
                   onClick={paste}
                 >
-                  Use it
+                  {t("Use it")}
                 </button>
               </div>
             </>
