@@ -29,7 +29,8 @@ type ModalKind =
   | "artifacts"
   | "connector"
   | "approvals"
-  | "notifications";
+  | "notifications"
+  | "preferences";
 
 // The route is the hash: #chat/<id> or #kitty/<id>, so a view can be linked and reloaded.
 function routeFromHash(): {
@@ -39,10 +40,10 @@ function routeFromHash(): {
   connector: string;
 } {
   const m = location.hash.match(
-    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications))?/,
+    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications|preferences))?/,
   );
   const n = location.hash.match(
-    /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications)/,
+    /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications|preferences)/,
   );
   const c = location.hash.match(/^#connector\/([a-z0-9-]+)/);
   const modal = (c ? "connector" : m?.[3] || n?.[1] || "none") as ModalKind;
@@ -471,13 +472,14 @@ export default function App() {
         modal === "connectors" ||
         modal === "connectors-add" ||
         modal === "connector" ||
-        modal === "notifications") && (
+        modal === "notifications" ||
+        modal === "preferences") && (
         <SettingsModal
           initial={
             modal === "settings" || modal === "models-add"
               ? "models"
-              : modal === "notifications"
-                ? "notifications"
+              : modal === "notifications" || modal === "preferences"
+                ? modal
                 : "connectors"
           }
           addModel={modal === "models-add"}

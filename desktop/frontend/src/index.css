@@ -544,6 +544,22 @@ select:focus {
   font-size: 12.5px;
   animation: motion-enter-left var(--motion-base) var(--ease-out) backwards;
 }
+/* The technical details, when the person asked to see them. */
+.tech {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t4);
+}
+.tech-detail {
+  margin-top: 6px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--t3);
+  white-space: pre-wrap;
+  background: rgb(var(--ov-rgb) / 0.05);
+  border-radius: var(--radius-cut);
+}
 /* Each step is a sentence after a dot: sky while it goes, green when done, red if it failed. */
 .step .what {
   width: 7px;

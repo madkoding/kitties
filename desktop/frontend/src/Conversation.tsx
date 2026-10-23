@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from "preact/hooks";
 import type { Kitty, Session, Step, Turn } from "./api";
 import { api, shotData, shotURL } from "./api";
 import { inline, stepArgs, stepSentence, when } from "./format";
-import { actionLabel } from "./friendly";
+import { actionLabel, plainError } from "./friendly";
+import { useTechDetails } from "./prefs";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
 import { IconHand, IconShield, IconThumbDown, IconThumbUp } from "./icons";
@@ -65,16 +66,30 @@ function StepRow({
   chat: string;
   onOpen: (src: string) => void;
 }) {
+  const tech = useTechDetails();
   const cls = step.error ? "failed" : step.action === "done" ? "done" : "";
-  // The step reads as a sentence; what it did exactly (coordinates, the command) is on hover.
+  // The step reads as a sentence; what it did exactly (coordinates, the command, the result) is
+  // on hover, or written out with the technical details on.
   const args = stepArgs(step.action, step.args);
-  const detail = [step.action, args, step.result?.split("\n")[0]].filter(Boolean).join(" · ");
+  const result = step.action !== "done" ? step.result?.split("\n")[0].slice(0, 120) : "";
+  const detail = [step.action, args, result].filter(Boolean).join(" · ");
   return (
     <div class="step" title={detail}>
       <span class={`what ${cls}`} aria-hidden="true" />
       <span class="how">
         {stepSentence(step.action, step.args)}
-        {step.error && <span class="text-[var(--c-red)]"> — it did not work: {step.error}</span>}
+        {tech && (
+          <code class="tech" data-testid="step-detail">
+            {" "}
+            {detail}
+          </code>
+        )}
+        {step.error && (
+          <span class="text-[var(--c-red)]">
+            {" "}
+            — it did not work: {tech ? step.error : plainError(step.error)}
+          </span>
+        )}
       </span>
       {step.shot && (
         <div class="shot">
@@ -177,6 +192,7 @@ function TurnCard({
   const scheduler = turn.from === "scheduler";
   const approval = turn.from === "approval";
   const system = scheduler || approval;
+  const tech = useTechDetails();
   return (
     <div
       class={`msg ${mine || system ? "user" : "agent"} ${scheduler ? "scheduler" : ""} ${approval ? "approval-turn" : ""} ${turn.working ? "working" : ""} ${turn.needs_help ? "needs-help" : ""}`}
@@ -198,6 +214,11 @@ function TurnCard({
         </div>
       )}
       {turn.text && <Text text={turn.text} />}
+      {tech && turn.detail && (
+        <pre class="tech-detail" data-testid="turn-detail">
+          {turn.detail}
+        </pre>
+      )}
       {turn.steps && turn.steps.length > 0 && (
         <div class="trail" aria-label="steps">
           {turn.steps.map((s, i) => (
@@ -225,12 +246,17 @@ function TurnCard({
             <span
               key={i}
               class={`tag tag-logo ${c.error ? "tag-red" : "tag-accent"}`}
-              title={c.error || c.output}
+              title={tech ? c.error || c.output : c.error ? plainError(c.error) : undefined}
             >
               {c.kind && <ConnectorLogo kind={c.kind} size={12} mono />}
               {c.name}
             </span>
           ))}
+          {tech && turn.usage && (turn.usage.input || turn.usage.output) ? (
+            <span data-testid="tokens">
+              {turn.usage.input}→{turn.usage.output} tokens
+            </span>
+          ) : null}
           {turn.approvals?.map((a) => (
             <a key={a.id} class="tag tag-amber tag-logo" href="#new-approvals" title={a.summary}>
               <IconShield size={11} /> waiting for your yes: {actionLabel(a.action)} ({a.connector})

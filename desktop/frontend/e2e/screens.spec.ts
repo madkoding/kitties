@@ -68,6 +68,7 @@ test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await expect(trail).not.toContainText("640, 420");
   await expect(page.locator(".msg .meta").first()).not.toContainText("tokens");
   await expect(trail.locator(".shot-thumb img").first()).toBeVisible();
+  await expect(page.getByTestId("step-detail")).toHaveCount(0);
   await shot(page, "04-desktop-task");
   await page.goto(`/?theme=light&motion=off#chat/${ids.desktop}`);
   await expect(trail.getByText("Finished", { exact: true })).toBeVisible();
@@ -76,6 +77,25 @@ test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await page.goto(`/${Q}#chat/${ids.desktop}`);
   await expect(page.locator(".trail").first().getByText("Finished", { exact: true })).toBeVisible();
   await shot(page, "12-phone");
+});
+
+test("the technical details show only when asked for", async ({ page }) => {
+  await open(page, "#new-preferences");
+  const box = page.getByTestId("tech-details");
+  await expect(box).not.toBeChecked();
+  await box.check();
+  await open(page, `#chat/${ids.desktop}`);
+  const trail = page.locator(".trail").first();
+  await expect(trail.getByTestId("step-detail").first()).toBeVisible();
+  await expect(trail).toContainText("640, 420");
+  await expect(page.getByTestId("tokens").first()).toContainText("tokens");
+  // It is the person's choice in this browser: it stays after a reload, and goes when unticked.
+  await page.reload();
+  await expect(page.locator(".trail").first()).toContainText("640, 420");
+  await open(page, "#new-preferences");
+  await page.getByTestId("tech-details").uncheck();
+  await open(page, `#chat/${ids.desktop}`);
+  await expect(page.locator(".trail").first()).not.toContainText("640, 420");
 });
 
 test("a kitty's drawer shows its display", async ({ page }) => {
@@ -881,6 +901,15 @@ test("a connection says what it uses, is tested from the list and after saving, 
     "cannot be tested without acting",
   );
   await shot(page, "44-connection-test");
+  // A service's refusal reads in plain words, not as the service wrote it.
+  await page.route("**/v1/settings/connectors/github/test", (route) =>
+    route.fulfill({ json: { ok: false, tested: true, error: "HTTP 401: Bad credentials" } }),
+  );
+  await page.getByTestId("test-github").click();
+  await expect(page.getByTestId("test-result-github")).toContainText(
+    "did not accept the key or the sign-in",
+  );
+  await expect(page.getByTestId("test-result-github")).not.toContainText("HTTP 401");
 
   // Hours later the token is gone: the row and the form say so.
   await page.clock.setFixedTime(Date.now() + 3 * 60 * 60 * 1000);

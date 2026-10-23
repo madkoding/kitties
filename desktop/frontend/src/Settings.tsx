@@ -22,12 +22,14 @@ import {
   mayUse,
   people,
   pickOf,
+  plainError,
   providerLabel,
   signedInWith,
   uniqueName,
   withConnection,
 } from "./friendly";
 import { IconPlus, IconTrash, IconX } from "./icons";
+import { setTechDetails, useTechDetails } from "./prefs";
 import { ConnectModal } from "./Modals";
 import { Missing, Required, RequiredLegend } from "./Required";
 import { AccountSignIn } from "./SignIn";
@@ -40,7 +42,7 @@ import { ask } from "./Confirm";
 // they are reached when away (notifications). Every form asks only for what it cannot guess;
 // names, addresses and limits wait under "More options".
 
-export type Tab = "models" | "connectors" | "notifications" | "gateway";
+export type Tab = "models" | "connectors" | "notifications" | "gateway" | "preferences";
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";
 const INPUT = "w-full px-3 py-2 text-sm";
@@ -1235,6 +1237,7 @@ function ConnectionRow({
   const [err, setErr] = useState("");
   const [waiting, setWaiting] = useState(false);
   const [test, setTest] = useState<ConnectorTest | "busy" | null>(null);
+  const tech = useTechDetails();
   const [now, setNow] = useState(Date.now());
   const users = c.used_by || [];
   // A token with a lifetime counts down while the page is open.
@@ -1314,7 +1317,7 @@ function ConnectionRow({
             data-testid={`test-result-${c.name}`}
           >
             {!test.ok
-              ? `✗ It does not work: ${test.error}`
+              ? `✗ It does not work: ${tech ? test.error : plainError(test.error || "")}`
               : test.tested
                 ? `✓ It works${test.account ? ` as ${test.account}` : ""}.`
                 : "It cannot be tested without acting: it is tried the first time a kitty uses it."}
@@ -1527,6 +1530,31 @@ function NotifyForm({
   );
 }
 
+// Preferences are this browser's: whether the technical details show.
+function Preferences() {
+  const tech = useTechDetails();
+  return (
+    <div data-testid="preferences">
+      <label class="flex items-start gap-2 mt-2 text-sm cursor-pointer">
+        <input
+          type="checkbox"
+          class="mt-1"
+          checked={tech}
+          onChange={() => setTechDetails(!tech)}
+          data-testid="tech-details"
+        />
+        <span>
+          Show technical details
+          <span class="block text-xs text-[var(--t3)]">
+            What a kitty did exactly (coordinates, commands, results), the tokens each answer used,
+            and errors as the services wrote them.
+          </span>
+        </span>
+      </label>
+    </div>
+  );
+}
+
 // ─── The dialog ─────────────────────────────────────────────────────────────────────────────
 
 type ConnectionEdit = { view: ConnectorView | null; kind: ConnectorKind };
@@ -1600,6 +1628,7 @@ export default function SettingsModal({
     { id: "connectors", label: "Connections" },
     { id: "notifications", label: "Notifications" },
     { id: "gateway", label: inWails() ? "Gateway" : "Connection" },
+    { id: "preferences", label: "Preferences" },
   ];
   const modelNames = useMemo(() => (view?.providers || []).map((p) => p.name), [view]);
   const connNames = useMemo(() => (view?.connectors || []).map((c) => c.name), [view]);
@@ -1796,6 +1825,7 @@ export default function SettingsModal({
           <NotifyForm view={view} onSaved={setView} onSetUp={setUpNtfy} />
         )}
         {tab === "gateway" && <ConnectModal inline onClose={onClose} onDone={onClose} />}
+        {tab === "preferences" && <Preferences />}
       </div>
     </div>
   );

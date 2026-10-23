@@ -165,6 +165,8 @@ export interface Turn {
   delegations?: Delegation[];
   approvals?: { id: string; connector: string; action: string; summary: string }[];
   feedback?: "up" | "down" | "";
+  // detail is the technical form of what the text says in plain words (an error as written).
+  detail?: string;
   usage?: { input: number; output: number };
 }
 

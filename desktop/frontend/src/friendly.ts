@@ -246,6 +246,43 @@ export function friendlyError(msg: string): string {
   if (/model.*not.*found|does not exist|404/i.test(msg)) {
     return "That model name was not found at this provider: check its spelling.";
   }
+  return plainError(msg);
+}
+
+// plainError says what went wrong with a service the way a person who is not technical
+// understands it, and what they can do; one it does not recognise is kept as it is. It says
+// what the gateway's chat.Plain says.
+export function plainError(msg: string): string {
+  const status = msg.match(/\bHTTP (\d{3})\b/)?.[1];
+  if (status === "401") {
+    return "The service did not accept the key or the sign-in: connect it again in Settings, Connections.";
+  }
+  if (status === "403") {
+    return "The account is not allowed to do that: its permissions or its plan do not include it.";
+  }
+  if (status === "404") {
+    return "The service did not find it.";
+  }
+  if (status === "429") {
+    return "The service asks to wait a moment: too many requests in a short time.";
+  }
+  if (status?.startsWith("5")) {
+    return "The service is having trouble right now: try again in a while.";
+  }
+  if (/not signed in|could not be renewed/i.test(msg)) {
+    return "The account is not connected any more: sign in again in Settings, Connections.";
+  }
+  if (/unauthori[sz]ed|invalid api key|incorrect api key|invalid_auth/i.test(msg)) {
+    return "The service did not accept the key or the sign-in: connect it again in Settings, Connections.";
+  }
+  if (/deadline exceeded|time(d)? ?out/i.test(msg)) {
+    return "The service took too long to answer: try again in a while.";
+  }
+  if (
+    /connection refused|no such host|network is unreachable|dial tcp|failed to fetch/i.test(msg)
+  ) {
+    return "The service could not be reached: check the internet connection, or that it is running.";
+  }
   return msg;
 }
 
