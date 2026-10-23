@@ -531,12 +531,18 @@ func (m *Manager) StartInBackground(ref string) (*kitty.Kitty, error) {
 	if err := m.setStatus(k.ID, kitty.StatusStarting, ""); err != nil {
 		return nil, err
 	}
+	// The answer is taken before the start begins: a desktop that comes up at once would
+	// otherwise be reported as running, or not, depending on which goroutine went first.
+	starting, err := m.Get(k.ID)
+	if err != nil {
+		return nil, err
+	}
 	go func(id string) {
 		ctx, cancel := context.WithTimeout(context.Background(), startTimeout)
 		defer cancel()
 		_ = m.Start(ctx, id)
 	}(k.ID)
-	return m.Get(k.ID)
+	return starting, nil
 }
 
 func (m *Manager) containerState(ctx context.Context, name string) (exists, running bool, err error) {
