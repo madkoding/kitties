@@ -5,7 +5,7 @@
 # The page and the binary are built on the builder's own platform, whatever the image is for:
 # the page is the same everywhere, and Go cross-compiles. Under emulation (arm64 on an amd64
 # runner) npm could hang for the whole job.
-FROM --platform=$BUILDPLATFORM node:25-alpine AS page
+FROM --platform=$BUILDPLATFORM node:24-alpine AS page
 WORKDIR /src/desktop/frontend
 COPY desktop/frontend/package.json desktop/frontend/package-lock.json ./
 RUN npm ci --no-audit --no-fund
