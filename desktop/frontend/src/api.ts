@@ -586,6 +586,29 @@ export function gatewayAddress(typed: string): string | null {
   return safeGatewayBase(full) || null;
 }
 
+// sendsInTheClear says whether an address would carry the token unencrypted over a network that
+// is not the person's own: plain http to a host that is not this computer or a home/office address.
+export function sendsInTheClear(address: string): boolean {
+  try {
+    const u = new URL(address);
+    if (u.protocol !== "http:") {
+      return false;
+    }
+    const h = u.hostname;
+    return !(
+      h === "localhost" ||
+      h === "[::1]" ||
+      h.endsWith(".local") ||
+      /^127\./.test(h) ||
+      /^10\./.test(h) ||
+      /^192\.168\./.test(h) ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(h)
+    );
+  } catch {
+    return false;
+  }
+}
+
 // safeGatewayBase is the gateway address to build requests on: an http(s) address without a
 // trailing slash, or "" (this page's own origin) for anything else.
 function safeGatewayBase(url: string): string {

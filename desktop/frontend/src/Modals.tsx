@@ -7,6 +7,7 @@ import {
   inAndroid,
   inWails,
   saveConnection,
+  sendsInTheClear,
   savedConnection,
   THEMES,
 } from "./api";
@@ -854,6 +855,11 @@ export function ConnectModal({
         autocapitalize="off"
         aria-label={t("Address")}
       />
+      {sendsInTheClear(gatewayAddress(url) || "") && (
+        <p class="text-xs text-[var(--c-red)] mt-1" data-testid="clear-warning">
+          {t("This address is plain http: the token would travel unencrypted. Use https.")}
+        </p>
+      )}
       <label class={LABEL}>
         {t("Token")}
         {android ? <Required /> : t(" (remote gateways only)")}

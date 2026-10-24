@@ -149,6 +149,8 @@ const dict: Dictionary = {
   // Gateway connection
   "The address has to be like http://192.168.1.20:7488 or https://kitties.example.com.":
     "La dirección debe ser como http://192.168.1.20:7488 o https://kitties.example.com.",
+  "This address is plain http: the token would travel unencrypted. Use https.":
+    "Esta dirección es http sin cifrar: el token viajaría sin protección. Usa https.",
   "the address": "la dirección",
   "The app is a remote for the Kitties gateway running on your computer or server. Type its address on the network and its token.":
     "La app es un control remoto para el gateway de Kitties que corre en tu computadora o servidor. Escribe su dirección en la red y su token.",
