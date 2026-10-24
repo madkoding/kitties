@@ -375,6 +375,8 @@ const dict: Dictionary = {
   "Click the picture to take control": "Haz clic en la imagen para tomar el control",
   Enlarge: "Ampliar",
   Reduce: "Reducir",
+  "Show less": "Ver menos",
+  "Show {n} more": "Ver {n} más",
   "Start {name} to see its desktop live and take control of it.":
     "Inicia a {name} para ver su escritorio en vivo y tomar el control.",
   "Dragged on the screen": "Arrastró en la pantalla",

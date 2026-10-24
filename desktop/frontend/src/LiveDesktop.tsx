@@ -59,6 +59,27 @@ export function xKeys(e: {
   return [...mods, key].join("+");
 }
 
+// wasEnlarged and rememberEnlarged keep, in this browser, which kitties' desktops the person
+// likes enlarged. A browser that keeps nothing just opens the card.
+const ENLARGED = "kitties.desktop.enlarged";
+function wasEnlarged(id: string): boolean {
+  try {
+    return (JSON.parse(localStorage.getItem(ENLARGED) || "[]") as string[]).includes(id);
+  } catch {
+    return false;
+  }
+}
+function rememberEnlarged(id: string, on: boolean): void {
+  try {
+    const rest = (JSON.parse(localStorage.getItem(ENLARGED) || "[]") as string[]).filter(
+      (k) => k !== id,
+    );
+    localStorage.setItem(ENLARGED, JSON.stringify(on ? [...rest, id] : rest));
+  } catch {
+    /* private window */
+  }
+}
+
 // loadFrame fetches one frame and resolves once it can be shown without a blank.
 async function loadFrame(path: string): Promise<string> {
   const src = await shotData(path);
@@ -130,7 +151,12 @@ export default function LiveDesktop({
   const [loaded, setLoaded] = useState(false);
   const [clip, setClip] = useState("");
   const [clipNote, setClipNote] = useState("");
-  const [expanded, setExpanded] = useState(false);
+  // Whether the person keeps this kitty's desktop enlarged: remembered, per kitty.
+  const [expanded, setExpandedNow] = useState(() => !!inline && wasEnlarged(kitty.id));
+  const setExpanded = (on: boolean) => {
+    setExpandedNow(on);
+    rememberEnlarged(kitty.id, on);
+  };
   // What the person is doing and what is on its way, so every input can be seen to land: the
   // size of the display and of the room for it, the press or drag in progress, the rings where
   // a click went, the inputs still being sent, the text typed and not yet sent, and whether the
