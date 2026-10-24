@@ -712,28 +712,30 @@ export function KittyDrawer({
         </div>
       </div>
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
-      <div class={`grid gap-5 ${kitty.desktop ? "md:grid-cols-[1.2fr_1fr]" : ""}`}>
-        {kitty.desktop && (
-          <div class="min-w-0 md:sticky md:top-0 self-start">
-            <div class="section-title !mx-0 mt-5 flex items-center justify-between">
-              {t("Desktop")}
-              {running && (
-                <button
-                  class="btn-ghost px-2 py-1 text-xs flex items-center gap-1"
-                  onClick={() => setTick((n) => n + 1)}
-                >
-                  <IconCamera size={12} /> {t("refresh")}
-                </button>
-              )}
-            </div>
-            <Shot key={tick} path={`/v1/kitties/${kitty.id}/screenshot?t=${tick}`} big />
-          </div>
-        )}
+      <div class="grid md:grid-cols-2 gap-x-6">
         <div class="min-w-0">
           <GoalsPanel kitty={kitty} onOpenChat={onOpenChat} />
+        </div>
+        <div class="min-w-0">
           <JournalPanel kitty={kitty} onOpenChat={onOpenChat} />
         </div>
       </div>
+      {kitty.desktop && (
+        <div class="min-w-0">
+          <div class="section-title !mx-0 mt-5 flex items-center justify-between">
+            {t("Desktop")}
+            {running && (
+              <button
+                class="btn-ghost px-2 py-1 text-xs flex items-center gap-1"
+                onClick={() => setTick((n) => n + 1)}
+              >
+                <IconCamera size={12} /> {t("refresh")}
+              </button>
+            )}
+          </div>
+          <Shot path={`/v1/kitties/${kitty.id}/screenshot?t=${tick}`} big />
+        </div>
+      )}
       <details class="config mt-5" data-testid="kitty-config">
         <summary>
           <span>{t("Configuration")}</span>

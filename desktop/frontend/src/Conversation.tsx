@@ -39,11 +39,21 @@ export function Shot({
   onOpen?: (src: string) => void;
 }) {
   const [src, setSrc] = useState<string>("");
+  // A new path (a refresh) keeps showing the picture it has until the next one is ready to
+  // paint: the box never goes blank in between, and a refresh that fails leaves the last picture.
   useEffect(() => {
     let alive = true;
     shotData(path)
+      .then(
+        (s) =>
+          new Promise<string>((done) => {
+            const img = new Image();
+            img.onload = img.onerror = () => done(s);
+            img.src = s;
+          }),
+      )
       .then((s) => alive && setSrc(s))
-      .catch(() => alive && setSrc(""));
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
