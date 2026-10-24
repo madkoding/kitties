@@ -95,9 +95,12 @@ teléfono. Entonces usa `ask_help` (todos los modelos lo tienen, llamen a las he
 nativa o en texto), te llega una notificación y se abre una ventana sobre el chat con lo que el
 kitty ve y un campo para lo que necesita: escribe un código o una respuesta y **díselo**, o marca
 *es un secreto* y el texto se **escribe en su escritorio** sin que el kitty lo vea. O **toma el
-control**: ves su escritorio en vivo (motion JPEG por el gateway, con un cuarto de segundo de
-retraso), tus clics, arrastres, rueda y teclas van a su pantalla, y el portapapeles funciona en
-ambos sentidos. El kitty espera; cuando respondes o le devuelves el escritorio, sigue solo.
+control**: ves su escritorio en vivo (solo los rectángulos que cambiaron, como VNC, con un cuarto
+de segundo de retraso), tus clics, arrastres, rueda y teclas van a su pantalla, y el portapapeles funciona en
+ambos sentidos. El kitty espera; cuando respondes o le devuelves el escritorio, sigue solo. La vista
+se dibuja con rectángulos (`/v1/kitties/{ref}/rects`: la imagen entera una vez y luego solo los
+mosaicos que cambian, unidos); la app de escritorio, que aún no lee ese flujo, recibe imágenes
+enteras (`/stream`, motion JPEG), y las capturas una tras otra son el último recurso.
 
 <img src="screenshots/50-help-modal.png" alt="Un kitty pide ayuda: lo que ve y un campo para lo que necesita" width="100%">
 
@@ -123,4 +126,5 @@ cada imagen con solo lo que cambió), servido en `/v1/chats/{id}/turns/{n}/repla
 | El ciclo: captura, modelo, acciones, otra vez | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Contenedores: arrancar, `exec`, captura, stream en vivo | [`internal/container/`](../internal/container) |
 | Tomar el control: retenciones, entrada de la persona, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
+| Lo que cambió en la pantalla, como rectángulos sobre la última imagen | [`internal/rects`](../internal/rects) |
 | La vista en vivo en la app | [`desktop/frontend/src/LiveDesktop.tsx`](../desktop/frontend/src/LiveDesktop.tsx) |

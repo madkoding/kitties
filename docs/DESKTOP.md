@@ -86,9 +86,12 @@ uses `ask_help` (every model has it, whether it calls tools natively or in text)
 goes out, and a window opens over the chat with what the kitty sees and a box for what it needs:
 write a code or an answer and **tell it**, or tick *it is a secret* and the text is **typed on
 its desktop** without the kitty being shown it. Or **take control**: you see its desktop live
-(motion JPEG through the gateway, about a quarter of a second behind), your clicks, drags, wheel
+(only the rectangles that changed, like VNC, about a quarter of a second behind), your clicks, drags, wheel
 and keys go to its display, and the clipboard works both ways. The kitty waits; when you answer
-or give the desktop back, it goes on by itself.
+or give the desktop back, it goes on by itself. The view is drawn from rectangles (`/v1/kitties/{ref}/rects`:
+the whole picture once, then only the tiles that differ, merged); the desktop app, which cannot
+read that stream yet, gets whole pictures (`/stream`, motion JPEG), and screenshots one after
+another are the last resort.
 
 <img src="screenshots/50-help-modal.png" alt="A kitty asks for help: what it sees and a box for what it needs" width="100%">
 
@@ -114,4 +117,5 @@ picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.
 | The loop: screenshot, model, actions, again | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Containers: start, `exec`, screenshot, live stream | [`internal/container/`](../internal/container) |
 | Taking over: holds, the person's input, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
+| What changed on the display, as rectangles to draw over the last picture | [`internal/rects`](../internal/rects) |
 | The live view in the app | [`desktop/frontend/src/LiveDesktop.tsx`](../desktop/frontend/src/LiveDesktop.tsx) |
