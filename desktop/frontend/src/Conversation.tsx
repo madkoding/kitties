@@ -118,6 +118,50 @@ function StepRow({
   );
 }
 
+// ReplayButtons make a task's screenshots into an animated GIF the person can watch and keep.
+function ReplayButtons({
+  chat,
+  index,
+  onOpen,
+}: {
+  chat: string;
+  index: number;
+  onOpen: (src: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const film = async (what: "watch" | "save") => {
+    setBusy(true);
+    setErr("");
+    try {
+      const src = await shotData(`/v1/chats/${chat}/turns/${index}/replay.gif`, "image/gif");
+      if (what === "watch") {
+        onOpen(src);
+      } else {
+        const a = document.createElement("a");
+        a.href = src;
+        a.download = "kitty-task.gif";
+        a.click();
+      }
+    } catch {
+      setErr(t("The film could not be made."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div class="flex items-center gap-2 mt-2" data-testid="replay">
+      <button class="btn-ghost px-2 py-1 text-xs" disabled={busy} onClick={() => film("watch")}>
+        ▶ {t("Watch it as a GIF")}
+      </button>
+      <button class="btn-ghost px-2 py-1 text-xs" disabled={busy} onClick={() => film("save")}>
+        {t("Save the GIF")}
+      </button>
+      {err && <span class="text-xs text-[var(--c-red)]">{err}</span>}
+    </div>
+  );
+}
+
 function turnMood(turn: Turn, latest: boolean): Mood {
   if (turn.working) {
     return "working";
@@ -307,6 +351,9 @@ function TurnCard({
             <StepRow key={i} step={s} chat={chat} onOpen={onOpen} />
           ))}
         </div>
+      )}
+      {!turn.working && (turn.steps?.filter((s) => s.shot).length || 0) > 1 && (
+        <ReplayButtons chat={chat} index={index} onOpen={onOpen} />
       )}
       {turn.resumable && !turn.working && latest && onContinue && (
         <div class="callout flex items-center gap-2 mt-2" data-testid="resume-callout">

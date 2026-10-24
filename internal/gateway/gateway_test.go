@@ -27,6 +27,7 @@ import (
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/skills"
 )
 
@@ -330,6 +331,17 @@ func (c *fakeChats) Shot(id, name string) ([]byte, error) {
 	}
 	return []byte("png"), nil
 }
+func (c *fakeChats) Replay(id string, turn int) ([]byte, error) {
+	switch {
+	case id != "c1":
+		return nil, errors.New("no such chat")
+	case turn == 1:
+		return []byte("GIF89a"), nil
+	case turn == 2:
+		return nil, replay.ErrNoFrames
+	}
+	return nil, errors.New("boom")
+}
 func (c *fakeChats) Send(_ context.Context, id, text string) ([]chat.Turn, error) {
 	if _, err := c.Get(id); err != nil {
 		return nil, err
@@ -604,6 +616,15 @@ func TestChatRoutes(t *testing.T) {
 	}
 	if code, _, _ := call(t, srv, "GET", "/v1/chats/c1/shots/9-9.png", "tok", nil); code != 404 {
 		t.Error("shot unknown")
+	}
+	if code, _, data := call(t, srv, "GET", "/v1/chats/c1/turns/1/replay.gif", "tok", nil); code != 200 || string(data) != "GIF89a" {
+		t.Errorf("replay = %d %q", code, data)
+	}
+	for path, want := range map[string]int{"/v1/chats/c1/turns/2/replay.gif": 404, "/v1/chats/zz/turns/1/replay.gif": 404,
+		"/v1/chats/c1/turns/x/replay.gif": 400, "/v1/chats/c1/turns/3/replay.gif": 500} {
+		if code, _, _ := call(t, srv, "GET", path, "tok", nil); code != want {
+			t.Errorf("GET %s = %d, want %d", path, code, want)
+		}
 	}
 	if code, _, _ := call(t, srv, "DELETE", "/v1/chats/c1", "tok", nil); code != 200 {
 		t.Error("delete")

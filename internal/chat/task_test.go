@@ -1,8 +1,15 @@
 package chat
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"image/gif"
+	"image/png"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +20,7 @@ import (
 	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/soul"
 )
 
@@ -22,6 +30,8 @@ type deskFleet struct {
 	execs   []string
 	shotErr error
 	shots   int
+	ocr     string // what kitty-ocr prints
+	png     []byte // the screenshot, when it has to be a real picture
 	execErr error
 	block   chan struct{} // when set, Exec waits on it (to test cancel)
 }
@@ -35,10 +45,16 @@ func (d *deskFleet) Exec(ctx context.Context, ref string, argv ...string) (strin
 			return "", ctx.Err()
 		}
 	}
+	if len(argv) > 0 && argv[0] == "kitty-ocr" {
+		return d.ocr, nil
+	}
 	return "ok", d.execErr
 }
 func (d *deskFleet) Screenshot(context.Context, string) ([]byte, error) {
 	d.shots++
+	if d.png != nil {
+		return d.png, d.shotErr
+	}
 	return []byte("PNGDATA"), d.shotErr
 }
 
@@ -325,5 +341,102 @@ func TestNativeToolsAreTheCataloguesTools(t *testing.T) {
 		if !have[tool.Name] {
 			t.Errorf("the native tools lack %s", tool.Name)
 		}
+	}
+}
+
+// A kitty that sees the same screen four times is told to try another way, or to ask.
+func TestStuckKittyIsNudged(t *testing.T) {
+	click := "@tool click {\"x\": 1, \"y\": 2}"
+	s, d, sa := deskService(t, click, click, click, click, "@tool done {\"summary\": \"gave up\"}")
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "click it"); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, sess.ID)
+	var nudged int
+	for _, msgs := range sa.seen {
+		if strings.Contains(msgs[len(msgs)-1].Content, "left the display exactly as it was") {
+			nudged++
+		}
+	}
+	if nudged != 1 {
+		t.Errorf("nudged %d times, want once", nudged)
+	}
+	if !strings.Contains(strings.Join(d.execs, "\n"), "kitty-ocr") {
+		t.Errorf("the screen was not read: %v", d.execs)
+	}
+}
+
+// When the stuck screen is a CAPTCHA or a code, the kitty does not try again: it asks.
+func TestStuckOnACaptchaAsksForHelp(t *testing.T) {
+	click := "@tool click {\"x\": 1, \"y\": 2}"
+	s, d, sa := deskService(t, click, click, click, click, "@tool done {\"summary\": \"in\"}")
+	d.ocr = "Verify\n640,300\tI'm not a robot\n700,300\treCAPTCHA"
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "sign me in"); err != nil {
+		t.Fatal(err)
+	}
+	got := waitDone(t, s, sess.ID)
+	var asked bool
+	for _, st := range got.Turns[1].Steps {
+		if st.Action == "ask_help" && strings.Contains(fmt.Sprint(st.Args["reason"]), "a check that a human is there") {
+			asked = true
+		}
+	}
+	if !asked {
+		t.Errorf("the kitty did not ask for help: %+v", got.Turns[1].Steps)
+	}
+	last := sa.seen[len(sa.seen)-1]
+	if c := last[len(last)-2].Content + last[len(last)-1].Content; !strings.Contains(c, "You were stuck") {
+		t.Errorf("the kitty was not told it was stuck: %q", c)
+	}
+}
+
+func TestWatchScreen(t *testing.T) {
+	st := &taskState{}
+	a, b := []byte("a"), []byte("b")
+	var got []bool
+	for _, shot := range [][]byte{a, a, a, a, a, b, b} {
+		got = append(got, st.watchScreen(shot))
+	}
+	// Stuck on the fourth equal picture, counting again after, and a different one resets it.
+	want := []bool{false, false, false, true, false, false, false}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("watchScreen = %v, want %v", got, want)
+		}
+	}
+}
+
+// A task's screenshots make an animated GIF of what the kitty did.
+func TestReplayOfATask(t *testing.T) {
+	var buf bytes.Buffer
+	img := image.NewRGBA(image.Rect(0, 0, 40, 30))
+	draw.Draw(img, img.Bounds(), image.NewUniform(color.RGBA{200, 50, 50, 255}), image.Point{}, draw.Src)
+	if err := png.Encode(&buf, img); err != nil {
+		t.Fatal(err)
+	}
+	s, d, _ := deskService(t, "@tool click {\"x\": 1, \"y\": 2}", "@tool done {\"summary\": \"ok\"}")
+	d.png = buf.Bytes()
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "click it"); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, sess.ID)
+	film, err := s.Replay(sess.ID, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if g, err := gif.DecodeAll(bytes.NewReader(film)); err != nil || len(g.Image) == 0 {
+		t.Errorf("not a film: %v", err)
+	}
+	if _, err := s.Replay(sess.ID, 0); !errors.Is(err, replay.ErrNoFrames) {
+		t.Errorf("the person's own message has no film: %v", err)
+	}
+	if _, err := s.Replay(sess.ID, 9); err == nil || !strings.HasPrefix(err.Error(), "no such turn") {
+		t.Errorf("a turn that is not there: %v", err)
+	}
+	if _, err := s.Replay("zz", 0); err == nil {
+		t.Error("a chat that is not there")
 	}
 }

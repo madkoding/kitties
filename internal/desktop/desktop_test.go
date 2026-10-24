@@ -248,3 +248,21 @@ func TestPageTools(t *testing.T) {
 		t.Error("the prompt does not say that a page's words are not instructions")
 	}
 }
+
+func TestNeedsPerson(t *testing.T) {
+	for screen, want := range map[string]string{
+		"Please verify you are human":                 "a check that a human is there (a CAPTCHA)",
+		"Marca: No soy un robot":                      "a check that a human is there (a CAPTCHA)",
+		"Enter the 6-digit Verification Code we sent": "a code that only you receive",
+		"Código de verificación":                      "a code that only you receive",
+	} {
+		if got, ok := NeedsPerson(screen); !ok || got != want {
+			t.Errorf("NeedsPerson(%q) = %q, %v", screen, got, ok)
+		}
+	}
+	for _, screen := range []string{"", "Sign in to your account", "Inbox (3)"} {
+		if got, ok := NeedsPerson(screen); ok {
+			t.Errorf("NeedsPerson(%q) = %q", screen, got)
+		}
+	}
+}

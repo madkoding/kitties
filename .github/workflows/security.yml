@@ -1,0 +1,136 @@
+name: security
+
+# What could hurt a person who runs Kitties: known flaws in what it is built from, secrets that
+# slipped into the history, and the code's own mistakes. It runs on every push and pull request,
+# and once a week, because a flaw can be published about something that was clean yesterday.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # Go: the standard library and the modules the code really calls, for both modules.
+  govulncheck:
+    name: go · known vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: the gateway and the CLI
+        run: govulncheck ./...
+      - name: the desktop app
+        run: cd desktop && govulncheck ./...
+
+  # The page's packages: what ships (dependencies) must have no high or critical flaw.
+  npm-audit:
+    name: page · known vulnerabilities
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd desktop/frontend && npm audit --omit=dev --audit-level=high
+
+  # A secret in the code or in its history is a secret for everyone who can read it.
+  secrets:
+    name: secrets in the history
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # The code's own mistakes (injection, unsafe paths, weak crypto), with GitHub's CodeQL.
+  codeql:
+    name: codeql · ${{ matrix.language }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [go, javascript-typescript]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        if: matrix.language == 'go'
+        with:
+          go-version-file: go.mod
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended
+      - uses: github/codeql-action/autobuild@v3
+        if: matrix.language == 'go'
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  # The files that build the images and the deploy, and the gateway image itself.
+  trivy:
+    name: trivy · files and the gateway image
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: the repository's files (flaws, secrets and Dockerfile or compose mistakes)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: build the gateway image
+        run: docker build -f docker/gateway/Dockerfile -t kitties:scan .
+      - name: the gateway image
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: kitties:scan
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  # A pull request that adds a dependency with a known flaw or a licence that cannot ship.
+  dependency-review:
+    name: dependencies a pull request adds
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  # The image's shell scripts, with their own linter.
+  shellcheck:
+    name: shell scripts
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck --severity=warning docker/kitty-desktop/*.sh scripts/*.sh

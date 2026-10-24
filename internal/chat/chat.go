@@ -31,6 +31,7 @@ import (
 	"github.com/madkoding/kitties/internal/memory"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
 )
@@ -801,6 +802,27 @@ func (s *Service) Shot(id, name string) ([]byte, error) {
 	return data, nil
 }
 
+// Replay is the film of a turn's desktop task: its screenshots, in order, as an animated GIF.
+func (s *Service) Replay(id string, index int) ([]byte, error) {
+	sess, err := s.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if index < 0 || index >= len(sess.Turns) {
+		return nil, fmt.Errorf("no such turn %d", index)
+	}
+	var shots [][]byte
+	for _, st := range sess.Turns[index].Steps {
+		if st.Shot == "" {
+			continue
+		}
+		if data, err := s.Shot(id, st.Shot); err == nil {
+			shots = append(shots, data)
+		}
+	}
+	return replay.GIF(shots, replay.Default)
+}
+
 var shotName = regexp.MustCompile(`^[0-9]+-[0-9]+\.png$`)
 
 func (s *Service) lockFor(id string) *sync.Mutex {
@@ -1078,6 +1100,9 @@ type taskState struct {
 	final     string
 	tokens    int
 	rounds    int
+	// lastShot and same follow the screen the kitty keeps seeing (stuck.go).
+	lastShot [32]byte
+	same     int
 	// pre are the outcomes of the first batch's non-desktop actions, run before the task.
 	pre map[int]outcome
 	// detail is why the task failed, as the error said it.
@@ -1241,7 +1266,11 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			extra := provider.Message{Role: "user", Content: "Nothing on the display can have changed, so no screenshot comes with this: ask for screenshot or read_screen when you need to look. Continue with your next actions, or call done when the task is finished."}
 			if looked {
 				png, err := runner.Screenshot(ctx, k.ID)
-				extra = s.screenMessage(id, index, png, err)
+				if err == nil && st.watchScreen(png) {
+					extra = s.unstick(ctx, runner, id, index, k, png)
+				} else {
+					extra = s.screenMessage(id, index, png, err)
+				}
 			}
 			st.messages = append(st.messages, feedback(p.native, st.reply, st.replyText, outs, &extra)...)
 		}
@@ -1283,12 +1312,20 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 // screenMessage is what the kitty is told after actions that can have changed its display: the
 // screenshot, which is also kept for the chat's step, or why there is none.
 func (s *Service) screenMessage(id string, index int, png []byte, err error) provider.Message {
+	return s.screenMessageWith(id, index, png, err, "")
+}
+
+// screenMessageWith is screenMessage with something said before it.
+func (s *Service) screenMessageWith(id string, index int, png []byte, err error, before string) provider.Message {
 	m := provider.Message{Role: "user", Content: "Here is the screenshot of your display now. Continue with your next actions, or call done when the task is finished."}
 	if err != nil {
 		m.Content = "The screenshot failed: " + err.Error() + ". Continue with your next actions, or call done when the task is finished."
 	} else if name, err := s.saveShot(id, index, png); err == nil {
 		s.markShot(id, index, name)
 		m.Images = []provider.Image{{MIME: "image/png", Data: png}}
+	}
+	if before != "" {
+		m.Content = before + "\n" + m.Content
 	}
 	return m
 }

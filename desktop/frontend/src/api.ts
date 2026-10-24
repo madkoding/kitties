@@ -583,7 +583,7 @@ export function shotURL(path: string): string {
 }
 
 // shotData loads a screenshot as a data: URL through the API (the only way inside Wails).
-export async function shotData(path: string): Promise<string> {
+export async function shotData(path: string, mime = "image/png"): Promise<string> {
   const app = window.go?.main?.App;
   if (!app) {
     return shotURL(path);
@@ -593,7 +593,7 @@ export async function shotData(path: string): Promise<string> {
   if (parsed.status >= 400 || !parsed.base64) {
     throw new ApiError(parsed.status, "no screenshot");
   }
-  return "data:image/png;base64," + parsed.base64;
+  return `data:${mime};base64,` + parsed.base64;
 }
 
 export const api = {

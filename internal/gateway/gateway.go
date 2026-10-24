@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/skills"
 )
 
@@ -90,6 +92,8 @@ type Chats interface {
 	Send(ctx context.Context, id, text string) ([]chat.Turn, error)
 	Cancel(id string) bool
 	Shot(id, name string) ([]byte, error)
+	// Replay is the film of a turn's desktop task, an animated GIF of its screenshots.
+	Replay(id string, turn int) ([]byte, error)
 	Subscribe(id string) (<-chan chat.Event, func())
 }
 
@@ -207,6 +211,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/chats/{id}/messages", api(s.handleSend))
 	s.mux.Handle("POST /v1/chats/{id}/cancel", api(s.handleCancel))
 	s.mux.Handle("GET /v1/chats/{id}/shots/{name}", api(s.handleShot))
+	s.mux.Handle("GET /v1/chats/{id}/turns/{turn}/replay.gif", api(s.handleReplay))
 	s.mux.Handle("GET /v1/settings", api(s.handleSettings))
 	s.mux.Handle("PUT /v1/settings/providers/{name}", api(s.handleSetProvider))
 	s.mux.Handle("DELETE /v1/settings/providers/{name}", api(s.handleRemoveProvider))
@@ -913,6 +918,26 @@ func (s *Server) handleShot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	_, _ = w.Write(png)
+}
+
+func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
+	turn, err := strconv.Atoi(r.PathValue("turn"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, errors.New("the turn is not a number"))
+		return
+	}
+	film, err := s.chats.Replay(r.PathValue("id"), turn)
+	if errors.Is(err, replay.ErrNoFrames) {
+		fail(w, http.StatusNotFound, err)
+		return
+	}
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	w.Header().Set("Content-Type", "image/gif")
+	w.Header().Set("Cache-Control", "private, max-age=60")
+	_, _ = w.Write(film)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {
