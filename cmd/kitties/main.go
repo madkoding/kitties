@@ -757,7 +757,13 @@ func (a *app) followTask(ctx context.Context, id string) {
 			if t.From == "user" || finished[i] {
 				continue
 			}
-			for _, st := range t.Steps[shown[i]:] {
+			// The screenshot of a step lands just after the step does: while the task goes on, the
+			// newest step waits until it has its shot or another step follows it.
+			upto := len(t.Steps)
+			if t.Working && upto > shown[i] && t.Steps[upto-1].Shot == "" {
+				upto--
+			}
+			for _, st := range t.Steps[shown[i]:upto] {
 				line := "  · " + st.Action
 				if st.Error != "" {
 					line += " failed: " + st.Error
@@ -769,7 +775,7 @@ func (a *app) followTask(ctx context.Context, id string) {
 				}
 				fmt.Fprintln(a.out, line)
 			}
-			shown[i] = len(t.Steps)
+			shown[i] = upto
 			if t.Working {
 				working = true
 				continue
