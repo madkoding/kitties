@@ -28,6 +28,67 @@ type Keeper interface {
 	Forget(kitty string) error
 }
 
+// errBusy is what an automatic update says when the kitty is in use: it will be tried again.
+var errBusy = errors.New("the kitty is in use")
+
+// SetBusy tells the manager how to know that a kitty is in the middle of a task (the chats know),
+// so an automatic update never interrupts one.
+func (m *Manager) SetBusy(fn func(kittyID string) bool) { m.busyFn = fn }
+
+func (m *Manager) busy(id string) bool { return m.busyFn != nil && m.busyFn(id) }
+
+// staleForAutoUpdate tells whether a stopped container is of an older image than the newest one
+// and the gateway keeps desktops up to date by itself.
+func (m *Manager) staleForAutoUpdate(ctx context.Context, k *kitty.Kitty) bool {
+	if !m.cfg.Containers.AutoUpdate {
+		return false
+	}
+	stale, _ := m.ctr().ImageStale(ctx, k.Container, m.cfg.Containers.Image)
+	return stale
+}
+
+// WatchUpdates keeps the desktops on the newest image until ctx ends: shortly after the start and
+// then every `every`, it looks for a newer image (a pull), and makes the desktop of each idle kitty
+// anew. updated hears about each one; warn about each one that could not be updated.
+func (m *Manager) WatchUpdates(ctx context.Context, first, every time.Duration, updated func(k *kitty.Kitty), warn func(format string, args ...any)) {
+	wait := first
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(wait):
+		}
+		wait = every
+		m.CheckUpdates(ctx, updated, warn)
+	}
+}
+
+// CheckUpdates is one round of WatchUpdates. A kitty that is working, or whose desktop the person
+// holds, is left for the next round; one whose desktop is stopped is made anew when it is started.
+func (m *Manager) CheckUpdates(ctx context.Context, updated func(k *kitty.Kitty), warn func(format string, args ...any)) {
+	c := m.ctr()
+	if c == nil || !m.cfg.Containers.AutoUpdate {
+		return
+	}
+	// A reference that is only built here has nothing to pull: what is on this machine is the news.
+	_ = c.Pull(ctx, m.cfg.Containers.Image)
+	for _, k := range m.List() {
+		if !k.Desktop || k.Status != kitty.StatusRunning {
+			continue
+		}
+		if stale, _ := c.ImageStale(ctx, k.Container, m.cfg.Containers.Image); !stale {
+			continue
+		}
+		switch err := m.renew(ctx, k, true); {
+		case err == nil:
+			updated(k)
+		case errors.Is(err, errBusy):
+		default:
+			warn("update: %s: %v", k.Name, err)
+		}
+	}
+}
+
 // SetKeeper gives the manager the place the backups are kept.
 func (m *Manager) SetKeeper(k Keeper) { m.keeper = k }
 
@@ -40,6 +101,8 @@ type DesktopInfo struct {
 	Image string `json:"image"`
 	// UpdateAvailable is true when a newer image than the container's is on this machine.
 	UpdateAvailable bool `json:"update_available"`
+	// AutoUpdate is true when the gateway moves the desktop to a newer image by itself, when idle.
+	AutoUpdate bool `json:"auto_update"`
 	// Backup says when its sessions were last backed up, when they were.
 	Backup *keep.Info `json:"backup,omitempty"`
 }
@@ -61,7 +124,7 @@ func (m *Manager) DesktopInfo(ctx context.Context, ref string) (DesktopInfo, err
 	if err != nil {
 		return DesktopInfo{}, err
 	}
-	info := DesktopInfo{Image: m.cfg.Containers.Image}
+	info := DesktopInfo{Image: m.cfg.Containers.Image, AutoUpdate: m.cfg.Containers.AutoUpdate}
 	if exists, _, err := m.containerState(ctx, k.Container); err == nil && exists {
 		info.UpdateAvailable, _ = m.ctr().ImageStale(ctx, k.Container, info.Image)
 	}
@@ -172,16 +235,32 @@ func (m *Manager) update(ctx context.Context, id string) error {
 	if err != nil {
 		return err
 	}
-	image := m.cfg.Containers.Image
 	// A reference that is only built here has nothing to pull: what is on this machine is the news.
-	_ = m.ctr().Pull(ctx, image)
+	_ = m.ctr().Pull(ctx, m.cfg.Containers.Image)
+	return m.renew(ctx, k, false)
+}
+
+// renew makes a kitty's container anew from the newest image when it is of an older one. In auto
+// mode it gives way, before touching anything, to a kitty that is working or that the person holds.
+func (m *Manager) renew(ctx context.Context, k *kitty.Kitty, auto bool) error {
 	exists, running, err := m.containerState(ctx, k.Container)
 	if err != nil {
 		return m.fail(k.ID, err)
 	}
 	if exists {
-		if stale, _ := m.ctr().ImageStale(ctx, k.Container, image); !stale {
+		if stale, _ := m.ctr().ImageStale(ctx, k.Container, m.cfg.Containers.Image); !stale {
+			if auto {
+				return nil
+			}
 			return m.setStatus(k.ID, kitty.StatusRunning, "")
+		}
+		if auto && (m.Held(k.ID) || m.busy(k.ID)) {
+			return errBusy
+		}
+		if auto {
+			if err := m.setStatus(k.ID, kitty.StatusStarting, ""); err != nil {
+				return err
+			}
 		}
 		if running {
 			m.saveSessions(ctx, k)

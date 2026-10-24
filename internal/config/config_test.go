@@ -268,3 +268,24 @@ func TestKittyLimitsBackupAndGoals(t *testing.T) {
 		}
 	}
 }
+
+// The desktops keep themselves on the newest image unless told not to, looking every six hours.
+func TestAutoUpdateDefaultsAndChecks(t *testing.T) {
+	c, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Containers.AutoUpdate || c.Containers.UpdateCheckHours != 6 {
+		t.Errorf("defaults = %+v", c.Containers)
+	}
+	off, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\ncontainers:\n  auto_update: false\n  update_check_hours: 24\n"))
+	if err != nil || off.Containers.AutoUpdate || off.Containers.UpdateCheckHours != 24 {
+		t.Errorf("off = %+v, %v", off.Containers, err)
+	}
+	for _, hours := range []string{"0", "721", "-1"} {
+		_, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\ncontainers:\n  update_check_hours: " + hours + "\n"))
+		if err == nil || !strings.Contains(err.Error(), "update_check_hours") {
+			t.Errorf("update_check_hours %s = %v", hours, err)
+		}
+	}
+}

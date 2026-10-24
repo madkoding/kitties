@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -245,4 +246,147 @@ func TestUpdateRefusesAndFails(t *testing.T) {
 	if err := m.update(ctx, "zz"); err == nil {
 		t.Error("update of a kitty that is not there")
 	}
+}
+
+// A round of automatic updates: a kitty in use is left for later, an idle one is made anew with its
+// sessions put back, a stopped one is made anew when it is started.
+func TestAutoUpdateLeavesTheBusyAndRenewsTheIdle(t *testing.T) {
+	ctx := context.Background()
+	m, f, keeper := sessionsManager(t)
+	mimi, _ := m.Create(ctx, Spec{Name: "mimi"})
+	tom, _ := m.Create(ctx, Spec{Name: "tom"})
+	no := false
+	_, _ = m.Create(ctx, Spec{Name: "brain", Desktop: &no})
+	_ = m.Start(ctx, "mimi")
+	_ = m.Start(ctx, "tom")
+	f.outputs = map[string]string{"kitty-backup": base64.StdEncoding.EncodeToString([]byte("sessions"))}
+	f.stale = true
+	busy := map[string]bool{mimi.ID: true}
+	m.SetBusy(func(id string) bool { return busy[id] })
+	var updated []string
+	hear := func(k *kitty.Kitty) { updated = append(updated, k.Name) }
+	var warned []string
+	warn := func(format string, args ...any) { warned = append(warned, format) }
+	f.calls = nil
+	m.CheckUpdates(ctx, hear, warn)
+	// The image was looked for once; tom was made anew with its sessions, mimi (busy) was left.
+	calls := strings.Join(f.calls, "|")
+	if strings.Count(calls, "pull") != 1 || len(updated) != 1 || updated[0] != "tom" || len(warned) != 0 {
+		t.Errorf("round 1: calls %q updated %v warned %v", calls, updated, warned)
+	}
+	if got, _ := m.Get(mimi.ID); got.Status != kitty.StatusRunning {
+		t.Errorf("a busy kitty's status = %s", got.Status)
+	}
+	if string(keeper.data[tom.ID]) != "sessions" || len(f.inputs) != 1 || !strings.HasPrefix(f.inputs[0], tom.Container+":") {
+		t.Errorf("tom's sessions: %q %v", keeper.data[tom.ID], f.inputs)
+	}
+	if _, ok := keeper.data[mimi.ID]; ok {
+		t.Error("a busy kitty was backed up and touched")
+	}
+	// Next round: mimi is idle now, but the person holds its desktop; then it is free.
+	busy[mimi.ID] = false
+	_, _ = m.Hold("mimi", true)
+	updated = nil
+	m.CheckUpdates(ctx, hear, warn)
+	if len(updated) != 1 {
+		t.Errorf("round 2 (tom is stale again in the fake, mimi held): %v", updated)
+	}
+	for _, n := range updated {
+		if n == "mimi" {
+			t.Error("a held desktop was updated")
+		}
+	}
+	_, _ = m.Hold("mimi", false)
+	updated = nil
+	m.CheckUpdates(ctx, hear, warn)
+	found := false
+	for _, n := range updated {
+		found = found || n == "mimi"
+	}
+	if !found {
+		t.Errorf("round 3: %v", updated)
+	}
+	// Up to date, or switched off: nothing happens.
+	f.stale = false
+	updated = nil
+	m.CheckUpdates(ctx, hear, warn)
+	m.cfg.Containers.AutoUpdate = false
+	f.stale = true
+	m.CheckUpdates(ctx, hear, warn)
+	if len(updated) != 0 {
+		t.Errorf("updated %v", updated)
+	}
+}
+
+func TestAutoUpdateOfAStoppedDesktopHappensWhenItStarts(t *testing.T) {
+	ctx := context.Background()
+	m, f, keeper := sessionsManager(t)
+	k, _ := m.Create(ctx, Spec{Name: "mimi"})
+	_ = m.Start(ctx, "mimi")
+	keeper.data[k.ID] = []byte("kept")
+	_ = m.Stop(ctx, "mimi")
+	f.stale = true
+	f.calls, f.inputs = nil, nil
+	if err := m.Start(ctx, "mimi"); err != nil {
+		t.Fatal(err)
+	}
+	if c := strings.Join(f.calls, "|"); !strings.Contains(c, "rm") || !strings.Contains(c, "up") || len(f.inputs) != 1 {
+		t.Errorf("a stale stopped desktop: calls %q inputs %v", c, f.inputs)
+	}
+	// Not when it is up to date, nor when updates are off.
+	_ = m.Stop(ctx, "mimi")
+	f.stale, f.calls = false, nil
+	_ = m.Start(ctx, "mimi")
+	_ = m.Stop(ctx, "mimi")
+	f.stale = true
+	m.cfg.Containers.AutoUpdate = false
+	_ = m.Start(ctx, "mimi")
+	if c := strings.Join(f.calls, "|"); strings.Contains(c, "rm") || strings.Contains(c, "up") {
+		t.Errorf("made anew without need: %q", c)
+	}
+	// A container that cannot be removed fails the start with the reason.
+	_ = m.Stop(ctx, "mimi")
+	m.cfg.Containers.AutoUpdate = true
+	f.fail = "rm"
+	if err := m.Start(ctx, "mimi"); err == nil {
+		t.Error("a stale container that cannot be removed started")
+	}
+}
+
+func TestAutoUpdateWarnsAndKeepsLooking(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	m, f, _ := sessionsManager(t)
+	k, _ := m.Create(ctx, Spec{Name: "mimi"})
+	_ = m.Start(ctx, "mimi")
+	f.stale, f.fail = true, "rm"
+	var warned []string
+	rounds := make(chan struct{}, 8)
+	warn := func(format string, args ...any) {
+		warned = append(warned, fmt.Sprintf(format, args...))
+		rounds <- struct{}{}
+	}
+	go m.WatchUpdates(ctx, time.Millisecond, time.Millisecond, func(*kitty.Kitty) {}, warn)
+	wait := func() {
+		select {
+		case <-rounds:
+		case <-time.After(3 * time.Second):
+			t.Fatal("the watch did not look again")
+		}
+	}
+	// A desktop that cannot be updated is a failed kitty with the reason on it; once it is running
+	// again the next round tries again.
+	wait()
+	if got, _ := m.Get(k.ID); got.Status != kitty.StatusError {
+		t.Errorf("status = %s", got.Status)
+	}
+	_ = m.setStatus(k.ID, kitty.StatusRunning, "")
+	wait()
+	if len(warned) < 2 || !strings.Contains(warned[0], "update: mimi") {
+		t.Errorf("warned = %v", warned)
+	}
+	cancel()
+	// No runtime: nothing to look at.
+	none, _ := New(testConfig(t))
+	none.CheckUpdates(context.Background(), func(*kitty.Kitty) {}, func(string, ...any) { t.Error("warned without a runtime") })
 }

@@ -62,6 +62,8 @@ type Manager struct {
 	rtMu sync.RWMutex
 	// detect looks for the runtime again; nil when it is not looked for again.
 	detect func(ctx context.Context) (Containers, error)
+	// busyFn says whether a kitty is in the middle of a task (SetBusy).
+	busyFn func(kittyID string) bool
 	// keeper keeps the backups of what a kitty's browser knows (sessions.go), nil when there is none.
 	keeper Keeper
 	// holds are the displays the person has taken over, by kitty id, with their last use.
@@ -605,11 +607,18 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	}
 	switch {
 	case running:
-	case exists:
+	case exists && !m.staleForAutoUpdate(ctx, k):
 		if err := m.ctr().Start(ctx, k.Container); err != nil {
 			return m.fail(k.ID, err)
 		}
 	default:
+		// A stopped container of an older image is made anew with the newest (its sessions were
+		// backed up when it stopped, and are put back below).
+		if exists {
+			if err := m.ctr().Remove(ctx, k.Container); err != nil {
+				return m.fail(k.ID, err)
+			}
+		}
 		c := m.cfg.Containers
 		spec := container.Spec{
 			Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: c.MemoryMB, CPUs: c.CPUs,

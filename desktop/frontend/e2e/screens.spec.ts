@@ -1253,6 +1253,9 @@ test("a kitty's cookies, sessions and passwords are backed up, and a newer deskt
   await expect(care).toBeVisible();
   await expect(care.getByTestId("backup-state")).toContainText("are not backed up yet");
   await expect(care.getByTestId("update-callout")).toHaveCount(0);
+  await expect(care.getByTestId("auto-update")).toContainText(
+    "downloaded and installed by themselves",
+  );
   // Backing up keeps them sealed away from the desktop, and says when.
   const done = page.waitForResponse((r) => r.url().includes("/backup") && r.status() === 200);
   await care.getByTestId("backup-now").click();

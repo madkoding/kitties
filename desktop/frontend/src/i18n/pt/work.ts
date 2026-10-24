@@ -363,6 +363,9 @@ const dict: Dictionary = {
   "Live and take control": "Ao vivo e assumir o controle",
   "Dragged on the screen": "Arrastou na tela",
   "Looked at the open windows": "Olhou as janelas abertas",
+  "Newer desktops are downloaded and installed by themselves when {name} is idle; its cookies, sessions and passwords come along.":
+    "As áreas de trabalho novas são baixadas e instaladas sozinhas quando {name} está ocioso; seus cookies, sessões e senhas são mantidos.",
+  updated: "atualizado",
   "Update {name}'s desktop? It restarts. Its cookies, sessions and saved passwords are backed up first and put back in the new one.":
     "Atualizar a área de trabalho de {name}? Ela reinicia. Antes, seus cookies, sessões e senhas salvas são copiados e colocados na nova.",
   Update: "Atualizar",

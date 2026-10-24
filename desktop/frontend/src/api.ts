@@ -996,6 +996,7 @@ function watchRects(
 export type DesktopInfo = {
   image: string;
   update_available: boolean;
+  auto_update?: boolean;
   backup?: { saved: string; bytes: number };
 };
 

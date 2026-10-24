@@ -436,8 +436,17 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindRecovered, Text: what})
 		a.notifier.Notify(notify.Notification{Event: notify.Recovered, Kitty: k.Name, Title: "is back", Body: what})
 	}, logf)
+	// A newer desktop image is downloaded and put on the idle desktops, their sessions kept.
+	a.fleet.SetBusy(a.chats.KittyBusy)
+	go a.fleet.WatchUpdates(ctx, updateFirstCheck, time.Duration(a.cfg.Containers.UpdateCheckHours)*time.Hour, func(k *kitty.Kitty) {
+		logf("update: the desktop of %s is on the newest image", k.Name)
+		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindUpdated, Text: "its desktop was updated to the newest image; its sessions were kept"})
+	}, logf)
 	return srv.Listen(ctx, g.Listen, logf)
 }
+
+// updateFirstCheck is how long after the start the gateway first looks for a newer desktop image.
+var updateFirstCheck = 2 * time.Minute
 
 // watchEvery is how often the watchdog looks at the containers.
 var watchEvery = 30 * time.Second

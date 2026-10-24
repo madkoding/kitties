@@ -129,6 +129,12 @@ type Containers struct {
 	Workspace string `yaml:"workspace"`
 	// Env is extra environment for every container.
 	Env map[string]string `yaml:"env"`
+	// AutoUpdate keeps the desktops on the newest image: the gateway looks for a new one every
+	// UpdateCheckHours, downloads it, and makes a desktop anew (its sessions backed up and put back)
+	// when its kitty is idle, or when a stopped one is started.
+	AutoUpdate bool `yaml:"auto_update"`
+	// UpdateCheckHours is how often the gateway looks for a newer image (6 by default).
+	UpdateCheckHours int `yaml:"update_check_hours"`
 }
 
 // Gateway is the HTTP API block. On a server it is also the web interface: the same address
@@ -308,7 +314,7 @@ func Defaults() Config {
 		Providers: map[string]Provider{},
 		Containers: Containers{
 			Runtime: "auto", Image: "ghcr.io/madkoding/kitty-desktop:latest",
-			MemoryMB: 2048, CPUs: 2,
+			MemoryMB: 2048, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6,
 		},
 		Gateway:    Gateway{Listen: "127.0.0.1:7488"},
 		Connectors: map[string]Connector{},
@@ -424,6 +430,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Containers.Image == "" {
 		return errors.New("containers.image cannot be empty")
+	}
+	if c.Containers.UpdateCheckHours < 1 || c.Containers.UpdateCheckHours > 24*30 {
+		return errors.New("containers.update_check_hours is between 1 and 720")
 	}
 	if c.Containers.MemoryMB < 0 || c.Containers.CPUs < 0 {
 		return errors.New("containers: memory_mb and cpus cannot be negative")

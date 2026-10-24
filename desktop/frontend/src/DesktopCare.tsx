@@ -88,6 +88,14 @@ export default function DesktopCare({ kitty, onChanged }: { kitty: Kitty; onChan
           {t("Back up now")}
         </button>
       </div>
+      {info.auto_update && (
+        <p class="text-xs text-[var(--t3)]" data-testid="auto-update">
+          {t(
+            "Newer desktops are downloaded and installed by themselves when {name} is idle; its cookies, sessions and passwords come along.",
+            { name: kitty.name },
+          )}
+        </p>
+      )}
       <p class="text-xs text-[var(--t4)]">
         {t(
           "The backup is sealed and kept away from the desktop, and goes back into it when it is made anew. It is also made when the desktop stops.",

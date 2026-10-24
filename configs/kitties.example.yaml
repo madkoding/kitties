@@ -77,6 +77,8 @@ containers:
   memory_mb: 2048
   cpus: 2
   workspace: ""                  # host folder with one subfolder per kitty; empty is data_dir/work
+  auto_update: true              # new desktop image: download it and make idle desktops anew (sessions kept)
+  update_check_hours: 6          # how often to look for one
 
 gateway:
   listen: 127.0.0.1:7488

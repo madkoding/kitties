@@ -123,9 +123,16 @@ picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.
 ## Updating a desktop without losing what it knows
 
 A desktop is made from an image, and a newer one can come. A container keeps the image it was made
-from, so an update makes it anew: the kitty's window says **a newer desktop is available** (the image
+from, so an update makes it anew. **The gateway does it by itself** (`containers.auto_update`, on by
+default): two minutes after it starts, and then every `containers.update_check_hours` (6), it pulls
+the image, and each running desktop that is on an older one is updated when its kitty is idle. A
+kitty in the middle of a task, or whose desktop you hold, is left for the next round and checked again
+right before anything is touched; a stopped desktop is made anew when it is started; the journal
+notes each update. Turn it off with `auto_update: false`; the window of the kitty says whether it is on.
+
+The same can be done by hand: the kitty's window says **a newer desktop is available** (the image
 on this machine is not the one the container runs) and **Update the desktop** does it, when the
-kitty is not in the middle of a task and you do not hold its desktop: it pulls the image, closes the
+kitty is not in the middle of a task and you do not hold its desktop. Either way it pulls the image, closes the
 browser in an orderly way (`kitty-page quit`, so everything is written to disk), backs up, makes the
 container anew and puts the backup back. The work folder is on your computer and is never touched.
 

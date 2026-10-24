@@ -133,10 +133,17 @@ cada imagen con solo lo que cambió), servido en `/v1/chats/{id}/turns/{n}/repla
 ## Actualizar un escritorio sin perder lo que sabe
 
 Un escritorio se hace a partir de una imagen, y puede salir una más nueva. Un contenedor conserva la
-imagen con la que se creó, así que actualizarlo es rehacerlo: la ventana del kitty dice **hay un
-escritorio más nuevo** (la imagen de esta máquina no es la que corre el contenedor) y
-**Actualizar el escritorio** lo hace, si el kitty no está en medio de una tarea y no tienes tú su
-escritorio: baja la imagen, cierra el navegador de forma ordenada (`kitty-page quit`, para que todo
+imagen con la que se creó, así que actualizarlo es rehacerlo. **El gateway lo hace solo**
+(`containers.auto_update`, activado por defecto): a los dos minutos de arrancar, y luego cada
+`containers.update_check_hours` (6), baja la imagen, y cada escritorio en marcha que tenga una más
+vieja se actualiza cuando su kitty está inactivo. Un kitty en medio de una tarea, o cuyo escritorio
+tienes tú, queda para la siguiente ronda, y se vuelve a comprobar justo antes de tocar nada; un
+escritorio detenido se rehace al iniciarlo; el journal anota cada actualización. Se apaga con
+`auto_update: false`; la ventana del kitty dice si está activa.
+
+También se puede hacer a mano: la ventana del kitty dice **hay un escritorio más nuevo** (la imagen
+de esta máquina no es la que corre el contenedor) y **Actualizar el escritorio** lo hace, si el kitty
+no está en medio de una tarea y no tienes tú su escritorio. En ambos casos baja la imagen, cierra el navegador de forma ordenada (`kitty-page quit`, para que todo
 se escriba a disco), respalda, rehace el contenedor y devuelve el respaldo. La carpeta de trabajo
 está en tu computador y nunca se toca.
 
