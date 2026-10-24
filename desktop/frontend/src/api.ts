@@ -412,19 +412,16 @@ export interface Connection {
   token: string;
 }
 
-// A link can carry the connection (?gateway=...&token=...): the gateway's own page and a shared
-// link use it. It is saved once and dropped from the address bar.
+// A link can carry the token (?token=...): the gateway's own page and a shared link use it. It is
+// saved once and dropped from the address bar. The gateway's address never comes from a link: a
+// link could point the page, and the token it holds, at another server.
 (function connectionFromLink() {
   try {
     const q = new URLSearchParams(location.search);
-    if (q.has("token") || q.has("gateway")) {
+    if (q.has("token")) {
       const saved = savedConnection();
-      saveConnection({
-        url: safeGatewayBase(q.get("gateway") ?? saved.url),
-        token: q.get("token") ?? saved.token,
-      });
+      saveConnection({ url: saved.url, token: q.get("token") ?? saved.token });
       q.delete("token");
-      q.delete("gateway");
       const rest = q.toString();
       history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash);
     }
