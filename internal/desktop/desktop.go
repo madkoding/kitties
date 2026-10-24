@@ -40,7 +40,7 @@ type Runner interface {
 
 // Tools lists what the model may do, name by name, for the prompt.
 var Tools = []struct{ Name, Args, Help string }{
-	{"screenshot", `{}`, "look at the display (one is also taken after every batch of actions)"},
+	{"screenshot", `{}`, "look at the display (one is also taken after every batch of actions that can change it)"},
 	{"click", `{"x": 0, "y": 0, "button": "left|right|middle"}`, "click at a point of the 1280x800 display"},
 	{"double_click", `{"x": 0, "y": 0}`, "double-click at a point"},
 	{"move", `{"x": 0, "y": 0}`, "move the mouse without clicking"},
@@ -48,6 +48,7 @@ var Tools = []struct{ Name, Args, Help string }{
 	{"key", `{"keys": "ctrl+l"}`, "press a key or a combination (xdotool names: Return, Tab, ctrl+c, alt+F4)"},
 	{"scroll", `{"direction": "down|up", "amount": 3}`, "scroll the wheel at the mouse position"},
 	{"drag", `{"x": 0, "y": 0, "to_x": 0, "to_y": 0}`, "press the left button at a point and let go at another (move a window, select text)"},
+	{"read_screen", `{}`, "read the text on the display (OCR): one line per piece of text, with the x,y of its centre; cheaper than a screenshot when you only need to read or find a word to click"},
 	{"windows", `{}`, "list the open windows (id, workspace, title)"},
 	{"focus", `{"title": "..."}`, "bring to the front the window whose title has this text"},
 	{"open", `{"url": "https://..."}`, "open a URL in the browser on the display"},
@@ -63,8 +64,9 @@ var Tools = []struct{ Name, Args, Help string }{
 func Catalogue() string {
 	var b strings.Builder
 	b.WriteString("You can act on your display by writing lines of the form `@tool <name> <json>` in your reply, " +
-		"one action per line, in order. After the actions run you receive their results and a screenshot, " +
-		"and you continue. Write `@tool done {\"summary\": \"...\"}` when the task is finished, and write " +
+		"one action per line, in order. After the actions run you receive their results and, when they could " +
+		"have changed the display, a screenshot; a batch of only windows, run, install or read_screen brings " +
+		"none (ask for screenshot or read_screen when you need to look), and you continue. Write `@tool done {\"summary\": \"...\"}` when the task is finished, and write " +
 		"no @tool line at all when you only want to talk. Coordinates are pixels of the 1280x800 display, " +
 		"origin top-left. The display is a desktop with IceWM: a taskbar at the bottom (its menu at the left " +
 		"corner, then Chromium, a terminal and the files), icons on the desktop to double-click (Work is your " +
@@ -101,6 +103,14 @@ func Parse(text string) ([]Action, string) {
 	}
 	return actions, strings.TrimSpace(strings.Join(kept, "\n"))
 }
+
+// textual are the actions whose answer is text and that leave the display as it was: after a
+// batch of only these a screenshot would repeat the last one.
+var textual = map[string]bool{"windows": true, "run": true, "install": true, "read_screen": true}
+
+// Visual reports whether the action can change what the display shows, and so whether the
+// kitty needs a new screenshot after it.
+func (a Action) Visual() bool { return !textual[a.Name] }
 
 // Done reports whether the action ends the task, and its summary.
 func (a Action) Done() (string, bool) {
@@ -156,6 +166,8 @@ func Argv(a Action) ([]string, error) {
 	switch a.Name {
 	case "screenshot", "done", "wait", "ask_help":
 		return nil, nil
+	case "read_screen":
+		return []string{"kitty-ocr"}, nil
 	case "click", "double_click", "move":
 		x, err := num(a.Args, "x")
 		if err != nil {
@@ -336,8 +348,13 @@ func Run(ctx context.Context, r Runner, ref string, a Action) (string, error) {
 	}
 	out, err := r.Exec(ctx, ref, argv...)
 	out = strings.TrimSpace(out)
-	if len(out) > 4000 {
-		out = out[:4000] + "…"
+	// What is read off the screen is the answer itself: it gets more room than a command's output.
+	max := 4000
+	if a.Name == "read_screen" {
+		max = 12000
+	}
+	if len(out) > max {
+		out = out[:max] + "…"
 	}
 	if err != nil {
 		if out == "" {

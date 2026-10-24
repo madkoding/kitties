@@ -1179,6 +1179,9 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		}
 		var outs []outcome
 		done := false
+		// looked is whether something of this batch can have changed the display: only then a
+		// new screenshot is worth its tokens.
+		looked := false
 		for i, a := range st.actions {
 			if a.kind != "tool" {
 				if o, ok := st.pre[i]; ok {
@@ -1205,6 +1208,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 				break
 			}
 			if da.Name == "ask_help" {
+				looked = true
 				outs = append(outs, outcome{action: a, text: s.askHelp(ctx, id, index, k, fmt.Sprint(a.args["reason"]))})
 				if ctx.Err() != nil {
 					break
@@ -1212,6 +1216,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 				continue
 			}
 			s.waitWhileHeld(ctx, id, index, k.ID)
+			looked = looked || da.Visual()
 			out, err := desktop.Run(ctx, runner, k.ID, da)
 			step := Step{At: s.now(), Action: a.name, Args: a.args, Result: out}
 			o := outcome{action: a, text: out}
@@ -1233,13 +1238,10 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			return stopReason(ctx, limits), false
 		}
 		if len(st.actions) > 0 {
-			png, err := runner.Screenshot(ctx, k.ID)
-			extra := provider.Message{Role: "user", Content: "Here is the screenshot of your display now. Continue with your next actions, or call done when the task is finished."}
-			if err != nil {
-				extra.Content = "The screenshot failed: " + err.Error() + ". Continue with your next actions, or call done when the task is finished."
-			} else if name, err := s.saveShot(id, index, png); err == nil {
-				s.markShot(id, index, name)
-				extra.Images = []provider.Image{{MIME: "image/png", Data: png}}
+			extra := provider.Message{Role: "user", Content: "Nothing on the display can have changed, so no screenshot comes with this: ask for screenshot or read_screen when you need to look. Continue with your next actions, or call done when the task is finished."}
+			if looked {
+				png, err := runner.Screenshot(ctx, k.ID)
+				extra = s.screenMessage(id, index, png, err)
 			}
 			st.messages = append(st.messages, feedback(p.native, st.reply, st.replyText, outs, &extra)...)
 		}
@@ -1276,6 +1278,19 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			return "", false
 		}
 	}
+}
+
+// screenMessage is what the kitty is told after actions that can have changed its display: the
+// screenshot, which is also kept for the chat's step, or why there is none.
+func (s *Service) screenMessage(id string, index int, png []byte, err error) provider.Message {
+	m := provider.Message{Role: "user", Content: "Here is the screenshot of your display now. Continue with your next actions, or call done when the task is finished."}
+	if err != nil {
+		m.Content = "The screenshot failed: " + err.Error() + ". Continue with your next actions, or call done when the task is finished."
+	} else if name, err := s.saveShot(id, index, png); err == nil {
+		s.markShot(id, index, name)
+		m.Images = []provider.Image{{MIME: "image/png", Data: png}}
+	}
+	return m
 }
 
 // endsTask reports whether a batch calls done: that batch runs even past the round limit.

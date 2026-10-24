@@ -68,6 +68,15 @@ sequenceDiagram
 Corre en segundo plano; cada paso, con su captura, aparece en el chat. Una tarea tiene límites
 (tiempo, rondas, tokens) y se puede cancelar en cualquier momento.
 
+## Mirar sin imagen
+
+Una captura es lo más caro de una ronda, así que solo llega cuando puede contar algo nuevo. Tras
+un lote de solo `windows`, `run`, `install` o `read_screen` nada cambió en la pantalla, y al kitty
+se le dice eso en vez de darle la misma imagen otra vez. Cuando solo necesita leer la pantalla o
+encontrar una palabra donde hacer clic, `read_screen` responde en texto: el OCR de la imagen
+(`kitty-ocr`, Tesseract en inglés y español) imprime una línea por cada texto con el `x,y` de su
+centro, que un clic puede usar tal cual.
+
 ## Cuando necesita a una persona
 
 Hay cosas que un kitty no puede hacer solo: un captcha, una contraseña, un código que llega a tu

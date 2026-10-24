@@ -55,6 +55,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl git jq python3 openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
         inkscape imagemagick mtpaint \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
         tini procps \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
@@ -77,6 +78,7 @@ RUN mkdir -p /usr/share/backgrounds/kitties \
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/kitty-entrypoint
 COPY --chmod=755 kitty-shot.sh /usr/local/bin/kitty-shot
+COPY --chmod=755 kitty-ocr.sh /usr/local/bin/kitty-ocr
 COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch
 COPY --chmod=755 kitty-install.sh /usr/local/bin/kitty-install

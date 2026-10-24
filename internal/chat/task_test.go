@@ -20,6 +20,7 @@ type deskFleet struct {
 	*fakeFleet
 	execs   []string
 	shotErr error
+	shots   int
 	execErr error
 	block   chan struct{} // when set, Exec waits on it (to test cancel)
 }
@@ -36,6 +37,7 @@ func (d *deskFleet) Exec(ctx context.Context, ref string, argv ...string) (strin
 	return "ok", d.execErr
 }
 func (d *deskFleet) Screenshot(context.Context, string) ([]byte, error) {
+	d.shots++
 	return []byte("PNGDATA"), d.shotErr
 }
 
@@ -281,5 +283,30 @@ func TestMarkShotWithoutSteps(t *testing.T) {
 	_ = os.WriteFile(s.dir, nil, 0o600)
 	if _, err := s.saveShot(sess.ID, 0, nil); err == nil {
 		t.Error("saveShot reports a folder that cannot be made")
+	}
+}
+
+func TestNoScreenshotAfterActionsThatLeaveTheDisplayAlone(t *testing.T) {
+	s, d, sa := deskService(t,
+		"@tool run {\"argv\": [\"ls\"]}\n@tool windows {}\n@tool read_screen {}",
+		"@tool click {\"x\": 10, \"y\": 20}",
+		"@tool done {\"summary\": \"ok\"}")
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "look around, then click"); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, sess.ID)
+	// One screenshot, for the click: the text-only batch brought none, and said so.
+	if d.shots != 1 {
+		t.Errorf("screenshots = %d, want 1", d.shots)
+	}
+	if len(sa.seen) < 2 {
+		t.Fatalf("the model was asked %d times", len(sa.seen))
+	}
+	if last := sa.seen[1][len(sa.seen[1])-1]; !strings.Contains(last.Content, "no screenshot comes with this") || len(last.Images) != 0 {
+		t.Errorf("the kitty was not told why there is no screenshot: %+v", last)
+	}
+	if !strings.Contains(strings.Join(d.execs, "\n"), "kitty-ocr") {
+		t.Errorf("read_screen did not run the OCR: %v", d.execs)
 	}
 }

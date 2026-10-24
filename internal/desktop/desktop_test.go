@@ -180,3 +180,26 @@ func TestCatalogueHandsCaptchasToThePerson(t *testing.T) {
 		t.Error("the catalogue must hand CAPTCHAs to the person")
 	}
 }
+
+func TestReadScreenAndWhichActionsLookAtTheDisplay(t *testing.T) {
+	argv, err := Argv(Action{Name: "read_screen"})
+	if err != nil || len(argv) != 1 || argv[0] != "kitty-ocr" {
+		t.Errorf("read_screen = %v, %v", argv, err)
+	}
+	for name, visual := range map[string]bool{"read_screen": false, "windows": false, "run": false, "install": false,
+		"click": true, "type": true, "wait": true, "open": true, "screenshot": true, "focus": true} {
+		if got := (Action{Name: name}).Visual(); got != visual {
+			t.Errorf("%s.Visual() = %v, want %v", name, got, visual)
+		}
+	}
+	// What is read off the screen gets more room than a command's output.
+	long := strings.Repeat("x", 9000)
+	out, _ := Run(context.Background(), &fakeRunner{out: long}, "k", Action{Name: "read_screen"})
+	if len(out) < 9000 {
+		t.Errorf("read_screen was cut at %d", len(out))
+	}
+	out, _ = Run(context.Background(), &fakeRunner{out: long}, "k", Action{Name: "run", Args: map[string]any{"command": "cat big"}})
+	if len(out) > 4010 {
+		t.Errorf("run was not cut: %d", len(out))
+	}
+}
