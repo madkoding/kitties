@@ -660,8 +660,15 @@ test("the Android app asks for the gateway first, then works as a remote", async
   const { token } = (await (await request.get(`${GATEWAY}/v1/local-token`)).json()) as {
     token: string;
   };
-  await page.getByLabel("Address").fill(new URL(page.url()).origin);
+  // Only an http(s) address is taken; a bare host:port is read as http.
+  await page.getByLabel("Address").fill("ftp://example.com");
   await page.getByLabel("Token").fill(token);
+  await page.getByRole("button", { name: "Connect", exact: true }).click();
+  await expect(page.getByText("The address has to be like")).toBeVisible();
+  await page.getByLabel("Address").fill("http://203.0.113.5:7488");
+  await expect(page.getByTestId("clear-warning")).toBeVisible();
+  await page.getByLabel("Address").fill(new URL(page.url()).host);
+  await expect(page.getByTestId("clear-warning")).toHaveCount(0);
   await page.getByRole("button", { name: "Connect", exact: true }).click();
   await expect(page.getByRole("banner").getByText("connected")).toBeVisible();
   // The kitties are a tap away, in the menu.

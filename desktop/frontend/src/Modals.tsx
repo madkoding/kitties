@@ -1,6 +1,16 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
-import { api, errText, inAndroid, inWails, saveConnection, savedConnection, THEMES } from "./api";
+import {
+  api,
+  errText,
+  gatewayAddress,
+  inAndroid,
+  inWails,
+  saveConnection,
+  sendsInTheClear,
+  savedConnection,
+  THEMES,
+} from "./api";
 import { ask } from "./Confirm";
 import { Modal } from "./Modal";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
@@ -767,11 +777,17 @@ export function ConnectModal({
     setBusy(true);
     setErr("");
     try {
+      const address = gatewayAddress(url);
+      if (address === null) {
+        throw new Error(
+          t("The address has to be like http://192.168.1.20:7488 or https://kitties.example.com."),
+        );
+      }
       const app = window.go?.main?.App;
       if (app) {
-        await app.Connect(url, token);
+        await app.Connect(address, token);
       } else {
-        saveConnection({ url: url.trim().replace(/\/$/, ""), token: token.trim() });
+        saveConnection({ url: address, token: token.trim() });
         await api.kitties();
       }
       onDone();
@@ -839,6 +855,11 @@ export function ConnectModal({
         autocapitalize="off"
         aria-label={t("Address")}
       />
+      {sendsInTheClear(gatewayAddress(url) || "") && (
+        <p class="text-xs text-[var(--c-red)] mt-1" data-testid="clear-warning">
+          {t("This address is plain http: the token would travel unencrypted. Use https.")}
+        </p>
+      )}
       <label class={LABEL}>
         {t("Token")}
         {android ? <Required /> : t(" (remote gateways only)")}
