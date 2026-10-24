@@ -1215,6 +1215,13 @@ test("in a kitty's drawer the desktop is there, live, and one click on it takes 
   const drawer = page.locator("[data-modal]");
   const live = drawer.getByTestId("live-desktop");
   await expect(live).toBeVisible();
+  // The desktop comes right after the header, above the goals and the journal: those grow and
+  // must not push it down.
+  const deskBox = (await live.boundingBox())!;
+  const goalsBox = (await drawer.getByText("Goals", { exact: true }).first().boundingBox())!;
+  const journalBox = (await drawer.getByText("Journal", { exact: true }).first().boundingBox())!;
+  expect(deskBox.y).toBeLessThan(goalsBox.y);
+  expect(deskBox.y).toBeLessThan(journalBox.y);
   // One picture of the desktop, and it is the live one: nothing else shows it, nothing to open.
   await expect(drawer.getByTestId("live-frame")).toHaveCount(1);
   await expect(drawer.getByTestId("open-desktop")).toHaveCount(0);
