@@ -364,6 +364,14 @@ const dict: Dictionary = {
     "Toma el control para hacer clic y escribir tú mismo, en lo que {name} no puede hacer solo (una contraseña, un captcha). Mientras tanto, {name} espera.",
   "See {name}'s desktop live, and take control of it":
     "Ver el escritorio de {name} en vivo y tomar el control",
+  "Dragging: let go where it should end": "Arrastrando: suelta donde debe terminar",
+  "Button down: let go to click, or move to drag":
+    "Botón pulsado: suelta para hacer clic, o mueve para arrastrar",
+  "Typing {n} characters…": "Escribiendo {n} caracteres…",
+  "Sending to {name}'s desktop…": "Enviando al escritorio de {name}…",
+  "Sent: waiting for the screen to change…": "Enviado: esperando a que la pantalla cambie…",
+  "Ready: click, drag, scroll or type on the picture":
+    "Listo: haz clic, arrastra, desplaza o escribe sobre la imagen",
   "Live and take control": "En vivo y tomar el control",
   "Dragged on the screen": "Arrastró en la pantalla",
   "Looked at the open windows": "Revisó las ventanas abiertas",

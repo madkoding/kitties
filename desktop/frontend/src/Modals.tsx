@@ -627,17 +627,23 @@ export function KittyDrawer({
         <div class="avatar-stage !p-2 !pt-3 shrink-0">
           <PixelCat breed={kitty.avatar?.breed} color={kitty.avatar?.color} mood={mood} size={72} />
         </div>
-        <div class="min-w-0 flex-1">
-          <div class="flex gap-2 flex-wrap items-center">
+        <div class="min-w-0 flex-1 basis-[14rem]">
+          <div class="flex gap-2 flex-wrap items-center min-w-0">
             <span
               class={`state-pill ${running ? "is-ok" : kitty.status === "error" ? "is-off" : ""}`}
             >
               {kitty.status}
             </span>
-            <span class="tag tag-accent">
-              {model ? modelLabel(model) : kitty.provider || t("no model")}
+            <span class="tag tag-accent max-w-full min-w-0">
+              <span class="truncate">
+                {model ? modelLabel(model) : kitty.provider || t("no model")}
+              </span>
             </span>
-            {kitty.desktop && <span class="tag">{kitty.container}</span>}
+            {kitty.desktop && (
+              <span class="tag max-w-full min-w-0">
+                <span class="truncate">{kitty.container}</span>
+              </span>
+            )}
           </div>
           {soul.skills && soul.skills.length > 0 && (
             <div class="flex flex-wrap gap-1 mt-2">
@@ -650,7 +656,7 @@ export function KittyDrawer({
           )}
           {kitty.error && <p class="text-sm text-[var(--c-red)] mt-2">{kitty.error}</p>}
         </div>
-        <div class="flex gap-2 flex-wrap" data-testid="kitty-actions">
+        <div class="flex gap-2 flex-wrap shrink-0 max-w-full" data-testid="kitty-actions">
           <button class="btn-accent px-3 py-2 text-sm" onClick={onChat}>
             {t("Chat with {name}", { name: kitty.name })}
           </button>

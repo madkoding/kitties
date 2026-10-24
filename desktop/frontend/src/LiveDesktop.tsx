@@ -85,6 +85,24 @@ const QUICK: [string, string][] = [
   ["Alt+F4", "alt+F4"],
 ];
 
+// Gesture is a press or a drag in progress on the display, in the display's own pixels.
+interface Gesture {
+  from: { x: number; y: number };
+  to: { x: number; y: number };
+  drag: boolean;
+}
+
+// Ring is a mark that shows where an input went and fades.
+interface Ring {
+  id: number;
+  x: number;
+  y: number;
+  kind: "click" | "double" | "right" | "drag" | "up" | "down";
+}
+
+// RING_ARROW marks a scroll ring with its direction.
+const RING_ARROW: Record<string, string> = { up: "↑", down: "↓" };
+
 // INPUT is the look of a text field here.
 const INPUT = "w-full px-3 py-1.5 text-sm";
 
@@ -108,6 +126,19 @@ export default function LiveDesktop({
   const [loaded, setLoaded] = useState(false);
   const [clip, setClip] = useState("");
   const [clipNote, setClipNote] = useState("");
+  // What the person is doing and what is on its way, so every input can be seen to land: the
+  // size of the display and of the room for it, the press or drag in progress, the rings where
+  // a click went, the inputs still being sent, the text typed and not yet sent, and whether the
+  // display has not yet shown what they did.
+  const [dims, setDims] = useState({ w: 0, h: 0 });
+  const [room, setRoom] = useState({ w: 0, h: 0 });
+  const [gesture, setGesture] = useState<Gesture | null>(null);
+  const [rings, setRings] = useState<Ring[]>([]);
+  const [sending, setSending] = useState(0);
+  const [typing, setTyping] = useState(0);
+  const [waiting, setWaiting] = useState(false);
+  const waitTimer = useRef<number | undefined>(undefined);
+  const ringId = useRef(0);
   const img = useRef<HTMLImageElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const surface = useRef<HTMLDivElement>(null);
@@ -121,6 +152,25 @@ export default function LiveDesktop({
   // queue sends the inputs one after another, in the order they were made: typed text and keys
   // sent side by side would reach the display mixed up.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+
+  // seen is the display showing something new: what the person just did has had its effect.
+  const seen = () => setWaiting(false);
+
+  // The room the picture has: it is drawn as large as fits, with the display's own proportions.
+  useEffect(() => {
+    const el = surface.current;
+    if (!el) {
+      return;
+    }
+    const measure = () => setRoom({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      return;
+    }
+    const watch = new ResizeObserver(measure);
+    watch.observe(el);
+    return () => watch.disconnect();
+  }, []);
 
   // The rectangles: the whole display first, then only the parts that changed, drawn over it. One
   // that fails, or shows nothing in a few seconds, gives way to the stream of whole pictures.
@@ -139,6 +189,7 @@ export default function LiveDesktop({
             canvas.current.width = w;
             canvas.current.height = h;
           }
+          setDims({ w, h });
         },
         rects: (list) => {
           drawing = drawing
@@ -149,6 +200,7 @@ export default function LiveDesktop({
                 ctx?.drawImage(pictures[i], r.x, r.y);
                 pictures[i].close();
               });
+              seen();
               if (ctx && !got) {
                 got = true;
                 setLoaded(true);
@@ -182,6 +234,7 @@ export default function LiveDesktop({
         got = true;
         setFrame(src);
         setLoaded(true);
+        seen();
       },
       () => setMode("poll"),
     );
@@ -206,6 +259,7 @@ export default function LiveDesktop({
           if (alive) {
             setFrame(src);
             setLoaded(true);
+            seen();
             setErr((e) => (e === t("The desktop did not answer") ? "" : e));
           }
         } catch (e) {
@@ -232,6 +286,9 @@ export default function LiveDesktop({
   // Closing gives the display back, so the kitty never waits on a closed window.
   useEffect(
     () => () => {
+      clearTimeout(waitTimer.current);
+      clearTimeout(typeTimer.current);
+      clearTimeout(pendingClick.current);
       if (controlRef.current) {
         api.controlKitty(kitty.id, false).catch(() => undefined);
       }
@@ -247,9 +304,27 @@ export default function LiveDesktop({
   }, [onClose]);
 
   const send = (action: string, args: Record<string, unknown>) => {
+    setSending((n) => n + 1);
     queue.current = queue.current.then(() =>
-      api.inputKitty(kitty.id, action, args).catch((e) => setErr(plainError((e as Error).message))),
+      api
+        .inputKitty(kitty.id, action, args)
+        .catch((e) => setErr(plainError((e as Error).message)))
+        .finally(() => {
+          setSending((n) => Math.max(0, n - 1));
+          // The display answers a moment later: until it shows a change (or a while passes) the
+          // person is told it is being waited for.
+          setWaiting(true);
+          clearTimeout(waitTimer.current);
+          waitTimer.current = window.setTimeout(() => setWaiting(false), 2500);
+        }),
     );
+  };
+
+  // ring shows where an input went, for a moment.
+  const ring = (at: { x: number; y: number }, kind: Ring["kind"]) => {
+    const id = ++ringId.current;
+    setRings((list) => [...list, { id, ...at, kind }]);
+    setTimeout(() => setRings((list) => list.filter((r) => r.id !== id)), 800);
   };
 
   const take = async (on: boolean) => {
@@ -317,6 +392,7 @@ export default function LiveDesktop({
       send("type", { text: typed.current });
       typed.current = "";
     }
+    setTyping(0);
   };
 
   const onMouseDown = (e: MouseEvent) => {
@@ -325,12 +401,32 @@ export default function LiveDesktop({
     }
     e.preventDefault();
     surface.current?.focus();
-    down.current = { ...point(e), button: e.button };
+    const from = point(e);
+    down.current = { ...from, button: e.button };
+    setGesture({ from, to: from, drag: false });
+  };
+
+  const onMouseMove = (e: MouseEvent) => {
+    const from = down.current;
+    if (!control || !from) {
+      return;
+    }
+    const to = point(e);
+    setGesture({ from, to, drag: Math.abs(to.x - from.x) > 4 || Math.abs(to.y - from.y) > 4 });
+  };
+
+  // Leaving the picture with the button down drops the gesture: nothing is sent.
+  const onMouseLeave = () => {
+    if (down.current) {
+      down.current = null;
+      setGesture(null);
+    }
   };
 
   const onMouseUp = (e: MouseEvent) => {
     const from = down.current;
     down.current = null;
+    setGesture(null);
     if (!control || !from) {
       return;
     }
@@ -338,11 +434,13 @@ export default function LiveDesktop({
     flushTyped();
     const to = point(e);
     if (Math.abs(to.x - from.x) > 4 || Math.abs(to.y - from.y) > 4) {
+      ring(to, "drag");
       send("drag", { x: from.x, y: from.y, to_x: to.x, to_y: to.y });
       return;
     }
     const button = ["left", "middle", "right"][from.button] || "left";
     if (button !== "left") {
+      ring(to, "right");
       send("click", { ...to, button });
       return;
     }
@@ -350,9 +448,11 @@ export default function LiveDesktop({
     if (pendingClick.current !== undefined) {
       clearTimeout(pendingClick.current);
       pendingClick.current = undefined;
+      ring(to, "double");
       send("double_click", to);
       return;
     }
+    ring(to, "click");
     pendingClick.current = window.setTimeout(() => {
       pendingClick.current = undefined;
       send("click", to);
@@ -369,6 +469,7 @@ export default function LiveDesktop({
       return;
     }
     wheelAt.current = now;
+    ring(point(e), e.deltaY < 0 ? "up" : "down");
     send("move", point(e));
     send("scroll", { direction: e.deltaY < 0 ? "up" : "down", amount: 2 });
   };
@@ -391,6 +492,7 @@ export default function LiveDesktop({
     if (e.key.length === 1) {
       e.preventDefault();
       typed.current += e.key;
+      setTyping(typed.current.length);
       clearTimeout(typeTimer.current);
       typeTimer.current = window.setTimeout(flushTyped, 150);
     }
@@ -405,6 +507,33 @@ export default function LiveDesktop({
     }
   };
 
+  // The display is drawn as large as the room allows, with its own proportions: the marks over it
+  // are placed in the display's pixels, so they stay where the person pointed.
+  const scale = dims.w && room.w && room.h ? Math.min(room.w / dims.w, room.h / dims.h) : 0;
+  const fit = scale
+    ? { width: `${Math.floor(dims.w * scale)}px`, height: `${Math.floor(dims.h * scale)}px` }
+    : {};
+  const pct = (at: { x: number; y: number }) => ({
+    left: `${dims.w ? (at.x / dims.w) * 100 : 0}%`,
+    top: `${dims.h ? (at.y / dims.h) * 100 : 0}%`,
+  });
+
+  // What is going on, in one line: the person's own input first, then what is on its way.
+  let activity: { tone: "ready" | "busy" | "drag"; text: string };
+  if (gesture?.drag) {
+    activity = { tone: "drag", text: t("Dragging: let go where it should end") };
+  } else if (gesture) {
+    activity = { tone: "busy", text: t("Button down: let go to click, or move to drag") };
+  } else if (typing) {
+    activity = { tone: "busy", text: t("Typing {n} characters…", { n: typing }) };
+  } else if (sending) {
+    activity = { tone: "busy", text: t("Sending to {name}'s desktop…", { name: kitty.name }) };
+  } else if (waiting) {
+    activity = { tone: "busy", text: t("Sent: waiting for the screen to change…") };
+  } else {
+    activity = { tone: "ready", text: t("Ready: click, drag, scroll or type on the picture") };
+  }
+
   return (
     <div
       class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6 backdrop"
@@ -413,36 +542,41 @@ export default function LiveDesktop({
       data-testid="live-desktop"
     >
       <div
-        class="chat-modal w-full max-w-6xl p-3 sm:p-4 max-h-[96vh] flex flex-col gap-3"
+        class="chat-modal w-full max-w-6xl h-full max-h-[56rem] p-3 sm:p-4 flex flex-col gap-3 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-label={t("{name}'s desktop", { name: kitty.name })}
       >
-        <div class="flex items-center gap-2 flex-wrap">
+        <div class="flex items-center gap-2 flex-wrap shrink-0">
           <h2 class="font-mono text-base tracking-wide flex-1 min-w-0 truncate">
             {t("{name}'s desktop", { name: kitty.name })}
           </h2>
-          <span class={`state-pill ${control ? "is-working" : "is-ok"}`} data-testid="live-state">
+          <span
+            class={`state-pill max-w-full ${control ? "is-working" : "is-ok"}`}
+            data-testid="live-state"
+          >
             {control
               ? t("You have the controls: {name} waits", { name: kitty.name })
               : t("Watching live")}
           </span>
           {control ? (
             <button
-              class="btn-accent px-3 py-1.5 text-sm"
+              class="btn-accent px-3 py-1.5 text-sm flex items-center gap-2"
               onClick={() => take(false)}
               disabled={busy}
               data-testid="give-back"
             >
+              {busy && <span class="spinner" />}
               {t("Give it back to {name}", { name: kitty.name })}
             </button>
           ) : (
             <button
-              class="btn-accent px-3 py-1.5 text-sm"
+              class="btn-accent px-3 py-1.5 text-sm flex items-center gap-2"
               onClick={() => take(true)}
               disabled={busy || !loaded}
               data-testid="take-control"
             >
+              {busy && <span class="spinner" />}
               {t("Take control")}
             </button>
           )}
@@ -457,38 +591,83 @@ export default function LiveDesktop({
         <div
           ref={surface}
           tabIndex={0}
-          class={`live-surface relative min-h-0 flex-1 flex items-center justify-center outline-none ${control ? "is-control" : ""}`}
+          class={`live-surface relative min-h-[10rem] flex-1 flex items-center justify-center outline-none overflow-hidden ${control ? "is-control" : ""} ${gesture?.drag ? "is-dragging" : ""}`}
           onKeyDown={onKeyDown}
           onPaste={onPaste}
           onContextMenu={(e) => control && e.preventDefault()}
         >
-          {mode === "rects" && (
-            <canvas
-              ref={canvas}
-              aria-label={t("{name}'s desktop", { name: kitty.name })}
-              class={`max-w-full max-h-[70vh] select-none ${loaded ? "" : "invisible absolute"}`}
-              onMouseDown={onMouseDown}
-              onMouseUp={onMouseUp}
-              onWheel={onWheel}
-              data-testid="live-frame"
-              data-mode="rects"
-            />
-          )}
-          {mode !== "rects" && frame && (
-            <img
-              ref={img}
-              src={frame}
-              alt={t("{name}'s desktop", { name: kitty.name })}
-              class={`max-w-full max-h-[70vh] select-none ${loaded ? "" : "invisible absolute"}`}
-              draggable={false}
-              onLoad={() => setLoaded(true)}
-              onMouseDown={onMouseDown}
-              onMouseUp={onMouseUp}
-              onWheel={onWheel}
-              data-testid="live-frame"
-              data-mode={mode}
-            />
-          )}
+          <div
+            class={`live-stage ${loaded ? "" : "invisible absolute"}`}
+            style={fit}
+            onMouseLeave={onMouseLeave}
+          >
+            {mode === "rects" && (
+              <canvas
+                ref={canvas}
+                aria-label={t("{name}'s desktop", { name: kitty.name })}
+                class="select-none"
+                onMouseDown={onMouseDown}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+                onWheel={onWheel}
+                data-testid="live-frame"
+                data-mode="rects"
+              />
+            )}
+            {mode !== "rects" && frame && (
+              <img
+                ref={img}
+                src={frame}
+                alt={t("{name}'s desktop", { name: kitty.name })}
+                class="select-none"
+                draggable={false}
+                onLoad={(e) => {
+                  setLoaded(true);
+                  setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
+                }}
+                onMouseDown={onMouseDown}
+                onMouseMove={onMouseMove}
+                onMouseUp={onMouseUp}
+                onWheel={onWheel}
+                data-testid="live-frame"
+                data-mode={mode}
+              />
+            )}
+            {gesture && dims.w > 0 && (
+              <svg
+                class="live-gesture"
+                viewBox={`0 0 ${dims.w} ${dims.h}`}
+                preserveAspectRatio="none"
+                aria-hidden="true"
+                data-testid="live-gesture"
+              >
+                {gesture.drag && (
+                  <line
+                    x1={gesture.from.x}
+                    y1={gesture.from.y}
+                    x2={gesture.to.x}
+                    y2={gesture.to.y}
+                    vector-effect="non-scaling-stroke"
+                  />
+                )}
+              </svg>
+            )}
+            {gesture && <span class="live-press" style={pct(gesture.from)} aria-hidden="true" />}
+            {gesture?.drag && (
+              <span class="live-press is-end" style={pct(gesture.to)} aria-hidden="true" />
+            )}
+            {rings.map((r) => (
+              <span
+                key={r.id}
+                class={`live-ring is-${r.kind}`}
+                style={pct(r)}
+                aria-hidden="true"
+                data-testid="live-ring"
+              >
+                {RING_ARROW[r.kind]}
+              </span>
+            ))}
+          </div>
           {!loaded && (
             <div class="text-sm text-[var(--t3)] py-20">
               <span class="spinner" /> {t("Connecting to the desktop…")}
@@ -496,7 +675,18 @@ export default function LiveDesktop({
           )}
         </div>
         {control && (
-          <div class="flex gap-1.5 flex-wrap items-center" data-testid="quick-keys">
+          <div
+            class={`live-activity is-${activity.tone} shrink-0`}
+            role="status"
+            aria-live="polite"
+            data-testid="live-activity"
+          >
+            {activity.tone === "busy" ? <span class="spinner" /> : <span class="live-dot" />}
+            <span class="min-w-0 truncate">{activity.text}</span>
+          </div>
+        )}
+        {control && (
+          <div class="flex gap-1.5 flex-wrap items-center shrink-0" data-testid="quick-keys">
             {QUICK.map(([label, keys]) => (
               <button
                 key={keys}
@@ -516,7 +706,10 @@ export default function LiveDesktop({
           </div>
         )}
         {control && (
-          <div class="flex gap-1.5 flex-wrap sm:flex-nowrap items-center" data-testid="clipboard">
+          <div
+            class="flex gap-1.5 flex-wrap sm:flex-nowrap items-center shrink-0"
+            data-testid="clipboard"
+          >
             <input
               class={INPUT}
               value={clip}
@@ -538,19 +731,19 @@ export default function LiveDesktop({
           </div>
         )}
         {clipNote && (
-          <p class="text-xs text-[var(--t3)]" role="status" data-testid="clip-note">
+          <p class="text-xs text-[var(--t3)] shrink-0" role="status" data-testid="clip-note">
             {clipNote}
           </p>
         )}
         {!control && (
-          <p class="text-xs text-[var(--t3)]">
+          <p class="text-xs text-[var(--t3)] shrink-0">
             {t(
               "Take control to click and type in it yourself, for what {name} cannot do alone (a password, a captcha). {name} waits meanwhile.",
               { name: kitty.name },
             )}
           </p>
         )}
-        {err && <p class="text-sm text-[var(--c-red)]">{err}</p>}
+        {err && <p class="text-sm text-[var(--c-red)] shrink-0">{err}</p>}
       </div>
     </div>
   );

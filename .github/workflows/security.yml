@@ -110,13 +110,21 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - run: shellcheck --severity=warning docker/kitty-desktop/*.sh scripts/*.sh
 
-  # The gateway image: the operating system packages and the libraries inside it. Trivy is
-  # fetched from its release and checked against a checksum kept here, not run through a
-  # third-party action.
+  # The images: the operating system packages and the libraries inside them. Trivy is fetched from
+  # its release and checked against a checksum kept here, not run through a third-party action. The
+  # base image is pulled anew every time, so the weekly run sees what was published since.
   image-scan:
-    name: gateway image · known vulnerabilities
+    name: ${{ matrix.image }} image · known vulnerabilities
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: gateway
+            build: docker build --pull -f docker/gateway/Dockerfile -t scan:image .
+          - image: kitty-desktop
+            build: docker build --pull -t scan:image docker/kitty-desktop
     env:
       TRIVY_VERSION: "0.69.3"
       TRIVY_SHA256: "1816b632dfe529869c740c0913e36bd1629cb7688bd5634f4a858c1d57c88b75"
@@ -128,6 +136,6 @@ jobs:
           echo "${TRIVY_SHA256}  trivy.tgz" | sha256sum -c -
           tar -xzf trivy.tgz trivy
       - name: build the image
-        run: docker build -f docker/gateway/Dockerfile -t kitties:scan .
+        run: ${{ matrix.build }}
       - name: scan it
-        run: ./trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 kitties:scan
+        run: ./trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 scan:image
