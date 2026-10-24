@@ -180,10 +180,14 @@ jobs:
           docker exec kitty-ci sh -c 'pgrep -x icewm && pgrep -x pcmanfm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/icewm/themes/ceres-pro/default.theme && grep -q ceres-pro ~/.icewm/theme && test -f /usr/share/icons/Haiku/index.theme && test -f /usr/share/backgrounds/kitties/wallpaper.jpg'
           # Reading the screen (OCR) runs and prints lines of "x,y<TAB>text".
           docker exec kitty-ci kitty-ocr | awk -F'\t' 'NF && $1 !~ /^[0-9]+,[0-9]+$/ { bad = 1 } END { exit bad }'
+          # What a kitty keeps (a key, the browser's profile) is backed up and put back, and the browser
+          # closes in an orderly way and keeps its session cookies across a restart.
+          docker exec kitty-ci sh -c 'test -f /etc/chromium/policies/managed/kitties.json && mkdir -p ~/.ssh && echo k > ~/.ssh/id_ci && kitty-backup | base64 -d > /tmp/b.tgz && tar tzf /tmp/b.tgz | grep -q id_ci && rm -rf ~/.ssh && kitty-restore < /tmp/b.tgz && test -f ~/.ssh/id_ci'
           # Text for the keyboard (a secret) goes in on the input and is typed.
           printf 'x' | docker exec -i kitty-ci xdotool type --delay 20 --file -
           # A page is read and acted on from the inside, through the browser's DevTools port.
           docker exec kitty-ci sh -c 'printf "<title>ci page</title><button onclick=\"document.title=1\">Go</button>" > /tmp/p.html && kitty-open file:///tmp/p.html >/dev/null && sleep 5 && kitty-page read | grep -q "ci page" && kitty-page click --text Go && sleep 1 && kitty-page read | grep -q "^title: 1"'
+          docker exec kitty-ci kitty-page quit
           # The live stream sends pictures, and ends when its input closes.
           docker exec kitty-ci sh -c 'command -v kitty-grab && ldd "$(command -v kitty-grab)" | grep -vq "not found"'
           sleep 3 | docker exec -i kitty-ci kitty-stream --stdin 4 60 > stream.bin

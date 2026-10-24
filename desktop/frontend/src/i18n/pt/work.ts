@@ -363,6 +363,17 @@ const dict: Dictionary = {
   "Live and take control": "Ao vivo e assumir o controle",
   "Dragged on the screen": "Arrastou na tela",
   "Looked at the open windows": "Olhou as janelas abertas",
+  "Update {name}'s desktop? It restarts. Its cookies, sessions and saved passwords are backed up first and put back in the new one.":
+    "Atualizar a área de trabalho de {name}? Ela reinicia. Antes, seus cookies, sessões e senhas salvas são copiados e colocados na nova.",
+  Update: "Atualizar",
+  "A newer desktop is available for {name}.": "Há uma área de trabalho mais nova para {name}.",
+  "Update the desktop": "Atualizar a área de trabalho",
+  "Cookies, sessions and passwords backed up {when}.": "Cookies, sessões e senhas copiados {when}.",
+  "Cookies, sessions and passwords are not backed up yet.":
+    "Cookies, sessões e senhas ainda não foram copiados.",
+  "Back up now": "Copiar agora",
+  "The backup is sealed and kept away from the desktop, and goes back into it when it is made anew. It is also made when the desktop stops.":
+    "A cópia é criptografada e guardada longe da área de trabalho, e volta a ela quando é refeita. Também é feita quando a área de trabalho para.",
   Secrets: "Segredos",
   "Passwords and codes your kitties may type for you. A kitty is told only the names, and asks for one by name: the secret goes from here to its keyboard, and neither the kitty nor its AI model ever reads it. They are kept encrypted on the gateway.":
     "Senhas e códigos que seus kitties podem digitar por você. Um kitty só recebe os nomes e pede um pelo nome: o segredo vai daqui para o teclado dele, e nem o kitty nem o modelo de IA o leem jamais. Ficam guardados criptografados no gateway.",

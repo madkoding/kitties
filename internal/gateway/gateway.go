@@ -122,6 +122,8 @@ type Server struct {
 	agenda Agenda
 	// approver holds actions for the person's yes, nil when none are held.
 	approver Approver
+	// maintainer looks after the desktops (update, backup of sessions), nil when nothing does.
+	maintainer Maintainer
 	// vault holds the secrets the kitties may type, nil when there is none.
 	vault Vault
 	// memories is what the kitties know about the person, nil when they keep none.
@@ -232,6 +234,7 @@ func (s *Server) routes() {
 	s.approvalRoutes()
 	s.memoryRoutes()
 	s.vaultRoutes()
+	s.desktopRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
@@ -497,7 +500,7 @@ func codeFor(err error) int {
 	switch {
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
-	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"), strings.Contains(msg, "already has an answer"), strings.Contains(msg, "is already approved"), strings.Contains(msg, "is already rejected"):
+	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"), strings.Contains(msg, "already has an answer"), strings.Contains(msg, "has the desktop"), strings.Contains(msg, "is already approved"), strings.Contains(msg, "is already rejected"):
 		return http.StatusConflict
 	case errors.Is(err, chat.ErrNoApprovals), errors.Is(err, chat.ErrNoMemory):
 		return http.StatusNotFound
@@ -515,7 +518,7 @@ func codeFor(err error) int {
 		strings.Contains(msg, "limits"), strings.HasPrefix(msg, "a limit "), strings.Contains(msg, "not ask or auto"), strings.Contains(msg, "can be for good"), strings.Contains(msg, "always asked"),
 		strings.HasPrefix(msg, "notify."), strings.Contains(msg, "rating is"), strings.Contains(msg, "feedback is for"), strings.Contains(msg, "demand is a level"),
 		strings.Contains(msg, "a note needs"), strings.HasPrefix(msg, "scope "), strings.Contains(msg, "the turn is"),
-		strings.HasPrefix(msg, "there is no "), strings.HasPrefix(msg, "a secret"), strings.Contains(msg, "still think with"):
+		strings.HasPrefix(msg, "there is no "), strings.HasPrefix(msg, "a secret"), strings.Contains(msg, "is not running"), strings.Contains(msg, "nothing to back up"), strings.Contains(msg, "cannot back up"), strings.Contains(msg, "keeps no backups"), strings.Contains(msg, "still think with"):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError

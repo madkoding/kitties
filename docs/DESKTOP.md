@@ -120,6 +120,30 @@ picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.
 
 <img src="screenshots/49-live-desktop-control.png" alt="Taking control of a kitty's desktop: a command typed in its terminal" width="100%">
 
+## Updating a desktop without losing what it knows
+
+A desktop is made from an image, and a newer one can come. A container keeps the image it was made
+from, so an update makes it anew: the kitty's window says **a newer desktop is available** (the image
+on this machine is not the one the container runs) and **Update the desktop** does it, when the
+kitty is not in the middle of a task and you do not hold its desktop: it pulls the image, closes the
+browser in an orderly way (`kitty-page quit`, so everything is written to disk), backs up, makes the
+container anew and puts the backup back. The work folder is on your computer and is never touched.
+
+What the kitty's browser knows lives in that folder already (cookies, saved passwords, local
+storage), and now two things keep it from being lost: the browser closes in an orderly way before
+any stop or update (it only writes its cookies every half minute, and a container that is removed
+loses the last ones), and it continues where it left off (a Chromium policy), which keeps the
+**session cookies** (logins with no expiry) across a restart. Passwords use the browser's
+`--password-store=basic`, sealed with a key every container shares, so a profile opens in a new one.
+
+The **backup** (`kitty-backup`) adds a copy away from the container: the browser's cookies, sessions,
+saved passwords, local storage and preferences, and `~/.ssh`, `~/.gitconfig`, `~/.git-credentials`,
+`~/.netrc`, `~/.config/gh` and `~/.config/git`. The gateway keeps it sealed (AES-256-GCM, the key of
+the vault) under `backups/` in its data folder, one per kitty, replaced by each new one; it is made
+when the desktop stops, before an update, and with **Back up now**. `kitty-restore` gives it back to
+a container that is made anew (it never overwrites a file that is there: a workspace that kept its
+profile is newer than any backup). A removed kitty's backup is deleted with it.
+
 ## Where it lives in the code
 
 | What | Where |
@@ -129,6 +153,7 @@ picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.
 | The loop: screenshot, model, actions, again | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Containers: start, `exec`, screenshot, live stream | [`internal/container/`](../internal/container) |
 | Taking over: holds, the person's input, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
+| The sealed backups of a kitty's sessions, and the update of a desktop | [`internal/keep`](../internal/keep), [`internal/orchestrator/sessions.go`](../internal/orchestrator/sessions.go) |
 | The saved secrets a kitty may type, sealed | [`internal/vault`](../internal/vault) |
 | What changed on the display, as rectangles to draw over the last picture | [`internal/rects`](../internal/rects) |
 | The live view in the app | [`desktop/frontend/src/LiveDesktop.tsx`](../desktop/frontend/src/LiveDesktop.tsx) |

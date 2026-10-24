@@ -130,6 +130,33 @@ cada imagen con solo lo que cambió), servido en `/v1/chats/{id}/turns/{n}/repla
 
 <img src="screenshots/49-live-desktop-control.png" alt="Tomando el control del escritorio de un kitty: un comando escrito en su terminal" width="100%">
 
+## Actualizar un escritorio sin perder lo que sabe
+
+Un escritorio se hace a partir de una imagen, y puede salir una más nueva. Un contenedor conserva la
+imagen con la que se creó, así que actualizarlo es rehacerlo: la ventana del kitty dice **hay un
+escritorio más nuevo** (la imagen de esta máquina no es la que corre el contenedor) y
+**Actualizar el escritorio** lo hace, si el kitty no está en medio de una tarea y no tienes tú su
+escritorio: baja la imagen, cierra el navegador de forma ordenada (`kitty-page quit`, para que todo
+se escriba a disco), respalda, rehace el contenedor y devuelve el respaldo. La carpeta de trabajo
+está en tu computador y nunca se toca.
+
+Lo que sabe el navegador del kitty ya vive en esa carpeta (cookies, contraseñas guardadas, almacenamiento
+local), y ahora dos cosas evitan perderlo: el navegador se cierra de forma ordenada antes de cualquier
+parada o actualización (solo escribe sus cookies cada medio minuto, y un contenedor que se elimina
+pierde las últimas), y continúa donde se quedó (una política de Chromium), lo que conserva las
+**cookies de sesión** (inicios de sesión sin caducidad) tras un reinicio. Las contraseñas usan
+`--password-store=basic`, cifradas con una clave que comparten todos los contenedores, así que un perfil
+se abre en uno nuevo.
+
+El **respaldo** (`kitty-backup`) añade una copia fuera del contenedor: cookies, sesiones, contraseñas
+guardadas, almacenamiento local y preferencias del navegador, y `~/.ssh`, `~/.gitconfig`,
+`~/.git-credentials`, `~/.netrc`, `~/.config/gh` y `~/.config/git`. El gateway lo guarda cifrado
+(AES-256-GCM, la clave de la bóveda) en `backups/` de su carpeta de datos, uno por kitty, reemplazado
+por cada nuevo; se hace cuando el escritorio se detiene, antes de una actualización y con **Respaldar
+ahora**. `kitty-restore` se lo devuelve a un contenedor que se rehace (nunca sobrescribe un archivo
+que ya está: un workspace que conservó su perfil es más nuevo que cualquier respaldo). El respaldo de
+un kitty eliminado se borra con él.
+
 ## Dónde está en el código
 
 | Qué | Dónde |
@@ -139,6 +166,7 @@ cada imagen con solo lo que cambió), servido en `/v1/chats/{id}/turns/{n}/repla
 | El ciclo: captura, modelo, acciones, otra vez | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Contenedores: arrancar, `exec`, captura, stream en vivo | [`internal/container/`](../internal/container) |
 | Tomar el control: retenciones, entrada de la persona, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
+| Los respaldos cifrados de las sesiones de un kitty, y la actualización de un escritorio | [`internal/keep`](../internal/keep), [`internal/orchestrator/sessions.go`](../internal/orchestrator/sessions.go) |
 | Los secretos guardados que un kitty puede escribir, cifrados | [`internal/vault`](../internal/vault) |
 | Lo que cambió en la pantalla, como rectángulos sobre la última imagen | [`internal/rects`](../internal/rects) |
 | La vista en vivo en la app | [`desktop/frontend/src/LiveDesktop.tsx`](../desktop/frontend/src/LiveDesktop.tsx) |

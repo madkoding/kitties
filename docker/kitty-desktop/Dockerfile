@@ -88,6 +88,11 @@ RUN mkdir -p /usr/share/backgrounds/kitties \
 COPY --chmod=755 entrypoint.sh /usr/local/bin/kitty-entrypoint
 COPY --chmod=755 kitty-shot.sh /usr/local/bin/kitty-shot
 COPY --chmod=755 kitty-ocr.sh /usr/local/bin/kitty-ocr
+COPY --chmod=755 kitty-backup.sh /usr/local/bin/kitty-backup
+COPY --chmod=755 kitty-restore.sh /usr/local/bin/kitty-restore
+# "Continue where you left off": the browser keeps session cookies (logins that have no expiry)
+# across a restart, which an update of the desktop is.
+COPY chromium-policy.json /etc/chromium/policies/managed/kitties.json
 COPY --chmod=755 kitty-page.py /usr/local/bin/kitty-page
 COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch

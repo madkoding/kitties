@@ -807,6 +807,20 @@ func (s *Service) Shot(id, name string) ([]byte, error) {
 	return data, nil
 }
 
+// KittyBusy reports whether a kitty is in the middle of a task, in any chat.
+func (s *Service) KittyBusy(kittyID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, sess := range s.sessions {
+		for _, t := range sess.Turns {
+			if t.Working && t.Kitty == kittyID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Replay is the film of a turn's desktop task: its screenshots, in order, as an animated GIF.
 func (s *Service) Replay(id string, index int) ([]byte, error) {
 	sess, err := s.Get(id)

@@ -7,6 +7,7 @@ import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly
 import { ProviderLogo } from "./ConnectorLogo";
 import { Shot } from "./Conversation";
 import { IconCamera, IconMonitor, IconPlay, IconStop, IconTrash } from "./icons";
+import DesktopCare from "./DesktopCare";
 import LiveDesktop from "./LiveDesktop";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import { MemoryPanel } from "./Memory";
@@ -692,6 +693,7 @@ export function KittyDrawer({
             )}
           </div>
           <Shot path={`/v1/kitties/${kitty.id}/screenshot?t=${tick}`} big />
+          <DesktopCare kitty={kitty} onChanged={onChanged} />
         </div>
       )}
       <details class="config mt-5" data-testid="kitty-config">

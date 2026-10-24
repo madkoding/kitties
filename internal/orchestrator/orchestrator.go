@@ -35,6 +35,10 @@ type Containers interface {
 	Stop(ctx context.Context, name string) error
 	Remove(ctx context.Context, name string) error
 	Exec(ctx context.Context, name string, argv ...string) (string, error)
+	// Pull downloads the image again; ImageStale tells whether a container was made from an
+	// older one than the reference names now.
+	Pull(ctx context.Context, image string) error
+	ImageStale(ctx context.Context, name, image string) (bool, error)
 	// ExecInput is Exec with text on the command's input, for what must not show in its arguments.
 	ExecInput(ctx context.Context, name, stdin string, argv ...string) (string, error)
 	Screenshot(ctx context.Context, name string) ([]byte, error)
@@ -58,6 +62,8 @@ type Manager struct {
 	rtMu sync.RWMutex
 	// detect looks for the runtime again; nil when it is not looked for again.
 	detect func(ctx context.Context) (Containers, error)
+	// keeper keeps the backups of what a kitty's browser knows (sessions.go), nil when there is none.
+	keeper Keeper
 	// holds are the displays the person has taken over, by kitty id, with their last use.
 	holdMu sync.Mutex
 	holds  map[string]time.Time
@@ -612,6 +618,8 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 		if _, err := m.ctr().Up(ctx, spec); err != nil {
 			return m.fail(k.ID, err)
 		}
+		// A container made anew gets back what its kitty's browser knew.
+		m.restoreSessions(ctx, k)
 	}
 	m.applyTheme(ctx, k, false)
 	return m.setStatus(k.ID, kitty.StatusRunning, "")
@@ -672,9 +680,13 @@ func (m *Manager) Stop(ctx context.Context, ref string) error {
 		return err
 	}
 	if k.Desktop {
-		if exists, _, err := m.containerState(ctx, k.Container); err != nil {
+		if exists, running, err := m.containerState(ctx, k.Container); err != nil {
 			return m.fail(k.ID, err)
 		} else if exists {
+			// The browser is closed in an orderly way and its sessions are kept before the stop.
+			if running {
+				m.saveSessions(ctx, k)
+			}
 			if err := m.ctr().Stop(ctx, k.Container); err != nil {
 				return m.fail(k.ID, err)
 			}

@@ -1245,6 +1245,41 @@ test("a kitty that needs the person gets what it asked for typed in the window, 
   await expect(page.getByText("hunter2")).toHaveCount(0);
 });
 
+test("a kitty's cookies, sessions and passwords are backed up, and a newer desktop can be updated", async ({
+  page,
+}) => {
+  await open(page, `#kitty/${ids.tom}`);
+  const care = page.getByTestId("desktop-care");
+  await expect(care).toBeVisible();
+  await expect(care.getByTestId("backup-state")).toContainText("are not backed up yet");
+  await expect(care.getByTestId("update-callout")).toHaveCount(0);
+  // Backing up keeps them sealed away from the desktop, and says when.
+  const done = page.waitForResponse((r) => r.url().includes("/backup") && r.status() === 200);
+  await care.getByTestId("backup-now").click();
+  await done;
+  await expect(care.getByTestId("backup-state")).toContainText("backed up");
+  await expect(care.getByTestId("backup-state")).not.toContainText("not backed up");
+  await shot(page, "52-desktop-backup");
+  // A newer image: the page offers the update, asks first, and the kitty comes back from it.
+  await page.route("**/v1/kitties/*/desktop", (route) =>
+    route.fulfill({
+      json: { image: "ghcr.io/madkoding/kitty-desktop:latest", update_available: true },
+    }),
+  );
+  let updated = "";
+  await page.route("**/v1/kitties/*/update", (route) => {
+    updated = route.request().url();
+    return route.fulfill({ status: 202, json: { kitty: {} } });
+  });
+  await page.reload();
+  const callout = page.getByTestId("update-callout");
+  await expect(callout).toContainText("A newer desktop is available for tom");
+  await shot(page, "53-desktop-update");
+  await callout.getByTestId("update-desktop").click();
+  await page.getByRole("button", { name: "Update", exact: true }).click();
+  await expect.poll(() => updated).toContain("/update");
+});
+
 test("the secrets a kitty may type: saved with who may use them, changed and removed, never shown", async ({
   page,
 }) => {

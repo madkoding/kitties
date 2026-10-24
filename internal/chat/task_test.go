@@ -445,3 +445,17 @@ func TestReplayOfATask(t *testing.T) {
 		t.Error("a chat that is not there")
 	}
 }
+
+func TestKittyBusy(t *testing.T) {
+	s, _, _ := deskService(t, "@tool wait {\"seconds\": 1}", "@tool done {\"summary\": \"ok\"}")
+	if s.KittyBusy("a1") {
+		t.Error("busy before any task")
+	}
+	sess, _ := s.Create("", []string{"ana"})
+	s.mu.Lock()
+	s.sessions[sess.ID].Turns = append(s.sessions[sess.ID].Turns, Turn{Kitty: "a1", Working: true})
+	s.mu.Unlock()
+	if !s.KittyBusy("a1") || s.KittyBusy("b1") {
+		t.Error("a kitty with a working turn is busy, another is not")
+	}
+}

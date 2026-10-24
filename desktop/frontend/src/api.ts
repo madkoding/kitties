@@ -636,6 +636,11 @@ export const api = {
     turn: number,
     a: { text: string; secret: boolean; enter: boolean; save?: string },
   ) => request("POST", `/v1/chats/${chat}/turns/${turn}/help`, a),
+  // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
+  // up; backupKitty backs them up now; updateKitty moves the desktop to the newest image.
+  desktopInfo: (ref: string) => request<DesktopInfo>("GET", `/v1/kitties/${ref}/desktop`),
+  backupKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/backup`),
+  updateKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/update`),
   // vault lists the secrets a kitty may type (names and kitties, never values); saveSecret saves
   // one (with a value) or changes who may use it (without).
   vault: () => request<{ secrets: Secret[] }>("GET", "/v1/vault").then((r) => r.secrets || []),
@@ -986,6 +991,14 @@ function watchRects(
 }
 
 // A DesktopRect is a part of the display that changed, and its picture.
+// DesktopInfo is what is known about a kitty's desktop: its image, whether a newer one waits, and
+// when its sessions were last backed up.
+export type DesktopInfo = {
+  image: string;
+  update_available: boolean;
+  backup?: { saved: string; bytes: number };
+};
+
 // A Secret is one of the vault: its name and the ids of the kitties that may type it.
 export type Secret = { name: string; kitties: string[]; saved: string };
 

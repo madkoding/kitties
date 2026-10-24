@@ -6,6 +6,7 @@ package demo
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"fmt"
 	"image"
 	"image/color"
@@ -321,10 +322,19 @@ func (d *Desktop) Exec(_ context.Context, name string, argv ...string) (string, 
 		return d.clip[name], nil
 	case "kitty-theme":
 		return "theme " + strings.Join(argv[1:], " "), nil
+	case "kitty-backup":
+		// What a backup of a drawn desktop holds: nothing real, but sealed and kept like the real one.
+		return base64.StdEncoding.EncodeToString([]byte("demo sessions of "+name)) + "\n", nil
 	default:
 		return "(demo) " + strings.Join(argv, " ") + "\n", nil
 	}
 }
+
+// Pull implements orchestrator.Containers: a drawn desktop has no image to download.
+func (d *Desktop) Pull(context.Context, string) error { return nil }
+
+// ImageStale implements orchestrator.Containers: a drawn desktop is always the newest.
+func (d *Desktop) ImageStale(context.Context, string, string) (bool, error) { return false, nil }
 
 // ExecInput implements orchestrator.Containers: the demo types nothing, so the text only has to
 // reach no command line.

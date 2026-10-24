@@ -53,9 +53,42 @@ type Store struct {
 	now  func() time.Time
 }
 
-// Open reads the vault in dir (created on the first save), with its key: the environment's, or
-// the key file, made on the first use.
-func Open(dir string) (*Store, error) {
+// Box seals and opens blobs with the same key as the vault (the environment's or the key file),
+// for what else is kept sealed away from a container: the backups of a kitty's sessions.
+type Box struct{ aead cipher.AEAD }
+
+// NewBox is the sealing box of the key kept in dir.
+func NewBox(dir string) (*Box, error) {
+	aead, err := newAEAD(dir)
+	if err != nil {
+		return nil, err
+	}
+	return &Box{aead: aead}, nil
+}
+
+// Seal encrypts plain, bound to aad (what the blob is for, so it cannot be moved to another use).
+func (b *Box) Seal(plain, aad []byte) ([]byte, error) {
+	nonce := make([]byte, b.aead.NonceSize())
+	if _, err := rand.Read(nonce); err != nil {
+		return nil, err
+	}
+	return b.aead.Seal(nonce, nonce, plain, aad), nil
+}
+
+// Open decrypts what Seal made.
+func (b *Box) Open(sealed, aad []byte) ([]byte, error) {
+	n := b.aead.NonceSize()
+	if len(sealed) < n {
+		return nil, errors.New("the sealed data is too short")
+	}
+	plain, err := b.aead.Open(nil, sealed[:n], sealed[n:], aad)
+	if err != nil {
+		return nil, errors.New("the sealed data cannot be opened with this key")
+	}
+	return plain, nil
+}
+
+func newAEAD(dir string) (cipher.AEAD, error) {
 	key, err := loadKey(dir)
 	if err != nil {
 		return nil, err
@@ -64,7 +97,13 @@ func Open(dir string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	aead, err := cipher.NewGCM(block)
+	return cipher.NewGCM(block)
+}
+
+// Open reads the vault in dir (created on the first save), with its key: the environment's, or
+// the key file, made on the first use.
+func Open(dir string) (*Store, error) {
+	aead, err := newAEAD(dir)
 	if err != nil {
 		return nil, err
 	}

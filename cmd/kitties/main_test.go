@@ -34,6 +34,10 @@ func (f *fakeContainers) Remove(_ context.Context, n string) error {
 func (f *fakeContainers) Exec(_ context.Context, n string, argv ...string) (string, error) {
 	return "ran " + strings.Join(argv, " ") + "\n", nil
 }
+func (f *fakeContainers) Pull(context.Context, string) error { return nil }
+func (f *fakeContainers) ImageStale(context.Context, string, string) (bool, error) {
+	return false, nil
+}
 func (f *fakeContainers) ExecInput(_ context.Context, n, stdin string, argv ...string) (string, error) {
 	return "ran " + strings.Join(argv, " ") + "\n", nil
 }

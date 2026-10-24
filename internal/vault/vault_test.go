@@ -134,3 +134,27 @@ func TestKeys(t *testing.T) {
 		t.Error("a broken vault was accepted")
 	}
 }
+
+func TestBoxSealsForOneUseOnly(t *testing.T) {
+	b, err := NewBox(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	sealed, err := b.Seal([]byte("cookies"), []byte("backup:k1"))
+	if err != nil || bytes.Contains(sealed, []byte("cookies")) {
+		t.Fatalf("Seal = %q, %v", sealed, err)
+	}
+	if plain, err := b.Open(sealed, []byte("backup:k1")); err != nil || string(plain) != "cookies" {
+		t.Errorf("Open = %q, %v", plain, err)
+	}
+	if _, err := b.Open(sealed, []byte("backup:k2")); err == nil {
+		t.Error("opened for another use")
+	}
+	if _, err := b.Open([]byte("x"), nil); err == nil {
+		t.Error("opened a truncated blob")
+	}
+	t.Setenv(KeyEnv, "nope")
+	if _, err := NewBox(t.TempDir()); err == nil {
+		t.Error("a bad key made a box")
+	}
+}
