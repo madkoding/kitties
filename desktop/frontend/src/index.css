@@ -1183,6 +1183,37 @@ html.mac-inset aside .titlebar {
 .more > summary:hover {
   color: var(--t1);
 }
+/* The configuration of a kitty: closed until the person wants to change something. */
+.config {
+  border: 1px solid rgb(var(--neon-rgb) / 0.3);
+}
+.config > summary {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t3);
+}
+.config > summary::before {
+  content: "▸";
+}
+.config[open] > summary::before {
+  content: "▾";
+}
+.config[open] > summary {
+  border-bottom: 1px solid rgb(var(--neon-rgb) / 0.3);
+}
+.config > summary:hover {
+  color: var(--t1);
+}
 .callout {
   padding: 10px 12px;
   border: 1px solid rgb(var(--accent-rgb) / 0.35);

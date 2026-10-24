@@ -98,6 +98,14 @@ test("the technical details show only when asked for", async ({ page }) => {
   await expect(page.locator(".trail").first()).not.toContainText("640, 420");
 });
 
+// openConfig unfolds the configuration of the kitty's drawer, where its options are edited.
+async function openConfig(page: Page) {
+  const config = page.getByTestId("kitty-config");
+  if (!(await config.evaluate((el) => (el as HTMLDetailsElement).open))) {
+    await config.locator("summary").click();
+  }
+}
+
 test("a kitty's drawer shows its display", async ({ page }) => {
   await open(page, `#kitty/${ids.tom}`);
   await expect(page.getByRole("dialog").first()).toBeVisible();
@@ -295,6 +303,7 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   page,
 }) => {
   await open(page, `#kitty/${ids.mimi}`);
+  await openConfig(page);
   const memory = page.getByTestId("memory");
   await expect(memory).toBeVisible();
   // Four thumbs down with a word moved the level from balanced to demanding.
@@ -466,7 +475,10 @@ test("a kitty hands a subtask to another and the chip leads to their thread", as
 
 test("the kitty's drawer: goals, the journal, limits and the backup", async ({ page }) => {
   await open(page, `#kitty/${ids.mimi}`);
-  // Its brain, who it is and what it may use are edited right here.
+  // What it does is in view; its brain, who it is and what it may use are edited under
+  // its configuration.
+  await expect(page.getByTestId("kitty-basics")).toBeHidden();
+  await openConfig(page);
   const basics = page.getByTestId("kitty-basics");
   await expect(basics.getByLabel("Brain")).toHaveValue("strong");
   await expect(basics.getByLabel("Who is it?")).toHaveValue(/patient researcher/);
@@ -1165,6 +1177,7 @@ test("a kitty that needs the person asks for help: a button takes control, and g
 test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) => {
   await open(page, `#chat/${ids.desktop}`);
   await kittyRow(page, "tom").click();
+  await openConfig(page);
   const pick = page.locator("[data-modal]").getByTestId("desktop-theme");
   await expect(pick).toHaveValue("");
   const saved = page.waitForResponse(
