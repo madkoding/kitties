@@ -77,6 +77,19 @@ jobs:
       - name: vet and test the Wails module
         run: cd desktop && go vet ./... && go test -count=1 -cover ./...
 
+  # Kitties updating itself, with real binaries and a fake GitHub: a signed release is installed and
+  # restarted into in place, a bad signature is refused, and a version that does not hold is gone back from.
+  selfupdate:
+    name: updating itself
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: scripts/selfupdate_test.sh
+
   # The Android app: the same page in a WebView, a remote for a gateway on the network. Signed
   # with the KITTIES_KEYSTORE_* secrets when they are set (so an installed app updates), else with
   # a debug key.
@@ -267,9 +280,10 @@ jobs:
         shell: bash
         env:
           OAUTH_APPS: ${{ secrets.KITTIES_OAUTH_APPS }}
+          UPDATE_PUBKEY: ${{ vars.KITTIES_UPDATE_PUBKEY }}
         run: |
           ext=""; if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi
-          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }} -X 'github.com/madkoding/kitties/internal/oauth.builtin=$OAUTH_APPS'" -o "desktop/build/bin/kitties-gateway$ext" ./cmd/kitties
+          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }} -X 'github.com/madkoding/kitties/internal/oauth.builtin=$OAUTH_APPS' -X 'github.com/madkoding/kitties/internal/selfupdate.builtinKey=$UPDATE_PUBKEY'" -o "desktop/build/bin/kitties-gateway$ext" ./cmd/kitties
           ls -la desktop/build/bin
       - name: pack
         shell: bash
@@ -397,7 +411,7 @@ jobs:
   release:
     name: release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, build, wails, android, publish-image, publish-gateway-image]
+    needs: [check, build, wails, android, selfupdate, publish-image, publish-gateway-image]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -411,10 +425,13 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: desktop/frontend/package-lock.json
-      - run: make VERSION=${{ github.ref_name }} OAUTH_APPS="$OAUTH_APPS" dist
+      - run: make VERSION=${{ github.ref_name }} OAUTH_APPS="$OAUTH_APPS" UPDATE_PUBKEY="$UPDATE_PUBKEY" dist
         env:
           # The apps Kitties signs in through (a repository secret; empty: the person's own).
           OAUTH_APPS: ${{ secrets.KITTIES_OAUTH_APPS }}
+          # The public key the releases are signed with (a repository variable: it is not a secret).
+          # A gateway built with it only installs updates signed by the matching private key.
+          UPDATE_PUBKEY: ${{ vars.KITTIES_UPDATE_PUBKEY }}
       - uses: actions/download-artifact@v4
         with:
           pattern: kitties-desktop-*
@@ -425,9 +442,32 @@ jobs:
           name: kitties-android-app
           path: dist
       - run: cd dist && sha256sum kitties-* > SHA256SUMS
+      # What the updater of a gateway looks for: kitties-<os>-<arch> of every system and the signed
+      # checksums. The private key is the repository secret KITTIES_SIGNING_KEY (kitties release-key
+      # makes the pair); without it the release is unsigned, and a gateway that holds the key will
+      # not install it.
+      - name: sign the checksums and check what the updater needs
+        env:
+          KITTIES_SIGNING_KEY: ${{ secrets.KITTIES_SIGNING_KEY }}
+          UPDATE_PUBKEY: ${{ vars.KITTIES_UPDATE_PUBKEY }}
+        run: |
+          for p in linux-amd64 linux-arm64 linux-arm darwin-amd64 darwin-arm64 windows-amd64.exe windows-arm64.exe; do
+            grep -q "  kitties-$p\$" dist/SHA256SUMS || { echo "::error::SHA256SUMS does not list kitties-$p"; exit 1; }
+          done
+          if [ -n "$KITTIES_SIGNING_KEY" ]; then
+            dist/kitties-linux-amd64 release-sign dist/SHA256SUMS
+            if [ -n "$UPDATE_PUBKEY" ]; then
+              dist/kitties-linux-amd64 release-verify dist/SHA256SUMS dist/SHA256SUMS.sig "$UPDATE_PUBKEY"
+            else
+              echo "::warning::KITTIES_UPDATE_PUBKEY is not set: the signature was not checked and the binaries do not hold the key"
+            fi
+          else
+            echo "::warning::KITTIES_SIGNING_KEY is not set: this release is unsigned"
+          fi
       - uses: softprops/action-gh-release@v2
         with:
           files: |
             dist/kitties-*
             dist/SHA256SUMS
+            dist/SHA256SUMS.sig
           generate_release_notes: true

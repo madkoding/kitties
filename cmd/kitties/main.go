@@ -60,6 +60,8 @@ Commands:
   shot <name> <file.png>    save a screenshot of the kitty's display
   providers                 list the configured AI profiles and the supported kinds
   version                   print the version
+  release-key | release-sign <file> | release-verify <file> <sig> <key>
+                            the signing of the releases (for whoever makes them)
 
 Flags: -config file picks the configuration; -demo needs no key and no Docker (a scripted brain
 and a drawn desktop) and is the quickest way to see the interface: kitties -demo gateway.
@@ -87,15 +89,17 @@ type app struct {
 	vault     *vault.Store
 	keep      *keep.Store
 	updater   *selfupdate.Updater
-	budget    *budget.Store
-	digest    *digest.Reporter
-	memory    *memory.Store
-	notifier  *notify.Notifier
-	skills    *skills.Library
-	arts      *artifacts.Store
-	in        io.Reader
-	out       io.Writer
-	err       io.Writer
+	// booted is what the start found out about the last update (rolled back, confirmed).
+	booted   selfupdate.BootResult
+	budget   *budget.Store
+	digest   *digest.Reporter
+	memory   *memory.Store
+	notifier *notify.Notifier
+	skills   *skills.Library
+	arts     *artifacts.Store
+	in       io.Reader
+	out      io.Writer
+	err      io.Writer
 }
 
 // Seams for the tests.
@@ -129,9 +133,20 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 		return 0
 	case "init":
 		return cmdInit(*configPath, out, errOut)
+	case "release-key", "release-sign", "release-verify":
+		return cmdRelease(cmd, rest, out, errOut)
 	case "help", "-h", "--help":
 		fs.Usage()
 		return 0
+	}
+	// A gateway that was just updated is counted before anything else can go wrong (even reading
+	// the configuration): one that does not hold goes back to the version before.
+	var booted selfupdate.BootResult
+	if cmd == "gateway" {
+		var berr error
+		if booted, berr = selfupdate.New(config.Defaults().Updates, version).Boot(); berr != nil {
+			fmt.Fprintf(errOut, "kitties: %v\n", berr)
+		}
 	}
 	path := *configPath
 	if path == "" {
@@ -157,7 +172,7 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	if cmd == "token" {
 		return cmdToken(cfg, out, errOut)
 	}
-	a := &app{cfg: cfg, in: in, out: out, err: errOut, demo: *demoMode}
+	a := &app{cfg: cfg, in: in, out: out, err: errOut, demo: *demoMode, booted: booted}
 	if err := a.open(cmd); err != nil {
 		fmt.Fprintf(errOut, "kitties: %v\n", err)
 		return 1
@@ -282,6 +297,7 @@ func (a *app) open(cmd string) error {
 	}
 	a.fleet, a.chats = fleet, chats
 	a.updater = selfupdate.New(a.cfg.Updates, version)
+	a.updater.Idle = func() bool { return !a.chats.AnyBusy() && !a.fleet.AnyHeld() }
 	return nil
 }
 
@@ -448,23 +464,38 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	}, logf)
 	// Kitties itself: told about (notify) or moved to (auto) a newer release, inside the window and
 	// when no kitty is working and no desktop is held.
+	go a.updater.Confirm(ctx)
+	if a.booted.RolledBack != "" {
+		logf("update: %s did not hold and Kitties went back to %s; it will not be offered again", a.booted.RolledBack, version)
+		a.notifier.Notify(rolledBackNote(a.booted.RolledBack, version))
+	}
 	window, _ := config.ParseWindow(a.cfg.Updates.Window)
-	a.updater.Idle = func() bool { return !a.chats.AnyBusy() && !a.fleet.AnyHeld() }
-	go a.updater.Watch(ctx, updateFirstCheck, time.Duration(a.cfg.Updates.CheckHours)*time.Hour, selfupdate.Hooks{
-		Window: func() bool { return window.Contains(time.Now()) },
+	go a.updater.Watch(ctx, updateFirstCheck, time.Duration(a.cfg.Updates.CheckHours)*time.Hour, updateHooks(a.notifier, func() bool { return window.Contains(time.Now()) }, logf))
+	return srv.Listen(ctx, g.Listen, logf)
+}
+
+// rolledBackNote tells that a version that did not hold was gone back from.
+func rolledBackNote(failed, now string) notify.Notification {
+	return notify.Notification{Event: notify.Updated, Title: "Kitties went back to " + now,
+		Body: failed + " did not start properly, so the previous version is running again. It will not be offered again."}
+}
+
+// updateHooks is what the updates of Kitties itself tell the person, and when they may run.
+func updateHooks(n notify.Sender, window func() bool, logf func(string, ...any)) selfupdate.Hooks {
+	return selfupdate.Hooks{
+		Window: window,
 		Available: func(st selfupdate.Status) {
 			body := "Update it from Settings, Preferences."
 			if st.Why != "" {
 				body = st.Why
 			}
-			a.notifier.Notify(notify.Notification{Event: notify.Updated, Title: "Kitties " + st.Latest + " is available", Body: body})
+			n.Notify(notify.Notification{Event: notify.Updated, Title: "Kitties " + st.Latest + " is available", Body: body})
 		},
 		Updated: func(from, to string) {
-			a.notifier.Notify(notify.Notification{Event: notify.Updated, Title: "Kitties was updated to " + to, Body: "It was " + from + "; it restarts now, and the desktops of the kitties keep running."})
+			n.Notify(notify.Notification{Event: notify.Updated, Title: "Kitties was updated to " + to, Body: "It was " + from + "; it restarts now, and the desktops of the kitties keep running."})
 		},
 		Log: logf,
-	})
-	return srv.Listen(ctx, g.Listen, logf)
+	}
 }
 
 // updateFirstCheck is how long after the start the gateway first looks for a newer desktop image.

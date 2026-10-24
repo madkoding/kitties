@@ -1308,6 +1308,8 @@ test("the version of Kitties: a newer one is offered, asked about and installed,
   await expect(box).toContainText("Kitties v1.0.0");
   await expect(box.getByTestId("update-available")).toContainText("Kitties v1.1.0 is available");
   await expect(box).toContainText("tells you; you decide when to update");
+  // Without a signing key the update is only checksummed, and the page says so.
+  await expect(box.getByTestId("update-unsigned")).toContainText("updates.public_key");
   await shot(page, "54-updates");
   // It asks first, installs, and says it is restarting.
   await box.getByTestId("update-apply").click();
@@ -1335,10 +1337,17 @@ test("a gateway that cannot replace itself says how it is updated, and one that 
   await expect(box.getByTestId("update-available")).toContainText("runs in a container");
   await expect(box.getByTestId("update-apply")).toHaveCount(0);
   await expect(box).toContainText("installs them by itself");
-  status = { current: "v1.1.0", latest: "v1.1.0", available: false, mode: "off", can_apply: true };
+  status = {
+    current: "v1.1.0",
+    latest: "v1.2.0",
+    available: false,
+    skipped: "v1.2.0",
+    mode: "off",
+    can_apply: true,
+  };
   await page.getByRole("tab", { name: "Models" }).click();
   await page.getByRole("tab", { name: "Preferences" }).click();
-  await expect(box).toContainText("it is the newest version");
+  await expect(box.getByTestId("update-skipped")).toContainText("v1.2.0 did not hold here");
   await expect(box).toContainText("does not look for new versions");
   await expect(box.getByTestId("update-check")).toBeDisabled();
 });

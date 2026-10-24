@@ -1014,6 +1014,10 @@ export type UpdateStatus = {
   available: boolean;
   mode: "off" | "notify" | "auto";
   can_apply: boolean;
+  // signed is true when releases are checked against a signing key (updates.public_key).
+  signed?: boolean;
+  // skipped is a newer version that was tried here and did not hold: it is not offered again.
+  skipped?: string;
   why?: string;
   checked_at?: string;
   error?: string;

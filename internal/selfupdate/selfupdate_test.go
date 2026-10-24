@@ -27,7 +27,18 @@ type release_ struct {
 	sums       string // "" computes it from the binary
 	noAsset    bool
 	status     int
+	// signedBy is the private key the checksums are signed with ("" leaves the release unsigned).
+	signedBy string
 }
+
+// The release key of the tests.
+var testPub, testPriv = func() (string, string) {
+	pub, priv, err := GenerateKey()
+	if err != nil {
+		panic(err)
+	}
+	return pub, priv
+}()
 
 func fakeGitHub(t *testing.T, r *release_) *httptest.Server {
 	t.Helper()
@@ -39,7 +50,11 @@ func fakeGitHub(t *testing.T, r *release_) *httptest.Server {
 				w.WriteHeader(r.status)
 				return
 			}
-			assets := fmt.Sprintf(`[{"name":"kitties-linux-amd64","browser_download_url":"%[1]s/dl/bin"},{"name":"SHA256SUMS","browser_download_url":"%[1]s/dl/sums"}]`, srv.URL)
+			assets := fmt.Sprintf(`[{"name":"kitties-linux-amd64","browser_download_url":"%[1]s/dl/bin"},{"name":"SHA256SUMS","browser_download_url":"%[1]s/dl/sums"}`, srv.URL)
+			if r.signedBy != "" {
+				assets += fmt.Sprintf(`,{"name":"SHA256SUMS.sig","browser_download_url":"%s/dl/sig"}`, srv.URL)
+			}
+			assets += "]"
 			if r.noAsset {
 				assets = "[]"
 			}
@@ -47,18 +62,24 @@ func fakeGitHub(t *testing.T, r *release_) *httptest.Server {
 		case "/dl/bin":
 			_, _ = w.Write([]byte(r.binary))
 		case "/dl/sums":
-			sums := r.sums
-			if sums == "" {
-				h := sha256.Sum256([]byte(r.binary))
-				sums = hex.EncodeToString(h[:]) + "  kitties-linux-amd64\n0000  other-file\n"
-			}
-			_, _ = w.Write([]byte(sums))
+			_, _ = w.Write([]byte(r.sumsText()))
+		case "/dl/sig":
+			sig, _ := Sign(r.signedBy, []byte(r.sumsText()))
+			_, _ = w.Write([]byte(sig + "\n"))
 		default:
 			http.NotFound(w, req)
 		}
 	}))
 	t.Cleanup(srv.Close)
 	return srv
+}
+
+func (r *release_) sumsText() string {
+	if r.sums != "" {
+		return r.sums
+	}
+	h := sha256.Sum256([]byte(r.binary))
+	return hex.EncodeToString(h[:]) + "  kitties-linux-amd64\n0000  other-file\n"
 }
 
 func script(version string) string { return "#!/bin/sh\necho kitties " + version + "\n" }
@@ -75,6 +96,9 @@ func updater(t *testing.T, srv *httptest.Server, mode string) (*Updater, string)
 	}
 	cfg := config.Defaults().Updates
 	cfg.Gateway, cfg.API = mode, srv.URL
+	if mode == config.UpdateAuto {
+		cfg.PublicKey = testPub // updating by itself needs the release key
+	}
 	u := New(cfg, "v1.0.0")
 	u.Exe, u.OS, u.Arch, u.InDocker = exe, "linux", "amd64", false
 	return u, exe
@@ -156,9 +180,9 @@ func TestApplyReplacesTheBinaryAndKeepsTheOld(t *testing.T) {
 	if st, _ := os.Stat(exe); st.Mode().Perm()&0o100 == 0 {
 		t.Error("the new binary is not executable")
 	}
-	// Nothing is left behind in the folder but the two.
+	// Nothing is left behind in the folder but the two and the marker of an update to confirm.
 	entries, _ := os.ReadDir(filepath.Dir(exe))
-	if len(entries) != 2 {
+	if len(entries) != 3 {
 		t.Errorf("the folder holds %d files", len(entries))
 	}
 	// Already the newest.
@@ -184,6 +208,7 @@ func TestApplyRefusesWhatItCannotTrust(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			r := c.r
+			r.signedBy = testPriv
 			u, exe := updater(t, fakeGitHub(t, &r), config.UpdateAuto)
 			if _, err := u.Apply(context.Background()); err == nil || !strings.Contains(err.Error(), c.want) {
 				t.Fatalf("Apply = %v, want %q", err, c.want)
@@ -225,7 +250,7 @@ func TestOnlyHttpsAndLoopback(t *testing.T) {
 }
 
 func TestWhereItDoesNotUpdateItself(t *testing.T) {
-	r := &release_{tag: "v1.1.0", binary: script("v1.1.0")}
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), signedBy: testPriv}
 	u, exe := updater(t, fakeGitHub(t, r), config.UpdateAuto)
 	for name, set := range map[string]func(){
 		"a container":            func() { u.InDocker = true },
@@ -283,7 +308,7 @@ func (t *told) hooks(window bool) Hooks {
 
 func TestRoundsTellAndUpdate(t *testing.T) {
 	ctx := context.Background()
-	r := &release_{tag: "v1.1.0", binary: script("v1.1.0")}
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), signedBy: testPriv}
 	srv := fakeGitHub(t, r)
 	// notify: the person is told once per version, nothing is installed.
 	u, exe := updater(t, srv, config.UpdateNotify)
@@ -411,5 +436,273 @@ func TestNewAndRelaunch(t *testing.T) {
 		if err := redirect(req, nil); (err == nil) != ok {
 			t.Errorf("redirect to %s = %v", address, err)
 		}
+	}
+}
+
+func TestSigningKeys(t *testing.T) {
+	pub, priv, err := GenerateKey()
+	if err != nil {
+		t.Fatal(err)
+	}
+	data := []byte("abc  kitties-linux-amd64\n")
+	sig, err := Sign(priv, data)
+	if err != nil || Verify(pub, data, sig) != nil {
+		t.Fatalf("a signature does not verify: %v", err)
+	}
+	other, _, _ := GenerateKey()
+	for name, err := range map[string]error{
+		"another key":       Verify(other, data, sig),
+		"changed data":      Verify(pub, append([]byte("x"), data...), sig),
+		"a short signature": Verify(pub, data, "AAAA"),
+		"not base64":        Verify(pub, data, "***"),
+		"a bad public key":  Verify("AAAA", data, sig),
+	} {
+		if err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	if _, err := Sign("AAAA", data); err == nil {
+		t.Error("a bad private key signed")
+	}
+	// The configuration's key wins over the one built in.
+	old := builtinKey
+	builtinKey = "builtin"
+	t.Cleanup(func() { builtinKey = old })
+	u := New(config.Defaults().Updates, "v1.0.0")
+	if u.publicKey() != "builtin" {
+		t.Errorf("builtin = %q", u.publicKey())
+	}
+	u.cfg.PublicKey = " " + pub + " "
+	if u.publicKey() != pub {
+		t.Errorf("configured = %q", u.publicKey())
+	}
+}
+
+func TestOnlyAReleaseSignedByTheKeyIsInstalled(t *testing.T) {
+	ctx := context.Background()
+	other, otherPriv, _ := GenerateKey()
+	_ = other
+	for name, c := range map[string]struct {
+		signedBy string
+		want     string
+	}{
+		"unsigned":        {"", "not signed (it has no SHA256SUMS.sig)"},
+		"another key":     {otherPriv, "not signed by the release key"},
+		"the release key": {testPriv, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), signedBy: c.signedBy}
+			u, exe := updater(t, fakeGitHub(t, r), config.UpdateAuto)
+			to, err := u.Apply(ctx)
+			if c.want == "" {
+				if err != nil || to != "v1.1.0" {
+					t.Fatalf("Apply = %q, %v", to, err)
+				}
+				return
+			}
+			if err == nil || !strings.Contains(err.Error(), c.want) {
+				t.Fatalf("Apply = %v, want %q", err, c.want)
+			}
+			if got, _ := os.ReadFile(exe); string(got) != script("v1.0.0") {
+				t.Error("an unverified release was installed")
+			}
+		})
+	}
+}
+
+func TestWithoutAKeyOnlyAManualUpdateIsChecksummed(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0")}
+	srv := fakeGitHub(t, r)
+	// Updating by itself needs the key.
+	auto, _ := updater(t, srv, config.UpdateAuto)
+	auto.cfg.PublicKey = ""
+	old := builtinKey
+	builtinKey = ""
+	t.Cleanup(func() { builtinKey = old })
+	st, _ := auto.Check(context.Background())
+	if st.CanApply || st.Signed || !strings.Contains(st.Why, "updates.public_key") {
+		t.Errorf("auto without a key = %+v", st)
+	}
+	// By hand it works, and says it is only checksummed.
+	manual, _ := updater(t, srv, config.UpdateNotify)
+	st, _ = manual.Check(context.Background())
+	if !st.CanApply || st.Signed {
+		t.Errorf("manual without a key = %+v", st)
+	}
+	if _, err := manual.Apply(context.Background()); err != nil {
+		t.Errorf("a checksummed update = %v", err)
+	}
+	// With a key the status says so.
+	manual.cfg.PublicKey = testPub
+	if st, _ := manual.Check(context.Background()); !st.Signed {
+		t.Error("a configured key is not reported")
+	}
+}
+
+// installed makes an updater of a fake installation that was just updated from v1.0.0 to v1.1.0:
+// the new binary in place, the old as .prev, and the marker an update leaves.
+func installed(t *testing.T) (*Updater, string, *[]string) {
+	t.Helper()
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), signedBy: testPriv}
+	u, exe := updater(t, fakeGitHub(t, r), config.UpdateAuto)
+	if _, err := u.Apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// The new version is the one running now.
+	u.Current = "v1.1.0"
+	var restarts []string
+	u.Restart = func(exe string, args, env []string) error { restarts = append(restarts, exe); return nil }
+	return u, exe, &restarts
+}
+
+func TestAVersionThatDoesNotHoldIsGoneBackFrom(t *testing.T) {
+	u, exe, restarts := installed(t)
+	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	u.Now = func() time.Time { return clock }
+	// The first start of the new version is counted; nothing else happens.
+	if res, err := u.Boot(); err != nil || res.RolledBack != "" || len(*restarts) != 0 {
+		t.Fatalf("first boot = %+v, %v", res, err)
+	}
+	if _, err := os.Stat(exe + ".update"); err != nil {
+		t.Fatal("the marker went before the version was confirmed")
+	}
+	// It starts again a minute later, before holding long enough: it did not hold.
+	clock = clock.Add(time.Minute)
+	if _, err := u.Boot(); err != nil {
+		t.Fatal(err)
+	}
+	if len(*restarts) != 1 || (*restarts)[0] != exe {
+		t.Errorf("restarts = %v", *restarts)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != script("v1.0.0") {
+		t.Errorf("the binary is %q: the old version was not put back", got)
+	}
+	if bad, _ := os.ReadFile(exe + ".failed"); string(bad) != script("v1.1.0") {
+		t.Errorf("the failed version was not kept: %q", bad)
+	}
+	if _, err := os.Stat(exe + ".update"); err == nil {
+		t.Error("the marker is still there")
+	}
+	// The old version starts: it is told once, and does not offer the failed one again.
+	u.Current = "v1.0.0"
+	if res, _ := u.Boot(); res.RolledBack != "v1.1.0" {
+		t.Errorf("the rollback was not reported: %+v", res)
+	}
+	if res, _ := u.Boot(); res.RolledBack != "" {
+		t.Errorf("the rollback was reported twice: %+v", res)
+	}
+	st, _ := u.Check(context.Background())
+	if st.Available || st.Skipped != "v1.1.0" {
+		t.Errorf("the failed version is offered again: %+v", st)
+	}
+}
+
+func TestAVersionThatHoldsIsConfirmed(t *testing.T) {
+	// It stays up through the probation: confirmed from inside.
+	u, exe, restarts := installed(t)
+	if _, err := u.Boot(); err != nil {
+		t.Fatal(err)
+	}
+	old := Probation
+	Probation = 5 * time.Millisecond
+	t.Cleanup(func() { Probation = old })
+	u.Confirm(context.Background())
+	if _, err := os.Stat(exe + ".update"); err == nil {
+		t.Error("the marker stays after the probation")
+	}
+	if _, err := u.Boot(); err != nil || len(*restarts) != 0 {
+		t.Errorf("a confirmed version was gone back from: %v %v", err, *restarts)
+	}
+	// Or a restart long after the first start finds it held.
+	u, exe, restarts = installed(t)
+	clock := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+	u.Now = func() time.Time { return clock }
+	Probation = 3 * time.Minute
+	_, _ = u.Boot()
+	clock = clock.Add(10 * time.Minute)
+	res, err := u.Boot()
+	if err != nil || !res.Confirmed || len(*restarts) != 0 {
+		t.Errorf("a late restart = %+v %v %v", res, err, *restarts)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != script("v1.1.0") {
+		t.Error("a version that held was replaced")
+	}
+	// A marker of another version is not this one's business.
+	u, exe, _ = installed(t)
+	u.Current = "v9.9.9"
+	if _, err := u.Boot(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(exe + ".update"); err == nil {
+		t.Error("a marker of another version stays")
+	}
+	// Without a marker, nothing happens at all (and confirming is a no-op).
+	u.Confirm(context.Background())
+	if res, err := u.Boot(); err != nil || res != (BootResult{}) {
+		t.Errorf("no marker = %+v %v", res, err)
+	}
+}
+
+func TestGoingBackNeedsTheOldVersion(t *testing.T) {
+	u, exe, restarts := installed(t)
+	_, _ = u.Boot()
+	if err := os.Remove(exe + ".prev"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := u.Boot(); err == nil || !strings.Contains(err.Error(), "cannot be run") || len(*restarts) != 0 {
+		t.Errorf("no previous version = %v", err)
+	}
+	if _, err := os.Stat(exe + ".update"); err == nil {
+		t.Error("the marker stays: every start would try again")
+	}
+	if got, _ := os.ReadFile(exe); string(got) != script("v1.1.0") {
+		t.Error("the binary changed without a version to go back to")
+	}
+	// A restart that fails says where things stand.
+	u, _, _ = installed(t)
+	_, _ = u.Boot()
+	u.Restart = func(string, []string, []string) error { return errors.New("no exec") }
+	if _, err := u.Boot(); err == nil || !strings.Contains(err.Error(), "could not restart") {
+		t.Errorf("a failed restart = %v", err)
+	}
+}
+
+// The updater looks for kitties-<os>-<arch>[.exe], and the Makefile names what it builds so: a
+// platform added to one and not the other would be offered an update that has no file.
+func TestAssetNamesAreTheMakefilesOnes(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Join("..", "..", "Makefile"))
+	if err != nil {
+		t.Skip("no Makefile here")
+	}
+	makefile := string(raw)
+	for _, want := range []string{`-o $(DIST)/kitties-$$os-$$arch$$ext`, `[ "$$os" = "windows" ] && ext=".exe"`} {
+		if !strings.Contains(makefile, want) {
+			t.Fatalf("the Makefile does not name its files as the updater expects: %q is gone", want)
+		}
+	}
+	i := strings.Index(makefile, "PLATFORMS :=")
+	if i < 0 {
+		t.Fatal("no PLATFORMS in the Makefile")
+	}
+	block := makefile[i:]
+	block = block[:strings.Index(block, "\n\n")]
+	checked := 0
+	for _, f := range strings.Fields(strings.NewReplacer("PLATFORMS :=", "", "\\", "").Replace(block)) {
+		osName, arch, ok := strings.Cut(f, "/")
+		if !ok {
+			continue
+		}
+		u := &Updater{OS: osName, Arch: arch}
+		want := "kitties-" + osName + "-" + arch
+		if osName == "windows" {
+			want += ".exe"
+		}
+		if u.assetName() != want {
+			t.Errorf("%s: the updater looks for %s, the Makefile builds %s", f, u.assetName(), want)
+		}
+		checked++
+	}
+	if checked < 7 {
+		t.Errorf("only %d platforms were read from the Makefile", checked)
 	}
 }

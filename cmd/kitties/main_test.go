@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
+	"github.com/madkoding/kitties/internal/notify"
+	"github.com/madkoding/kitties/internal/selfupdate"
 	"io"
 	"net/http"
 	"os"
@@ -431,4 +434,151 @@ func TestFollowTaskHelpers(t *testing.T) {
 	a := &app{out: &bytes.Buffer{}}
 	a.chats = nil
 	_ = a
+}
+
+// The commands of whoever makes the releases: a key pair, a signature, and checking it.
+func TestReleaseSigningCommands(t *testing.T) {
+	dir := t.TempDir()
+	var out, errOut bytes.Buffer
+	if code := run([]string{"release-key"}, nil, &out, &errOut); code != 0 {
+		t.Fatalf("release-key = %d %s", code, errOut.String())
+	}
+	var keys []string
+	for _, line := range strings.Split(out.String(), "\n") {
+		if len(line) == 44 || len(line) == 88 {
+			keys = append(keys, line)
+		}
+	}
+	if len(keys) != 2 {
+		t.Fatalf("the keys are not in %q", out.String())
+	}
+	pub, priv := keys[0], keys[1]
+	file := filepath.Join(dir, "SHA256SUMS")
+	if err := os.WriteFile(file, []byte("abc  kitties-linux-amd64\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("KITTIES_SIGNING_KEY", priv)
+	out.Reset()
+	if code := run([]string{"release-sign", file}, nil, &out, &errOut); code != 0 || !strings.Contains(out.String(), "SHA256SUMS.sig") {
+		t.Fatalf("release-sign = %d %s %s", code, out.String(), errOut.String())
+	}
+	out.Reset()
+	if code := run([]string{"release-verify", file, file + ".sig", pub}, nil, &out, &errOut); code != 0 || !strings.Contains(out.String(), "is signed by that key") {
+		t.Fatalf("release-verify = %d %s %s", code, out.String(), errOut.String())
+	}
+	// A changed file, another key, a missing file, a bad private key and bad usage all fail.
+	other := filepath.Join(dir, "other")
+	_ = os.WriteFile(other, []byte("changed"), 0o644)
+	var otherKey bytes.Buffer
+	run([]string{"release-key"}, nil, &otherKey, &errOut)
+	otherPub := ""
+	for _, line := range strings.Split(otherKey.String(), "\n") {
+		if len(line) == 44 {
+			otherPub = line
+			break
+		}
+	}
+	for name, args := range map[string][]string{
+		"changed":      {"release-verify", other, file + ".sig", pub},
+		"another key":  {"release-verify", file, file + ".sig", otherPub},
+		"no file":      {"release-verify", filepath.Join(dir, "nope"), file + ".sig", pub},
+		"no sig":       {"release-verify", file, filepath.Join(dir, "nope"), pub},
+		"verify usage": {"release-verify", file},
+		"sign usage":   {"release-sign"},
+		"sign no file": {"release-sign", filepath.Join(dir, "nope")},
+	} {
+		if code := run(args, nil, &out, &errOut); code == 0 {
+			t.Errorf("%s succeeded", name)
+		}
+	}
+	t.Setenv("KITTIES_SIGNING_KEY", "nope")
+	if code := run([]string{"release-sign", file}, nil, &out, &errOut); code == 0 {
+		t.Error("signing with a bad key succeeded")
+	}
+	if cmdRelease("release-other", nil, &out, &errOut) != 2 {
+		t.Error("an unknown release command")
+	}
+}
+
+type recordSender struct{ got []notify.Notification }
+
+func (r *recordSender) Notify(n notify.Notification) { r.got = append(r.got, n) }
+
+func TestUpdateNotes(t *testing.T) {
+	var logs []string
+	rec := &recordSender{}
+	h := updateHooks(rec, func() bool { return true }, func(f string, a ...any) { logs = append(logs, f) })
+	h.Available(selfupdate.Status{Latest: "v2.0.0"})
+	h.Available(selfupdate.Status{Latest: "v2.0.0", Why: "in a container: docker compose pull"})
+	h.Updated("v1.0.0", "v2.0.0")
+	h.Log("x")
+	if !h.Window() || len(rec.got) != 3 || len(logs) != 1 {
+		t.Fatalf("hooks = %+v %v", rec.got, logs)
+	}
+	for i, want := range []string{"Update it from Settings", "docker compose pull", "restarts now"} {
+		if rec.got[i].Event != notify.Updated || !strings.Contains(rec.got[i].Body, want) {
+			t.Errorf("note %d = %+v, want %q", i, rec.got[i], want)
+		}
+	}
+	if n := rolledBackNote("v2.0.0", "v1.0.0"); n.Event != notify.Updated || !strings.Contains(n.Title, "v1.0.0") || !strings.Contains(n.Body, "v2.0.0") {
+		t.Errorf("rollback note = %+v", n)
+	}
+}
+
+// A gateway that starts and finds that the update it is has already started and did not hold
+// goes back; here there is no previous version to go back to, which it says and goes on.
+func TestGatewayStartFindsAnUpdateThatDidNotHold(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := exe + ".update"
+	raw := fmt.Sprintf(`{"From":"v0.9.0","To":%q,"Boots":1,"BootAt":%q}`, version, time.Now().Format(time.RFC3339))
+	if err := os.WriteFile(marker, []byte(raw), 0o600); err != nil {
+		t.Skip("the folder of the test binary is not writable")
+	}
+	t.Cleanup(func() { _ = os.Remove(marker) })
+	var out, errOut bytes.Buffer
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	old := notifyContext
+	notifyContext = func() (context.Context, context.CancelFunc) { return ctx, func() {} }
+	t.Cleanup(func() { notifyContext = old })
+	run([]string{"-demo", "gateway"}, nil, &out, &errOut)
+	if !strings.Contains(errOut.String(), "cannot be run") {
+		t.Errorf("the failed rollback was not said: %q", errOut.String())
+	}
+}
+
+// A gateway that starts after a version that did not hold was gone back from says so.
+func TestGatewayStartTellsOfTheRollback(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	refused := exe + ".refused"
+	if err := os.WriteFile(refused, []byte(`{"Tag":"v9.9.9","Told":false}`), 0o600); err != nil {
+		t.Skip("the folder of the test binary is not writable")
+	}
+	t.Cleanup(func() { _ = os.Remove(refused) })
+	withRuntime(t, true)
+	cfg := writeConfig(t, chatServer(t, "ok"))
+	ctx, cancel := context.WithCancel(context.Background())
+	notifyContext = func() (context.Context, context.CancelFunc) { return ctx, func() {} }
+	out, errOut := &syncBuffer{}, &syncBuffer{}
+	done := make(chan int, 1)
+	go func() { done <- run([]string{"-config", cfg, "gateway"}, strings.NewReader(""), out, errOut) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for !strings.Contains(out.String(), "listening") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if !strings.Contains(out.String(), "v9.9.9 did not hold") {
+		t.Errorf("the rollback was not told: %s", out.String())
+	}
+	// It is told once: the next start finds nothing to say.
+	if raw := mustRead(t, refused); !strings.Contains(raw, `"Told":true`) {
+		t.Errorf("the rollback is told again at every start: %s", raw)
+	}
 }

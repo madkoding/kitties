@@ -215,6 +215,10 @@ const dict: Dictionary = {
     "Kitties busca versiones nuevas y las instala solo cuando nada está en uso.",
   "Kitties looks for new versions and tells you; you decide when to update.":
     "Kitties busca versiones nuevas y te avisa; tú decides cuándo actualizar.",
+  "This update is checked against its checksums only, which do not say who made it: set updates.public_key to require the release key's signature.":
+    "Esta actualización se comprueba solo con sus sumas de verificación, que no dicen quién la hizo: define updates.public_key para exigir la firma de la clave de los releases.",
+  "{version} did not hold here and Kitties went back to {current}: it is not offered again.":
+    "{version} no se sostuvo aquí y Kitties volvió a {current}: no se ofrece de nuevo.",
 };
 
 export default dict;

@@ -43,10 +43,15 @@ type Status struct {
 	Mode      string `json:"mode"`
 	// CanApply is true when this binary may be replaced and restarted by itself; when it is not,
 	// Why says why and what to do instead.
-	CanApply  bool      `json:"can_apply"`
+	CanApply bool `json:"can_apply"`
+	// Signed is true when releases are checked against a signing key; without one an update is
+	// only checked against the release's checksums, which do not say who made it.
+	Signed    bool      `json:"signed"`
 	Why       string    `json:"why,omitempty"`
 	CheckedAt time.Time `json:"checked_at,omitempty"`
 	Error     string    `json:"error,omitempty"`
+	// Skipped is a newer version that was tried here and did not hold, and is not offered again.
+	Skipped string `json:"skipped,omitempty"`
 }
 
 // ErrBusy is what an update gets while kitties are in use.
@@ -169,6 +174,8 @@ func (u *Updater) canApply() (bool, string) {
 		return false, "this gateway belongs to the Kitties app: update the app"
 	case u.OS == "windows":
 		return false, "a running program cannot be replaced on Windows: download the new version and replace it by hand"
+	case u.cfg.Gateway == config.UpdateAuto && u.publicKey() == "":
+		return false, "updating by itself needs the key the releases are signed with: set updates.public_key (kitties release-key makes one)"
 	}
 	probe, err := os.CreateTemp(filepath.Dir(u.Exe), ".kitties-update-*")
 	if err != nil {
@@ -190,7 +197,7 @@ func (u *Updater) Status() Status {
 // Check asks GitHub for the newest release.
 func (u *Updater) Check(ctx context.Context) (Status, error) {
 	can, why := u.canApply()
-	st := Status{Current: u.Current, Mode: u.cfg.Gateway, CanApply: can, Why: why, CheckedAt: u.Now()}
+	st := Status{Current: u.Current, Mode: u.cfg.Gateway, CanApply: can, Why: why, CheckedAt: u.Now(), Signed: u.publicKey() != ""}
 	if !isRelease(u.Current) {
 		// A development build has nothing to compare with: there is no use in asking.
 		u.set(st, release{})
@@ -203,6 +210,11 @@ func (u *Updater) Check(ctx context.Context) (Status, error) {
 		return st, err
 	}
 	st.Latest, st.Available = rel.Tag, Newer(u.Current, rel.Tag)
+	// A version that did not hold on this installation is not offered again; a newer one is.
+	if st.Latest == u.skipped() {
+		st.Available = false
+		st.Skipped = st.Latest
+	}
 	u.set(st, rel)
 	return st, nil
 }
@@ -299,6 +311,20 @@ func (u *Updater) Apply(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("downloading SHA256SUMS: %w", err)
 	}
+	// With a key, the checksums must be signed by it: nothing is trusted from a release that is not.
+	if key := u.publicKey(); key != "" {
+		sigURL := rel.Assets["SHA256SUMS.sig"]
+		if sigURL == "" {
+			return "", fmt.Errorf("the release %s is not signed (it has no SHA256SUMS.sig): it was not installed", rel.Tag)
+		}
+		sig, err := u.get(ctx, sigURL, 4<<10, "")
+		if err != nil {
+			return "", fmt.Errorf("downloading SHA256SUMS.sig: %w", err)
+		}
+		if err := Verify(key, sums, string(sig)); err != nil {
+			return "", fmt.Errorf("the release %s is not signed by the release key (%v): it was not installed", rel.Tag, err)
+		}
+	}
 	want := checksum(string(sums), name)
 	if want == "" {
 		return "", fmt.Errorf("SHA256SUMS of %s does not list %s", rel.Tag, name)
@@ -313,6 +339,8 @@ func (u *Updater) Apply(ctx context.Context) (string, error) {
 	if err := u.install(ctx, bin, rel.Tag); err != nil {
 		return "", err
 	}
+	// Until the new version has held for a while, it can be gone back from.
+	_ = writeJSON(u.markerPath(), pending{From: u.Current, To: rel.Tag})
 	return rel.Tag, nil
 }
 

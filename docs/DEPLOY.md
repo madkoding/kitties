@@ -101,10 +101,22 @@ Caddy: `flush_interval -1`). `deploy/nginx.conf` is a complete example.
   it once to see it is the version it claims to be, keeps the old one as `<name>.prev` and restarts
   into it (same process id, so a supervisor follows it), only when no kitty is working and no
   desktop is held, and inside `updates.window` ("02:00-06:00", the server's clock) when there is one.
-  The desktops of the kitties keep running across the restart. It does not replace a development
+  The desktops of the kitties keep running across the restart. If the new version is started again
+  before it has stayed up for three minutes (it crashed, or hung and was restarted), that start goes
+  back to `<name>.prev`, keeps the failed binary as `<name>.failed`, tells you, and does not offer
+  that version again (a newer one is offered); a supervisor that restarts a crashed program
+  (systemd `Restart=always`, a container's restart policy) is what brings the failed start back for
+  this to see it. It does not replace a development
   build, a program in a container (that is the image's update), the one inside the Kitties app (its
   bundle is signed), one it cannot write next to, or anything on Windows: it says so and how to
   update instead. `updates.gateway: off` stops it looking.
+- Who made a release: a checksum shows a file arrived whole, not who made it, so releases are
+  **signed**. `kitties release-key` makes an Ed25519 key pair: keep the private key as the repository
+  secret `KITTIES_SIGNING_KEY` and the public key as the repository variable `KITTIES_UPDATE_PUBKEY`
+  (it is built into the binaries) or set it as `updates.public_key`. The release pipeline signs
+  `SHA256SUMS` (`SHA256SUMS.sig`, checked against the public key before it is published); a gateway
+  that holds the key installs nothing whose checksums are not signed by it, and `gateway: auto`
+  needs the key. Without one, the update from Settings is only checksummed and the page says so.
 - The desktops: with `containers.auto_update` (on), the gateway pulls the desktop image every
   `containers.update_check_hours` and makes each idle desktop anew with its sessions kept (see
   [how a kitty uses its desktop](DESKTOP.md)); it also waits for `updates.window`.

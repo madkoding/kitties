@@ -1,6 +1,8 @@
 package config
 
 import (
+	"encoding/base64"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -21,6 +23,10 @@ type Updates struct {
 	CheckHours int `yaml:"check_hours"`
 	// Repo is the GitHub repository whose releases are looked at.
 	Repo string `yaml:"repo"`
+	// PublicKey is the key releases must be signed with (base64, 32 bytes): when there is one (this
+	// or the one built into the binary), a release whose checksums are not signed by it is never
+	// installed, and the automatic update needs one.
+	PublicKey string `yaml:"public_key"`
 	// API is GitHub's API address (changed for a GitHub Enterprise server, or a test).
 	API string `yaml:"api"`
 }
@@ -79,6 +85,11 @@ func (u Updates) validate() error {
 	}
 	if u.CheckHours < 1 || u.CheckHours > 24*30 {
 		return fmt.Errorf("updates.check_hours is between 1 and 720")
+	}
+	if u.PublicKey != "" {
+		if raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(u.PublicKey)); err != nil || len(raw) != 32 {
+			return errors.New("updates.public_key is not a key: 32 bytes in base64 (kitties release-key makes one)")
+		}
 	}
 	if !strings.Contains(u.Repo, "/") || strings.ContainsAny(u.Repo, " ?#") {
 		return fmt.Errorf("updates.repo: %q is not owner/name", u.Repo)

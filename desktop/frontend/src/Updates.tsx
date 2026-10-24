@@ -112,6 +112,24 @@ export default function Updates() {
           )}
         </div>
       )}
+      {st.available && st.can_apply && !st.signed && (
+        <p class="text-xs text-[var(--c-amber)] mt-1" data-testid="update-unsigned">
+          {t(
+            "This update is checked against its checksums only, which do not say who made it: set updates.public_key to require the release key's signature.",
+          )}
+        </p>
+      )}
+      {st.skipped && (
+        <p class="text-xs text-[var(--t3)] mt-2" data-testid="update-skipped">
+          {t(
+            "{version} did not hold here and Kitties went back to {current}: it is not offered again.",
+            {
+              version: st.skipped,
+              current: st.current,
+            },
+          )}
+        </p>
+      )}
       {restarting && (
         <p class="text-sm mt-2" role="status" data-testid="update-restarting">
           <span class="spinner" /> {t("Updated to {version}: restarting…", { version: restarting })}

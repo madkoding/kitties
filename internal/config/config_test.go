@@ -339,3 +339,16 @@ func TestUpdatesWindowAndDefaults(t *testing.T) {
 		t.Errorf("a good block = %v", err)
 	}
 }
+
+func TestUpdatesPublicKey(t *testing.T) {
+	base := "providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\nupdates:\n  public_key: "
+	good := "A" + strings.Repeat("A", 42) + "="
+	if _, err := Parse([]byte(base + good + "\n")); err != nil {
+		t.Errorf("a 32-byte key = %v", err)
+	}
+	for _, bad := range []string{"short", "not-base64$", strings.Repeat("A", 64)} {
+		if _, err := Parse([]byte(base + bad + "\n")); err == nil || !strings.Contains(err.Error(), "updates.public_key") {
+			t.Errorf("key %q = %v", bad, err)
+		}
+	}
+}
