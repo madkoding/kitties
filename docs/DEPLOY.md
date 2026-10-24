@@ -124,6 +124,18 @@ Caddy: `flush_interval -1`). `deploy/nginx.conf` is a complete example.
   backup as private as the server). Each kitty's workspace is under `work/`.
 - The kitties' containers survive a gateway restart; the watchdog brings back any that stopped.
 
+## Keeping the repository itself safe
+
+- Actions are pinned to a commit, with the version as a comment; Dependabot proposes the updates
+  weekly (actions, Go, npm, Gradle and the images' base) as pull requests the checks look at.
+- The `security` workflow scans the gateway image with Trivy, fetched from its release and checked
+  against a checksum kept in the workflow; raise `TRIVY_VERSION` and `TRIVY_SHA256` together.
+- In the repository settings (Rules → branch ruleset for `main`), require a pull request, and these
+  checks to pass before merging: `fmt · vet · test · coverage`, `desktop app · end to end`,
+  `gateway image`, `kitty-desktop image`, `updating itself`, `semantic title`, `CodeQL`,
+  `dependencies a pull request adds` and `gateway image · known vulnerabilities`. Only an owner of the
+  repository can set this; it is not done by the workflows.
+
 ## Checking it works
 
 ```sh

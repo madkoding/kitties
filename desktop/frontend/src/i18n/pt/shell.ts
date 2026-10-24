@@ -147,6 +147,8 @@ const dict: Dictionary = {
   "Remove {name} and its container?": "Remover {name} e o contêiner dele?",
 
   // Gateway connection
+  "The address has to be like http://192.168.1.20:7488 or https://kitties.example.com.":
+    "O endereço deve ser como http://192.168.1.20:7488 ou https://kitties.example.com.",
   "the address": "o endereço",
   "The app is a remote for the Kitties gateway running on your computer or server. Type its address on the network and its token.":
     "O app é um controle remoto para o gateway do Kitties que roda no seu computador ou servidor. Digite o endereço dele na rede e o token.",

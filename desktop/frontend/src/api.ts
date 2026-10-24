@@ -574,6 +574,18 @@ async function fetchLocalToken(conn: Connection): Promise<Connection> {
   return conn;
 }
 
+// gatewayAddress turns what a person typed into the gateway's address: a bare "host:port" is
+// taken as http, and anything that is not an http(s) address is refused (null). Empty means this
+// page's own gateway.
+export function gatewayAddress(typed: string): string | null {
+  const text = typed.trim();
+  if (!text) {
+    return "";
+  }
+  const full = /^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : "http://" + text;
+  return safeGatewayBase(full) || null;
+}
+
 // safeGatewayBase is the gateway address to build requests on: an http(s) address without a
 // trailing slash, or "" (this page's own origin) for anything else.
 function safeGatewayBase(url: string): string {
