@@ -1101,6 +1101,29 @@ test("every dialog closes: its X, Escape or the backdrop, and the address forget
   await expect(page.getByTestId("zoom")).toHaveCount(0);
 });
 
+test("the buttons of a kitty's drawer never sit over its model and container", async ({ page }) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await kittyRow(page, "tom").click();
+  const header = page.getByTestId("kitty-header");
+  await expect(header).toBeVisible();
+  // The drawer is opened wide, then the window is narrowed under it.
+  for (const width of [1440, 900, 420]) {
+    await page.setViewportSize({ width, height: 900 });
+    const actions = (await page.getByTestId("kitty-actions").boundingBox())!;
+    for (const tag of await header.locator(".tag").all()) {
+      const t = (await tag.boundingBox())!;
+      const apart =
+        t.x + t.width <= actions.x + 1 ||
+        actions.x + actions.width <= t.x + 1 ||
+        t.y + t.height <= actions.y + 1 ||
+        actions.y + actions.height <= t.y + 1;
+      expect(apart, `${width}px: a tag is over the buttons`).toBe(true);
+    }
+    const edge = (await header.boundingBox())!;
+    expect(actions.x + actions.width).toBeLessThanOrEqual(edge.x + edge.width + 1);
+  }
+});
+
 test("a kitty's desktop opens live from the chat, and the person can take control and give it back", async ({
   page,
 }) => {
@@ -1133,11 +1156,40 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   });
   const clicked = page.waitForResponse((r) => r.url().includes("/input") && r.status() === 200);
   await live.getByTestId("live-frame").click({ position: { x: 40, y: 30 } });
+  // The click is seen to land: a ring where it went and a line that says it is on its way.
+  await expect(live.getByTestId("live-ring")).toBeVisible();
+  await expect(live.getByTestId("live-activity")).toContainText(/Sending|waiting|Ready/);
   await clicked;
   await page.keyboard.type("hola");
+  await expect(live.getByTestId("live-activity")).toContainText("Typing 4 characters");
   await page.keyboard.press("Enter");
   await live.getByRole("button", { name: "Alt+Tab" }).click();
   await expect.poll(() => inputs).toEqual(["click", "type", "key", "key"]);
+  await expect(live.getByTestId("live-activity")).toContainText("Ready", { timeout: 8000 });
+  // A drag shows what is being dragged while the button is down, and is sent when it is let go.
+  const box = (await frame.boundingBox())!;
+  await page.mouse.move(box.x + 40, box.y + 40);
+  await page.mouse.down();
+  await expect(live.getByTestId("live-activity")).toContainText("Button down");
+  await page.mouse.move(box.x + 140, box.y + 90, { steps: 4 });
+  await expect(live.getByTestId("live-activity")).toContainText("Dragging");
+  await expect(live.locator(".live-gesture line")).toHaveCount(1);
+  await page.mouse.up();
+  await expect.poll(() => inputs).toContain("drag");
+  await expect(live.locator(".live-gesture")).toHaveCount(0);
+  // The window keeps its margins, and the picture stays inside its frame.
+  const view = page.viewportSize()!;
+  const dialog = (await live.getByRole("dialog").boundingBox())!;
+  expect(dialog.x).toBeGreaterThanOrEqual(8);
+  expect(dialog.y).toBeGreaterThanOrEqual(8);
+  expect(dialog.x + dialog.width).toBeLessThanOrEqual(view.width - 8);
+  expect(dialog.y + dialog.height).toBeLessThanOrEqual(view.height - 8);
+  const surface = (await live.locator(".live-surface").boundingBox())!;
+  const shown = (await frame.boundingBox())!;
+  expect(shown.x).toBeGreaterThanOrEqual(surface.x);
+  expect(shown.y).toBeGreaterThanOrEqual(surface.y);
+  expect(shown.x + shown.width).toBeLessThanOrEqual(surface.x + surface.width + 1);
+  expect(shown.y + shown.height).toBeLessThanOrEqual(surface.y + surface.height + 1);
   // The clipboard both ways: the person's text goes to the kitty's, and comes back.
   const clipboard = live.getByTestId("clipboard");
   await clipboard.getByRole("textbox").fill("my coupon code");
@@ -1153,13 +1205,53 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live.getByTestId("live-state")).toHaveText("Watching live");
   await page.keyboard.press("Escape");
   await expect(live).toHaveCount(0);
-  // From the kitty's drawer too, and its X brings the drawer back.
+});
+
+test("in a kitty's drawer the desktop is there, live, and one click on it takes the controls", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
   await kittyRow(page, "tom").click();
-  await page.locator("[data-modal]").getByTestId("open-desktop").click();
+  const drawer = page.locator("[data-modal]");
+  const live = drawer.getByTestId("live-desktop");
   await expect(live).toBeVisible();
-  await live.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(live).toHaveCount(0);
-  await expect(page.locator("[data-modal]")).toHaveCount(1);
+  // The desktop comes right after the header, above the goals and the journal: those grow and
+  // must not push it down.
+  const deskBox = (await live.boundingBox())!;
+  const goalsBox = (await drawer.getByText("Goals", { exact: true }).first().boundingBox())!;
+  const journalBox = (await drawer.getByText("Journal", { exact: true }).first().boundingBox())!;
+  expect(deskBox.y).toBeLessThan(goalsBox.y);
+  expect(deskBox.y).toBeLessThan(journalBox.y);
+  // One picture of the desktop, and it is the live one: nothing else shows it, nothing to open.
+  await expect(drawer.getByTestId("live-frame")).toHaveCount(1);
+  await expect(drawer.getByTestId("open-desktop")).toHaveCount(0);
+  await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  await expect(live.getByText("Click the picture to take control")).toBeVisible();
+  // A click on the picture takes the controls; Escape is then a key of the display, not a way out.
+  await live.getByTestId("live-frame").click({ position: { x: 60, y: 40 } });
+  await expect(live.getByTestId("live-state")).toContainText("You have the controls");
+  await expect(live.getByTestId("live-activity")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer.getByTestId("kitty-header")).toBeVisible();
+  // It can be enlarged into a window and reduced back, keeping the controls.
+  await live.getByTestId("live-enlarge").click();
+  const big = page.getByRole("dialog", { name: "tom's desktop" });
+  await expect(big).toBeVisible();
+  await expect(big.getByTestId("live-state")).toContainText("You have the controls");
+  await expect(big.getByTestId("live-frame")).toHaveAttribute("data-mode", "rects");
+  await big.getByRole("button", { name: "Reduce", exact: true }).click();
+  await expect(big).toHaveCount(0);
+  await expect(live.getByTestId("live-state")).toContainText("You have the controls");
+  // Giving it back, and Escape from the window only reduces it: the drawer stays.
+  await live.getByTestId("give-back").click();
+  await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  await live.getByTestId("live-enlarge").click();
+  await expect(big).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(big).toHaveCount(0);
+  await expect(drawer.getByTestId("kitty-header")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
 });
 
 test("a desktop that cannot give rectangles is followed as a stream of whole pictures", async ({

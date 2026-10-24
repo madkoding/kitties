@@ -15,7 +15,8 @@ export function Modal({
   wide?: boolean;
 }) {
   useLayoutEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    // A window inside this one that used the key (the live desktop) keeps this one open.
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && onClose();
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [onClose]);

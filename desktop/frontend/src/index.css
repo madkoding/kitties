@@ -647,8 +647,165 @@ select:focus {
   border-color: var(--neon-cyan);
   box-shadow: var(--glow-cyan);
 }
-.live-surface.is-control img {
+.live-surface.is-control .live-stage canvas,
+.live-surface.is-control .live-stage img {
   cursor: crosshair;
+}
+.live-surface.is-dragging .live-stage canvas,
+.live-surface.is-dragging .live-stage img {
+  cursor: grabbing;
+}
+/* Watching: one click on the picture takes the controls, and a chip says so. */
+.live-surface.is-takeable .live-stage canvas,
+.live-surface.is-takeable .live-stage img {
+  cursor: pointer;
+}
+.live-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font: 11px/1.4 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--neon-cyan);
+  background: rgba(8, 10, 14, 0.82);
+  border: 1px solid rgb(0 240 255 / 0.45);
+  pointer-events: none;
+  opacity: 0.8;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+.live-surface:hover .live-hint {
+  opacity: 1;
+}
+/* The picture, as large as the room allows; the marks over it sit in its own pixels. */
+.live-stage {
+  position: relative;
+  line-height: 0;
+  max-width: 100%;
+  max-height: 100%;
+}
+.live-stage canvas,
+.live-stage img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.live-gesture {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.live-gesture line {
+  stroke: var(--neon-cyan);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  filter: drop-shadow(0 0 3px rgba(0, 0, 0, 0.9));
+}
+/* Where the button went down (and where a drag would end). */
+.live-press {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  margin: -7px 0 0 -7px;
+  border-radius: 50%;
+  background: rgb(0 240 255 / 0.35);
+  border: 2px solid var(--neon-cyan);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.55);
+  pointer-events: none;
+}
+.live-press.is-end {
+  background: rgb(126 231 135 / 0.35);
+  border-color: var(--c-green);
+}
+/* A ring where an input went: it grows and fades. */
+.live-ring {
+  position: absolute;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border-radius: 50%;
+  border: 3px solid var(--neon-cyan);
+  box-shadow:
+    0 0 0 2px rgba(0, 0, 0, 0.55),
+    0 0 12px rgb(0 240 255 / 0.7);
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font: 700 16px/1 var(--font-mono);
+  color: #fff;
+  animation: live-ring 0.8s ease-out forwards;
+}
+.live-ring.is-double {
+  border-style: double;
+  border-width: 6px;
+}
+.live-ring.is-right {
+  border-color: var(--c-amber);
+}
+.live-ring.is-drag {
+  border-color: var(--c-green);
+}
+.live-ring.is-up,
+.live-ring.is-down {
+  border-color: var(--c-amber);
+  border-style: dashed;
+}
+@keyframes live-ring {
+  from {
+    transform: scale(0.35);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .live-ring {
+    animation: live-ring-still 0.8s linear forwards;
+  }
+  @keyframes live-ring-still {
+    from {
+      opacity: 1;
+    }
+    to {
+      opacity: 0;
+    }
+  }
+}
+/* One line that says what the person's input is doing: ready, being sent, or waiting. */
+.live-activity {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 10px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  border: 1px solid rgb(var(--ov-rgb) / 0.12);
+  background: rgba(51, 51, 55, 0.28);
+  color: var(--t2, var(--t3));
+}
+.live-activity.is-busy {
+  border-color: rgba(255, 176, 32, 0.4);
+  color: var(--c-amber);
+}
+.live-activity.is-drag {
+  border-color: rgb(0 240 255 / 0.5);
+  color: var(--neon-cyan);
+}
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--c-green);
+  box-shadow: 0 0 6px var(--c-green);
 }
 .live-shot {
   width: 100%;

@@ -15,8 +15,7 @@ import { ask } from "./Confirm";
 import { Modal } from "./Modal";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
 import { ProviderLogo } from "./ConnectorLogo";
-import { Shot } from "./Conversation";
-import { IconCamera, IconMonitor, IconPlay, IconStop, IconTrash } from "./icons";
+import { IconPlay, IconStop, IconTrash } from "./icons";
 import DesktopCare from "./DesktopCare";
 import LiveDesktop from "./LiveDesktop";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
@@ -578,9 +577,6 @@ export function KittyDrawer({
   onChat: () => void;
   onOpenChat: (id: string) => void;
 }) {
-  const [tick, setTick] = useState(0);
-  // live opens the desktop live, in place of this drawer until it is closed.
-  const [live, setLive] = useState(false);
   const [err, setErr] = useState("");
   const mood: Mood =
     kitty.status === "running" ? "happy" : kitty.status === "error" ? "error" : "sleeping";
@@ -599,13 +595,6 @@ export function KittyDrawer({
       setErr((e as Error).message);
     }
   };
-  useEffect(() => {
-    if (!kitty.desktop || kitty.status !== "running") {
-      return;
-    }
-    const id = setInterval(() => setTick((t) => t + 1), 5000);
-    return () => clearInterval(id);
-  }, [kitty.desktop, kitty.status]);
   const act = async (fn: () => Promise<unknown>) => {
     setErr("");
     try {
@@ -616,9 +605,6 @@ export function KittyDrawer({
     }
   };
   const soul = kitty.soul || {};
-  if (live) {
-    return <LiveDesktop kitty={kitty} onClose={() => setLive(false)} />;
-  }
   const running = kitty.status === "running";
   const model = models.find((m) => m.name === kitty.provider);
   return (
@@ -627,17 +613,23 @@ export function KittyDrawer({
         <div class="avatar-stage !p-2 !pt-3 shrink-0">
           <PixelCat breed={kitty.avatar?.breed} color={kitty.avatar?.color} mood={mood} size={72} />
         </div>
-        <div class="min-w-0 flex-1">
-          <div class="flex gap-2 flex-wrap items-center">
+        <div class="min-w-0 flex-1 basis-[14rem]">
+          <div class="flex gap-2 flex-wrap items-center min-w-0">
             <span
               class={`state-pill ${running ? "is-ok" : kitty.status === "error" ? "is-off" : ""}`}
             >
               {kitty.status}
             </span>
-            <span class="tag tag-accent">
-              {model ? modelLabel(model) : kitty.provider || t("no model")}
+            <span class="tag tag-accent max-w-full min-w-0">
+              <span class="truncate">
+                {model ? modelLabel(model) : kitty.provider || t("no model")}
+              </span>
             </span>
-            {kitty.desktop && <span class="tag">{kitty.container}</span>}
+            {kitty.desktop && (
+              <span class="tag max-w-full min-w-0">
+                <span class="truncate">{kitty.container}</span>
+              </span>
+            )}
           </div>
           {soul.skills && soul.skills.length > 0 && (
             <div class="flex flex-wrap gap-1 mt-2">
@@ -650,19 +642,10 @@ export function KittyDrawer({
           )}
           {kitty.error && <p class="text-sm text-[var(--c-red)] mt-2">{kitty.error}</p>}
         </div>
-        <div class="flex gap-2 flex-wrap" data-testid="kitty-actions">
+        <div class="flex gap-2 flex-wrap shrink-0 max-w-full" data-testid="kitty-actions">
           <button class="btn-accent px-3 py-2 text-sm" onClick={onChat}>
             {t("Chat with {name}", { name: kitty.name })}
           </button>
-          {kitty.desktop && running && (
-            <button
-              class="btn-accent px-3 py-2 text-sm flex items-center gap-1"
-              onClick={() => setLive(true)}
-              data-testid="open-desktop"
-            >
-              <IconMonitor size={14} /> {t("Live and take control")}
-            </button>
-          )}
           {running ? (
             <button
               class="btn-ghost px-3 py-2 text-sm flex items-center gap-2"
@@ -681,6 +664,21 @@ export function KittyDrawer({
         </div>
       </div>
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
+      {/* The desktop comes first: the goals and the journal grow, and must not push it down. */}
+      {kitty.desktop && (
+        <div class="min-w-0">
+          <div class="section-title !mx-0 mt-5">{t("Desktop")}</div>
+          {running ? (
+            <LiveDesktop kitty={kitty} inline onClose={() => undefined} />
+          ) : (
+            <p class="text-sm text-[var(--t3)]" data-testid="desktop-off">
+              {t("Start {name} to see its desktop live and take control of it.", {
+                name: kitty.name,
+              })}
+            </p>
+          )}
+        </div>
+      )}
       <div class="grid md:grid-cols-2 gap-x-6">
         <div class="min-w-0">
           <GoalsPanel kitty={kitty} onOpenChat={onOpenChat} />
@@ -690,19 +688,7 @@ export function KittyDrawer({
         </div>
       </div>
       {kitty.desktop && (
-        <div class="min-w-0">
-          <div class="section-title !mx-0 mt-5 flex items-center justify-between">
-            {t("Desktop")}
-            {running && (
-              <button
-                class="btn-ghost px-2 py-1 text-xs flex items-center gap-1"
-                onClick={() => setTick((n) => n + 1)}
-              >
-                <IconCamera size={12} /> {t("refresh")}
-              </button>
-            )}
-          </div>
-          <Shot path={`/v1/kitties/${kitty.id}/screenshot?t=${tick}`} big />
+        <div class="min-w-0 mt-5">
           <DesktopCare kitty={kitty} onChanged={onChanged} />
         </div>
       )}
