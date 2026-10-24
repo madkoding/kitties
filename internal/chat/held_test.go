@@ -152,9 +152,10 @@ func TestAskHelpQuickGiveBack(t *testing.T) {
 	if _, err := s.Send(context.Background(), sess.ID, "sign me in"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(30 * time.Millisecond)
+	// The person took the desktop after the kitty asked: a moment ahead, so a slow machine that has
+	// not yet got the kitty as far as asking cannot put it before the request.
 	q.mu.Lock()
-	q.took = time.Now()
+	q.took = time.Now().Add(time.Minute)
 	q.mu.Unlock()
 	waitDone(t, s, sess.ID)
 	seen := sa.seen[len(sa.seen)-1]

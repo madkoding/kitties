@@ -1060,6 +1060,9 @@ var helpWait = 15 * time.Minute
 // take control in the chat, a notification goes out, and the kitty waits until the person has
 // taken the desktop and given it back (or does not come in time).
 func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Kitty, reason string) string {
+	// asked is taken before anything the person can see of the request: a desktop taken and given
+	// back right after the step shows up still counts.
+	asked := time.Now()
 	reason = strings.TrimSpace(reason)
 	if reason == "" || reason == "<nil>" {
 		reason = "something on the desktop needs you"
@@ -1074,7 +1077,6 @@ func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Ki
 		}
 	}
 	s.tell(notify.Help, k, "needs your hands on its desktop", reason, id)
-	asked := time.Now()
 	answers, stop := s.expectHelp(id, index)
 	defer stop()
 	h, ok := s.fleet.(holder)
