@@ -582,3 +582,27 @@ func TestGatewayStartTellsOfTheRollback(t *testing.T) {
 		t.Errorf("the rollback is told again at every start: %s", raw)
 	}
 }
+
+// Where the data folder cannot hold the key (a read-only volume), the saved secrets and the
+// session backups are off and the gateway still starts.
+func TestSecretStoresOffWhereTheKeyCannotBeKept(t *testing.T) {
+	dir := t.TempDir()
+	var warn bytes.Buffer
+	if v, k := openSecretStores(dir, &warn); v == nil || k == nil || warn.Len() != 0 {
+		t.Fatalf("a writable folder: %v %v %q", v, k, warn.String())
+	}
+	blocked := filepath.Join(dir, "a-file")
+	if err := os.WriteFile(blocked, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// A folder that cannot be made (it is under a file) cannot keep a key.
+	if v, k := openSecretStores(filepath.Join(blocked, "data"), &warn); v != nil || k != nil || !strings.Contains(warn.String(), "are off") {
+		t.Errorf("an unwritable folder: %v %v %q", v, k, warn.String())
+	}
+	// And a key that is not one stops them too.
+	t.Setenv("KITTIES_VAULT_KEY", "nope")
+	warn.Reset()
+	if v, _ := openSecretStores(t.TempDir(), &warn); v != nil || !strings.Contains(warn.String(), "KITTIES_VAULT_KEY") {
+		t.Errorf("a bad key: %v %q", v, warn.String())
+	}
+}

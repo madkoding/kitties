@@ -248,14 +248,12 @@ func (a *app) open(cmd string) error {
 		return err
 	}
 	a.memory = memory.Open(filepath.Join(dataDir, "memory"))
-	if a.vault, err = vault.Open(dataDir); err != nil {
-		return err
+	// The saved secrets and the backups of the kitties' sessions need a key kept in the data
+	// folder: where it cannot be written (a read-only volume) they are off, and the rest runs.
+	if a.vault, a.keep = openSecretStores(dataDir, a.err); a.vault != nil {
+		chats.SetVault(a.vault)
+		fleet.SetKeeper(a.keep)
 	}
-	chats.SetVault(a.vault)
-	if a.keep, err = keep.Open(dataDir); err != nil {
-		return err
-	}
-	fleet.SetKeeper(a.keep)
 	chats.SetBudget(a.budget)
 	chats.SetApprovals(a.approvals)
 	chats.SetMemory(a.memory)
@@ -289,7 +287,10 @@ func (a *app) open(cmd string) error {
 		Day:     digest.MyDay(fleet.Connectors()),
 	}, filepath.Join(dataDir, "digest.json"))
 	// A removed kitty takes its held actions and its memory along.
-	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.vault.ForgetKitty, a.keep.Forget, a.budget.Forget, chats.LeaveChats)
+	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget, chats.LeaveChats)
+	if a.vault != nil {
+		ag.OnForget = append(ag.OnForget, a.vault.ForgetKitty, a.keep.Forget)
+	}
 	// Chats whose kitties were removed earlier have nobody to answer: take those kitties out,
 	// and drop the chats left empty.
 	if err := chats.Prune(func(id string) bool { _, err := fleet.Get(id); return err == nil }); err != nil {
@@ -433,8 +434,11 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	}
 	g := a.cfg.Gateway
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
-		WithApprovals(a.chats).WithMemory(a.chats).WithVault(a.vault).WithMaintenance(a.fleet).WithUpdater(a.updater).WithNotifier(a.notifier).WithDigest(a.digest).
+		WithApprovals(a.chats).WithMemory(a.chats).WithMaintenance(a.fleet).WithUpdater(a.updater).WithNotifier(a.notifier).WithDigest(a.digest).
 		WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
+	if a.vault != nil {
+		srv.WithVault(a.vault)
+	}
 	if site, ok := webFS(); ok {
 		srv.WithWeb(site)
 	} else {
@@ -472,6 +476,23 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	window, _ := config.ParseWindow(a.cfg.Updates.Window)
 	go a.updater.Watch(ctx, updateFirstCheck, time.Duration(a.cfg.Updates.CheckHours)*time.Hour, updateHooks(a.notifier, func() bool { return window.Contains(time.Now()) }, logf))
 	return srv.Listen(ctx, g.Listen, logf)
+}
+
+// openSecretStores opens the vault of saved secrets and the store of session backups, which share
+// a key kept in the data folder. Where the folder cannot be written they are both off (nil) and it
+// says so: a read-only volume must not keep the gateway from starting.
+func openSecretStores(dataDir string, warn io.Writer) (*vault.Store, *keep.Store) {
+	v, err := vault.Open(dataDir)
+	if err != nil {
+		fmt.Fprintf(warn, "kitties: saved secrets and session backups are off: %v\n", err)
+		return nil, nil
+	}
+	k, err := keep.Open(dataDir)
+	if err != nil {
+		fmt.Fprintf(warn, "kitties: saved secrets and session backups are off: %v\n", err)
+		return nil, nil
+	}
+	return v, k
 }
 
 // rolledBackNote tells that a version that did not hold was gone back from.

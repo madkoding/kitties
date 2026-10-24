@@ -178,7 +178,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: shell scripts parse
-        run: for f in docker/kitty-desktop/*.sh; do sh -n "$f"; done
+        run: |
+          for f in docker/kitty-desktop/*.sh; do sh -n "$f"; done
           python3 -m py_compile docker/kitty-desktop/kitty-page.py
       - name: the desktop's fonts are the app's
         run: for f in docker/kitty-desktop/fonts/*.woff2; do cmp "$f" "desktop/frontend/public/$(basename "$f")"; done

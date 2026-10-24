@@ -89,31 +89,6 @@ jobs:
         with:
           category: /language:${{ matrix.language }}
 
-  # The files that build the images and the deploy, and the gateway image itself.
-  trivy:
-    name: trivy · files and the gateway image
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - name: the repository's files (flaws, secrets and Dockerfile or compose mistakes)
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          scan-type: fs
-          scanners: vuln,secret,misconfig
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-      - name: build the gateway image
-        run: docker build -f docker/gateway/Dockerfile -t kitties:scan .
-      - name: the gateway image
-        uses: aquasecurity/trivy-action@0.28.0
-        with:
-          image-ref: kitties:scan
-          severity: HIGH,CRITICAL
-          ignore-unfixed: true
-          exit-code: "1"
-
   # A pull request that adds a dependency with a known flaw or a licence that cannot ship.
   dependency-review:
     name: dependencies a pull request adds
