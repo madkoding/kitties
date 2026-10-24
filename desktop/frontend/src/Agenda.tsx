@@ -58,6 +58,40 @@ function resultTag(r?: string): string {
   }
 }
 
+// How many goals and journal lines show before "show more": the drawer keeps its other rows in
+// sight however long these grow.
+const FEW_GOALS = 3;
+const FEW_LINES = 5;
+
+// MoreLess is the button that opens a list past its first few rows, and closes it again.
+function MoreLess({
+  total,
+  few,
+  open,
+  onToggle,
+  id,
+}: {
+  total: number;
+  few: number;
+  open: boolean;
+  onToggle: () => void;
+  id: string;
+}) {
+  if (total <= few) {
+    return null;
+  }
+  return (
+    <button
+      class="btn-ghost px-2 py-1 text-xs mt-2"
+      onClick={onToggle}
+      aria-expanded={open}
+      data-testid={id}
+    >
+      {open ? t("Show less") : t("Show {n} more", { n: total - few })}
+    </button>
+  );
+}
+
 export function GoalsPanel({
   kitty,
   onOpenChat,
@@ -66,6 +100,7 @@ export function GoalsPanel({
   onOpenChat: (id: string) => void;
 }) {
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [allGoals, setAllGoals] = useState(false);
   const [connectors, setConnectors] = useState<ConnectorView[]>([]);
   const [adding, setAdding] = useState(false);
   const [err, setErr] = useState("");
@@ -121,7 +156,7 @@ export function GoalsPanel({
         </p>
       )}
       <div class="flex flex-col gap-2" data-testid="goals">
-        {goals.map((g) => (
+        {(allGoals ? goals : goals.slice(0, FEW_GOALS)).map((g) => (
           <div key={g.id} class={`goal ${g.enabled ? "" : "off"}`}>
             <div class="flex items-center gap-2 min-w-0">
               <span class="font-semibold truncate">{g.title}</span>
@@ -188,6 +223,13 @@ export function GoalsPanel({
           </div>
         ))}
       </div>
+      <MoreLess
+        total={goals.length}
+        few={FEW_GOALS}
+        open={allGoals}
+        onToggle={() => setAllGoals(!allGoals)}
+        id="goals-more"
+      />
       {adding ? (
         <div class="mt-3 p-3 border border-[rgb(var(--accent-rgb)/0.3)] bg-[rgb(var(--accent-rgb)/0.05)]">
           <label class={LABEL}>
@@ -296,6 +338,7 @@ export function JournalPanel({
   onOpenChat: (id: string) => void;
 }) {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
+  const [allLines, setAllLines] = useState(false);
   useEffect(() => {
     api
       .journal(kitty.id, 30)
@@ -307,7 +350,7 @@ export function JournalPanel({
       <div class="section-title !mx-0 mt-5">{t("Journal")}</div>
       {entries.length === 0 && <p class="text-xs text-[var(--t4)]">{t("Nothing yet.")}</p>}
       <div class="journal" data-testid="journal">
-        {entries.map((e, i) => (
+        {(allLines ? entries : entries.slice(0, FEW_LINES)).map((e, i) => (
           <div key={i} class="journal-line">
             <span class="text-[var(--t4)] font-mono text-[10px] whitespace-nowrap">
               {when(e.at)}
@@ -327,6 +370,13 @@ export function JournalPanel({
           </div>
         ))}
       </div>
+      <MoreLess
+        total={entries.length}
+        few={FEW_LINES}
+        open={allLines}
+        onToggle={() => setAllLines(!allLines)}
+        id="journal-more"
+      />
     </div>
   );
 }

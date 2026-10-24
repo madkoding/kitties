@@ -138,4 +138,4 @@ jobs:
       - name: build the image
         run: ${{ matrix.build }}
       - name: scan it
-        run: ./trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 scan:image
+        run: ./trivy image --skip-version-check --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 scan:image

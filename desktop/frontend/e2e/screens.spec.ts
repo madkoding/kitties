@@ -473,6 +473,38 @@ test("a kitty hands a subtask to another and the chip leads to their thread", as
   await expect(page.getByText("summarise the launch plan").first()).toBeVisible();
 });
 
+test("a long list of goals shows its first few, and the rest on request", async ({ page }) => {
+  const headers = { Authorization: "Bearer e2e-token" };
+  const made: string[] = [];
+  for (let n = 1; n <= 5; n++) {
+    const res = await page.request.post(`${GATEWAY}/v1/goals`, {
+      headers,
+      data: { kitty: "luna", title: `Long list ${n}`, text: "x", every: "@daily" },
+    });
+    expect(res.ok()).toBeTruthy();
+    made.push(((await res.json()) as { goal: { id: string } }).goal.id);
+  }
+  try {
+    await open(page, `#chat/${ids.desktop}`);
+    await kittyRow(page, "luna").click();
+    const goals = page.getByTestId("goals");
+    await expect(goals.locator(".goal")).toHaveCount(3);
+    const more = page.getByTestId("goals-more");
+    await expect(more).toHaveText("Show 2 more");
+    await more.click();
+    await expect(goals.locator(".goal")).toHaveCount(5);
+    await expect(more).toHaveText("Show less");
+    await more.click();
+    await expect(goals.locator(".goal")).toHaveCount(3);
+  } finally {
+    for (const id of made) {
+      await page.request
+        .delete(`${GATEWAY}/v1/goals/${id}`, { headers, timeout: 5000 })
+        .catch(() => undefined);
+    }
+  }
+});
+
 test("the kitty's drawer: goals, the journal, limits and the backup", async ({ page }) => {
   await open(page, `#kitty/${ids.mimi}`);
   // What it does is in view; its brain, who it is and what it may use are edited under
@@ -492,6 +524,10 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   await expect(goals.getByText("on events from github")).toBeVisible();
   await expect(goals.locator(".tag", { hasText: "done" })).toHaveCount(2);
   const journal = page.getByTestId("journal");
+  // Only the first lines show: the rest are a click away.
+  if (await page.getByTestId("journal-more").count()) {
+    await page.getByTestId("journal-more").click();
+  }
   await expect(journal.locator(".tag", { hasText: "event" }).first()).toBeVisible();
   await expect(journal.locator(".tag", { hasText: "done" }).first()).toBeVisible();
   await expect(journal.locator(".tag", { hasText: "delegated" }).first()).toBeVisible();
@@ -1246,6 +1282,9 @@ test("in a kitty's drawer the desktop is there, live, and one click on it takes 
   await live.getByTestId("give-back").click();
   await expect(live.getByTestId("live-state")).toHaveText("Watching live");
   await live.getByTestId("live-enlarge").click();
+  await expect(big).toBeVisible();
+  // The size the person likes is remembered for this kitty: the drawer opens enlarged next time.
+  await page.reload();
   await expect(big).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(big).toHaveCount(0);
