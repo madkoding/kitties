@@ -574,10 +574,22 @@ async function fetchLocalToken(conn: Connection): Promise<Connection> {
   return conn;
 }
 
+function safeGatewayBase(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
 // shotURL is where a screenshot can be loaded from as an image.
 export function shotURL(path: string): string {
   const conn = savedConnection();
-  const base = conn.url.replace(/\/$/, "");
+  const base = safeGatewayBase(conn.url);
   const sep = path.includes("?") ? "&" : "?";
   return conn.token ? `${base}${path}${sep}token=${encodeURIComponent(conn.token)}` : base + path;
 }
