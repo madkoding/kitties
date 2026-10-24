@@ -81,6 +81,16 @@ export function stepSentence(action: string, args?: Record<string, unknown>): st
       return a.title
         ? t("Brought “{title}” to the front", { title: String(a.title) })
         : t("Brought a window to the front");
+    case "read_screen":
+      return t("Read the text on the screen");
+    case "page_read":
+      return t("Read the page");
+    case "page_click":
+      return a.text
+        ? t("Clicked “{text}” on the page", { text: String(a.text) })
+        : t("Clicked on the page");
+    case "page_type":
+      return t("Filled in a field of the page");
     case "launch":
       return t("Opened a program");
     case "install": {

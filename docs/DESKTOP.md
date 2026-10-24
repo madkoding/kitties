@@ -26,7 +26,7 @@ flowchart LR
 
 - **The computer.** One container per kitty, from the `kitty-desktop` image: a virtual display
   (Xvfb) with a real desktop on it (IceWM, Chromium, a terminal, PCManFM, LibreOffice, Inkscape).
-  It opens no port: the gateway reaches it with `docker exec` only. Its work folder lives on the
+  It publishes no port: the gateway reaches it with `docker exec` only. Its work folder lives on the
   host, so its files outlive the container.
 - **The eyes.** The gateway takes a screenshot of the display and hands it to the model, which
   can see pictures. After every batch of actions a new one follows, so the kitty sees what its
@@ -67,6 +67,17 @@ sequenceDiagram
 
 It runs in the background; every step, with its screenshot, shows up in the chat. A task has
 limits (time, rounds, tokens) and can be cancelled at any moment.
+
+## Reading and acting on pages from the inside
+
+In the browser a kitty does not have to guess from pixels. `page_read` gives it the page's
+address, title and text, and a numbered list of what can be clicked or filled in; `page_click`
+and `page_type` act on an element of that list (or on the one that shows some text), wherever it
+is on the screen, in a shadow root or scrolled out of view. It is the browser's own DevTools,
+reached by the image's `kitty-page` on the container's loopback: the port is not published, so
+only what runs inside the container can use it. What a page says comes back marked as the page's
+own text, and the kitty is told never to take it as an instruction; a password field's value is
+never printed.
 
 ## When it needs a person
 

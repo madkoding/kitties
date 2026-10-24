@@ -166,6 +166,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: shell scripts parse
         run: for f in docker/kitty-desktop/*.sh; do sh -n "$f"; done
+          python3 -m py_compile docker/kitty-desktop/kitty-page.py
       - name: the desktop's fonts are the app's
         run: for f in docker/kitty-desktop/fonts/*.woff2; do cmp "$f" "desktop/frontend/public/$(basename "$f")"; done
       - name: build the image
@@ -179,6 +180,8 @@ jobs:
           docker exec kitty-ci sh -c 'pgrep -x icewm && pgrep -x pcmanfm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/icewm/themes/ceres-pro/default.theme && grep -q ceres-pro ~/.icewm/theme && test -f /usr/share/icons/Haiku/index.theme && test -f /usr/share/backgrounds/kitties/wallpaper.jpg'
           # Reading the screen (OCR) runs and prints lines of "x,y<TAB>text".
           docker exec kitty-ci kitty-ocr | awk -F'\t' 'NF && $1 !~ /^[0-9]+,[0-9]+$/ { bad = 1 } END { exit bad }'
+          # A page is read and acted on from the inside, through the browser's DevTools port.
+          docker exec kitty-ci sh -c 'printf "<title>ci page</title><button onclick=\"document.title=1\">Go</button>" > /tmp/p.html && kitty-open file:///tmp/p.html >/dev/null && sleep 5 && kitty-page read | grep -q "ci page" && kitty-page click --text Go && sleep 1 && kitty-page read | grep -q "^title: 1"'
           # The live stream sends pictures, and ends when its input closes.
           sleep 3 | docker exec -i kitty-ci kitty-stream --stdin 4 60 > stream.bin
           head -c 5 stream.bin | grep -q FRAME

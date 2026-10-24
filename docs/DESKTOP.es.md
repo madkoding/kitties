@@ -26,7 +26,7 @@ flowchart LR
 
 - **El computador.** Un contenedor por kitty, de la imagen `kitty-desktop`: una pantalla virtual
   (Xvfb) con un escritorio real (IceWM, Chromium, terminal, PCManFM, LibreOffice, Inkscape). No
-  abre ningún puerto: el gateway entra solo con `docker exec`. Su carpeta de trabajo vive en el
+  publica ningún puerto: el gateway entra solo con `docker exec`. Su carpeta de trabajo vive en el
   equipo anfitrión, así que sus archivos sobreviven al contenedor.
 - **Los ojos.** El gateway saca una captura de la pantalla y se la entrega al modelo, que puede
   ver imágenes. Después de cada tanda de acciones llega una nueva, así el kitty ve lo que hizo.
@@ -76,6 +76,17 @@ se le dice eso en vez de darle la misma imagen otra vez. Cuando solo necesita le
 encontrar una palabra donde hacer clic, `read_screen` responde en texto: el OCR de la imagen
 (`kitty-ocr`, Tesseract en inglés y español) imprime una línea por cada texto con el `x,y` de su
 centro, que un clic puede usar tal cual.
+
+## Leer y actuar en las páginas por dentro
+
+En el navegador un kitty no tiene que adivinar a partir de píxeles. `page_read` le da la
+dirección, el título y el texto de la página, y una lista numerada de lo que se puede pulsar o
+rellenar; `page_click` y `page_type` actúan sobre un elemento de esa lista (o sobre el que
+muestra cierto texto), esté donde esté en la pantalla, dentro de un shadow root o fuera de la
+vista. Es el DevTools del propio navegador, al que llega `kitty-page` de la imagen por el
+loopback del contenedor: el puerto no se publica, así que solo lo usa lo que corre dentro del
+contenedor. Lo que dice una página vuelve marcado como texto de la página, y al kitty se le dice
+que nunca lo tome como una instrucción; el valor de un campo de contraseña no se imprime nunca.
 
 ## Cuando necesita a una persona
 

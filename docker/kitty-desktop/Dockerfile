@@ -7,7 +7,8 @@
 # from the chat. Chromium for the web, LibreOffice for office documents (also headless: `soffice
 # --headless --convert-to pdf file.docx`), Inkscape, ImageMagick and mtPaint for drawing;
 # kitty-install adds more from Debian, and they are installed again when the container is made
-# anew. Nothing listens on a port: the orchestrator reaches the container through `docker exec`.
+# anew. No port is published (the browser's DevTools listens on the container's own loopback only): the
+# orchestrator reaches the container through `docker exec`.
 #
 #   docker build -t ghcr.io/madkoding/kitty-desktop:latest docker/kitty-desktop
 
@@ -52,7 +53,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip \
         icewm xterm sudo pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
         chromium fonts-dejavu fonts-noto-color-emoji \
-        ca-certificates curl git jq python3 openssh-client \
+        ca-certificates curl git jq python3 python3-websocket openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
         inkscape imagemagick mtpaint \
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
@@ -79,6 +80,7 @@ RUN mkdir -p /usr/share/backgrounds/kitties \
 COPY --chmod=755 entrypoint.sh /usr/local/bin/kitty-entrypoint
 COPY --chmod=755 kitty-shot.sh /usr/local/bin/kitty-shot
 COPY --chmod=755 kitty-ocr.sh /usr/local/bin/kitty-ocr
+COPY --chmod=755 kitty-page.py /usr/local/bin/kitty-page
 COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch
 COPY --chmod=755 kitty-install.sh /usr/local/bin/kitty-install

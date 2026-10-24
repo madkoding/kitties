@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/soul"
@@ -308,5 +309,21 @@ func TestNoScreenshotAfterActionsThatLeaveTheDisplayAlone(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(d.execs, "\n"), "kitty-ocr") {
 		t.Errorf("read_screen did not run the OCR: %v", d.execs)
+	}
+}
+
+// A kitty whose model calls tools natively has every tool of the text catalogue, ask_help
+// among them: the one it asks for the person's hands with.
+func TestNativeToolsAreTheCataloguesTools(t *testing.T) {
+	s, _, _ := deskService(t, "ok")
+	ana, _ := s.fleet.Get("ana")
+	have := map[string]bool{}
+	for _, tool := range s.toolSet(ana, nil) {
+		have[tool.Name] = true
+	}
+	for _, tool := range desktop.Tools {
+		if !have[tool.Name] {
+			t.Errorf("the native tools lack %s", tool.Name)
+		}
 	}
 }
