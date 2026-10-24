@@ -91,10 +91,26 @@ que nunca lo tome como una instrucción; el valor de un campo de contraseña no 
 ## Cuando necesita a una persona
 
 Hay cosas que un kitty no puede hacer solo: un captcha, una contraseña, un código que llega a tu
-teléfono. Entonces usa `ask_help`: el chat muestra el botón **Tomar el control** y te llega una
-notificación. Ves su escritorio en vivo (motion JPEG por el gateway, con un cuarto de segundo de
+teléfono. Entonces usa `ask_help` (todos los modelos lo tienen, llamen a las herramientas de forma
+nativa o en texto), te llega una notificación y se abre una ventana sobre el chat con lo que el
+kitty ve y un campo para lo que necesita: escribe un código o una respuesta y **díselo**, o marca
+*es un secreto* y el texto se **escribe en su escritorio** sin que el kitty lo vea. O **toma el
+control**: ves su escritorio en vivo (motion JPEG por el gateway, con un cuarto de segundo de
 retraso), tus clics, arrastres, rueda y teclas van a su pantalla, y el portapapeles funciona en
-ambos sentidos. El kitty espera; cuando le devuelves el escritorio, sigue solo.
+ambos sentidos. El kitty espera; cuando respondes o le devuelves el escritorio, sigue solo.
+
+<img src="screenshots/50-help-modal.png" alt="Un kitty pide ayuda: lo que ve y un campo para lo que necesita" width="100%">
+
+Un kitty no tiene que acordarse de pedir. Cuando ve la misma pantalla cuatro veces seguidas se le
+dice que pruebe otro camino, o que pida; y cuando esa pantalla parece un CAPTCHA o un código que
+solo recibes tú (un OCR de ella, en inglés, español o portugués), pide de inmediato en vez de
+gastar su presupuesto contra una pared.
+
+## Una tarea como GIF
+
+Las capturas de una tarea son su película: **Verla como GIF** y **Guardar el GIF**, bajo los
+pasos, las convierten en un GIF animado (`internal/replay`: una paleta para todas las imágenes,
+cada imagen con solo lo que cambió), servido en `/v1/chats/{id}/turns/{n}/replay.gif`.
 
 <img src="screenshots/49-live-desktop-control.png" alt="Tomando el control del escritorio de un kitty: un comando escrito en su terminal" width="100%">
 

@@ -629,6 +629,10 @@ export const api = {
     request<{ held: boolean }>("POST", `/v1/kitties/${ref}/control`, { hold }).then((r) => r.held),
   inputKitty: (ref: string, action: string, args: Record<string, unknown>) =>
     request("POST", `/v1/kitties/${ref}/input`, { action, args }),
+  // answerHelp is what the person answers a kitty that asked for help: told to it, or (secret)
+  // typed on its desktop without showing it.
+  answerHelp: (chat: string, turn: number, a: { text: string; secret: boolean; enter: boolean }) =>
+    request("POST", `/v1/chats/${chat}/turns/${turn}/help`, a),
   // clipboard is the text on a kitty's clipboard; setClipboard gives it the person's.
   clipboard: (ref: string) =>
     request<{ text: string }>("GET", `/v1/kitties/${ref}/clipboard`).then((r) => r.text || ""),

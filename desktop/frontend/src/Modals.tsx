@@ -1,11 +1,12 @@
-import { useEffect, useLayoutEffect, useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
 import { api, errText, inAndroid, inWails, saveConnection, savedConnection, THEMES } from "./api";
 import { ask } from "./Confirm";
+import { Modal } from "./Modal";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
 import { ProviderLogo } from "./ConnectorLogo";
 import { Shot } from "./Conversation";
-import { IconCamera, IconMonitor, IconPlay, IconStop, IconTrash, IconX } from "./icons";
+import { IconCamera, IconMonitor, IconPlay, IconStop, IconTrash } from "./icons";
 import LiveDesktop from "./LiveDesktop";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import { MemoryPanel } from "./Memory";
@@ -20,49 +21,6 @@ function suggestAvatar(name: string): { breed: string; color: string } {
     h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
   }
   return { breed: BREEDS[h % BREEDS.length], color: COLORS[Math.floor(h / 7) % COLORS.length] };
-}
-
-function Modal({
-  title,
-  onClose,
-  children,
-  wide,
-}: {
-  title: string;
-  onClose: () => void;
-  children: preact.ComponentChildren;
-  wide?: boolean;
-}) {
-  useLayoutEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, [onClose]);
-  return (
-    <div
-      class="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4 backdrop"
-      onClick={onClose}
-      data-modal
-    >
-      <div
-        class={`chat-modal w-full ${wide ? "max-w-3xl" : "max-w-md"} p-5 max-h-[90vh] overflow-y-auto scroll-thin`}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-      >
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-mono text-base tracking-wide">{title}</h2>
-          <button
-            class="plain p-1 text-[var(--t3)] hover:text-[var(--t1)]"
-            onClick={onClose}
-            aria-label={t("Close")}
-          >
-            <IconX />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
 }
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";

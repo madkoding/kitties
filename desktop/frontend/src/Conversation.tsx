@@ -10,6 +10,7 @@ import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
 import { IconHand, IconShield, IconThumbDown, IconThumbUp } from "./icons";
 import { RULE_LABEL, ruleTarget } from "./Approvals";
+import HelpModal from "./Help";
 import LiveDesktop from "./LiveDesktop";
 
 function Text({ text }: { text: string }) {
@@ -477,6 +478,8 @@ export default function Conversation({ session, kitties, user, pending, waiting,
   const [zoom, setZoom] = useState<string>("");
   // helping is the kitty whose desktop is open because it asked for help.
   const [helping, setHelping] = useState<Kitty | null>(null);
+  // The requests for help the person put off, by the step that asked: a new request opens again.
+  const [later, setLater] = useState<Record<string, boolean>>({});
   const end = useRef<HTMLDivElement>(null);
   const count = session?.turns?.length ?? 0;
   // Escape closes a screenshot opened big, like a click on it does.
@@ -576,6 +579,27 @@ export default function Conversation({ session, kitties, user, pending, waiting,
         </>
       )}
       <div ref={end} />
+      {session &&
+        !helping &&
+        (session.turns || []).map((turn, i) => {
+          const last = turn.steps?.[turn.steps.length - 1];
+          const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+          const key = `${session.id}:${i}:${turn.steps?.length}`;
+          return turn.working && last?.action === "ask_help" && k && !later[key] ? (
+            <HelpModal
+              key={key}
+              kitty={k}
+              chat={session.id}
+              turn={i}
+              step={last}
+              onTakeControl={() => {
+                setLater({ ...later, [key]: true });
+                setHelping(k);
+              }}
+              onClose={() => setLater({ ...later, [key]: true })}
+            />
+          ) : null;
+        })}
       {helping && <LiveDesktop kitty={helping} autoControl onClose={() => setHelping(null)} />}
       {zoom && (
         <div

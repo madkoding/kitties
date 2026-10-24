@@ -271,6 +271,7 @@ func (f *fakeFleet) InboundSecret(name string) (string, error) {
 type fakeChats struct {
 	sessions map[string]*chat.Session
 	fail     error
+	helped   []string
 }
 
 func (c *fakeChats) Create(title string, members []string) (*chat.Session, error) {
@@ -330,6 +331,18 @@ func (c *fakeChats) Shot(id, name string) ([]byte, error) {
 		return nil, errors.New("no such screenshot")
 	}
 	return []byte("png"), nil
+}
+func (c *fakeChats) AnswerHelp(id string, turn int, a chat.HelpAnswer) error {
+	switch {
+	case id != "c1":
+		return chat.ErrNoHelp
+	case a.Text == "":
+		return errors.New("the answer is empty")
+	case a.Text == "twice":
+		return errors.New("the kitty already has an answer")
+	}
+	c.helped = append(c.helped, fmt.Sprintf("%d:%s:%v:%v", turn, a.Text, a.Secret, a.Enter))
+	return nil
 }
 func (c *fakeChats) Replay(id string, turn int) ([]byte, error) {
 	switch {
@@ -616,6 +629,24 @@ func TestChatRoutes(t *testing.T) {
 	}
 	if code, _, _ := call(t, srv, "GET", "/v1/chats/c1/shots/9-9.png", "tok", nil); code != 404 {
 		t.Error("shot unknown")
+	}
+	help := func(path string, body any) int { code, _, _ := call(t, srv, "POST", path, "tok", body); return code }
+	if code := help("/v1/chats/c1/turns/1/help", map[string]any{"text": "4821", "secret": true, "enter": true}); code != 200 || len(c.helped) != 1 || c.helped[0] != "1:4821:true:true" {
+		t.Errorf("help = %d %v", code, c.helped)
+	}
+	for path, want := range map[string]int{"/v1/chats/zz/turns/1/help": 404, "/v1/chats/c1/turns/x/help": 400} {
+		if code := help(path, map[string]any{"text": "1"}); code != want {
+			t.Errorf("POST %s = %d, want %d", path, code, want)
+		}
+	}
+	if code := help("/v1/chats/c1/turns/1/help", map[string]any{"text": ""}); code != 400 {
+		t.Errorf("an empty answer = %d", code)
+	}
+	if code := help("/v1/chats/c1/turns/1/help", map[string]any{"text": "twice"}); code != 409 {
+		t.Errorf("a second answer = %d", code)
+	}
+	if code := help("/v1/chats/c1/turns/1/help", "{not json"); code != 400 {
+		t.Errorf("a broken body = %d", code)
 	}
 	if code, _, data := call(t, srv, "GET", "/v1/chats/c1/turns/1/replay.gif", "tok", nil); code != 200 || string(data) != "GIF89a" {
 		t.Errorf("replay = %d %q", code, data)

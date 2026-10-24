@@ -82,10 +82,26 @@ never printed.
 ## When it needs a person
 
 Some things a kitty cannot do alone: a captcha, a password, a code sent to your phone. It then
-uses `ask_help`: the chat shows a **Take control** button and a notification goes out. You see
-its desktop live (motion JPEG through the gateway, about a quarter of a second behind), your
-clicks, drags, wheel and keys go to its display, and the clipboard works both ways. The kitty
-waits; when you give the desktop back, it goes on by itself.
+uses `ask_help` (every model has it, whether it calls tools natively or in text), a notification
+goes out, and a window opens over the chat with what the kitty sees and a box for what it needs:
+write a code or an answer and **tell it**, or tick *it is a secret* and the text is **typed on
+its desktop** without the kitty being shown it. Or **take control**: you see its desktop live
+(motion JPEG through the gateway, about a quarter of a second behind), your clicks, drags, wheel
+and keys go to its display, and the clipboard works both ways. The kitty waits; when you answer
+or give the desktop back, it goes on by itself.
+
+<img src="screenshots/50-help-modal.png" alt="A kitty asks for help: what it sees and a box for what it needs" width="100%">
+
+A kitty does not have to think of asking. When it sees the very same screen four times in a row
+it is told to try another way, or to ask; and when that screen reads like a CAPTCHA or a code
+only you receive (an OCR of it, in English, Spanish or Portuguese), it asks at once instead of
+spending its budget on a wall.
+
+## A task as a GIF
+
+The screenshots of a task are its film: **Watch it as a GIF** and **Save the GIF** under the
+steps make them an animated GIF (`internal/replay`: one palette for all the pictures, each
+picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.gif`.
 
 <img src="screenshots/49-live-desktop-control.png" alt="Taking control of a kitty's desktop: a command typed in its terminal" width="100%">
 

@@ -94,6 +94,8 @@ type Chats interface {
 	Shot(id, name string) ([]byte, error)
 	// Replay is the film of a turn's desktop task, an animated GIF of its screenshots.
 	Replay(id string, turn int) ([]byte, error)
+	// AnswerHelp gives a kitty that asked for help what the person answers.
+	AnswerHelp(id string, turn int, a chat.HelpAnswer) error
 	Subscribe(id string) (<-chan chat.Event, func())
 }
 
@@ -212,6 +214,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/chats/{id}/cancel", api(s.handleCancel))
 	s.mux.Handle("GET /v1/chats/{id}/shots/{name}", api(s.handleShot))
 	s.mux.Handle("GET /v1/chats/{id}/turns/{turn}/replay.gif", api(s.handleReplay))
+	s.mux.Handle("POST /v1/chats/{id}/turns/{turn}/help", api(s.handleHelp))
 	s.mux.Handle("GET /v1/settings", api(s.handleSettings))
 	s.mux.Handle("PUT /v1/settings/providers/{name}", api(s.handleSetProvider))
 	s.mux.Handle("DELETE /v1/settings/providers/{name}", api(s.handleRemoveProvider))
@@ -491,7 +494,7 @@ func codeFor(err error) int {
 	switch {
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
-	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"), strings.Contains(msg, "is already approved"), strings.Contains(msg, "is already rejected"):
+	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"), strings.Contains(msg, "already has an answer"), strings.Contains(msg, "is already approved"), strings.Contains(msg, "is already rejected"):
 		return http.StatusConflict
 	case errors.Is(err, chat.ErrNoApprovals), errors.Is(err, chat.ErrNoMemory):
 		return http.StatusNotFound
@@ -918,6 +921,30 @@ func (s *Server) handleShot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	_, _ = w.Write(png)
+}
+
+// handleHelp is the person's answer to a kitty that asked for help: what it needs, told to it,
+// or (secret) typed on its desktop without showing it.
+func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
+	turn, err := strconv.Atoi(r.PathValue("turn"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, errors.New("the turn is not a number"))
+		return
+	}
+	var body struct {
+		Text   string `json:"text"`
+		Secret bool   `json:"secret"`
+		Enter  bool   `json:"enter"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.chats.AnswerHelp(r.PathValue("id"), turn, chat.HelpAnswer{Text: body.Text, Secret: body.Secret, Enter: body.Enter}); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true})
 }
 
 func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {

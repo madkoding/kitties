@@ -173,8 +173,10 @@ type Service struct {
 	sessions map[string]*Session
 	// running serialises the turns of one session.
 	running map[string]*sync.Mutex
-	now     func() time.Time
-	newID   func() string
+	// helps are the kitties waiting for the person's answer, by turn (help.go).
+	helps map[string]chan HelpAnswer
+	now   func() time.Time
+	newID func() string
 	// MaxRounds bounds how many times a kitty may call connectors in one answer.
 	MaxRounds int
 	// MaxTurns is how much of the thread a kitty is shown.
@@ -1027,8 +1029,18 @@ func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Ki
 		reason = "something on the desktop needs you"
 	}
 	s.appendStep(id, index, Step{At: s.now(), Action: "ask_help", Args: map[string]any{"reason": reason}, Result: reason})
+	// The person sees what the kitty sees: its screen goes with the request.
+	if runner := s.runner(); runner != nil {
+		if png, err := runner.Screenshot(ctx, k.ID); err == nil {
+			if name, err := s.saveShot(id, index, png); err == nil {
+				s.markShot(id, index, name)
+			}
+		}
+	}
 	s.tell(notify.Help, k, "needs your hands on its desktop", reason, id)
 	asked := time.Now()
+	answers, stop := s.expectHelp(id, index)
+	defer stop()
 	h, ok := s.fleet.(holder)
 	if !ok {
 		return "nobody can take your desktop from here: say in your answer what you need, and stop"
@@ -1043,11 +1055,14 @@ func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Ki
 		held := h.Held(k.ID)
 		came = came || held || started != nil && started.HoldStarted(k.ID).After(asked)
 		if came && !held {
+			s.appendStep(id, index, Step{At: s.now(), Action: "helped", Result: "took the desktop and gave it back"})
 			return "the person took your desktop and gave it back: look at the screenshot and continue"
 		}
 		select {
 		case <-ctx.Done():
 			return "stopped"
+		case a := <-answers:
+			return s.applyHelp(ctx, id, index, k, a)
 		case <-deadline.C:
 			if !came {
 				return fmt.Sprintf("nobody came in %d minutes: say in your answer what you need from the person, and stop", int(helpWait.Minutes()))
@@ -1375,7 +1390,11 @@ func (s *Service) appendStep(id string, index int, step Step) {
 func (s *Service) markShot(id string, index int, name string) {
 	s.edit(id, index, func(t *Turn) {
 		if len(t.Steps) > 0 {
-			t.Steps[len(t.Steps)-1].Shot = name
+			// A copy: whoever holds the turn's steps (a reader of the session, a subscriber)
+			// never sees an element change under it.
+			steps := append([]Step(nil), t.Steps...)
+			steps[len(steps)-1].Shot = name
+			t.Steps = steps
 		} else {
 			t.Steps = append(t.Steps, Step{At: s.now(), Action: "screenshot", Shot: name})
 		}

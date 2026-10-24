@@ -101,6 +101,12 @@ export function stepSentence(action: string, args?: Record<string, unknown>): st
       return a.reason
         ? t("Asked you for help: {reason}", { reason: String(a.reason) })
         : t("Asked you for help on its desktop");
+    case "helped":
+      return a.secret
+        ? t("You typed it on its desktop")
+        : a.told
+          ? t("You answered")
+          : t("You took the desktop and gave it back");
     case "held":
       return t("Waited while you used the desktop");
     case "wait":

@@ -1152,14 +1152,23 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(page.locator("[data-modal]")).toHaveCount(1);
 });
 
-test("a kitty that needs the person asks for help: a button takes control, and giving it back lets it finish", async ({
+test("a kitty that needs the person asks for help: a window shows what it sees, and giving the desktop back lets it finish", async ({
   page,
 }) => {
   await open(page, `#chat/${ids.desktop}`);
   await page.getByPlaceholder("Say something…").fill("tom, sign in to the shop for me");
   await page.keyboard.press("Enter");
+  // The window opens on its own, with what the kitty sees and what it asked for.
+  const modal = page.getByTestId("help-modal");
+  await expect(modal).toBeVisible({ timeout: 15000 });
+  await expect(modal).toContainText("the shop's sign-in needs your password");
+  await expect(modal.getByRole("img", { name: "What tom sees" })).toBeVisible();
+  await shot(page, "50-help-modal");
+  // Not now: the window closes and the chat keeps a button for it.
+  await modal.getByRole("button", { name: "Not now" }).click();
+  await expect(modal).toHaveCount(0);
   const callout = page.getByTestId("help-callout");
-  await expect(callout).toBeVisible({ timeout: 15000 });
+  await expect(callout).toBeVisible();
   await expect(
     page.getByText("Asked you for help: the shop's sign-in needs your password"),
   ).toBeVisible();
@@ -1172,6 +1181,41 @@ test("a kitty that needs the person asks for help: a button takes control, and g
     timeout: 15000,
   });
   await expect(callout).toHaveCount(0);
+});
+
+test("a kitty that needs the person gets what it asked for typed in the window, told or in secret", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  const typed: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/help")) {
+      typed.push(r.postData() || "");
+    }
+  });
+  await page.getByPlaceholder("Say something…").fill("tom, log in to the shop again");
+  await page.keyboard.press("Enter");
+  const modal = page.getByTestId("help-modal");
+  await expect(modal).toBeVisible({ timeout: 15000 });
+  const send = modal.getByTestId("help-send");
+  await expect(send).toBeDisabled();
+  await modal.getByTestId("help-input").fill("hunter2");
+  await expect(modal.getByTestId("help-input")).toHaveAttribute("type", "text");
+  await expect(send).toHaveText("Tell tom");
+  // A secret is hidden, and typed on the desktop instead of told to the kitty.
+  await modal.getByTestId("help-secret").check();
+  await expect(modal.getByTestId("help-input")).toHaveAttribute("type", "password");
+  await expect(send).toHaveText("Type it on the desktop");
+  await send.click();
+  await expect(modal).toHaveCount(0);
+  await expect(page.getByText("You typed it on its desktop").first()).toBeVisible();
+  await expect(
+    page.getByText("Signed in to the shop: thank you for the password.").last(),
+  ).toBeVisible({
+    timeout: 15000,
+  });
+  expect(JSON.parse(typed[0])).toEqual({ text: "hunter2", secret: true, enter: false });
+  await expect(page.getByText("hunter2")).toHaveCount(0);
 });
 
 test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) => {
