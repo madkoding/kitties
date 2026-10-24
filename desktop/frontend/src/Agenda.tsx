@@ -285,6 +285,7 @@ const KIND_TAG: Record<string, string> = {
   skipped: "tag-amber",
   delegated: "tag-magenta",
   recovered: "tag-green",
+  updated: "tag-green",
 };
 
 export function JournalPanel({

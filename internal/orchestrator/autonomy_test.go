@@ -171,7 +171,7 @@ func TestNotifySettings(t *testing.T) {
 		t.Errorf("off by default: %+v", c)
 	}
 	v := m.Settings()
-	if v.Notify.Connector != "" || len(v.Notify.On) != 0 || strings.Join(v.NotifyEvents, ",") != "help,approval,goal_done,goal_blocked,recovered,budget" {
+	if v.Notify.Connector != "" || len(v.Notify.On) != 0 || strings.Join(v.NotifyEvents, ",") != "help,approval,goal_done,goal_blocked,recovered,budget,updated" {
 		t.Errorf("view = %+v %v", v.Notify, v.NotifyEvents)
 	}
 	if err := m.SetNotify(notify.Config{Connector: "nope"}); err == nil {

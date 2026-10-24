@@ -19,6 +19,7 @@ const (
 	KindEscalated = "escalated" // it asked the person for help
 	KindDelegated = "delegated" // it handed work to another kitty
 	KindRecovered = "recovered" // its container was brought back
+	KindUpdated   = "updated"   // its desktop was moved to a newer image
 	KindSkipped   = "skipped"   // a run was skipped (still busy)
 	KindEvent     = "event"     // something arrived from a service
 	KindApproval  = "approval"  // an action waited for a yes, or went ahead on trust

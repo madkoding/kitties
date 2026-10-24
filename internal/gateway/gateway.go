@@ -15,6 +15,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -29,6 +30,7 @@ import (
 	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/skills"
 )
 
@@ -90,6 +92,10 @@ type Chats interface {
 	Send(ctx context.Context, id, text string) ([]chat.Turn, error)
 	Cancel(id string) bool
 	Shot(id, name string) ([]byte, error)
+	// Replay is the film of a turn's desktop task, an animated GIF of its screenshots.
+	Replay(id string, turn int) ([]byte, error)
+	// AnswerHelp gives a kitty that asked for help what the person answers.
+	AnswerHelp(id string, turn int, a chat.HelpAnswer) error
 	Subscribe(id string) (<-chan chat.Event, func())
 }
 
@@ -116,6 +122,12 @@ type Server struct {
 	agenda Agenda
 	// approver holds actions for the person's yes, nil when none are held.
 	approver Approver
+	// updater keeps Kitties itself up to date, nil when nothing does.
+	updater Updating
+	// maintainer looks after the desktops (update, backup of sessions), nil when nothing does.
+	maintainer Maintainer
+	// vault holds the secrets the kitties may type, nil when there is none.
+	vault Vault
 	// memories is what the kitties know about the person, nil when they keep none.
 	memories Memories
 	// notifier tests notifications, nil when the gateway sends none.
@@ -207,6 +219,8 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/chats/{id}/messages", api(s.handleSend))
 	s.mux.Handle("POST /v1/chats/{id}/cancel", api(s.handleCancel))
 	s.mux.Handle("GET /v1/chats/{id}/shots/{name}", api(s.handleShot))
+	s.mux.Handle("GET /v1/chats/{id}/turns/{turn}/replay.gif", api(s.handleReplay))
+	s.mux.Handle("POST /v1/chats/{id}/turns/{turn}/help", api(s.handleHelp))
 	s.mux.Handle("GET /v1/settings", api(s.handleSettings))
 	s.mux.Handle("PUT /v1/settings/providers/{name}", api(s.handleSetProvider))
 	s.mux.Handle("DELETE /v1/settings/providers/{name}", api(s.handleRemoveProvider))
@@ -221,6 +235,9 @@ func (s *Server) routes() {
 	s.accountRoutes()
 	s.approvalRoutes()
 	s.memoryRoutes()
+	s.vaultRoutes()
+	s.desktopRoutes()
+	s.updateRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
@@ -486,7 +503,7 @@ func codeFor(err error) int {
 	switch {
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
-	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"), strings.Contains(msg, "is already approved"), strings.Contains(msg, "is already rejected"):
+	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"), strings.Contains(msg, "already has an answer"), strings.Contains(msg, "has the desktop"), strings.Contains(msg, "is already approved"), strings.Contains(msg, "is already rejected"):
 		return http.StatusConflict
 	case errors.Is(err, chat.ErrNoApprovals), errors.Is(err, chat.ErrNoMemory):
 		return http.StatusNotFound
@@ -504,7 +521,7 @@ func codeFor(err error) int {
 		strings.Contains(msg, "limits"), strings.HasPrefix(msg, "a limit "), strings.Contains(msg, "not ask or auto"), strings.Contains(msg, "can be for good"), strings.Contains(msg, "always asked"),
 		strings.HasPrefix(msg, "notify."), strings.Contains(msg, "rating is"), strings.Contains(msg, "feedback is for"), strings.Contains(msg, "demand is a level"),
 		strings.Contains(msg, "a note needs"), strings.HasPrefix(msg, "scope "), strings.Contains(msg, "the turn is"),
-		strings.HasPrefix(msg, "there is no "), strings.Contains(msg, "still think with"):
+		strings.HasPrefix(msg, "there is no "), strings.HasPrefix(msg, "a secret"), strings.Contains(msg, "is not running"), strings.Contains(msg, "nothing to back up"), strings.Contains(msg, "cannot back up"), strings.Contains(msg, "keeps no backups"), strings.Contains(msg, "still think with"):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
@@ -913,6 +930,51 @@ func (s *Server) handleShot(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "image/png")
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	_, _ = w.Write(png)
+}
+
+// handleHelp is the person's answer to a kitty that asked for help: what it needs, told to it,
+// or (secret) typed on its desktop without showing it.
+func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
+	turn, err := strconv.Atoi(r.PathValue("turn"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, errors.New("the turn is not a number"))
+		return
+	}
+	var body struct {
+		Text   string `json:"text"`
+		Secret bool   `json:"secret"`
+		Enter  bool   `json:"enter"`
+		Save   string `json:"save"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.chats.AnswerHelp(r.PathValue("id"), turn, chat.HelpAnswer{Text: body.Text, Secret: body.Secret, Enter: body.Enter, Save: body.Save}); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+func (s *Server) handleReplay(w http.ResponseWriter, r *http.Request) {
+	turn, err := strconv.Atoi(r.PathValue("turn"))
+	if err != nil {
+		fail(w, http.StatusBadRequest, errors.New("the turn is not a number"))
+		return
+	}
+	film, err := s.chats.Replay(r.PathValue("id"), turn)
+	if errors.Is(err, replay.ErrNoFrames) {
+		fail(w, http.StatusNotFound, err)
+		return
+	}
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	w.Header().Set("Content-Type", "image/gif")
+	w.Header().Set("Cache-Control", "private, max-age=60")
+	_, _ = w.Write(film)
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) {

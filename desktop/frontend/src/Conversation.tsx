@@ -10,6 +10,7 @@ import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
 import { IconHand, IconShield, IconThumbDown, IconThumbUp } from "./icons";
 import { RULE_LABEL, ruleTarget } from "./Approvals";
+import HelpModal from "./Help";
 import LiveDesktop from "./LiveDesktop";
 
 function Text({ text }: { text: string }) {
@@ -39,11 +40,21 @@ export function Shot({
   onOpen?: (src: string) => void;
 }) {
   const [src, setSrc] = useState<string>("");
+  // A new path (a refresh) keeps showing the picture it has until the next one is ready to
+  // paint: the box never goes blank in between, and a refresh that fails leaves the last picture.
   useEffect(() => {
     let alive = true;
     shotData(path)
+      .then(
+        (s) =>
+          new Promise<string>((done) => {
+            const img = new Image();
+            img.onload = img.onerror = () => done(s);
+            img.src = s;
+          }),
+      )
       .then((s) => alive && setSrc(s))
-      .catch(() => alive && setSrc(""));
+      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -104,6 +115,65 @@ function StepRow({
           <Shot path={`/v1/chats/${chat}/shots/${step.shot}`} onOpen={onOpen} />
         </div>
       )}
+    </div>
+  );
+}
+
+function isSafeReplaySrc(src: string): boolean {
+  if (src.startsWith("data:image/")) {
+    return true;
+  }
+  try {
+    const u = new URL(src, location.href);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+// ReplayButtons make a task's screenshots into an animated GIF the person can watch and keep.
+function ReplayButtons({
+  chat,
+  index,
+  onOpen,
+}: {
+  chat: string;
+  index: number;
+  onOpen: (src: string) => void;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const film = async (what: "watch" | "save") => {
+    setBusy(true);
+    setErr("");
+    try {
+      const src = await shotData(`/v1/chats/${chat}/turns/${index}/replay.gif`, "image/gif");
+      if (!isSafeReplaySrc(src)) {
+        throw new Error("unsafe replay source");
+      }
+      if (what === "watch") {
+        onOpen(src);
+      } else {
+        const a = document.createElement("a");
+        a.href = src;
+        a.download = "kitty-task.gif";
+        a.click();
+      }
+    } catch {
+      setErr(t("The film could not be made."));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <div class="flex items-center gap-2 mt-2" data-testid="replay">
+      <button class="btn-ghost px-2 py-1 text-xs" disabled={busy} onClick={() => film("watch")}>
+        ▶ {t("Watch it as a GIF")}
+      </button>
+      <button class="btn-ghost px-2 py-1 text-xs" disabled={busy} onClick={() => film("save")}>
+        {t("Save the GIF")}
+      </button>
+      {err && <span class="text-xs text-[var(--c-red)]">{err}</span>}
     </div>
   );
 }
@@ -298,6 +368,9 @@ function TurnCard({
           ))}
         </div>
       )}
+      {!turn.working && (turn.steps?.filter((s) => s.shot).length || 0) > 1 && (
+        <ReplayButtons chat={chat} index={index} onOpen={onOpen} />
+      )}
       {turn.resumable && !turn.working && latest && onContinue && (
         <div class="callout flex items-center gap-2 mt-2" data-testid="resume-callout">
           <span class="flex-1">
@@ -420,6 +493,8 @@ export default function Conversation({ session, kitties, user, pending, waiting,
   const [zoom, setZoom] = useState<string>("");
   // helping is the kitty whose desktop is open because it asked for help.
   const [helping, setHelping] = useState<Kitty | null>(null);
+  // The requests for help the person put off, by the step that asked: a new request opens again.
+  const [later, setLater] = useState<Record<string, boolean>>({});
   const end = useRef<HTMLDivElement>(null);
   const count = session?.turns?.length ?? 0;
   // Escape closes a screenshot opened big, like a click on it does.
@@ -519,6 +594,27 @@ export default function Conversation({ session, kitties, user, pending, waiting,
         </>
       )}
       <div ref={end} />
+      {session &&
+        !helping &&
+        (session.turns || []).map((turn, i) => {
+          const last = turn.steps?.[turn.steps.length - 1];
+          const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+          const key = `${session.id}:${i}:${turn.steps?.length}`;
+          return turn.working && last?.action === "ask_help" && k && !later[key] ? (
+            <HelpModal
+              key={key}
+              kitty={k}
+              chat={session.id}
+              turn={i}
+              step={last}
+              onTakeControl={() => {
+                setLater({ ...later, [key]: true });
+                setHelping(k);
+              }}
+              onClose={() => setLater({ ...later, [key]: true })}
+            />
+          ) : null;
+        })}
       {helping && <LiveDesktop kitty={helping} autoControl onClose={() => setHelping(null)} />}
       {zoom && (
         <div

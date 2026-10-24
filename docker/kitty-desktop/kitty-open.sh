@@ -19,8 +19,13 @@ if ! pgrep -x chromium >/dev/null 2>&1; then
     fi
 fi
 # --force-dark-mode: Chromium's own face is dark, and pages that offer a dark look show it.
+# --remote-debugging-port: the browser's DevTools on this container's own loopback (nothing
+# outside reaches it), which kitty-page uses to read and act on a page from the inside.
+# --password-store=basic: saved passwords are sealed with a key every container shares, so a
+# profile kept in the workspace opens in a container made anew (no keyring to lose).
 # --test-type keeps Chromium from covering the page with a bar about --no-sandbox, which a
 # container needs (it has no user namespaces of its own).
 nohup chromium --no-sandbox --test-type --hide-crash-restore-bubble --force-dark-mode --disable-gpu --disable-dev-shm-usage --no-first-run \
+    --remote-debugging-port=9222 --remote-debugging-address=127.0.0.1 --password-store=basic \
     --window-size=1280,800 --user-data-dir="$KITTY_PROFILE" "$@" >/tmp/chromium.log 2>&1 &
 echo "opened $* on $DISPLAY (profile $KITTY_PROFILE)"

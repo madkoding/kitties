@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExampleParses(t *testing.T) {
@@ -265,6 +266,89 @@ func TestKittyLimitsBackupAndGoals(t *testing.T) {
 	} {
 		if _, err := Parse([]byte(base + bad)); err == nil || !strings.Contains(err.Error(), "kitties[0]") {
 			t.Errorf("%q must be refused: %v", bad, err)
+		}
+	}
+}
+
+// The desktops keep themselves on the newest image unless told not to, looking every six hours.
+func TestAutoUpdateDefaultsAndChecks(t *testing.T) {
+	c, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !c.Containers.AutoUpdate || c.Containers.UpdateCheckHours != 6 {
+		t.Errorf("defaults = %+v", c.Containers)
+	}
+	off, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\ncontainers:\n  auto_update: false\n  update_check_hours: 24\n"))
+	if err != nil || off.Containers.AutoUpdate || off.Containers.UpdateCheckHours != 24 {
+		t.Errorf("off = %+v, %v", off.Containers, err)
+	}
+	for _, hours := range []string{"0", "721", "-1"} {
+		_, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\ncontainers:\n  update_check_hours: " + hours + "\n"))
+		if err == nil || !strings.Contains(err.Error(), "update_check_hours") {
+			t.Errorf("update_check_hours %s = %v", hours, err)
+		}
+	}
+}
+
+func TestUpdatesWindowAndDefaults(t *testing.T) {
+	c, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u := c.Updates; u.Gateway != UpdateNotify || u.CheckHours != 12 || u.Repo != "madkoding/kitties" || u.Window != "" {
+		t.Errorf("defaults = %+v", u)
+	}
+	at := func(h, m int) time.Time { return time.Date(2026, 1, 1, h, m, 0, 0, time.UTC) }
+	for _, c := range []struct {
+		window string
+		in     map[time.Time]bool
+	}{
+		{"", map[time.Time]bool{at(3, 0): true, at(15, 0): true}},
+		{"02:00-06:00", map[time.Time]bool{at(1, 59): false, at(2, 0): true, at(5, 59): true, at(6, 0): false, at(15, 0): false}},
+		{"22:00-04:00", map[time.Time]bool{at(21, 59): false, at(22, 0): true, at(23, 30): true, at(0, 0): true, at(3, 59): true, at(4, 0): false, at(12, 0): false}},
+		{"09:00-09:00", map[time.Time]bool{at(3, 0): true}},
+	} {
+		w, err := ParseWindow(c.window)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for when, want := range c.in {
+			if got := w.Contains(when); got != want {
+				t.Errorf("window %q at %s = %v, want %v", c.window, when.Format("15:04"), got, want)
+			}
+		}
+	}
+	for _, bad := range []string{"2-6", "02:00", "25:00-06:00", "02:00-xx", "a-b"} {
+		if _, err := ParseWindow(bad); err == nil {
+			t.Errorf("window %q was accepted", bad)
+		}
+	}
+	for yaml, want := range map[string]string{
+		"updates:\n  window: nope\n":                 "updates.window",
+		"updates:\n  gateway: maybe\n":               "updates.gateway",
+		"updates:\n  check_hours: 0\n":               "updates.check_hours",
+		"updates:\n  repo: justaname\n":              "updates.repo",
+		"updates:\n  api: http://evil.example.com\n": "updates.api",
+	} {
+		if _, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\n" + yaml)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q = %v, want %s", yaml, err, want)
+		}
+	}
+	if _, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\nupdates:\n  window: 02:00-06:00\n  gateway: auto\n  api: http://127.0.0.1:9\n")); err != nil {
+		t.Errorf("a good block = %v", err)
+	}
+}
+
+func TestUpdatesPublicKey(t *testing.T) {
+	base := "providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\nupdates:\n  public_key: "
+	good := "A" + strings.Repeat("A", 42) + "="
+	if _, err := Parse([]byte(base + good + "\n")); err != nil {
+		t.Errorf("a 32-byte key = %v", err)
+	}
+	for _, bad := range []string{"short", "not-base64$", strings.Repeat("A", 64)} {
+		if _, err := Parse([]byte(base + bad + "\n")); err == nil || !strings.Contains(err.Error(), "updates.public_key") {
+			t.Errorf("key %q = %v", bad, err)
 		}
 	}
 }

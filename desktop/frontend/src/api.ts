@@ -412,16 +412,16 @@ export interface Connection {
   token: string;
 }
 
-// A link can carry the connection (?gateway=...&token=...): the gateway's own page and a shared
-// link use it. It is saved once and dropped from the address bar.
+// A link can carry the token (?token=...): the gateway's own page and a shared link use it. It is
+// saved once and dropped from the address bar. The gateway's address never comes from a link: a
+// link could point the page, and the token it holds, at another server.
 (function connectionFromLink() {
   try {
     const q = new URLSearchParams(location.search);
-    if (q.has("token") || q.has("gateway")) {
+    if (q.has("token")) {
       const saved = savedConnection();
-      saveConnection({ url: q.get("gateway") ?? saved.url, token: q.get("token") ?? saved.token });
+      saveConnection({ url: saved.url, token: q.get("token") ?? saved.token });
       q.delete("token");
-      q.delete("gateway");
       const rest = q.toString();
       history.replaceState(null, "", location.pathname + (rest ? "?" + rest : "") + location.hash);
     }
@@ -433,7 +433,7 @@ export interface Connection {
 export function savedConnection(): Connection {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || "{}");
-    return { url: raw.url || "", token: raw.token || "" };
+    return { url: safeGatewayBase(raw.url || ""), token: raw.token || "" };
   } catch {
     return { url: "", token: "" };
   }
@@ -529,7 +529,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   if (conn.token) {
     headers.Authorization = "Bearer " + conn.token;
   }
-  const res = await fetch(conn.url.replace(/\/$/, "") + path, {
+  const res = await fetch(safeGatewayBase(conn.url) + path, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -558,7 +558,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
 // saves it. The page served by the gateway itself, or opened on the same computer, needs no typing.
 async function fetchLocalToken(conn: Connection): Promise<Connection> {
   try {
-    const res = await fetch(conn.url.replace(/\/$/, "") + "/v1/local-token");
+    const res = await fetch(safeGatewayBase(conn.url) + "/v1/local-token");
     if (!res.ok) {
       return conn;
     }
@@ -574,16 +574,30 @@ async function fetchLocalToken(conn: Connection): Promise<Connection> {
   return conn;
 }
 
+// safeGatewayBase is the gateway address to build requests on: an http(s) address without a
+// trailing slash, or "" (this page's own origin) for anything else.
+function safeGatewayBase(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return "";
+    }
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
 // shotURL is where a screenshot can be loaded from as an image.
 export function shotURL(path: string): string {
   const conn = savedConnection();
-  const base = conn.url.replace(/\/$/, "");
+  const base = safeGatewayBase(conn.url);
   const sep = path.includes("?") ? "&" : "?";
   return conn.token ? `${base}${path}${sep}token=${encodeURIComponent(conn.token)}` : base + path;
 }
 
 // shotData loads a screenshot as a data: URL through the API (the only way inside Wails).
-export async function shotData(path: string): Promise<string> {
+export async function shotData(path: string, mime = "image/png"): Promise<string> {
   const app = window.go?.main?.App;
   if (!app) {
     return shotURL(path);
@@ -593,7 +607,7 @@ export async function shotData(path: string): Promise<string> {
   if (parsed.status >= 400 || !parsed.base64) {
     throw new ApiError(parsed.status, "no screenshot");
   }
-  return "data:image/png;base64," + parsed.base64;
+  return `data:${mime};base64,` + parsed.base64;
 }
 
 export const api = {
@@ -629,6 +643,35 @@ export const api = {
     request<{ held: boolean }>("POST", `/v1/kitties/${ref}/control`, { hold }).then((r) => r.held),
   inputKitty: (ref: string, action: string, args: Record<string, unknown>) =>
     request("POST", `/v1/kitties/${ref}/input`, { action, args }),
+  // answerHelp is what the person answers a kitty that asked for help: told to it, or (secret)
+  // typed on its desktop without showing it.
+  answerHelp: (
+    chat: string,
+    turn: number,
+    a: { text: string; secret: boolean; enter: boolean; save?: string },
+  ) => request("POST", `/v1/chats/${chat}/turns/${turn}/help`, a),
+  // updateStatus is the version of Kitties and the news of a newer one (refresh looks now);
+  // applyUpdate installs the newer one, and the gateway restarts into it.
+  updateStatus: (refresh = false) =>
+    request<UpdateStatus>("GET", "/v1/update" + (refresh ? "?refresh=1" : "")),
+  applyUpdate: () =>
+    request<{ updated_to: string; restarting: boolean }>("POST", "/v1/update/apply"),
+  // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
+  // up; backupKitty backs them up now; updateKitty moves the desktop to the newest image.
+  desktopInfo: (ref: string) => request<DesktopInfo>("GET", `/v1/kitties/${ref}/desktop`),
+  backupKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/backup`),
+  updateKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/update`),
+  // vault lists the secrets a kitty may type (names and kitties, never values); saveSecret saves
+  // one (with a value) or changes who may use it (without).
+  vault: () => request<{ secrets: Secret[] }>("GET", "/v1/vault").then((r) => r.secrets || []),
+  saveSecret: (name: string, body: { value?: string; kitties: string[] }) =>
+    request<{ secrets: Secret[] }>("PUT", `/v1/vault/${encodeURIComponent(name)}`, body).then(
+      (r) => r.secrets || [],
+    ),
+  deleteSecret: (name: string) =>
+    request<{ secrets: Secret[] }>("DELETE", `/v1/vault/${encodeURIComponent(name)}`).then(
+      (r) => r.secrets || [],
+    ),
   // clipboard is the text on a kitty's clipboard; setClipboard gives it the person's.
   clipboard: (ref: string) =>
     request<{ text: string }>("GET", `/v1/kitties/${ref}/clipboard`).then((r) => r.text || ""),
@@ -857,7 +900,7 @@ export function streamDesktop(
       if (!conn.token) {
         conn = await fetchLocalToken(conn);
       }
-      const res = await fetch(conn.url.replace(/\/$/, "") + `/v1/kitties/${ref}/stream`, {
+      const res = await fetch(safeGatewayBase(conn.url) + `/v1/kitties/${ref}/stream`, {
         headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
         signal: stop.signal,
       });
@@ -913,6 +956,187 @@ export function streamDesktop(
       setTimeout(() => URL.revokeObjectURL(last), 1000);
     }
   };
+}
+
+// watchRects is rectsDesktop inside Wails: the app's WatchRects emits "kitties:rects:<ref>" events
+// with the display's size and the rectangles as data: URLs, drawn here in the order they came.
+function watchRects(
+  ref: string,
+  on: { size: (w: number, h: number) => void; rects: (list: DesktopRect[]) => void },
+  onError: (why: string) => void,
+): (() => void) | null {
+  const app = window.go?.main?.App as unknown as
+    | {
+        WatchRects?: (ref: string) => Promise<void>;
+        UnwatchRects?: (ref: string) => Promise<void>;
+      }
+    | undefined;
+  const rt = (
+    window as unknown as {
+      runtime?: { EventsOn?: (name: string, cb: (data: unknown) => void) => () => void };
+    }
+  ).runtime;
+  if (!app?.WatchRects || !rt?.EventsOn) {
+    return null;
+  }
+  let ordered: Promise<unknown> = Promise.resolve();
+  const off = rt.EventsOn("kitties:rects:" + ref, (data) => {
+    const d = data as {
+      error?: string;
+      size?: [number, number];
+      rects?: { x: number; y: number; w: number; h: number; data: string }[];
+    };
+    if (d.error) {
+      onError(d.error);
+    } else if (d.size) {
+      const size = d.size;
+      ordered = ordered.then(() => on.size(size[0], size[1]));
+    } else if (d.rects) {
+      const rects = d.rects;
+      ordered = ordered
+        .then(async () => {
+          const list = await Promise.all(
+            rects.map(async (r) => {
+              if (!r.data.startsWith("data:image/")) {
+                throw new Error("unexpected picture source");
+              }
+              return { ...r, blob: await (await fetch(r.data)).blob() };
+            }),
+          );
+          on.rects(list);
+        })
+        .catch((e) => onError(String(e)));
+    }
+  });
+  void app.WatchRects(ref).catch((e: unknown) => onError(String(e)));
+  return () => {
+    off();
+    void app.UnwatchRects?.(ref);
+  };
+}
+
+// A DesktopRect is a part of the display that changed, and its picture.
+// DesktopInfo is what is known about a kitty's desktop: its image, whether a newer one waits, and
+// when its sessions were last backed up.
+export type DesktopInfo = {
+  image: string;
+  update_available: boolean;
+  auto_update?: boolean;
+  backup?: { saved: string; bytes: number };
+};
+
+// UpdateStatus says which version of Kitties runs, whether a newer one is out, and whether this
+// gateway may install it by itself (and why not when it may not).
+export type UpdateStatus = {
+  current: string;
+  latest?: string;
+  available: boolean;
+  mode: "off" | "notify" | "auto";
+  can_apply: boolean;
+  // signed is true when releases are checked against a signing key (updates.public_key).
+  signed?: boolean;
+  // skipped is a newer version that was tried here and did not hold: it is not offered again.
+  skipped?: string;
+  why?: string;
+  checked_at?: string;
+  error?: string;
+};
+
+// A Secret is one of the vault: its name and the ids of the kitties that may type it.
+export type Secret = { name: string; kitties: string[]; saved: string };
+
+export type DesktopRect = { x: number; y: number; w: number; h: number; blob: Blob };
+
+// rectsDesktop follows a kitty's display as what changed on it, like VNC: the whole picture
+// first, then only the rectangles that differ from the one before (the gateway's /rects). size
+// says the display's size, and rects the pictures to draw over what is there. It returns the
+// function that stops it, or null where it cannot be had. Inside Wails the page cannot reach the
+// gateway itself: the app reads the stream and hands each update over as runtime events. onError
+// says why it ended (a gateway without /rects answers 404); the caller falls back to streamDesktop.
+export function rectsDesktop(
+  ref: string,
+  on: { size: (w: number, h: number) => void; rects: (list: DesktopRect[]) => void },
+  onError: (why: string) => void,
+): (() => void) | null {
+  if (window.go?.main?.App) {
+    return watchRects(ref, on, onError);
+  }
+  const stop = new AbortController();
+  void (async () => {
+    try {
+      let conn = savedConnection();
+      if (!conn.token) {
+        conn = await fetchLocalToken(conn);
+      }
+      const res = await fetch(safeGatewayBase(conn.url) + `/v1/kitties/${ref}/rects?fps=20`, {
+        headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
+        signal: stop.signal,
+      });
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const reader = res.body.getReader();
+      const text = new TextDecoder();
+      let buf = new Uint8Array(0);
+      // want is how many rectangles of the update are still to come; head is the one whose
+      // picture is being waited for; batch is what the update has so far.
+      let want = 0;
+      let head: number[] | null = null;
+      let batch: DesktopRect[] = [];
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) {
+          throw new Error("the stream ended");
+        }
+        const joined = new Uint8Array(buf.length + value.length);
+        joined.set(buf);
+        joined.set(value, buf.length);
+        buf = joined;
+        for (;;) {
+          if (head) {
+            if (buf.length < head[4]) {
+              break;
+            }
+            batch.push({
+              x: head[0],
+              y: head[1],
+              w: head[2],
+              h: head[3],
+              blob: new Blob([buf.slice(0, head[4])]),
+            });
+            buf = buf.slice(head[4]);
+            head = null;
+            if (--want === 0) {
+              on.rects(batch);
+              batch = [];
+            }
+            continue;
+          }
+          const nl = buf.indexOf(10);
+          if (nl < 0) {
+            break;
+          }
+          const line = text.decode(buf.subarray(0, nl)).trim().split(" ");
+          buf = buf.slice(nl + 1);
+          if (line[0] === "SCREEN" && line.length === 3) {
+            on.size(Number(line[1]), Number(line[2]));
+          } else if (line[0] === "UPDATE" && line.length === 2) {
+            want = Number(line[1]);
+            batch = [];
+          } else if (line[0] === "RECT" && line.length === 6 && want > 0) {
+            head = line.slice(1).map(Number);
+          } else {
+            throw new Error("not a stream of rectangles");
+          }
+        }
+      }
+    } catch (e) {
+      if (!stop.signal.aborted) {
+        onError(e instanceof Error ? e.message : String(e));
+      }
+    }
+  })();
+  return () => stop.abort();
 }
 
 // indexOf finds a sequence of bytes, or -1.

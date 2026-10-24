@@ -195,6 +195,29 @@ const dict: Dictionary = {
   Language: "Idioma",
   "The system's language is used until you pick one.":
     "O idioma do sistema é usado até você escolher um.",
+  "A desktop or Kitties was updated, or a new version is waiting":
+    "Um desktop ou o Kitties foi atualizado, ou há uma versão nova esperando",
+  "Kitties did not come back in a minute: restart it by hand.":
+    "O Kitties não voltou em um minuto: reinicie-o manualmente.",
+  "Update Kitties to {version}? It restarts in a moment; the kitties' desktops keep running.":
+    "Atualizar o Kitties para {version}? Ele reinicia em instantes; as áreas de trabalho dos kitties continuam funcionando.",
+  "Kitties {version}": "Kitties {version}",
+  "it is the newest version": "é a versão mais nova",
+  "Kitties {version} is available.": "O Kitties {version} está disponível.",
+  "Update and restart": "Atualizar e reiniciar",
+  "Updated to {version}: restarting…": "Atualizado para {version}: reiniciando…",
+  "Look for a new version": "Procurar uma versão nova",
+  "Looked {when}.": "Procurada {when}.",
+  "Kitties does not look for new versions: turn it on with updates.gateway in the configuration.":
+    "O Kitties não procura versões novas: ative com updates.gateway na configuração.",
+  "Kitties looks for new versions and installs them by itself when nothing is in use.":
+    "O Kitties procura versões novas e as instala sozinho quando nada está em uso.",
+  "Kitties looks for new versions and tells you; you decide when to update.":
+    "O Kitties procura versões novas e avisa você; você decide quando atualizar.",
+  "This update is checked against its checksums only, which do not say who made it: set updates.public_key to require the release key's signature.":
+    "Esta atualização é verificada apenas pelas somas de verificação, que não dizem quem a fez: defina updates.public_key para exigir a assinatura da chave dos releases.",
+  "{version} did not hold here and Kitties went back to {current}: it is not offered again.":
+    "{version} não se sustentou aqui e o Kitties voltou para {current}: não será oferecida de novo.",
 };
 
 export default dict;

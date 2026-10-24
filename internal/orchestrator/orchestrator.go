@@ -35,6 +35,12 @@ type Containers interface {
 	Stop(ctx context.Context, name string) error
 	Remove(ctx context.Context, name string) error
 	Exec(ctx context.Context, name string, argv ...string) (string, error)
+	// Pull downloads the image again; ImageStale tells whether a container was made from an
+	// older one than the reference names now.
+	Pull(ctx context.Context, image string) error
+	ImageStale(ctx context.Context, name, image string) (bool, error)
+	// ExecInput is Exec with text on the command's input, for what must not show in its arguments.
+	ExecInput(ctx context.Context, name, stdin string, argv ...string) (string, error)
 	Screenshot(ctx context.Context, name string) ([]byte, error)
 	// Stream follows the display: pictures to read with container.ReadFrame, until closed.
 	Stream(ctx context.Context, name string, fps, quality int) (io.ReadCloser, error)
@@ -56,6 +62,10 @@ type Manager struct {
 	rtMu sync.RWMutex
 	// detect looks for the runtime again; nil when it is not looked for again.
 	detect func(ctx context.Context) (Containers, error)
+	// busyFn says whether a kitty is in the middle of a task (SetBusy).
+	busyFn func(kittyID string) bool
+	// keeper keeps the backups of what a kitty's browser knows (sessions.go), nil when there is none.
+	keeper Keeper
 	// holds are the displays the person has taken over, by kitty id, with their last use.
 	holdMu sync.Mutex
 	holds  map[string]time.Time
@@ -597,11 +607,18 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	}
 	switch {
 	case running:
-	case exists:
+	case exists && !m.staleForAutoUpdate(ctx, k):
 		if err := m.ctr().Start(ctx, k.Container); err != nil {
 			return m.fail(k.ID, err)
 		}
 	default:
+		// A stopped container of an older image is made anew with the newest (its sessions were
+		// backed up when it stopped, and are put back below).
+		if exists {
+			if err := m.ctr().Remove(ctx, k.Container); err != nil {
+				return m.fail(k.ID, err)
+			}
+		}
 		c := m.cfg.Containers
 		spec := container.Spec{
 			Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: c.MemoryMB, CPUs: c.CPUs,
@@ -610,6 +627,8 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 		if _, err := m.ctr().Up(ctx, spec); err != nil {
 			return m.fail(k.ID, err)
 		}
+		// A container made anew gets back what its kitty's browser knew.
+		m.restoreSessions(ctx, k)
 	}
 	m.applyTheme(ctx, k, false)
 	return m.setStatus(k.ID, kitty.StatusRunning, "")
@@ -670,9 +689,13 @@ func (m *Manager) Stop(ctx context.Context, ref string) error {
 		return err
 	}
 	if k.Desktop {
-		if exists, _, err := m.containerState(ctx, k.Container); err != nil {
+		if exists, running, err := m.containerState(ctx, k.Container); err != nil {
 			return m.fail(k.ID, err)
 		} else if exists {
+			// The browser is closed in an orderly way and its sessions are kept before the stop.
+			if running {
+				m.saveSessions(ctx, k)
+			}
 			if err := m.ctr().Stop(ctx, k.Container); err != nil {
 				return m.fail(k.ID, err)
 			}
@@ -1012,6 +1035,18 @@ func (m *Manager) Exec(ctx context.Context, ref string, argv ...string) (string,
 		return "", fmt.Errorf("%s has no container", k.Name)
 	}
 	return m.ctr().Exec(ctx, k.Container, argv...)
+}
+
+// ExecInput runs a command in the kitty's container with text on its input.
+func (m *Manager) ExecInput(ctx context.Context, ref, stdin string, argv ...string) (string, error) {
+	k, err := m.Get(ref)
+	if err != nil {
+		return "", err
+	}
+	if !k.Desktop {
+		return "", fmt.Errorf("%s has no container", k.Name)
+	}
+	return m.ctr().ExecInput(ctx, k.Container, stdin, argv...)
 }
 
 // Screenshot captures the kitty's display.

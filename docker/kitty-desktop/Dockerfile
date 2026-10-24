@@ -7,7 +7,8 @@
 # from the chat. Chromium for the web, LibreOffice for office documents (also headless: `soffice
 # --headless --convert-to pdf file.docx`), Inkscape, ImageMagick and mtPaint for drawing;
 # kitty-install adds more from Debian, and they are installed again when the container is made
-# anew. Nothing listens on a port: the orchestrator reaches the container through `docker exec`.
+# anew. No port is published (the browser's DevTools listens on the container's own loopback only): the
+# orchestrator reaches the container through `docker exec`.
 #
 #   docker build -t ghcr.io/madkoding/kitty-desktop:latest docker/kitty-desktop
 
@@ -38,6 +39,13 @@ RUN git init -q /tmp/haiku-icons \
     && /tmp/haiku/build-theme.sh /tmp/haiku-icons /out/icons/Haiku \
     && cp /tmp/haiku-icons/LICENSE /out/doc/HAIKU-ICONS-LICENSE
 
+# kitty-grab, the live view's capture: C, XShm and libjpeg (see kitty-grab.c).
+FROM debian:bookworm-slim AS grab
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev libx11-dev libxext-dev libjpeg-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY kitty-grab.c /tmp/kitty-grab.c
+RUN gcc -O2 -Wall -Werror -o /kitty-grab /tmp/kitty-grab.c -lX11 -lXext -ljpeg && strip /kitty-grab
+
 FROM debian:bookworm-slim
 
 # Dark everywhere: GTK 3 programs (LibreOffice among them) in Adwaita's dark variant.
@@ -52,9 +60,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip \
         icewm xterm sudo pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
         chromium fonts-dejavu fonts-noto-color-emoji \
-        ca-certificates curl git jq python3 openssh-client \
+        ca-certificates curl git jq python3 python3-websocket openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
         inkscape imagemagick mtpaint \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
+        libx11-6 libxext6 libjpeg62-turbo \
         tini procps \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
@@ -77,11 +87,19 @@ RUN mkdir -p /usr/share/backgrounds/kitties \
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/kitty-entrypoint
 COPY --chmod=755 kitty-shot.sh /usr/local/bin/kitty-shot
+COPY --chmod=755 kitty-ocr.sh /usr/local/bin/kitty-ocr
+COPY --chmod=755 kitty-backup.sh /usr/local/bin/kitty-backup
+COPY --chmod=755 kitty-restore.sh /usr/local/bin/kitty-restore
+# "Continue where you left off": the browser keeps session cookies (logins that have no expiry)
+# across a restart, which an update of the desktop is.
+COPY chromium-policy.json /etc/chromium/policies/managed/kitties.json
+COPY --chmod=755 kitty-page.py /usr/local/bin/kitty-page
 COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch
 COPY --chmod=755 kitty-install.sh /usr/local/bin/kitty-install
 COPY --chmod=755 kitty-apt.sh /usr/local/sbin/kitty-apt
 COPY --chmod=755 kitty-stream.sh /usr/local/bin/kitty-stream
+COPY --from=grab --chmod=755 /kitty-grab /usr/local/bin/kitty-grab
 COPY --chmod=755 kitty-clip.sh /usr/local/bin/kitty-clip
 COPY --chmod=755 kitty-theme.sh /usr/local/bin/kitty-theme
 COPY --chown=kitty:kitty icewm/ /home/kitty/.icewm/

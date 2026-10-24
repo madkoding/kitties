@@ -27,13 +27,16 @@ import (
 	"github.com/madkoding/kitties/internal/demo"
 	"github.com/madkoding/kitties/internal/digest"
 	"github.com/madkoding/kitties/internal/gateway"
+	"github.com/madkoding/kitties/internal/keep"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/memory"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/selfupdate"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
+	"github.com/madkoding/kitties/internal/vault"
 	"github.com/madkoding/kitties/internal/web"
 )
 
@@ -57,6 +60,8 @@ Commands:
   shot <name> <file.png>    save a screenshot of the kitty's display
   providers                 list the configured AI profiles and the supported kinds
   version                   print the version
+  release-key | release-sign <file> | release-verify <file> <sig> <key>
+                            the signing of the releases (for whoever makes them)
 
 Flags: -config file picks the configuration; -demo needs no key and no Docker (a scripted brain
 and a drawn desktop) and is the quickest way to see the interface: kitties -demo gateway.
@@ -81,15 +86,20 @@ type app struct {
 	// approvals hold the actions that wait for a yes; memory is what the kitties know of the
 	// person; notifier tells the person outside the interface.
 	approvals *approvals.Store
-	budget    *budget.Store
-	digest    *digest.Reporter
-	memory    *memory.Store
-	notifier  *notify.Notifier
-	skills    *skills.Library
-	arts      *artifacts.Store
-	in        io.Reader
-	out       io.Writer
-	err       io.Writer
+	vault     *vault.Store
+	keep      *keep.Store
+	updater   *selfupdate.Updater
+	// booted is what the start found out about the last update (rolled back, confirmed).
+	booted   selfupdate.BootResult
+	budget   *budget.Store
+	digest   *digest.Reporter
+	memory   *memory.Store
+	notifier *notify.Notifier
+	skills   *skills.Library
+	arts     *artifacts.Store
+	in       io.Reader
+	out      io.Writer
+	err      io.Writer
 }
 
 // Seams for the tests.
@@ -123,9 +133,20 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 		return 0
 	case "init":
 		return cmdInit(*configPath, out, errOut)
+	case "release-key", "release-sign", "release-verify":
+		return cmdRelease(cmd, rest, out, errOut)
 	case "help", "-h", "--help":
 		fs.Usage()
 		return 0
+	}
+	// A gateway that was just updated is counted before anything else can go wrong (even reading
+	// the configuration): one that does not hold goes back to the version before.
+	var booted selfupdate.BootResult
+	if cmd == "gateway" {
+		var berr error
+		if booted, berr = selfupdate.New(config.Defaults().Updates, version).Boot(); berr != nil {
+			fmt.Fprintf(errOut, "kitties: %v\n", berr)
+		}
 	}
 	path := *configPath
 	if path == "" {
@@ -151,7 +172,7 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	if cmd == "token" {
 		return cmdToken(cfg, out, errOut)
 	}
-	a := &app{cfg: cfg, in: in, out: out, err: errOut, demo: *demoMode}
+	a := &app{cfg: cfg, in: in, out: out, err: errOut, demo: *demoMode, booted: booted}
 	if err := a.open(cmd); err != nil {
 		fmt.Fprintf(errOut, "kitties: %v\n", err)
 		return 1
@@ -227,6 +248,12 @@ func (a *app) open(cmd string) error {
 		return err
 	}
 	a.memory = memory.Open(filepath.Join(dataDir, "memory"))
+	// The saved secrets and the backups of the kitties' sessions need a key kept in the data
+	// folder: where it cannot be written (a read-only volume) they are off, and the rest runs.
+	if a.vault, a.keep = openSecretStores(dataDir, a.err); a.vault != nil {
+		chats.SetVault(a.vault)
+		fleet.SetKeeper(a.keep)
+	}
 	chats.SetBudget(a.budget)
 	chats.SetApprovals(a.approvals)
 	chats.SetMemory(a.memory)
@@ -261,12 +288,17 @@ func (a *app) open(cmd string) error {
 	}, filepath.Join(dataDir, "digest.json"))
 	// A removed kitty takes its held actions and its memory along.
 	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget, chats.LeaveChats)
+	if a.vault != nil {
+		ag.OnForget = append(ag.OnForget, a.vault.ForgetKitty, a.keep.Forget)
+	}
 	// Chats whose kitties were removed earlier have nobody to answer: take those kitties out,
 	// and drop the chats left empty.
 	if err := chats.Prune(func(id string) bool { _, err := fleet.Get(id); return err == nil }); err != nil {
 		fmt.Fprintf(a.err, "kitties: tidying the chats: %v\n", err)
 	}
 	a.fleet, a.chats = fleet, chats
+	a.updater = selfupdate.New(a.cfg.Updates, version)
+	a.updater.Idle = func() bool { return !a.chats.AnyBusy() && !a.fleet.AnyHeld() }
 	return nil
 }
 
@@ -402,8 +434,11 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	}
 	g := a.cfg.Gateway
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
-		WithApprovals(a.chats).WithMemory(a.chats).WithNotifier(a.notifier).WithDigest(a.digest).
+		WithApprovals(a.chats).WithMemory(a.chats).WithMaintenance(a.fleet).WithUpdater(a.updater).WithNotifier(a.notifier).WithDigest(a.digest).
 		WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
+	if a.vault != nil {
+		srv.WithVault(a.vault)
+	}
 	if site, ok := webFS(); ok {
 		srv.WithWeb(site)
 	} else {
@@ -424,8 +459,68 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindRecovered, Text: what})
 		a.notifier.Notify(notify.Notification{Event: notify.Recovered, Kitty: k.Name, Title: "is back", Body: what})
 	}, logf)
+	// A newer desktop image is downloaded and put on the idle desktops, their sessions kept.
+	a.fleet.SetBusy(a.chats.KittyBusy)
+	go a.fleet.WatchUpdates(ctx, updateFirstCheck, time.Duration(a.cfg.Containers.UpdateCheckHours)*time.Hour, func(k *kitty.Kitty) {
+		logf("update: the desktop of %s is on the newest image", k.Name)
+		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindUpdated, Text: "its desktop was updated to the newest image; its sessions were kept"})
+		a.notifier.Notify(notify.Notification{Event: notify.Updated, Kitty: k.Name, Title: "its desktop was updated", Body: "It runs the newest image now; its cookies, sessions and passwords were kept."})
+	}, logf)
+	// Kitties itself: told about (notify) or moved to (auto) a newer release, inside the window and
+	// when no kitty is working and no desktop is held.
+	go a.updater.Confirm(ctx)
+	if a.booted.RolledBack != "" {
+		logf("update: %s did not hold and Kitties went back to %s; it will not be offered again", a.booted.RolledBack, version)
+		a.notifier.Notify(rolledBackNote(a.booted.RolledBack, version))
+	}
+	window, _ := config.ParseWindow(a.cfg.Updates.Window)
+	go a.updater.Watch(ctx, updateFirstCheck, time.Duration(a.cfg.Updates.CheckHours)*time.Hour, updateHooks(a.notifier, func() bool { return window.Contains(time.Now()) }, logf))
 	return srv.Listen(ctx, g.Listen, logf)
 }
+
+// openSecretStores opens the vault of saved secrets and the store of session backups, which share
+// a key kept in the data folder. Where the folder cannot be written they are both off (nil) and it
+// says so: a read-only volume must not keep the gateway from starting.
+func openSecretStores(dataDir string, warn io.Writer) (*vault.Store, *keep.Store) {
+	v, err := vault.Open(dataDir)
+	if err != nil {
+		fmt.Fprintf(warn, "kitties: saved secrets and session backups are off: %v\n", err)
+		return nil, nil
+	}
+	k, err := keep.Open(dataDir)
+	if err != nil {
+		fmt.Fprintf(warn, "kitties: saved secrets and session backups are off: %v\n", err)
+		return nil, nil
+	}
+	return v, k
+}
+
+// rolledBackNote tells that a version that did not hold was gone back from.
+func rolledBackNote(failed, now string) notify.Notification {
+	return notify.Notification{Event: notify.Updated, Title: "Kitties went back to " + now,
+		Body: failed + " did not start properly, so the previous version is running again. It will not be offered again."}
+}
+
+// updateHooks is what the updates of Kitties itself tell the person, and when they may run.
+func updateHooks(n notify.Sender, window func() bool, logf func(string, ...any)) selfupdate.Hooks {
+	return selfupdate.Hooks{
+		Window: window,
+		Available: func(st selfupdate.Status) {
+			body := "Update it from Settings, Preferences."
+			if st.Why != "" {
+				body = st.Why
+			}
+			n.Notify(notify.Notification{Event: notify.Updated, Title: "Kitties " + st.Latest + " is available", Body: body})
+		},
+		Updated: func(from, to string) {
+			n.Notify(notify.Notification{Event: notify.Updated, Title: "Kitties was updated to " + to, Body: "It was " + from + "; it restarts now, and the desktops of the kitties keep running."})
+		},
+		Log: logf,
+	}
+}
+
+// updateFirstCheck is how long after the start the gateway first looks for a newer desktop image.
+var updateFirstCheck = 2 * time.Minute
 
 // watchEvery is how often the watchdog looks at the containers.
 var watchEvery = 30 * time.Second
@@ -662,7 +757,13 @@ func (a *app) followTask(ctx context.Context, id string) {
 			if t.From == "user" || finished[i] {
 				continue
 			}
-			for _, st := range t.Steps[shown[i]:] {
+			// The screenshot of a step lands just after the step does: while the task goes on, the
+			// newest step waits until it has its shot or another step follows it.
+			upto := len(t.Steps)
+			if t.Working && upto > shown[i] && t.Steps[upto-1].Shot == "" {
+				upto--
+			}
+			for _, st := range t.Steps[shown[i]:upto] {
 				line := "  · " + st.Action
 				if st.Error != "" {
 					line += " failed: " + st.Error
@@ -674,7 +775,7 @@ func (a *app) followTask(ctx context.Context, id string) {
 				}
 				fmt.Fprintln(a.out, line)
 			}
-			shown[i] = len(t.Steps)
+			shown[i] = upto
 			if t.Working {
 				working = true
 				continue

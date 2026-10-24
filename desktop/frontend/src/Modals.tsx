@@ -1,11 +1,13 @@
-import { useEffect, useLayoutEffect, useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
 import { api, errText, inAndroid, inWails, saveConnection, savedConnection, THEMES } from "./api";
 import { ask } from "./Confirm";
+import { Modal } from "./Modal";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
 import { ProviderLogo } from "./ConnectorLogo";
 import { Shot } from "./Conversation";
-import { IconCamera, IconMonitor, IconPlay, IconStop, IconTrash, IconX } from "./icons";
+import { IconCamera, IconMonitor, IconPlay, IconStop, IconTrash } from "./icons";
+import DesktopCare from "./DesktopCare";
 import LiveDesktop from "./LiveDesktop";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import { MemoryPanel } from "./Memory";
@@ -20,49 +22,6 @@ function suggestAvatar(name: string): { breed: string; color: string } {
     h = Math.imul(h ^ ch.charCodeAt(0), 16777619) >>> 0;
   }
   return { breed: BREEDS[h % BREEDS.length], color: COLORS[Math.floor(h / 7) % COLORS.length] };
-}
-
-function Modal({
-  title,
-  onClose,
-  children,
-  wide,
-}: {
-  title: string;
-  onClose: () => void;
-  children: preact.ComponentChildren;
-  wide?: boolean;
-}) {
-  useLayoutEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, [onClose]);
-  return (
-    <div
-      class="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4 backdrop"
-      onClick={onClose}
-      data-modal
-    >
-      <div
-        class={`chat-modal w-full ${wide ? "max-w-3xl" : "max-w-md"} p-5 max-h-[90vh] overflow-y-auto scroll-thin`}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-      >
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="font-mono text-base tracking-wide">{title}</h2>
-          <button
-            class="plain p-1 text-[var(--t3)] hover:text-[var(--t1)]"
-            onClick={onClose}
-            aria-label={t("Close")}
-          >
-            <IconX />
-          </button>
-        </div>
-        {children}
-      </div>
-    </div>
-  );
 }
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";
@@ -615,7 +574,6 @@ export function KittyDrawer({
   const [err, setErr] = useState("");
   const mood: Mood =
     kitty.status === "running" ? "happy" : kitty.status === "error" ? "error" : "sleeping";
-  const [looks, setLooks] = useState(false);
   const [models, setModels] = useState<ProviderInfo[]>([]);
   useEffect(() => {
     api
@@ -651,121 +609,129 @@ export function KittyDrawer({
   if (live) {
     return <LiveDesktop kitty={kitty} onClose={() => setLive(false)} />;
   }
+  const running = kitty.status === "running";
+  const model = models.find((m) => m.name === kitty.provider);
   return (
     <Modal title={kitty.name} onClose={onClose} wide>
-      <div class="grid md:grid-cols-[1.4fr_1fr] gap-5">
-        <div class="min-w-0">
-          <div class="avatar-stage mb-3">
-            <PixelCat
-              breed={kitty.avatar?.breed}
-              color={kitty.avatar?.color}
-              mood={mood}
-              size={112}
-            />
-          </div>
-          <div class="mood-row">
-            <button class="btn-ghost px-2 py-1" onClick={() => setLooks(!looks)}>
-              {looks ? t("done") : t("change looks")}
-            </button>
-          </div>
-          {looks && (
-            <div class="mt-3">
-              <CatPicker
-                breed={kitty.avatar?.breed || "tabby"}
-                color={kitty.avatar?.color || "orange"}
-                onChange={pick}
-              />
-            </div>
-          )}
-          <div class="section-title !mx-0 mt-4">{t("Desktop")}</div>
-          {kitty.desktop ? (
-            <Shot key={tick} path={`/v1/kitties/${kitty.id}/screenshot?t=${tick}`} big />
-          ) : (
-            <div class="live-shot flex items-center justify-center text-[var(--t4)] text-sm">
-              {t("brain only, no desktop")}
-            </div>
-          )}
-          <div class="flex gap-2 mt-3 flex-wrap">
+      <div class="flex items-center gap-4 flex-wrap" data-testid="kitty-header">
+        <div class="avatar-stage !p-2 !pt-3 shrink-0">
+          <PixelCat breed={kitty.avatar?.breed} color={kitty.avatar?.color} mood={mood} size={72} />
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="flex gap-2 flex-wrap items-center">
             <span
-              class={`state-pill ${kitty.status === "running" ? "is-ok" : kitty.status === "error" ? "is-off" : ""}`}
+              class={`state-pill ${running ? "is-ok" : kitty.status === "error" ? "is-off" : ""}`}
             >
               {kitty.status}
             </span>
             <span class="tag tag-accent">
-              {(() => {
-                const p = models.find((m) => m.name === kitty.provider);
-                return p ? modelLabel(p) : kitty.provider || t("no model");
-              })()}
+              {model ? modelLabel(model) : kitty.provider || t("no model")}
             </span>
             {kitty.desktop && <span class="tag">{kitty.container}</span>}
-            {kitty.desktop && kitty.status === "running" && (
-              <button
-                class="btn-ghost px-2 py-1 text-xs flex items-center gap-1"
-                onClick={() => setTick((t) => t + 1)}
-              >
-                <IconCamera size={12} /> {t("refresh")}
-              </button>
-            )}
-            {kitty.desktop && kitty.status === "running" && (
-              <button
-                class="btn-accent px-2 py-1 text-xs flex items-center gap-1"
-                onClick={() => setLive(true)}
-                data-testid="open-desktop"
-              >
-                <IconMonitor size={12} /> {t("Live and take control")}
-              </button>
-            )}
           </div>
-          {kitty.error && <p class="text-sm text-[var(--c-red)] mt-2">{kitty.error}</p>}
-          <GoalsPanel kitty={kitty} onOpenChat={onOpenChat} />
-          <JournalPanel kitty={kitty} onOpenChat={onOpenChat} />
-        </div>
-        <div class="text-sm">
-          <KittyBasics kitty={kitty} models={models} onChanged={onChanged} />
           {soul.skills && soul.skills.length > 0 && (
             <div class="flex flex-wrap gap-1 mt-2">
-              {soul.skills.map((t) => (
-                <span key={t} class="tag tag-magenta">
-                  {t}
+              {soul.skills.map((s) => (
+                <span key={s} class="tag tag-magenta">
+                  {s}
                 </span>
               ))}
             </div>
           )}
-          <div class="section-title !mx-0 mt-5">{t("Actions")}</div>
-          <div class="flex flex-col gap-2">
-            <button class="btn-accent px-3 py-2 text-sm" onClick={onChat}>
-              {t("Chat with {name}", { name: kitty.name })}
-            </button>
-            {kitty.status === "running" ? (
-              <button
-                class="btn-ghost px-3 py-2 text-sm flex items-center gap-2"
-                onClick={() => act(() => api.stopKitty(kitty.id))}
-              >
-                <IconStop size={14} /> {t("Stop")}
-              </button>
-            ) : (
-              <button
-                class="btn-ghost px-3 py-2 text-sm flex items-center gap-2"
-                onClick={() => act(() => api.startKitty(kitty.id))}
-              >
-                <IconPlay size={14} /> {t("Start")}
-              </button>
-            )}
+          {kitty.error && <p class="text-sm text-[var(--c-red)] mt-2">{kitty.error}</p>}
+        </div>
+        <div class="flex gap-2 flex-wrap" data-testid="kitty-actions">
+          <button class="btn-accent px-3 py-2 text-sm" onClick={onChat}>
+            {t("Chat with {name}", { name: kitty.name })}
+          </button>
+          {kitty.desktop && running && (
             <button
-              class="btn-danger px-3 py-2 text-sm flex items-center gap-2"
-              onClick={async () =>
-                (await ask(t("Remove {name} and its container?", { name: kitty.name }))) &&
-                act(() => api.removeKitty(kitty.id).then(onClose))
-              }
+              class="btn-accent px-3 py-2 text-sm flex items-center gap-1"
+              onClick={() => setLive(true)}
+              data-testid="open-desktop"
             >
-              <IconTrash size={14} /> {t("Remove")}
+              <IconMonitor size={14} /> {t("Live and take control")}
             </button>
-          </div>
-          {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
-          <LimitsForm kitty={kitty} kitties={kitties} onChanged={onChanged} />
-          <MemoryPanel kitty={kitty} />
+          )}
+          {running ? (
+            <button
+              class="btn-ghost px-3 py-2 text-sm flex items-center gap-2"
+              onClick={() => act(() => api.stopKitty(kitty.id))}
+            >
+              <IconStop size={14} /> {t("Stop")}
+            </button>
+          ) : (
+            <button
+              class="btn-ghost px-3 py-2 text-sm flex items-center gap-2"
+              onClick={() => act(() => api.startKitty(kitty.id))}
+            >
+              <IconPlay size={14} /> {t("Start")}
+            </button>
+          )}
         </div>
       </div>
+      {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
+      <div class="grid md:grid-cols-2 gap-x-6">
+        <div class="min-w-0">
+          <GoalsPanel kitty={kitty} onOpenChat={onOpenChat} />
+        </div>
+        <div class="min-w-0">
+          <JournalPanel kitty={kitty} onOpenChat={onOpenChat} />
+        </div>
+      </div>
+      {kitty.desktop && (
+        <div class="min-w-0">
+          <div class="section-title !mx-0 mt-5 flex items-center justify-between">
+            {t("Desktop")}
+            {running && (
+              <button
+                class="btn-ghost px-2 py-1 text-xs flex items-center gap-1"
+                onClick={() => setTick((n) => n + 1)}
+              >
+                <IconCamera size={12} /> {t("refresh")}
+              </button>
+            )}
+          </div>
+          <Shot path={`/v1/kitties/${kitty.id}/screenshot?t=${tick}`} big />
+          <DesktopCare kitty={kitty} onChanged={onChanged} />
+        </div>
+      )}
+      <details class="config mt-5" data-testid="kitty-config">
+        <summary>
+          <span>{t("Configuration")}</span>
+          <span class="text-[var(--t4)] normal-case tracking-normal">
+            {t("looks, brain, personality, connections, limits and memory")}
+          </span>
+        </summary>
+        <div class="grid md:grid-cols-2 gap-x-6 gap-y-2 p-3 text-sm">
+          <div class="min-w-0">
+            <div class="section-title !mx-0">{t("Looks")}</div>
+            <CatPicker
+              breed={kitty.avatar?.breed || "tabby"}
+              color={kitty.avatar?.color || "orange"}
+              onChange={pick}
+            />
+            <div class="mt-4">
+              <KittyBasics kitty={kitty} models={models} onChanged={onChanged} />
+            </div>
+          </div>
+          <div class="min-w-0">
+            <LimitsForm kitty={kitty} kitties={kitties} onChanged={onChanged} />
+            <MemoryPanel kitty={kitty} />
+            <div class="mt-6">
+              <button
+                class="btn-danger px-3 py-2 text-sm flex items-center gap-2"
+                onClick={async () =>
+                  (await ask(t("Remove {name} and its container?", { name: kitty.name }))) &&
+                  act(() => api.removeKitty(kitty.id).then(onClose))
+                }
+              >
+                <IconTrash size={14} /> {t("Remove")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </details>
     </Modal>
   );
 }

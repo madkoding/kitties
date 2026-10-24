@@ -50,6 +50,19 @@ func TestHoldAndInput(t *testing.T) {
 	if !m.Held(k.ID) || !strings.Contains(strings.Join(f.calls, " "), "exec") {
 		t.Errorf("input = held %v, calls %v", m.Held(k.ID), f.calls)
 	}
+	// What the person types may be a password: it goes in on the input, never in the arguments.
+	if err := m.Input(ctx, "mimi", desktop.Action{Name: "type", Args: map[string]any{"text": "hunter2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.inputs) != 1 || f.inputs[0] != "kitty-mimi:hunter2" || strings.Contains(strings.Join(f.execs, " "), "hunter2") {
+		t.Errorf("typed: inputs %v execs %v", f.inputs, f.execs)
+	}
+	if _, err := m.ExecInput(ctx, "brain", "x", "ls"); err == nil {
+		t.Error("a kitty without a desktop has no container")
+	}
+	if _, err := m.ExecInput(ctx, "nobody", "x", "ls"); err == nil {
+		t.Error("unknown kitty")
+	}
 	if err := m.Input(ctx, "mimi", desktop.Action{Name: "run", Args: map[string]any{"argv": []any{"rm"}}}); err == nil {
 		t.Error("the person's input runs no programs")
 	}
@@ -120,5 +133,26 @@ func TestStartWithoutTheme(t *testing.T) {
 	_, _ = m.Create(context.Background(), Spec{Name: "mimi"})
 	if err := m.Start(context.Background(), "mimi"); err != nil || len(f.execs) != 0 {
 		t.Errorf("start = %v %v", err, f.execs)
+	}
+}
+
+func TestAnyHeld(t *testing.T) {
+	m, err := New(testConfig(t), WithContainers(newFake(), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return now }
+	_, _ = m.Create(context.Background(), Spec{Name: "mimi"})
+	if m.AnyHeld() {
+		t.Error("held from the start")
+	}
+	_, _ = m.Hold("mimi", true)
+	if !m.AnyHeld() {
+		t.Error("a held desktop is not seen")
+	}
+	now = now.Add(holdIdle + time.Second)
+	if m.AnyHeld() {
+		t.Error("an idle hold counts")
 	}
 }

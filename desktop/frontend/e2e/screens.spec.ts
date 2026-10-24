@@ -98,6 +98,14 @@ test("the technical details show only when asked for", async ({ page }) => {
   await expect(page.locator(".trail").first()).not.toContainText("640, 420");
 });
 
+// openConfig unfolds the configuration of the kitty's drawer, where its options are edited.
+async function openConfig(page: Page) {
+  const config = page.getByTestId("kitty-config");
+  if (!(await config.evaluate((el) => (el as HTMLDetailsElement).open))) {
+    await config.locator("summary").click();
+  }
+}
+
 test("a kitty's drawer shows its display", async ({ page }) => {
   await open(page, `#kitty/${ids.tom}`);
   await expect(page.getByRole("dialog").first()).toBeVisible();
@@ -295,6 +303,7 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   page,
 }) => {
   await open(page, `#kitty/${ids.mimi}`);
+  await openConfig(page);
   const memory = page.getByTestId("memory");
   await expect(memory).toBeVisible();
   // Four thumbs down with a word moved the level from balanced to demanding.
@@ -466,7 +475,10 @@ test("a kitty hands a subtask to another and the chip leads to their thread", as
 
 test("the kitty's drawer: goals, the journal, limits and the backup", async ({ page }) => {
   await open(page, `#kitty/${ids.mimi}`);
-  // Its brain, who it is and what it may use are edited right here.
+  // What it does is in view; its brain, who it is and what it may use are edited under
+  // its configuration.
+  await expect(page.getByTestId("kitty-basics")).toBeHidden();
+  await openConfig(page);
   const basics = page.getByTestId("kitty-basics");
   await expect(basics.getByLabel("Brain")).toHaveValue("strong");
   await expect(basics.getByLabel("Who is it?")).toHaveValue(/patient researcher/);
@@ -1093,10 +1105,13 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live).toBeVisible();
   await expect(live.getByTestId("live-frame")).toBeVisible();
   await expect(live.getByTestId("live-state")).toHaveText("Watching live");
-  // The picture is a stream (the gateway's motion JPEG, cut into pictures by the page), not
-  // screenshots one by one.
-  await expect(live.getByTestId("live-frame")).toHaveAttribute("data-mode", "stream");
-  await expect(live.getByTestId("live-frame")).toHaveAttribute("src", /^blob:/);
+  // The picture is what changed on the display, drawn on a canvas (the gateway's rectangles,
+  // like VNC), not screenshots one by one.
+  const frame = live.getByTestId("live-frame");
+  await expect(frame).toHaveAttribute("data-mode", "rects");
+  await expect
+    .poll(() => frame.evaluate((c: HTMLCanvasElement) => c.width * c.height))
+    .toBeGreaterThan(0);
   // Taking control: the clicks, the keys and the text reach the display through the gateway.
   const held = page.waitForResponse((r) => r.url().includes("/control") && r.status() === 200);
   await live.getByTestId("take-control").click();
@@ -1140,14 +1155,34 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(page.locator("[data-modal]")).toHaveCount(1);
 });
 
-test("a kitty that needs the person asks for help: a button takes control, and giving it back lets it finish", async ({
+test("a desktop that cannot give rectangles is followed as a stream of whole pictures", async ({
+  page,
+}) => {
+  await page.route("**/v1/kitties/*/rects*", (route) => route.fulfill({ status: 404, body: "no" }));
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("open-desktop").first().click();
+  const frame = page.getByTestId("live-desktop").getByTestId("live-frame");
+  await expect(frame).toHaveAttribute("data-mode", "stream");
+  await expect(frame).toHaveAttribute("src", /^blob:/);
+});
+
+test("a kitty that needs the person asks for help: a window shows what it sees, and giving the desktop back lets it finish", async ({
   page,
 }) => {
   await open(page, `#chat/${ids.desktop}`);
   await page.getByPlaceholder("Say something…").fill("tom, sign in to the shop for me");
   await page.keyboard.press("Enter");
+  // The window opens on its own, with what the kitty sees and what it asked for.
+  const modal = page.getByTestId("help-modal");
+  await expect(modal).toBeVisible({ timeout: 15000 });
+  await expect(modal).toContainText("the shop's sign-in needs your password");
+  await expect(modal.getByRole("img", { name: "What tom sees" })).toBeVisible();
+  await shot(page, "50-help-modal");
+  // Not now: the window closes and the chat keeps a button for it.
+  await modal.getByRole("button", { name: "Not now" }).click();
+  await expect(modal).toHaveCount(0);
   const callout = page.getByTestId("help-callout");
-  await expect(callout).toBeVisible({ timeout: 15000 });
+  await expect(callout).toBeVisible();
   await expect(
     page.getByText("Asked you for help: the shop's sign-in needs your password"),
   ).toBeVisible();
@@ -1162,9 +1197,196 @@ test("a kitty that needs the person asks for help: a button takes control, and g
   await expect(callout).toHaveCount(0);
 });
 
+test("a kitty that needs the person gets what it asked for typed in the window, told or in secret", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  const typed: string[] = [];
+  page.on("request", (r) => {
+    if (r.method() === "POST" && r.url().includes("/help")) {
+      typed.push(r.postData() || "");
+    }
+  });
+  await page.getByPlaceholder("Say something…").fill("tom, log in to the shop again");
+  await page.keyboard.press("Enter");
+  const modal = page.getByTestId("help-modal");
+  await expect(modal).toBeVisible({ timeout: 15000 });
+  const send = modal.getByTestId("help-send");
+  await expect(send).toBeDisabled();
+  await modal.getByTestId("help-input").fill("hunter2");
+  await expect(modal.getByTestId("help-input")).toHaveAttribute("type", "text");
+  await expect(send).toHaveText("Tell tom");
+  // A secret is hidden, and typed on the desktop instead of told to the kitty.
+  await modal.getByTestId("help-secret").check();
+  await modal.getByTestId("help-save").fill("Shop password");
+  await expect(modal.getByTestId("help-input")).toHaveAttribute("type", "password");
+  await expect(send).toHaveText("Type it on the desktop");
+  await send.click();
+  await expect(modal).toHaveCount(0);
+  await expect(page.getByText("You typed it on its desktop").first()).toBeVisible();
+  await expect(
+    page.getByText("Signed in to the shop: thank you for the password.").last(),
+  ).toBeVisible({
+    timeout: 15000,
+  });
+  expect(JSON.parse(typed[0])).toEqual({
+    text: "hunter2",
+    secret: true,
+    enter: false,
+    save: "Shop password",
+  });
+  // It was kept for tom, and the vault never says a value.
+  const vault = await page.request.get(`${GATEWAY}/v1/vault`, {
+    headers: { Authorization: "Bearer e2e-token" },
+  });
+  const listed = await vault.text();
+  expect(listed).toContain("Shop password");
+  expect(listed).not.toContain("hunter2");
+  await expect(page.getByText("hunter2")).toHaveCount(0);
+});
+
+test("a kitty's cookies, sessions and passwords are backed up, and a newer desktop can be updated", async ({
+  page,
+}) => {
+  await open(page, `#kitty/${ids.tom}`);
+  const care = page.getByTestId("desktop-care");
+  await expect(care).toBeVisible();
+  await expect(care.getByTestId("backup-state")).toContainText("are not backed up yet");
+  await expect(care.getByTestId("update-callout")).toHaveCount(0);
+  await expect(care.getByTestId("auto-update")).toContainText(
+    "downloaded and installed by themselves",
+  );
+  // Backing up keeps them sealed away from the desktop, and says when.
+  const done = page.waitForResponse((r) => r.url().includes("/backup") && r.status() === 200);
+  await care.getByTestId("backup-now").click();
+  await done;
+  await expect(care.getByTestId("backup-state")).toContainText("backed up");
+  await expect(care.getByTestId("backup-state")).not.toContainText("not backed up");
+  await shot(page, "52-desktop-backup");
+  // A newer image: the page offers the update, asks first, and the kitty comes back from it.
+  await page.route("**/v1/kitties/*/desktop", (route) =>
+    route.fulfill({
+      json: { image: "ghcr.io/madkoding/kitty-desktop:latest", update_available: true },
+    }),
+  );
+  let updated = "";
+  await page.route("**/v1/kitties/*/update", (route) => {
+    updated = route.request().url();
+    return route.fulfill({ status: 202, json: { kitty: {} } });
+  });
+  await page.reload();
+  const callout = page.getByTestId("update-callout");
+  await expect(callout).toContainText("A newer desktop is available for tom");
+  await shot(page, "53-desktop-update");
+  await callout.getByTestId("update-desktop").click();
+  await page.getByRole("button", { name: "Update", exact: true }).click();
+  await expect.poll(() => updated).toContain("/update");
+});
+
+test("the version of Kitties: a newer one is offered, asked about and installed, and the page follows the restart", async ({
+  page,
+}) => {
+  let status = {
+    current: "v1.0.0",
+    latest: "v1.1.0",
+    available: true,
+    mode: "notify",
+    can_apply: true,
+    checked_at: new Date().toISOString(),
+  };
+  let applied = 0;
+  await page.route("**/v1/update**", (route) =>
+    route.request().method() === "POST"
+      ? ((applied += 1),
+        route.fulfill({ status: 202, json: { updated_to: "v1.1.0", restarting: true } }))
+      : route.fulfill({ json: status }),
+  );
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("updates");
+  await expect(box).toContainText("Kitties v1.0.0");
+  await expect(box.getByTestId("update-available")).toContainText("Kitties v1.1.0 is available");
+  await expect(box).toContainText("tells you; you decide when to update");
+  // Without a signing key the update is only checksummed, and the page says so.
+  await expect(box.getByTestId("update-unsigned")).toContainText("updates.public_key");
+  await shot(page, "54-updates");
+  // It asks first, installs, and says it is restarting.
+  await box.getByTestId("update-apply").click();
+  await page.getByRole("button", { name: "Update", exact: true }).click();
+  await expect(box.getByTestId("update-restarting")).toContainText("Updated to v1.1.0");
+  expect(applied).toBe(1);
+});
+
+test("a gateway that cannot replace itself says how it is updated, and one that is up to date says so", async ({
+  page,
+}) => {
+  let status: Record<string, unknown> = {
+    current: "v1.0.0",
+    latest: "v1.1.0",
+    available: true,
+    mode: "auto",
+    can_apply: false,
+    why: "this gateway runs in a container: update it with `docker compose pull && docker compose up -d`",
+  };
+  await page.route("**/v1/update**", (route) => route.fulfill({ json: status }));
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("updates");
+  await expect(box.getByTestId("update-available")).toContainText("runs in a container");
+  await expect(box.getByTestId("update-apply")).toHaveCount(0);
+  await expect(box).toContainText("installs them by itself");
+  status = {
+    current: "v1.1.0",
+    latest: "v1.2.0",
+    available: false,
+    skipped: "v1.2.0",
+    mode: "off",
+    can_apply: true,
+  };
+  await page.getByRole("tab", { name: "Models" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  await expect(box.getByTestId("update-skipped")).toContainText("v1.2.0 did not hold here");
+  await expect(box).toContainText("does not look for new versions");
+  await expect(box.getByTestId("update-check")).toBeDisabled();
+});
+
+test("the secrets a kitty may type: saved with who may use them, changed and removed, never shown", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Secrets" }).click();
+  const secrets = page.getByTestId("secrets");
+  await expect(secrets).toBeVisible();
+  const save = secrets.getByTestId("secret-save");
+  await expect(save).toBeDisabled();
+  await secrets.locator("#secret-name").fill("Bank code");
+  await secrets.locator("#secret-value").fill("4821");
+  await expect(secrets.locator("#secret-value")).toHaveAttribute("type", "password");
+  await secrets.getByRole("group", { name: "Kitties that may use it" }).getByText("tom").click();
+  await save.click();
+  const row = secrets.locator('[data-secret="Bank code"]');
+  await expect(row).toContainText("May be used by tom");
+  await expect(secrets).not.toContainText("4821");
+  await shot(page, "51-secrets");
+  // Who may use it changes in place.
+  await row.getByRole("group").getByText("mimi").click();
+  await expect(row).toContainText("tom, mimi");
+  await row.getByRole("group").getByText("tom").click();
+  await row.getByRole("group").getByText("mimi").click();
+  await expect(row).toContainText("No kitty may use it yet");
+  // Removing asks first.
+  await row.getByRole("button", { name: "Remove the secret Bank code" }).click();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(row).toHaveCount(0);
+});
+
 test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) => {
   await open(page, `#chat/${ids.desktop}`);
   await kittyRow(page, "tom").click();
+  await openConfig(page);
   const pick = page.locator("[data-modal]").getByTestId("desktop-theme");
   await expect(pick).toHaveValue("");
   const saved = page.waitForResponse(

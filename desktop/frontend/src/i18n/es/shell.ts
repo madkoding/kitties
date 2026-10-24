@@ -135,12 +135,13 @@ const dict: Dictionary = {
   "All, new ones too": "Todas, también las nuevas",
 
   // Kitty: drawer
+  Configuration: "Configuración",
+  "looks, brain, personality, connections, limits and memory":
+    "aspecto, cerebro, personalidad, conexiones, límites y memoria",
   done: "listo",
-  "change looks": "cambiar aspecto",
   Desktop: "Escritorio",
   "brain only, no desktop": "solo cerebro, sin escritorio",
   refresh: "actualizar",
-  Actions: "Acciones",
   "Chat with {name}": "Chatear con {name}",
   Start: "Iniciar",
   "Remove {name} and its container?": "¿Eliminar a {name} y su contenedor?",

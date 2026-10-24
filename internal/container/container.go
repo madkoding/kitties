@@ -47,6 +47,12 @@ var (
 	runCmd   = func(ctx context.Context, bin string, args ...string) ([]byte, error) {
 		return exec.CommandContext(ctx, bin, args...).CombinedOutput()
 	}
+	// runCmdIn is runCmd with text on the command's standard input.
+	runCmdIn = func(ctx context.Context, stdin string, bin string, args ...string) ([]byte, error) {
+		cmd := exec.CommandContext(ctx, bin, args...)
+		cmd.Stdin = strings.NewReader(stdin)
+		return cmd.CombinedOutput()
+	}
 )
 
 // Runtime is the container engine found on this machine.
@@ -243,6 +249,56 @@ func (m *Manager) Exec(ctx context.Context, name string, argv ...string) (string
 	args := append([]string{"exec", "-w", Workdir, name}, argv...)
 	out, err := runCmd(ctx, m.rt.Bin, args...)
 	if err != nil {
+		return string(out), fmt.Errorf("exec in %s: %w", name, err)
+	}
+	return string(out), nil
+}
+
+// Pull downloads an image again: the desktop's image is a moving tag (latest).
+func (m *Manager) Pull(ctx context.Context, image string) error {
+	if !imageRef.MatchString(image) {
+		return fmt.Errorf("image %q is not a valid reference", image)
+	}
+	if out, err := runCmd(ctx, m.rt.Bin, "pull", "-q", image); err != nil {
+		return fmt.Errorf("pull %s: %s", image, tail(string(out), 4))
+	}
+	return nil
+}
+
+// ImageStale tells whether a container was made from an image that is no longer the one the
+// reference names on this machine (one that was pulled since, or built again). An image that is
+// not here at all is not stale: there is nothing newer to move to.
+func (m *Manager) ImageStale(ctx context.Context, name, image string) (bool, error) {
+	if !nameRe.MatchString(name) {
+		return false, fmt.Errorf("container name %q is not valid", name)
+	}
+	if !imageRef.MatchString(image) {
+		return false, fmt.Errorf("image %q is not a valid reference", image)
+	}
+	made, err := runCmd(ctx, m.rt.Bin, "inspect", "-f", "{{.Image}}", name)
+	if err != nil {
+		return false, fmt.Errorf("inspect %s: %s", name, tail(string(made), 4))
+	}
+	current, err := runCmd(ctx, m.rt.Bin, "image", "inspect", "-f", "{{.Id}}", image)
+	if err != nil {
+		return false, nil
+	}
+	return strings.TrimSpace(string(made)) != strings.TrimSpace(string(current)), nil
+}
+
+// ExecInput is Exec with text on the command's standard input: what must not show in the
+// command line, where any process of the container (or of the host) can read it.
+func (m *Manager) ExecInput(ctx context.Context, name, stdin string, argv ...string) (string, error) {
+	if !nameRe.MatchString(name) {
+		return "", fmt.Errorf("container name %q is not valid", name)
+	}
+	if len(argv) == 0 {
+		return "", errors.New("nothing to run")
+	}
+	args := append([]string{"exec", "-i", "-w", Workdir, name}, argv...)
+	out, err := runCmdIn(ctx, stdin, m.rt.Bin, args...)
+	if err != nil {
+		// The input is not in the error: it may be a secret.
 		return string(out), fmt.Errorf("exec in %s: %w", name, err)
 	}
 	return string(out), nil

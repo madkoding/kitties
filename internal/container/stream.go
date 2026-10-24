@@ -13,7 +13,7 @@ import (
 
 // THE DISPLAY, LIVE.
 //
-// `kitty-stream` in the image writes the display as JPEG pictures, each after a line
+// `kitty-stream` in the image (it runs kitty-grab, the XShm capture, when there is one) writes the display as JPEG pictures, each after a line
 // "FRAME <bytes>", and only when it changed; "PING" lines keep a quiet stream alive. It runs
 // under `docker exec -i` with --stdin: closing its input ends it, the one signal that reaches it
 // when the reader goes (docker would go on reading its output for good).

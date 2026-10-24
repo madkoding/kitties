@@ -5,7 +5,10 @@ VERSION  ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev
 # OAUTH_APPS are the apps the connections sign in through when the person has none of their
 # own: "spotify=<client id>,facebook=<id>:<secret>,..." (see internal/oauth: Builtin).
 OAUTH_APPS ?=
-LDFLAGS  := -s -w -X main.version=$(VERSION) -X 'github.com/madkoding/kitties/internal/oauth.builtin=$(OAUTH_APPS)'
+# UPDATE_PUBKEY is the public key the releases are signed with (kitties release-key makes the pair):
+# a gateway built with it only installs an update whose SHA256SUMS are signed by it.
+UPDATE_PUBKEY ?=
+LDFLAGS  := -s -w -X main.version=$(VERSION) -X 'github.com/madkoding/kitties/internal/oauth.builtin=$(OAUTH_APPS)' -X 'github.com/madkoding/kitties/internal/selfupdate.builtinKey=$(UPDATE_PUBKEY)'
 GO       ?= go
 DIST     := dist
 PKGS     := ./internal/... ./cmd/...

@@ -31,8 +31,10 @@ import (
 	"github.com/madkoding/kitties/internal/memory"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
+	"github.com/madkoding/kitties/internal/vault"
 )
 
 // Turn is one message of a thread.
@@ -172,8 +174,12 @@ type Service struct {
 	sessions map[string]*Session
 	// running serialises the turns of one session.
 	running map[string]*sync.Mutex
-	now     func() time.Time
-	newID   func() string
+	// vault holds the secrets a kitty may type without reading them, nil when there is none.
+	vault *vault.Store
+	// helps are the kitties waiting for the person's answer, by turn (help.go).
+	helps map[string]chan HelpAnswer
+	now   func() time.Time
+	newID func() string
 	// MaxRounds bounds how many times a kitty may call connectors in one answer.
 	MaxRounds int
 	// MaxTurns is how much of the thread a kitty is shown.
@@ -801,6 +807,55 @@ func (s *Service) Shot(id, name string) ([]byte, error) {
 	return data, nil
 }
 
+// AnyBusy reports whether any kitty is in the middle of a task, in any chat.
+func (s *Service) AnyBusy() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, sess := range s.sessions {
+		for _, t := range sess.Turns {
+			if t.Working {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// KittyBusy reports whether a kitty is in the middle of a task, in any chat.
+func (s *Service) KittyBusy(kittyID string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, sess := range s.sessions {
+		for _, t := range sess.Turns {
+			if t.Working && t.Kitty == kittyID {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// Replay is the film of a turn's desktop task: its screenshots, in order, as an animated GIF.
+func (s *Service) Replay(id string, index int) ([]byte, error) {
+	sess, err := s.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if index < 0 || index >= len(sess.Turns) {
+		return nil, fmt.Errorf("no such turn %d", index)
+	}
+	var shots [][]byte
+	for _, st := range sess.Turns[index].Steps {
+		if st.Shot == "" {
+			continue
+		}
+		if data, err := s.Shot(id, st.Shot); err == nil {
+			shots = append(shots, data)
+		}
+	}
+	return replay.GIF(shots, replay.Default)
+}
+
 var shotName = regexp.MustCompile(`^[0-9]+-[0-9]+\.png$`)
 
 func (s *Service) lockFor(id string) *sync.Mutex {
@@ -888,6 +943,11 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	})
 	if k.Desktop {
 		system += "\n" + desktop.Catalogue()
+		if s.vault != nil {
+			if names := s.vault.Names(k.ID); len(names) > 0 {
+				system += "\nSecrets the person saved for you to type with type_secret (you are never shown them): " + strings.Join(names, ", ") + ".\n"
+			}
+		}
 	}
 	if lib := s.libraryPrompt(); lib != "" {
 		system += "\n" + lib
@@ -1005,8 +1065,18 @@ func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Ki
 		reason = "something on the desktop needs you"
 	}
 	s.appendStep(id, index, Step{At: s.now(), Action: "ask_help", Args: map[string]any{"reason": reason}, Result: reason})
+	// The person sees what the kitty sees: its screen goes with the request.
+	if runner := s.runner(); runner != nil {
+		if png, err := runner.Screenshot(ctx, k.ID); err == nil {
+			if name, err := s.saveShot(id, index, png); err == nil {
+				s.markShot(id, index, name)
+			}
+		}
+	}
 	s.tell(notify.Help, k, "needs your hands on its desktop", reason, id)
 	asked := time.Now()
+	answers, stop := s.expectHelp(id, index)
+	defer stop()
 	h, ok := s.fleet.(holder)
 	if !ok {
 		return "nobody can take your desktop from here: say in your answer what you need, and stop"
@@ -1021,11 +1091,14 @@ func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Ki
 		held := h.Held(k.ID)
 		came = came || held || started != nil && started.HoldStarted(k.ID).After(asked)
 		if came && !held {
+			s.appendStep(id, index, Step{At: s.now(), Action: "helped", Result: "took the desktop and gave it back"})
 			return "the person took your desktop and gave it back: look at the screenshot and continue"
 		}
 		select {
 		case <-ctx.Done():
 			return "stopped"
+		case a := <-answers:
+			return s.applyHelp(ctx, id, index, k, a)
 		case <-deadline.C:
 			if !came {
 				return fmt.Sprintf("nobody came in %d minutes: say in your answer what you need from the person, and stop", int(helpWait.Minutes()))
@@ -1078,6 +1151,9 @@ type taskState struct {
 	final     string
 	tokens    int
 	rounds    int
+	// lastShot and same follow the screen the kitty keeps seeing (stuck.go).
+	lastShot [32]byte
+	same     int
 	// pre are the outcomes of the first batch's non-desktop actions, run before the task.
 	pre map[int]outcome
 	// detail is why the task failed, as the error said it.
@@ -1179,6 +1255,9 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		}
 		var outs []outcome
 		done := false
+		// looked is whether something of this batch can have changed the display: only then a
+		// new screenshot is worth its tokens.
+		looked := false
 		for i, a := range st.actions {
 			if a.kind != "tool" {
 				if o, ok := st.pre[i]; ok {
@@ -1205,13 +1284,24 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 				break
 			}
 			if da.Name == "ask_help" {
+				looked = true
 				outs = append(outs, outcome{action: a, text: s.askHelp(ctx, id, index, k, fmt.Sprint(a.args["reason"]))})
 				if ctx.Err() != nil {
 					break
 				}
 				continue
 			}
+			if da.Name == "type_secret" {
+				looked = true
+				o := s.typeSecret(ctx, id, index, k, a)
+				outs = append(outs, o)
+				if ctx.Err() != nil {
+					break
+				}
+				continue
+			}
 			s.waitWhileHeld(ctx, id, index, k.ID)
+			looked = looked || da.Visual()
 			out, err := desktop.Run(ctx, runner, k.ID, da)
 			step := Step{At: s.now(), Action: a.name, Args: a.args, Result: out}
 			o := outcome{action: a, text: out}
@@ -1233,13 +1323,14 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			return stopReason(ctx, limits), false
 		}
 		if len(st.actions) > 0 {
-			png, err := runner.Screenshot(ctx, k.ID)
-			extra := provider.Message{Role: "user", Content: "Here is the screenshot of your display now. Continue with your next actions, or call done when the task is finished."}
-			if err != nil {
-				extra.Content = "The screenshot failed: " + err.Error() + ". Continue with your next actions, or call done when the task is finished."
-			} else if name, err := s.saveShot(id, index, png); err == nil {
-				s.markShot(id, index, name)
-				extra.Images = []provider.Image{{MIME: "image/png", Data: png}}
+			extra := provider.Message{Role: "user", Content: "Nothing on the display can have changed, so no screenshot comes with this: ask for screenshot or read_screen when you need to look. Continue with your next actions, or call done when the task is finished."}
+			if looked {
+				png, err := runner.Screenshot(ctx, k.ID)
+				if err == nil && st.watchScreen(png) {
+					extra = s.unstick(ctx, runner, id, index, k, png)
+				} else {
+					extra = s.screenMessage(id, index, png, err)
+				}
 			}
 			st.messages = append(st.messages, feedback(p.native, st.reply, st.replyText, outs, &extra)...)
 		}
@@ -1276,6 +1367,27 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			return "", false
 		}
 	}
+}
+
+// screenMessage is what the kitty is told after actions that can have changed its display: the
+// screenshot, which is also kept for the chat's step, or why there is none.
+func (s *Service) screenMessage(id string, index int, png []byte, err error) provider.Message {
+	return s.screenMessageWith(id, index, png, err, "")
+}
+
+// screenMessageWith is screenMessage with something said before it.
+func (s *Service) screenMessageWith(id string, index int, png []byte, err error, before string) provider.Message {
+	m := provider.Message{Role: "user", Content: "Here is the screenshot of your display now. Continue with your next actions, or call done when the task is finished."}
+	if err != nil {
+		m.Content = "The screenshot failed: " + err.Error() + ". Continue with your next actions, or call done when the task is finished."
+	} else if name, err := s.saveShot(id, index, png); err == nil {
+		s.markShot(id, index, name)
+		m.Images = []provider.Image{{MIME: "image/png", Data: png}}
+	}
+	if before != "" {
+		m.Content = before + "\n" + m.Content
+	}
+	return m
 }
 
 // endsTask reports whether a batch calls done: that batch runs even past the round limit.
@@ -1323,7 +1435,11 @@ func (s *Service) appendStep(id string, index int, step Step) {
 func (s *Service) markShot(id string, index int, name string) {
 	s.edit(id, index, func(t *Turn) {
 		if len(t.Steps) > 0 {
-			t.Steps[len(t.Steps)-1].Shot = name
+			// A copy: whoever holds the turn's steps (a reader of the session, a subscriber)
+			// never sees an element change under it.
+			steps := append([]Step(nil), t.Steps...)
+			steps[len(steps)-1].Shot = name
+			t.Steps = steps
 		} else {
 			t.Steps = append(t.Steps, Step{At: s.now(), Action: "screenshot", Shot: name})
 		}

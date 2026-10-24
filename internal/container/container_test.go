@@ -216,3 +216,88 @@ func TestWidenPath(t *testing.T) {
 		t.Errorf("empty = %s", path)
 	}
 }
+
+// A command can be given text on its input, and the text is never in the arguments or an error.
+func TestExecInput(t *testing.T) {
+	f := &fake{answer: ok}
+	f.install(t, "docker")
+	var gave string
+	oldIn := runCmdIn
+	runCmdIn = func(_ context.Context, stdin, _ string, args ...string) ([]byte, error) {
+		gave = stdin
+		f.calls = append(f.calls, args)
+		return f.answer(args)
+	}
+	t.Cleanup(func() { runCmdIn = oldIn })
+	m := &Manager{rt: Runtime{Bin: "docker"}}
+	out, err := m.ExecInput(context.Background(), "kitty-a", "hunter2", "xdotool", "type", "--file", "-")
+	if err != nil || out != "abc\n" || gave != "hunter2" {
+		t.Fatalf("ExecInput = %q, %v (input %q)", out, err, gave)
+	}
+	if call := strings.Join(f.calls[len(f.calls)-1], " "); !strings.Contains(call, "exec -i") || strings.Contains(call, "hunter2") {
+		t.Errorf("call = %q", call)
+	}
+	if _, err := m.ExecInput(context.Background(), "Bad", "x", "ls"); err == nil {
+		t.Error("the name is validated")
+	}
+	if _, err := m.ExecInput(context.Background(), "kitty-a", "x"); err == nil {
+		t.Error("it needs a command")
+	}
+	f.answer = func([]string) ([]byte, error) { return []byte("no display"), errors.New("exit 1") }
+	if out, err := m.ExecInput(context.Background(), "kitty-a", "hunter2", "xdotool"); err == nil || out != "no display" || strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("a failure = %q, %v", out, err)
+	}
+}
+
+// An image is pulled again, and a container is stale when the image it was made from is not the
+// one the reference names now.
+func TestPullAndImageStale(t *testing.T) {
+	f := &fake{answer: func(args []string) ([]byte, error) {
+		switch {
+		case args[0] == "inspect":
+			return []byte("sha256:old\n"), nil
+		case args[0] == "image" && args[1] == "inspect":
+			return []byte("sha256:new\n"), nil
+		}
+		return []byte("ok"), nil
+	}}
+	f.install(t, "docker")
+	m := &Manager{rt: Runtime{Bin: "docker"}}
+	ctx := context.Background()
+	if err := m.Pull(ctx, "ghcr.io/x/y:latest"); err != nil || strings.Join(f.calls[len(f.calls)-1], " ") != "pull -q ghcr.io/x/y:latest" {
+		t.Errorf("Pull = %v %v", err, f.calls)
+	}
+	if err := m.Pull(ctx, "bad image"); err == nil {
+		t.Error("a bad reference was pulled")
+	}
+	if stale, err := m.ImageStale(ctx, "kitty-a", "ghcr.io/x/y:latest"); err != nil || !stale {
+		t.Errorf("old vs new = %v, %v", stale, err)
+	}
+	f.answer = func(args []string) ([]byte, error) { return []byte("sha256:same\n"), nil }
+	if stale, _ := m.ImageStale(ctx, "kitty-a", "ghcr.io/x/y:latest"); stale {
+		t.Error("the same image is stale")
+	}
+	// An image that is not here is not stale; a container that is not there is an error.
+	f.answer = func(args []string) ([]byte, error) {
+		if args[0] == "image" {
+			return []byte("no such image"), errors.New("exit 1")
+		}
+		return []byte("sha256:old"), nil
+	}
+	if stale, err := m.ImageStale(ctx, "kitty-a", "ghcr.io/x/y:latest"); stale || err != nil {
+		t.Errorf("no local image = %v, %v", stale, err)
+	}
+	f.answer = func(args []string) ([]byte, error) { return []byte("no such container"), errors.New("exit 1") }
+	if _, err := m.ImageStale(ctx, "kitty-a", "ghcr.io/x/y:latest"); err == nil {
+		t.Error("a container that is not there")
+	}
+	f.answer = func([]string) ([]byte, error) { return []byte("denied"), errors.New("exit 1") }
+	if err := m.Pull(ctx, "ghcr.io/x/y:latest"); err == nil || !strings.Contains(err.Error(), "denied") {
+		t.Errorf("a refused pull = %v", err)
+	}
+	for _, c := range [][2]string{{"Bad", "ghcr.io/x/y"}, {"kitty-a", "bad image"}} {
+		if _, err := m.ImageStale(ctx, c[0], c[1]); err == nil {
+			t.Errorf("ImageStale(%q, %q) was accepted", c[0], c[1])
+		}
+	}
+}
