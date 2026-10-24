@@ -1283,6 +1283,66 @@ test("a kitty's cookies, sessions and passwords are backed up, and a newer deskt
   await expect.poll(() => updated).toContain("/update");
 });
 
+test("the version of Kitties: a newer one is offered, asked about and installed, and the page follows the restart", async ({
+  page,
+}) => {
+  let status = {
+    current: "v1.0.0",
+    latest: "v1.1.0",
+    available: true,
+    mode: "notify",
+    can_apply: true,
+    checked_at: new Date().toISOString(),
+  };
+  let applied = 0;
+  await page.route("**/v1/update**", (route) =>
+    route.request().method() === "POST"
+      ? ((applied += 1),
+        route.fulfill({ status: 202, json: { updated_to: "v1.1.0", restarting: true } }))
+      : route.fulfill({ json: status }),
+  );
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("updates");
+  await expect(box).toContainText("Kitties v1.0.0");
+  await expect(box.getByTestId("update-available")).toContainText("Kitties v1.1.0 is available");
+  await expect(box).toContainText("tells you; you decide when to update");
+  await shot(page, "54-updates");
+  // It asks first, installs, and says it is restarting.
+  await box.getByTestId("update-apply").click();
+  await page.getByRole("button", { name: "Update", exact: true }).click();
+  await expect(box.getByTestId("update-restarting")).toContainText("Updated to v1.1.0");
+  expect(applied).toBe(1);
+});
+
+test("a gateway that cannot replace itself says how it is updated, and one that is up to date says so", async ({
+  page,
+}) => {
+  let status: Record<string, unknown> = {
+    current: "v1.0.0",
+    latest: "v1.1.0",
+    available: true,
+    mode: "auto",
+    can_apply: false,
+    why: "this gateway runs in a container: update it with `docker compose pull && docker compose up -d`",
+  };
+  await page.route("**/v1/update**", (route) => route.fulfill({ json: status }));
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("updates");
+  await expect(box.getByTestId("update-available")).toContainText("runs in a container");
+  await expect(box.getByTestId("update-apply")).toHaveCount(0);
+  await expect(box).toContainText("installs them by itself");
+  status = { current: "v1.1.0", latest: "v1.1.0", available: false, mode: "off", can_apply: true };
+  await page.getByRole("tab", { name: "Models" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  await expect(box).toContainText("it is the newest version");
+  await expect(box).toContainText("does not look for new versions");
+  await expect(box.getByTestId("update-check")).toBeDisabled();
+});
+
 test("the secrets a kitty may type: saved with who may use them, changed and removed, never shown", async ({
   page,
 }) => {

@@ -138,7 +138,8 @@ imagen con la que se creó, así que actualizarlo es rehacerlo. **El gateway lo 
 `containers.update_check_hours` (6), baja la imagen, y cada escritorio en marcha que tenga una más
 vieja se actualiza cuando su kitty está inactivo. Un kitty en medio de una tarea, o cuyo escritorio
 tienes tú, queda para la siguiente ronda, y se vuelve a comprobar justo antes de tocar nada; un
-escritorio detenido se rehace al iniciarlo; el journal anota cada actualización. Se apaga con
+escritorio detenido se rehace al iniciarlo; el journal anota cada actualización y, si activaste ese evento en Ajustes, Notificaciones, también
+te avisan. `updates.window` ("02:00-06:00") deja los reinicios para la noche. Se apaga con
 `auto_update: false`; la ventana del kitty dice si está activa.
 
 También se puede hacer a mano: la ventana del kitty dice **hay un escritorio más nuevo** (la imagen

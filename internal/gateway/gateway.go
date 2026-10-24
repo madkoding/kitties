@@ -122,6 +122,8 @@ type Server struct {
 	agenda Agenda
 	// approver holds actions for the person's yes, nil when none are held.
 	approver Approver
+	// updater keeps Kitties itself up to date, nil when nothing does.
+	updater Updating
 	// maintainer looks after the desktops (update, backup of sessions), nil when nothing does.
 	maintainer Maintainer
 	// vault holds the secrets the kitties may type, nil when there is none.
@@ -235,6 +237,7 @@ func (s *Server) routes() {
 	s.memoryRoutes()
 	s.vaultRoutes()
 	s.desktopRoutes()
+	s.updateRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)

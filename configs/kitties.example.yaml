@@ -80,6 +80,11 @@ containers:
   auto_update: true              # new desktop image: download it and make idle desktops anew (sessions kept)
   update_check_hours: 6          # how often to look for one
 
+updates:
+  window: ""                     # e.g. 02:00-06:00: automatic updates (desktops, Kitties itself) only then
+  gateway: notify                # off | notify (tell me, I update from Settings) | auto (download, check, restart when idle)
+  check_hours: 12                # how often to look for a new version of Kitties itself
+
 gateway:
   listen: 127.0.0.1:7488
   token: ""                      # empty generates one on first start and prints it

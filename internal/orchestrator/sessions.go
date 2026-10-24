@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/keep"
 	"github.com/madkoding/kitties/internal/kitty"
 )
@@ -72,6 +73,10 @@ func (m *Manager) CheckUpdates(ctx context.Context, updated func(k *kitty.Kitty)
 	}
 	// A reference that is only built here has nothing to pull: what is on this machine is the news.
 	_ = c.Pull(ctx, m.cfg.Containers.Image)
+	// Outside the window the image is looked for, but no desktop is restarted.
+	if w, err := config.ParseWindow(m.cfg.Updates.Window); err != nil || !w.Contains(m.now()) {
+		return
+	}
 	for _, k := range m.List() {
 		if !k.Desktop || k.Status != kitty.StatusRunning {
 			continue

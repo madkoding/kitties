@@ -196,6 +196,25 @@ const dict: Dictionary = {
   Language: "Idioma",
   "The system's language is used until you pick one.":
     "Se usa el idioma del sistema hasta que elijas uno.",
+  "A desktop or Kitties was updated, or a new version is waiting":
+    "Se actualizó un escritorio o Kitties, o espera una versión nueva",
+  "Kitties did not come back in a minute: restart it by hand.":
+    "Kitties no volvió en un minuto: reinícialo a mano.",
+  "Update Kitties to {version}? It restarts in a moment; the kitties' desktops keep running.":
+    "¿Actualizar Kitties a {version}? Se reinicia en un momento; los escritorios de los kitties siguen funcionando.",
+  "Kitties {version}": "Kitties {version}",
+  "it is the newest version": "es la versión más nueva",
+  "Kitties {version} is available.": "Kitties {version} está disponible.",
+  "Update and restart": "Actualizar y reiniciar",
+  "Updated to {version}: restarting…": "Actualizado a {version}: reiniciando…",
+  "Look for a new version": "Buscar una versión nueva",
+  "Looked {when}.": "Buscada {when}.",
+  "Kitties does not look for new versions: turn it on with updates.gateway in the configuration.":
+    "Kitties no busca versiones nuevas: actívalo con updates.gateway en la configuración.",
+  "Kitties looks for new versions and installs them by itself when nothing is in use.":
+    "Kitties busca versiones nuevas y las instala solo cuando nada está en uso.",
+  "Kitties looks for new versions and tells you; you decide when to update.":
+    "Kitties busca versiones nuevas y te avisa; tú decides cuándo actualizar.",
 };
 
 export default dict;

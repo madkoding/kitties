@@ -12,6 +12,9 @@ services:
   kitties:
     image: ghcr.io/madkoding/kitties:latest
     restart: unless-stopped
+    # Watched by the optional "autoupdate" service below (and only this one).
+    labels:
+      com.centurylinklabs.watchtower.enable: "true"
     environment:
       KITTIES_TOKEN: ${KITTIES_TOKEN:?set KITTIES_TOKEN in deploy/.env}
       KITTIES_PUBLIC_URL: https://${KITTIES_DOMAIN:?set KITTIES_DOMAIN in deploy/.env}
@@ -32,6 +35,23 @@ services:
     expose:
       - "7488"
     command: ["gateway"]
+
+  # Keeps the gateway's own image up to date: a container cannot replace itself, so this checks the
+  # registry and recreates it when a newer one is out. Optional: docker compose --profile autoupdate up -d
+  # It watches only containers with the label above (not the kitties' desktops: the gateway looks
+  # after those, with their sessions backed up), and runs on a schedule (KITTIES_UPDATE_CRON, six
+  # fields, 03:00 by default). It reaches the docker socket, as the gateway does.
+  watchtower:
+    image: containrrr/watchtower:1.7.1
+    profiles: ["autoupdate"]
+    restart: unless-stopped
+    environment:
+      WATCHTOWER_LABEL_ENABLE: "true"
+      WATCHTOWER_CLEANUP: "true"
+      WATCHTOWER_SCHEDULE: ${KITTIES_UPDATE_CRON:-0 0 3 * * *}
+      WATCHTOWER_ROLLING_RESTART: "true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
 
   caddy:
     image: caddy:2-alpine

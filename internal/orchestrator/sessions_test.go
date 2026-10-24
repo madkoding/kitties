@@ -390,3 +390,33 @@ func TestAutoUpdateWarnsAndKeepsLooking(t *testing.T) {
 	none, _ := New(testConfig(t))
 	none.CheckUpdates(context.Background(), func(*kitty.Kitty) {}, func(string, ...any) { t.Error("warned without a runtime") })
 }
+
+// Outside the window the image is looked for but no desktop is restarted; inside, they are.
+func TestAutoUpdateWaitsForItsWindow(t *testing.T) {
+	ctx := context.Background()
+	m, f, _ := sessionsManager(t)
+	_, _ = m.Create(ctx, Spec{Name: "mimi"})
+	_ = m.Start(ctx, "mimi")
+	f.stale = true
+	m.cfg.Updates.Window = "02:00-06:00"
+	var updated int
+	hear := func(*kitty.Kitty) { updated++ }
+	m.now = func() time.Time { return time.Date(2026, 1, 1, 15, 0, 0, 0, time.UTC) }
+	f.calls = nil
+	m.CheckUpdates(ctx, hear, func(string, ...any) {})
+	if updated != 0 || !strings.Contains(strings.Join(f.calls, "|"), "pull") || strings.Contains(strings.Join(f.calls, "|"), "rm") {
+		t.Errorf("outside the window: updated %d calls %v", updated, f.calls)
+	}
+	m.now = func() time.Time { return time.Date(2026, 1, 1, 3, 0, 0, 0, time.UTC) }
+	m.CheckUpdates(ctx, hear, func(string, ...any) {})
+	if updated != 1 {
+		t.Errorf("inside the window: updated %d", updated)
+	}
+	// A window that is not one stops the round, rather than updating at any hour.
+	m.cfg.Updates.Window = "nope"
+	f.stale = true
+	m.CheckUpdates(ctx, hear, func(string, ...any) {})
+	if updated != 1 {
+		t.Errorf("a bad window updated: %d", updated)
+	}
+}

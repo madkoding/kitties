@@ -33,6 +33,7 @@ import (
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/selfupdate"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
 	"github.com/madkoding/kitties/internal/vault"
@@ -85,6 +86,7 @@ type app struct {
 	approvals *approvals.Store
 	vault     *vault.Store
 	keep      *keep.Store
+	updater   *selfupdate.Updater
 	budget    *budget.Store
 	digest    *digest.Reporter
 	memory    *memory.Store
@@ -279,6 +281,7 @@ func (a *app) open(cmd string) error {
 		fmt.Fprintf(a.err, "kitties: tidying the chats: %v\n", err)
 	}
 	a.fleet, a.chats = fleet, chats
+	a.updater = selfupdate.New(a.cfg.Updates, version)
 	return nil
 }
 
@@ -414,7 +417,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	}
 	g := a.cfg.Gateway
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
-		WithApprovals(a.chats).WithMemory(a.chats).WithVault(a.vault).WithMaintenance(a.fleet).WithNotifier(a.notifier).WithDigest(a.digest).
+		WithApprovals(a.chats).WithMemory(a.chats).WithVault(a.vault).WithMaintenance(a.fleet).WithUpdater(a.updater).WithNotifier(a.notifier).WithDigest(a.digest).
 		WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
 	if site, ok := webFS(); ok {
 		srv.WithWeb(site)
@@ -441,7 +444,26 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	go a.fleet.WatchUpdates(ctx, updateFirstCheck, time.Duration(a.cfg.Containers.UpdateCheckHours)*time.Hour, func(k *kitty.Kitty) {
 		logf("update: the desktop of %s is on the newest image", k.Name)
 		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindUpdated, Text: "its desktop was updated to the newest image; its sessions were kept"})
+		a.notifier.Notify(notify.Notification{Event: notify.Updated, Kitty: k.Name, Title: "its desktop was updated", Body: "It runs the newest image now; its cookies, sessions and passwords were kept."})
 	}, logf)
+	// Kitties itself: told about (notify) or moved to (auto) a newer release, inside the window and
+	// when no kitty is working and no desktop is held.
+	window, _ := config.ParseWindow(a.cfg.Updates.Window)
+	a.updater.Idle = func() bool { return !a.chats.AnyBusy() && !a.fleet.AnyHeld() }
+	go a.updater.Watch(ctx, updateFirstCheck, time.Duration(a.cfg.Updates.CheckHours)*time.Hour, selfupdate.Hooks{
+		Window: func() bool { return window.Contains(time.Now()) },
+		Available: func(st selfupdate.Status) {
+			body := "Update it from Settings, Preferences."
+			if st.Why != "" {
+				body = st.Why
+			}
+			a.notifier.Notify(notify.Notification{Event: notify.Updated, Title: "Kitties " + st.Latest + " is available", Body: body})
+		},
+		Updated: func(from, to string) {
+			a.notifier.Notify(notify.Notification{Event: notify.Updated, Title: "Kitties was updated to " + to, Body: "It was " + from + "; it restarts now, and the desktops of the kitties keep running."})
+		},
+		Log: logf,
+	})
 	return srv.Listen(ctx, g.Listen, logf)
 }
 

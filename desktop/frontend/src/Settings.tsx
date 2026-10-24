@@ -35,6 +35,7 @@ import { Missing, Required, RequiredLegend } from "./Required";
 import { AccountSignIn } from "./SignIn";
 import { ask } from "./Confirm";
 import Secrets from "./Secrets";
+import Updates from "./Updates";
 import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 
 // SETTINGS, FOR PEOPLE.
@@ -1440,6 +1441,7 @@ const NOTIFY_LABELS: Record<string, string> = {
   goal_blocked: t("A goal could not finish"),
   recovered: t("A kitty's container was brought back"),
   budget: t("A kitty spent its day's tokens"),
+  updated: t("A desktop or Kitties was updated, or a new version is waiting"),
 };
 
 // NotifyForm chooses where the kitties tell you what happened while you were away (a push to
@@ -1916,7 +1918,12 @@ export default function SettingsModal({
           <NotifyForm view={view} onSaved={setView} onSetUp={setUpNtfy} />
         )}
         {tab === "gateway" && <ConnectModal inline onClose={onClose} onDone={onClose} />}
-        {tab === "preferences" && <Preferences />}
+        {tab === "preferences" && (
+          <>
+            <Preferences />
+            <Updates />
+          </>
+        )}
       </div>
     </div>
   );

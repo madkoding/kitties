@@ -459,3 +459,17 @@ func TestKittyBusy(t *testing.T) {
 		t.Error("a kitty with a working turn is busy, another is not")
 	}
 }
+
+func TestAnyBusy(t *testing.T) {
+	s, _, _ := deskService(t, "ok")
+	if s.AnyBusy() {
+		t.Error("busy before any task")
+	}
+	sess, _ := s.Create("", []string{"ana"})
+	s.mu.Lock()
+	s.sessions[sess.ID].Turns = append(s.sessions[sess.ID].Turns, Turn{Kitty: "a1", Working: true})
+	s.mu.Unlock()
+	if !s.AnyBusy() {
+		t.Error("a working turn is busy")
+	}
+}

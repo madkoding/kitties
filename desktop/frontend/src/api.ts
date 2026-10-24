@@ -636,6 +636,12 @@ export const api = {
     turn: number,
     a: { text: string; secret: boolean; enter: boolean; save?: string },
   ) => request("POST", `/v1/chats/${chat}/turns/${turn}/help`, a),
+  // updateStatus is the version of Kitties and the news of a newer one (refresh looks now);
+  // applyUpdate installs the newer one, and the gateway restarts into it.
+  updateStatus: (refresh = false) =>
+    request<UpdateStatus>("GET", "/v1/update" + (refresh ? "?refresh=1" : "")),
+  applyUpdate: () =>
+    request<{ updated_to: string; restarting: boolean }>("POST", "/v1/update/apply"),
   // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
   // up; backupKitty backs them up now; updateKitty moves the desktop to the newest image.
   desktopInfo: (ref: string) => request<DesktopInfo>("GET", `/v1/kitties/${ref}/desktop`),
@@ -998,6 +1004,19 @@ export type DesktopInfo = {
   update_available: boolean;
   auto_update?: boolean;
   backup?: { saved: string; bytes: number };
+};
+
+// UpdateStatus says which version of Kitties runs, whether a newer one is out, and whether this
+// gateway may install it by itself (and why not when it may not).
+export type UpdateStatus = {
+  current: string;
+  latest?: string;
+  available: boolean;
+  mode: "off" | "notify" | "auto";
+  can_apply: boolean;
+  why?: string;
+  checked_at?: string;
+  error?: string;
 };
 
 // A Secret is one of the vault: its name and the ids of the kitties that may type it.

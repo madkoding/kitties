@@ -807,6 +807,20 @@ func (s *Service) Shot(id, name string) ([]byte, error) {
 	return data, nil
 }
 
+// AnyBusy reports whether any kitty is in the middle of a task, in any chat.
+func (s *Service) AnyBusy() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, sess := range s.sessions {
+		for _, t := range sess.Turns {
+			if t.Working {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // KittyBusy reports whether a kitty is in the middle of a task, in any chat.
 func (s *Service) KittyBusy(kittyID string) bool {
 	s.mu.RLock()

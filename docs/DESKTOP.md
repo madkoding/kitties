@@ -128,7 +128,9 @@ default): two minutes after it starts, and then every `containers.update_check_h
 the image, and each running desktop that is on an older one is updated when its kitty is idle. A
 kitty in the middle of a task, or whose desktop you hold, is left for the next round and checked again
 right before anything is touched; a stopped desktop is made anew when it is started; the journal
-notes each update. Turn it off with `auto_update: false`; the window of the kitty says whether it is on.
+notes each update, and, if you turned that event on in Settings, Notifications, you are told
+too. `updates.window` ("02:00-06:00") keeps the restarts to the night. Turn it off with
+`auto_update: false`; the window of the kitty says whether it is on.
 
 The same can be done by hand: the kitty's window says **a newer desktop is available** (the image
 on this machine is not the one the container runs) and **Update the desktop** does it, when the

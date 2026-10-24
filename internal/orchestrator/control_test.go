@@ -135,3 +135,24 @@ func TestStartWithoutTheme(t *testing.T) {
 		t.Errorf("start = %v %v", err, f.execs)
 	}
 }
+
+func TestAnyHeld(t *testing.T) {
+	m, err := New(testConfig(t), WithContainers(newFake(), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC)
+	m.now = func() time.Time { return now }
+	_, _ = m.Create(context.Background(), Spec{Name: "mimi"})
+	if m.AnyHeld() {
+		t.Error("held from the start")
+	}
+	_, _ = m.Hold("mimi", true)
+	if !m.AnyHeld() {
+		t.Error("a held desktop is not seen")
+	}
+	now = now.Add(holdIdle + time.Second)
+	if m.AnyHeld() {
+		t.Error("an idle hold counts")
+	}
+}

@@ -88,8 +88,26 @@ Caddy: `flush_interval -1`). `deploy/nginx.conf` is a complete example.
 
 ## Updating and backing up
 
-- Update: `docker compose pull && docker compose up -d`, or replace the binary and
+- Update by hand: `docker compose pull && docker compose up -d`, or replace the binary and
   `systemctl restart kitties`. State is kept in the data folder across versions.
+- Update by itself, in a container: `docker compose --profile autoupdate up -d` also runs
+  Watchtower, which looks at the registry on a schedule (`KITTIES_UPDATE_CRON`, 03:00 by default)
+  and recreates the gateway when a newer image is out. It touches only the gateway (it has the
+  label); the kitties' desktops are updated by the gateway itself (below).
+- Update by itself, as a binary: Kitties looks at its own releases on GitHub (`updates:` in the
+  configuration). `gateway: notify` (the default) tells you, through your notifications and from
+  Settings, Preferences, where **Update and restart** installs it; `gateway: auto` installs it by
+  itself. It downloads the file for this system, checks it against the release's `SHA256SUMS`, runs
+  it once to see it is the version it claims to be, keeps the old one as `<name>.prev` and restarts
+  into it (same process id, so a supervisor follows it), only when no kitty is working and no
+  desktop is held, and inside `updates.window` ("02:00-06:00", the server's clock) when there is one.
+  The desktops of the kitties keep running across the restart. It does not replace a development
+  build, a program in a container (that is the image's update), the one inside the Kitties app (its
+  bundle is signed), one it cannot write next to, or anything on Windows: it says so and how to
+  update instead. `updates.gateway: off` stops it looking.
+- The desktops: with `containers.auto_update` (on), the gateway pulls the desktop image every
+  `containers.update_check_hours` and makes each idle desktop anew with its sessions kept (see
+  [how a kitty uses its desktop](DESKTOP.md)); it also waits for `updates.window`.
 - Back up the data folder (`settings.json` holds the keys and the signed-in tokens: keep the
   backup as private as the server). Each kitty's workspace is under `work/`.
 - The kitties' containers survive a gateway restart; the watchdog brings back any that stopped.

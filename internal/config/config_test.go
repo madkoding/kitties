@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestExampleParses(t *testing.T) {
@@ -287,5 +288,54 @@ func TestAutoUpdateDefaultsAndChecks(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), "update_check_hours") {
 			t.Errorf("update_check_hours %s = %v", hours, err)
 		}
+	}
+}
+
+func TestUpdatesWindowAndDefaults(t *testing.T) {
+	c, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u := c.Updates; u.Gateway != UpdateNotify || u.CheckHours != 12 || u.Repo != "madkoding/kitties" || u.Window != "" {
+		t.Errorf("defaults = %+v", u)
+	}
+	at := func(h, m int) time.Time { return time.Date(2026, 1, 1, h, m, 0, 0, time.UTC) }
+	for _, c := range []struct {
+		window string
+		in     map[time.Time]bool
+	}{
+		{"", map[time.Time]bool{at(3, 0): true, at(15, 0): true}},
+		{"02:00-06:00", map[time.Time]bool{at(1, 59): false, at(2, 0): true, at(5, 59): true, at(6, 0): false, at(15, 0): false}},
+		{"22:00-04:00", map[time.Time]bool{at(21, 59): false, at(22, 0): true, at(23, 30): true, at(0, 0): true, at(3, 59): true, at(4, 0): false, at(12, 0): false}},
+		{"09:00-09:00", map[time.Time]bool{at(3, 0): true}},
+	} {
+		w, err := ParseWindow(c.window)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for when, want := range c.in {
+			if got := w.Contains(when); got != want {
+				t.Errorf("window %q at %s = %v, want %v", c.window, when.Format("15:04"), got, want)
+			}
+		}
+	}
+	for _, bad := range []string{"2-6", "02:00", "25:00-06:00", "02:00-xx", "a-b"} {
+		if _, err := ParseWindow(bad); err == nil {
+			t.Errorf("window %q was accepted", bad)
+		}
+	}
+	for yaml, want := range map[string]string{
+		"updates:\n  window: nope\n":                 "updates.window",
+		"updates:\n  gateway: maybe\n":               "updates.gateway",
+		"updates:\n  check_hours: 0\n":               "updates.check_hours",
+		"updates:\n  repo: justaname\n":              "updates.repo",
+		"updates:\n  api: http://evil.example.com\n": "updates.api",
+	} {
+		if _, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\n" + yaml)); err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q = %v, want %s", yaml, err, want)
+		}
+	}
+	if _, err := Parse([]byte("providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\nupdates:\n  window: 02:00-06:00\n  gateway: auto\n  api: http://127.0.0.1:9\n")); err != nil {
+		t.Errorf("a good block = %v", err)
 	}
 }

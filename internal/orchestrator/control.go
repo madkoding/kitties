@@ -57,6 +57,22 @@ func (m *Manager) Held(id string) bool {
 	return ok
 }
 
+// AnyHeld reports whether the person holds the desktop of any kitty.
+func (m *Manager) AnyHeld() bool {
+	m.holdMu.Lock()
+	ids := make([]string, 0, len(m.holds))
+	for id := range m.holds {
+		ids = append(ids, id)
+	}
+	m.holdMu.Unlock()
+	for _, id := range ids {
+		if m.Held(id) {
+			return true
+		}
+	}
+	return false
+}
+
 // HoldStarted is when the person last took the kitty's display (zero when never): a kitty that
 // asked for help knows they came even when they gave it back between two of its looks.
 func (m *Manager) HoldStarted(id string) time.Time {

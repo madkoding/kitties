@@ -25,13 +25,14 @@ const (
 	GoalBlocked Event = "goal_blocked" // a goal's run could not finish
 	Recovered   Event = "recovered"    // a container was brought back
 	Budget      Event = "budget"       // a kitty spent its day's tokens
+	Updated     Event = "updated"      // a desktop or Kitties itself was updated, or a new version waits
 	// Digest is the daily summary. It is not one of Events: the person turns it on by giving
 	// Config.Digest a time of day.
 	Digest Event = "digest"
 )
 
 // Events lists them in order, for the page.
-var Events = []Event{Help, Approval, GoalDone, GoalBlocked, Recovered, Budget}
+var Events = []Event{Help, Approval, GoalDone, GoalBlocked, Recovered, Budget, Updated}
 
 // Default is what is sent when the person chose nothing: the two that need them.
 var Default = []Event{Help, Approval}

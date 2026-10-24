@@ -517,7 +517,8 @@ renewed before they expire.
 | `GET /v1/kitties/{ref}/screenshot`        | a PNG of its display                           |
 | `POST /v1/kitties/{ref}/control` `{hold}` | take its display over, or give it back         |
 | `POST /v1/kitties/{ref}/input` `{action, args}` | a click, drag, scroll, key or text of the person on it |
-| `GET /v1/kitties/{ref}/stream`            | its display live, as motion JPEG (`?fps=1-15`) |
+| `GET /v1/kitties/{ref}/stream`            | its display live, as motion JPEG (`?fps=1-30`) |
+| `GET /v1/kitties/{ref}/rects`             | its display live as what changed on it, like VNC (`?fps=1-30`; `SCREEN`, `UPDATE`, `RECT` lines with JPEG bodies) |
 | `GET/PUT /v1/kitties/{ref}/clipboard` `{text}` | its clipboard, both ways                  |
 | `POST /v1/scale/{name}` `{replicas}`      | run n replicas of a configured kitty           |
 | `GET/POST /v1/chats`                      | threads; create `{title, members: [names]}`    |
@@ -536,6 +537,10 @@ renewed before they expire.
 | `GET/POST /v1/kitties/{ref}/memory` · `DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes, its picture of you, and a distillation now |
 | `POST /v1/chats/{id}/turns/{index}/feedback` `{rating, note}` | a thumb under an answer |
 | `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` · `POST …/notify/digest` | where and when kitties tell you; a test; the daily summary now |
+| `GET /v1/chats/{id}/turns/{n}/replay.gif` · `POST …/turns/{n}/help` `{text, secret, enter, save}` | a task as an animated GIF; the person's answer to a kitty that asked for help (a secret is typed on its desktop, not told) |
+| `GET /v1/vault` · `PUT/DELETE /v1/vault/{name}` `{value, kitties}` | the secrets a kitty may type: names and who may use them, never values |
+| `GET /v1/kitties/{ref}/desktop` · `POST …/backup` · `POST …/update` | its desktop's image and whether a newer one waits, the backup of its cookies, sessions and passwords, and moving it to the newest image |
+| `GET /v1/update` (`?refresh=1`) · `POST /v1/update/apply` | the version of Kitties and whether a newer one is out; install it and restart |
 | `POST /v1/settings/accounts/{kind}/login` · `GET/DELETE /v1/settings/logins/{id}` · `POST …/paste` · `DELETE /v1/settings/accounts/{kind}` | sign a model in with a subscription, follow it, paste the browser's address, sign out |
 
 Every other call needs `Authorization: Bearer <token>`; `/` and `/v1/health` are open.
