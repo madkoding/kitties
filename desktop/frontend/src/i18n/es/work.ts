@@ -372,7 +372,11 @@ const dict: Dictionary = {
   "Sent: waiting for the screen to change…": "Enviado: esperando a que la pantalla cambie…",
   "Ready: click, drag, scroll or type on the picture":
     "Listo: haz clic, arrastra, desplaza o escribe sobre la imagen",
-  "Live and take control": "En vivo y tomar el control",
+  "Click the picture to take control": "Haz clic en la imagen para tomar el control",
+  Enlarge: "Ampliar",
+  Reduce: "Reducir",
+  "Start {name} to see its desktop live and take control of it.":
+    "Inicia a {name} para ver su escritorio en vivo y tomar el control.",
   "Dragged on the screen": "Arrastró en la pantalla",
   "Looked at the open windows": "Revisó las ventanas abiertas",
   "Newer desktops are downloaded and installed by themselves when {name} is idle; its cookies, sessions and passwords come along.":

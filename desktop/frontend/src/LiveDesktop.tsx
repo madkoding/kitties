@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, type Kitty, rectsDesktop, shotData, streamDesktop } from "./api";
 import { plainError } from "./friendly";
 import { t } from "./i18n";
-import { IconX } from "./icons";
+import { IconExpand, IconReduce, IconX } from "./icons";
 
 // LIVE DESKTOP: the kitty's display as it is now, followed while it is open: first as what
 // changed on it (rectangles drawn on a canvas, like VNC), else as motion JPEG from the gateway
@@ -110,11 +110,15 @@ export default function LiveDesktop({
   kitty,
   onClose,
   autoControl,
+  inline,
 }: {
   kitty: Kitty;
   onClose: () => void;
   // autoControl takes the controls at once (the kitty asked for help).
   autoControl?: boolean;
+  // inline shows the desktop where it is placed, as a card, and can be enlarged into a window
+  // and reduced back; without it the desktop is a window that onClose closes.
+  inline?: boolean;
 }) {
   const [frame, setFrame] = useState("");
   const [control, setControl] = useState(false);
@@ -126,6 +130,7 @@ export default function LiveDesktop({
   const [loaded, setLoaded] = useState(false);
   const [clip, setClip] = useState("");
   const [clipNote, setClipNote] = useState("");
+  const [expanded, setExpanded] = useState(false);
   // What the person is doing and what is on its way, so every input can be seen to land: the
   // size of the display and of the room for it, the press or drag in progress, the rings where
   // a click went, the inputs still being sent, the text typed and not yet sent, and whether the
@@ -144,6 +149,10 @@ export default function LiveDesktop({
   const surface = useRef<HTMLDivElement>(null);
   const controlRef = useRef(false);
   controlRef.current = control;
+  // The desktop is a card in the page or a window over it. Going from one to the other keeps the
+  // controls and the state, and draws the picture anew (the display is sent whole again).
+  const windowed = !inline || expanded;
+  const view = windowed ? "window" : "card";
   const down = useRef<{ x: number; y: number; button: number } | null>(null);
   const pendingClick = useRef<number | undefined>(undefined);
   const typed = useRef("");
@@ -170,7 +179,7 @@ export default function LiveDesktop({
     const watch = new ResizeObserver(measure);
     watch.observe(el);
     return () => watch.disconnect();
-  }, []);
+  }, [view]);
 
   // The rectangles: the whole display first, then only the parts that changed, drawn over it. One
   // that fails, or shows nothing in a few seconds, gives way to the stream of whole pictures.
@@ -220,7 +229,7 @@ export default function LiveDesktop({
       clearTimeout(id);
       stop();
     };
-  }, [kitty.id, mode]);
+  }, [kitty.id, mode, view]);
 
   // The stream; one that fails, or shows nothing in a few seconds, gives way to screenshots.
   useEffect(() => {
@@ -296,12 +305,24 @@ export default function LiveDesktop({
     [kitty.id],
   );
 
-  // Escape closes, unless the person has the controls: then it is a key of the display.
+  // What leaving the window does: a card goes back from the window, a window closes.
+  const leave = inline ? () => setExpanded(false) : onClose;
+
+  // Escape leaves the window, unless the person has the controls: then it is a key of the display.
+  // It is taken first (and marked as used) so a drawer under the window stays open.
   useLayoutEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !controlRef.current && onClose();
-    addEventListener("keydown", onKey);
-    return () => removeEventListener("keydown", onKey);
-  }, [onClose]);
+    if (!windowed) {
+      return;
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !controlRef.current) {
+        e.preventDefault();
+        leave();
+      }
+    };
+    addEventListener("keydown", onKey, true);
+    return () => removeEventListener("keydown", onKey, true);
+  }, [windowed, inline, onClose]);
 
   const send = (action: string, args: Record<string, unknown>) => {
     setSending((n) => n + 1);
@@ -534,23 +555,12 @@ export default function LiveDesktop({
     activity = { tone: "ready", text: t("Ready: click, drag, scroll or type on the picture") };
   }
 
-  return (
-    <div
-      class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6 backdrop"
-      onClick={onClose}
-      data-modal
-      data-testid="live-desktop"
-    >
-      <div
-        class="chat-modal w-full max-w-6xl h-full max-h-[56rem] p-3 sm:p-4 flex flex-col gap-3 overflow-hidden"
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-label={t("{name}'s desktop", { name: kitty.name })}
-      >
+  const name = t("{name}'s desktop", { name: kitty.name });
+  const content = (
+    <>
+      {windowed ? (
         <div class="flex items-center gap-2 flex-wrap shrink-0">
-          <h2 class="font-mono text-base tracking-wide flex-1 min-w-0 truncate">
-            {t("{name}'s desktop", { name: kitty.name })}
-          </h2>
+          <h2 class="font-mono text-base tracking-wide flex-1 min-w-0 truncate">{name}</h2>
           <span
             class={`state-pill max-w-full ${control ? "is-working" : "is-ok"}`}
             data-testid="live-state"
@@ -582,168 +592,252 @@ export default function LiveDesktop({
           )}
           <button
             class="plain p-1 text-[var(--t3)] hover:text-[var(--t1)]"
-            onClick={onClose}
-            aria-label={t("Close")}
+            onClick={leave}
+            aria-label={inline ? t("Reduce") : t("Close")}
           >
-            <IconX />
+            {inline ? <IconReduce /> : <IconX />}
           </button>
         </div>
-        <div
-          ref={surface}
-          tabIndex={0}
-          class={`live-surface relative min-h-[10rem] flex-1 flex items-center justify-center outline-none overflow-hidden ${control ? "is-control" : ""} ${gesture?.drag ? "is-dragging" : ""}`}
-          onKeyDown={onKeyDown}
-          onPaste={onPaste}
-          onContextMenu={(e) => control && e.preventDefault()}
-        >
-          <div
-            class={`live-stage ${loaded ? "" : "invisible absolute"}`}
-            style={fit}
-            onMouseLeave={onMouseLeave}
+      ) : (
+        <div class="flex items-center gap-2 flex-wrap">
+          <span
+            class={`state-pill max-w-full ${control ? "is-working" : "is-ok"}`}
+            data-testid="live-state"
           >
-            {mode === "rects" && (
-              <canvas
-                ref={canvas}
-                aria-label={t("{name}'s desktop", { name: kitty.name })}
-                class="select-none"
-                onMouseDown={onMouseDown}
-                onMouseMove={onMouseMove}
-                onMouseUp={onMouseUp}
-                onWheel={onWheel}
-                data-testid="live-frame"
-                data-mode="rects"
-              />
-            )}
-            {mode !== "rects" && frame && (
-              <img
-                ref={img}
-                src={frame}
-                alt={t("{name}'s desktop", { name: kitty.name })}
-                class="select-none"
-                draggable={false}
-                onLoad={(e) => {
-                  setLoaded(true);
-                  setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
-                }}
-                onMouseDown={onMouseDown}
-                onMouseMove={onMouseMove}
-                onMouseUp={onMouseUp}
-                onWheel={onWheel}
-                data-testid="live-frame"
-                data-mode={mode}
-              />
-            )}
-            {gesture && dims.w > 0 && (
-              <svg
-                class="live-gesture"
-                viewBox={`0 0 ${dims.w} ${dims.h}`}
-                preserveAspectRatio="none"
-                aria-hidden="true"
-                data-testid="live-gesture"
-              >
-                {gesture.drag && (
-                  <line
-                    x1={gesture.from.x}
-                    y1={gesture.from.y}
-                    x2={gesture.to.x}
-                    y2={gesture.to.y}
-                    vector-effect="non-scaling-stroke"
-                  />
-                )}
-              </svg>
-            )}
-            {gesture && <span class="live-press" style={pct(gesture.from)} aria-hidden="true" />}
-            {gesture?.drag && (
-              <span class="live-press is-end" style={pct(gesture.to)} aria-hidden="true" />
-            )}
-            {rings.map((r) => (
-              <span
-                key={r.id}
-                class={`live-ring is-${r.kind}`}
-                style={pct(r)}
-                aria-hidden="true"
-                data-testid="live-ring"
-              >
-                {RING_ARROW[r.kind]}
-              </span>
-            ))}
-          </div>
-          {!loaded && (
-            <div class="text-sm text-[var(--t3)] py-20">
-              <span class="spinner" /> {t("Connecting to the desktop…")}
-            </div>
-          )}
-        </div>
-        {control && (
-          <div
-            class={`live-activity is-${activity.tone} shrink-0`}
-            role="status"
-            aria-live="polite"
-            data-testid="live-activity"
-          >
-            {activity.tone === "busy" ? <span class="spinner" /> : <span class="live-dot" />}
-            <span class="min-w-0 truncate">{activity.text}</span>
-          </div>
-        )}
-        {control && (
-          <div class="flex gap-1.5 flex-wrap items-center shrink-0" data-testid="quick-keys">
-            {QUICK.map(([label, keys]) => (
-              <button
-                key={keys}
-                class="btn-ghost px-2 py-1 text-xs font-mono"
-                onClick={() => {
-                  flushTyped();
-                  send("key", { keys });
-                  surface.current?.focus();
-                }}
-              >
-                {label}
-              </button>
-            ))}
-            <span class="text-xs text-[var(--t3)] ml-auto">
-              {t("Click, drag, scroll and type on the picture; Ctrl+V pastes your own text.")}
-            </span>
-          </div>
-        )}
-        {control && (
-          <div
-            class="flex gap-1.5 flex-wrap sm:flex-nowrap items-center shrink-0"
-            data-testid="clipboard"
-          >
-            <input
-              class={INPUT}
-              value={clip}
-              placeholder={t("Text for {name}'s clipboard", { name: kitty.name })}
-              aria-label={t("Clipboard")}
-              onInput={(e) => setClip((e.target as HTMLInputElement).value)}
-              onKeyDown={(e) => e.stopPropagation()}
-            />
+            {control
+              ? t("You have the controls: {name} waits", { name: kitty.name })
+              : t("Watching live")}
+          </span>
+          <span class="flex-1" />
+          {control ? (
             <button
-              class="btn-ghost px-2 py-1.5 text-xs whitespace-nowrap"
-              onClick={sendClip}
-              disabled={!clip}
+              class="btn-accent px-3 py-1.5 text-sm flex items-center gap-2"
+              onClick={() => take(false)}
+              disabled={busy}
+              data-testid="give-back"
             >
-              {t("Send to {name}", { name: kitty.name })}
+              {busy && <span class="spinner" />}
+              {t("Give it back to {name}", { name: kitty.name })}
             </button>
-            <button class="btn-ghost px-2 py-1.5 text-xs whitespace-nowrap" onClick={takeClip}>
-              {t("Copy from {name}", { name: kitty.name })}
+          ) : (
+            <button
+              class="btn-accent px-3 py-1.5 text-sm flex items-center gap-2"
+              onClick={() => take(true)}
+              disabled={busy || !loaded}
+              data-testid="take-control"
+            >
+              {busy && <span class="spinner" />}
+              {t("Take control")}
             </button>
+          )}
+          <button
+            class="btn-ghost p-1.5"
+            onClick={() => setExpanded(true)}
+            aria-label={t("Enlarge")}
+            title={t("Enlarge")}
+            data-testid="live-enlarge"
+          >
+            <IconExpand size={14} />
+          </button>
+        </div>
+      )}
+      <div
+        ref={surface}
+        tabIndex={0}
+        class={`live-surface relative flex items-center justify-center outline-none overflow-hidden ${windowed ? "min-h-[10rem] flex-1" : "w-full"} ${control ? "is-control" : ""} ${gesture?.drag ? "is-dragging" : ""} ${!control && loaded ? "is-takeable" : ""}`}
+        style={
+          windowed
+            ? undefined
+            : { aspectRatio: dims.w && dims.h ? `${dims.w} / ${dims.h}` : "16 / 10" }
+        }
+        onKeyDown={onKeyDown}
+        onPaste={onPaste}
+        onContextMenu={(e) => control && e.preventDefault()}
+      >
+        <div
+          class={`live-stage ${loaded ? "" : "invisible absolute"}`}
+          style={fit}
+          onMouseLeave={onMouseLeave}
+          onClick={() => {
+            // One click on the picture takes the controls: no button to find first.
+            if (!control && loaded && !busy) {
+              void take(true);
+            }
+          }}
+        >
+          {mode === "rects" && (
+            <canvas
+              ref={canvas}
+              aria-label={t("{name}'s desktop", { name: kitty.name })}
+              class="select-none"
+              onMouseDown={onMouseDown}
+              onMouseMove={onMouseMove}
+              onMouseUp={onMouseUp}
+              onWheel={onWheel}
+              data-testid="live-frame"
+              data-mode="rects"
+            />
+          )}
+          {mode !== "rects" && frame && (
+            <img
+              ref={img}
+              src={frame}
+              alt={t("{name}'s desktop", { name: kitty.name })}
+              class="select-none"
+              draggable={false}
+              onLoad={(e) => {
+                setLoaded(true);
+                setDims({ w: e.currentTarget.naturalWidth, h: e.currentTarget.naturalHeight });
+              }}
+              onMouseDown={onMouseDown}
+              onMouseMove={onMouseMove}
+              onMouseUp={onMouseUp}
+              onWheel={onWheel}
+              data-testid="live-frame"
+              data-mode={mode}
+            />
+          )}
+          {gesture && dims.w > 0 && (
+            <svg
+              class="live-gesture"
+              viewBox={`0 0 ${dims.w} ${dims.h}`}
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              data-testid="live-gesture"
+            >
+              {gesture.drag && (
+                <line
+                  x1={gesture.from.x}
+                  y1={gesture.from.y}
+                  x2={gesture.to.x}
+                  y2={gesture.to.y}
+                  vector-effect="non-scaling-stroke"
+                />
+              )}
+            </svg>
+          )}
+          {gesture && <span class="live-press" style={pct(gesture.from)} aria-hidden="true" />}
+          {gesture?.drag && (
+            <span class="live-press is-end" style={pct(gesture.to)} aria-hidden="true" />
+          )}
+          {rings.map((r) => (
+            <span
+              key={r.id}
+              class={`live-ring is-${r.kind}`}
+              style={pct(r)}
+              aria-hidden="true"
+              data-testid="live-ring"
+            >
+              {RING_ARROW[r.kind]}
+            </span>
+          ))}
+        </div>
+        {!control && loaded && (
+          <span class="live-hint" aria-hidden="true">
+            {busy ? <span class="spinner" /> : null}
+            {t("Click the picture to take control")}
+          </span>
+        )}
+        {!loaded && (
+          <div class="text-sm text-[var(--t3)] py-20">
+            <span class="spinner" /> {t("Connecting to the desktop…")}
           </div>
         )}
-        {clipNote && (
-          <p class="text-xs text-[var(--t3)] shrink-0" role="status" data-testid="clip-note">
-            {clipNote}
-          </p>
-        )}
-        {!control && (
-          <p class="text-xs text-[var(--t3)] shrink-0">
-            {t(
-              "Take control to click and type in it yourself, for what {name} cannot do alone (a password, a captcha). {name} waits meanwhile.",
-              { name: kitty.name },
-            )}
-          </p>
-        )}
-        {err && <p class="text-sm text-[var(--c-red)] shrink-0">{err}</p>}
+      </div>
+      {control && (
+        <div
+          class={`live-activity is-${activity.tone} shrink-0`}
+          role="status"
+          aria-live="polite"
+          data-testid="live-activity"
+        >
+          {activity.tone === "busy" ? <span class="spinner" /> : <span class="live-dot" />}
+          <span class="min-w-0 truncate">{activity.text}</span>
+        </div>
+      )}
+      {control && (
+        <div class="flex gap-1.5 flex-wrap items-center shrink-0" data-testid="quick-keys">
+          {QUICK.map(([label, keys]) => (
+            <button
+              key={keys}
+              class="btn-ghost px-2 py-1 text-xs font-mono"
+              onClick={() => {
+                flushTyped();
+                send("key", { keys });
+                surface.current?.focus();
+              }}
+            >
+              {label}
+            </button>
+          ))}
+          <span class="text-xs text-[var(--t3)] ml-auto">
+            {t("Click, drag, scroll and type on the picture; Ctrl+V pastes your own text.")}
+          </span>
+        </div>
+      )}
+      {control && (
+        <div
+          class="flex gap-1.5 flex-wrap sm:flex-nowrap items-center shrink-0"
+          data-testid="clipboard"
+        >
+          <input
+            class={INPUT}
+            value={clip}
+            placeholder={t("Text for {name}'s clipboard", { name: kitty.name })}
+            aria-label={t("Clipboard")}
+            onInput={(e) => setClip((e.target as HTMLInputElement).value)}
+            onKeyDown={(e) => e.stopPropagation()}
+          />
+          <button
+            class="btn-ghost px-2 py-1.5 text-xs whitespace-nowrap"
+            onClick={sendClip}
+            disabled={!clip}
+          >
+            {t("Send to {name}", { name: kitty.name })}
+          </button>
+          <button class="btn-ghost px-2 py-1.5 text-xs whitespace-nowrap" onClick={takeClip}>
+            {t("Copy from {name}", { name: kitty.name })}
+          </button>
+        </div>
+      )}
+      {clipNote && (
+        <p class="text-xs text-[var(--t3)] shrink-0" role="status" data-testid="clip-note">
+          {clipNote}
+        </p>
+      )}
+      {!control && (
+        <p class="text-xs text-[var(--t3)] shrink-0">
+          {t(
+            "Take control to click and type in it yourself, for what {name} cannot do alone (a password, a captcha). {name} waits meanwhile.",
+            { name: kitty.name },
+          )}
+        </p>
+      )}
+      {err && <p class="text-sm text-[var(--c-red)] shrink-0">{err}</p>}
+    </>
+  );
+
+  if (!windowed) {
+    return (
+      <div class="live-card flex flex-col gap-2 min-w-0" data-testid="live-desktop">
+        {content}
+      </div>
+    );
+  }
+  return (
+    <div
+      class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6 backdrop"
+      onClick={leave}
+      data-modal
+      data-testid="live-desktop"
+    >
+      <div
+        class="chat-modal w-full max-w-6xl h-full max-h-[56rem] p-3 sm:p-4 flex flex-col gap-3 overflow-hidden"
+        onClick={(e) => e.stopPropagation()}
+        role="dialog"
+        aria-label={name}
+      >
+        {content}
       </div>
     </div>
   );

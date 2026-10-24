@@ -655,6 +655,32 @@ select:focus {
 .live-surface.is-dragging .live-stage img {
   cursor: grabbing;
 }
+/* Watching: one click on the picture takes the controls, and a chip says so. */
+.live-surface.is-takeable .live-stage canvas,
+.live-surface.is-takeable .live-stage img {
+  cursor: pointer;
+}
+.live-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  font: 11px/1.4 var(--font-mono);
+  letter-spacing: 0.04em;
+  color: var(--neon-cyan);
+  background: rgba(8, 10, 14, 0.82);
+  border: 1px solid rgb(0 240 255 / 0.45);
+  pointer-events: none;
+  opacity: 0.8;
+  transition: opacity var(--motion-fast) var(--ease-out);
+}
+.live-surface:hover .live-hint {
+  opacity: 1;
+}
 /* The picture, as large as the room allows; the marks over it sit in its own pixels. */
 .live-stage {
   position: relative;

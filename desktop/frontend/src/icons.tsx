@@ -54,6 +54,20 @@ export const IconCamera = (p: P) =>
     <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />,
     <circle cx="12" cy="13" r="4" />,
   ]);
+export const IconExpand = (p: P) =>
+  svg(p, [
+    <path d="M15 3h6v6" />,
+    <path d="M9 21H3v-6" />,
+    <path d="M21 3l-7 7" />,
+    <path d="M3 21l7-7" />,
+  ]);
+export const IconReduce = (p: P) =>
+  svg(p, [
+    <path d="M4 14h6v6" />,
+    <path d="M20 10h-6V4" />,
+    <path d="M14 10l7-7" />,
+    <path d="M3 21l7-7" />,
+  ]);
 export const IconMenu = (p: P) =>
   svg(p, [<path d="M3 6h18" />, <path d="M3 12h18" />, <path d="M3 18h18" />]);
 export const IconBook = (p: P) =>

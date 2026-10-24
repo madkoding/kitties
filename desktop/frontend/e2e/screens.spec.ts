@@ -1205,13 +1205,46 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live.getByTestId("live-state")).toHaveText("Watching live");
   await page.keyboard.press("Escape");
   await expect(live).toHaveCount(0);
-  // From the kitty's drawer too, and its X brings the drawer back.
+});
+
+test("in a kitty's drawer the desktop is there, live, and one click on it takes the controls", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
   await kittyRow(page, "tom").click();
-  await page.locator("[data-modal]").getByTestId("open-desktop").click();
+  const drawer = page.locator("[data-modal]");
+  const live = drawer.getByTestId("live-desktop");
   await expect(live).toBeVisible();
-  await live.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(live).toHaveCount(0);
-  await expect(page.locator("[data-modal]")).toHaveCount(1);
+  // One picture of the desktop, and it is the live one: nothing else shows it, nothing to open.
+  await expect(drawer.getByTestId("live-frame")).toHaveCount(1);
+  await expect(drawer.getByTestId("open-desktop")).toHaveCount(0);
+  await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  await expect(live.getByText("Click the picture to take control")).toBeVisible();
+  // A click on the picture takes the controls; Escape is then a key of the display, not a way out.
+  await live.getByTestId("live-frame").click({ position: { x: 60, y: 40 } });
+  await expect(live.getByTestId("live-state")).toContainText("You have the controls");
+  await expect(live.getByTestId("live-activity")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer.getByTestId("kitty-header")).toBeVisible();
+  // It can be enlarged into a window and reduced back, keeping the controls.
+  await live.getByTestId("live-enlarge").click();
+  const big = page.getByRole("dialog", { name: "tom's desktop" });
+  await expect(big).toBeVisible();
+  await expect(big.getByTestId("live-state")).toContainText("You have the controls");
+  await expect(big.getByTestId("live-frame")).toHaveAttribute("data-mode", "rects");
+  await big.getByRole("button", { name: "Reduce", exact: true }).click();
+  await expect(big).toHaveCount(0);
+  await expect(live.getByTestId("live-state")).toContainText("You have the controls");
+  // Giving it back, and Escape from the window only reduces it: the drawer stays.
+  await live.getByTestId("give-back").click();
+  await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  await live.getByTestId("live-enlarge").click();
+  await expect(big).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(big).toHaveCount(0);
+  await expect(drawer.getByTestId("kitty-header")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(drawer).toHaveCount(0);
 });
 
 test("a desktop that cannot give rectangles is followed as a stream of whole pictures", async ({
