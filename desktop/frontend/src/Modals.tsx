@@ -677,7 +677,6 @@ export function KittyDrawer({
               })}
             </p>
           )}
-          <DesktopCare kitty={kitty} onChanged={onChanged} />
         </div>
       )}
       <div class="grid md:grid-cols-2 gap-x-6">
@@ -688,6 +687,11 @@ export function KittyDrawer({
           <JournalPanel kitty={kitty} onOpenChat={onOpenChat} />
         </div>
       </div>
+      {kitty.desktop && (
+        <div class="min-w-0 mt-5">
+          <DesktopCare kitty={kitty} onChanged={onChanged} />
+        </div>
+      )}
       <details class="config mt-5" data-testid="kitty-config">
         <summary>
           <span>{t("Configuration")}</span>
