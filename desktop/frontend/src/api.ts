@@ -419,7 +419,10 @@ export interface Connection {
     const q = new URLSearchParams(location.search);
     if (q.has("token") || q.has("gateway")) {
       const saved = savedConnection();
-      saveConnection({ url: q.get("gateway") ?? saved.url, token: q.get("token") ?? saved.token });
+      saveConnection({
+        url: safeGatewayBase(q.get("gateway") ?? saved.url),
+        token: q.get("token") ?? saved.token,
+      });
       q.delete("token");
       q.delete("gateway");
       const rest = q.toString();
@@ -433,7 +436,7 @@ export interface Connection {
 export function savedConnection(): Connection {
   try {
     const raw = JSON.parse(localStorage.getItem(KEY) || "{}");
-    return { url: raw.url || "", token: raw.token || "" };
+    return { url: safeGatewayBase(raw.url || ""), token: raw.token || "" };
   } catch {
     return { url: "", token: "" };
   }
@@ -529,7 +532,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   if (conn.token) {
     headers.Authorization = "Bearer " + conn.token;
   }
-  const res = await fetch(conn.url.replace(/\/$/, "") + path, {
+  const res = await fetch(safeGatewayBase(conn.url) + path, {
     method,
     headers,
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -558,7 +561,7 @@ export async function request<T>(method: string, path: string, body?: unknown): 
 // saves it. The page served by the gateway itself, or opened on the same computer, needs no typing.
 async function fetchLocalToken(conn: Connection): Promise<Connection> {
   try {
-    const res = await fetch(conn.url.replace(/\/$/, "") + "/v1/local-token");
+    const res = await fetch(safeGatewayBase(conn.url) + "/v1/local-token");
     if (!res.ok) {
       return conn;
     }
@@ -574,6 +577,8 @@ async function fetchLocalToken(conn: Connection): Promise<Connection> {
   return conn;
 }
 
+// safeGatewayBase is the gateway address to build requests on: an http(s) address without a
+// trailing slash, or "" (this page's own origin) for anything else.
 function safeGatewayBase(url: string): string {
   try {
     const parsed = new URL(url);
@@ -898,7 +903,7 @@ export function streamDesktop(
       if (!conn.token) {
         conn = await fetchLocalToken(conn);
       }
-      const res = await fetch(conn.url.replace(/\/$/, "") + `/v1/kitties/${ref}/stream`, {
+      const res = await fetch(safeGatewayBase(conn.url) + `/v1/kitties/${ref}/stream`, {
         headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
         signal: stop.signal,
       });
@@ -994,7 +999,12 @@ function watchRects(
       ordered = ordered
         .then(async () => {
           const list = await Promise.all(
-            rects.map(async (r) => ({ ...r, blob: await (await fetch(r.data)).blob() })),
+            rects.map(async (r) => {
+              if (!r.data.startsWith("data:image/")) {
+                throw new Error("unexpected picture source");
+              }
+              return { ...r, blob: await (await fetch(r.data)).blob() };
+            }),
           );
           on.rects(list);
         })
@@ -1061,7 +1071,7 @@ export function rectsDesktop(
       if (!conn.token) {
         conn = await fetchLocalToken(conn);
       }
-      const res = await fetch(conn.url.replace(/\/$/, "") + `/v1/kitties/${ref}/rects?fps=20`, {
+      const res = await fetch(safeGatewayBase(conn.url) + `/v1/kitties/${ref}/rects?fps=20`, {
         headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
         signal: stop.signal,
       });
