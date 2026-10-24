@@ -102,7 +102,7 @@ func TestLiveRects(t *testing.T) {
 	srv, f, _ := setup(t)
 	f.stream = "PING\n" + frameOf(jpegOf(t, -1, 0)) + "PING\n" + frameOf(jpegOf(t, -1, 0)) +
 		"FRAME 4\nnope" + frameOf(jpegOf(t, 100, 70))
-	req, _ := http.NewRequest("GET", srv.URL+"/v1/kitties/ana/rects?fps=12&quality=60&token=tok", nil)
+	req, _ := http.NewRequest("GET", srv.URL+"/v1/kitties/ana/rects?fps=30&quality=60&token=tok", nil)
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatal(err)
@@ -131,7 +131,7 @@ func TestLiveRects(t *testing.T) {
 	if len(msgs[2].Rects) != 1 || msgs[2].Rects[0].X != 64 || msgs[2].Rects[0].Y != 64 || msgs[2].Rects[0].W != 64 {
 		t.Errorf("the second update = %+v", msgs[2].Rects)
 	}
-	if !strings.Contains(strings.Join(f.calls, ","), "stream 12 60") {
+	if !strings.Contains(strings.Join(f.calls, ","), "stream 30 60") {
 		t.Errorf("calls = %v", f.calls)
 	}
 	// What is not a picture is a bad gateway, as on /stream; an unknown kitty is not found.

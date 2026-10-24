@@ -1,11 +1,16 @@
 #!/bin/sh
 # Writes the display to stdout as a stream of JPEG pictures, each after a line "FRAME <bytes>",
 # and only when it changed, with a line "PING" every two quiet seconds.
-#   kitty-stream [--stdin] [pictures per second, 1-15] [JPEG quality, 30-95]
+#   kitty-stream [--stdin] [pictures per second, 1-30 (15 without kitty-grab)] [JPEG quality, 30-95]
 # With --stdin it ends when its input closes: `docker exec -i` closes it when the reader goes,
 # while the stream's output alone would never tell (docker keeps reading it).
 set -eu
 : "${DISPLAY:=:99}"
+# kitty-grab (C, XShm) does the same much faster: it stays connected to the display, compares raw
+# pixels and only compresses what changed. The loop below is for an image that lacks it.
+if command -v kitty-grab >/dev/null 2>&1; then
+    exec kitty-grab "$@"
+fi
 if [ "${1:-}" = "--stdin" ]; then
     shift
     me=$$
@@ -21,7 +26,8 @@ fps="${1:-8}"
 quality="${2:-70}"
 case "$fps" in '' | *[!0-9]*) fps=8 ;; esac
 case "$quality" in '' | *[!0-9]*) quality=70 ;; esac
-[ "$fps" -ge 1 ] && [ "$fps" -le 15 ] || fps=8
+[ "$fps" -ge 1 ] || fps=8
+[ "$fps" -le 15 ] || fps=15
 [ "$quality" -ge 30 ] && [ "$quality" -le 95 ] || quality=70
 dir="$(mktemp -d /tmp/stream-XXXXXX)"
 trap 'rm -rf "$dir"' EXIT

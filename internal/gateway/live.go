@@ -25,11 +25,15 @@ func (s *Server) liveRoutes() {
 	s.mux.Handle("PUT /v1/kitties/{ref}/clipboard", api(s.handleSetClipboard))
 }
 
+// maxFPS is the most pictures a second a view may ask for (kitty-grab makes up to 30; an image
+// with only the older kitty-stream loop clamps it to 15 itself).
+const maxFPS = 30
+
 // streamBoundary separates the pictures of the stream.
 const streamBoundary = "kittyframe"
 
 func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
-	fps := bounded(r.URL.Query().Get("fps"), 8, 1, 15)
+	fps := bounded(r.URL.Query().Get("fps"), 8, 1, maxFPS)
 	quality := bounded(r.URL.Query().Get("quality"), 70, 30, 95)
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -78,7 +82,7 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 // then only the rectangles that differ from the one before, so a view follows it faster and
 // costs far less on a slow link. Clients that cannot read it use /stream.
 func (s *Server) handleRects(w http.ResponseWriter, r *http.Request) {
-	fps := bounded(r.URL.Query().Get("fps"), 8, 1, 15)
+	fps := bounded(r.URL.Query().Get("fps"), 8, 1, maxFPS)
 	quality := bounded(r.URL.Query().Get("quality"), 75, 30, 95)
 	flusher, ok := w.(http.Flusher)
 	if !ok {

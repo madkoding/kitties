@@ -942,7 +942,7 @@ export function rectsDesktop(
       if (!conn.token) {
         conn = await fetchLocalToken(conn);
       }
-      const res = await fetch(conn.url.replace(/\/$/, "") + `/v1/kitties/${ref}/rects?fps=12`, {
+      const res = await fetch(conn.url.replace(/\/$/, "") + `/v1/kitties/${ref}/rects?fps=20`, {
         headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
         signal: stop.signal,
       });
