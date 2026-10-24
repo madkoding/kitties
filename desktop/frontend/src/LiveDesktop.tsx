@@ -1,12 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { api, type Kitty, shotData, streamDesktop } from "./api";
+import { api, type Kitty, rectsDesktop, shotData, streamDesktop } from "./api";
 import { plainError } from "./friendly";
 import { t } from "./i18n";
 import { IconX } from "./icons";
 
-// LIVE DESKTOP: the kitty's display as it is now, streamed while it is open (motion JPEG from
-// the gateway: a picture whenever it changes; screenshots one after another when the stream
-// cannot be had). The person can
+// LIVE DESKTOP: the kitty's display as it is now, followed while it is open: first as what
+// changed on it (rectangles drawn on a canvas, like VNC), else as motion JPEG from the gateway
+// (a whole picture whenever it changes), else as screenshots one after another. The person can
 // take it over: their clicks, drags, the wheel and the keyboard go to the display, like on a
 // remote screen, and the kitty's own actions wait until they give it back. Nothing is opened
 // on the container: every frame and every input goes through the gateway's API.
@@ -102,12 +102,14 @@ export default function LiveDesktop({
   const [control, setControl] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  // mode is how the pictures come: a stream, or screenshots when the stream fails.
-  const [mode, setMode] = useState<"stream" | "poll">("stream");
+  // mode is how the pictures come: rectangles of what changed, whole pictures of a stream, or
+  // screenshots when each one before fails.
+  const [mode, setMode] = useState<"rects" | "stream" | "poll">("rects");
   const [loaded, setLoaded] = useState(false);
   const [clip, setClip] = useState("");
   const [clipNote, setClipNote] = useState("");
   const img = useRef<HTMLImageElement>(null);
+  const canvas = useRef<HTMLCanvasElement>(null);
   const surface = useRef<HTMLDivElement>(null);
   const controlRef = useRef(false);
   controlRef.current = control;
@@ -119,6 +121,54 @@ export default function LiveDesktop({
   // queue sends the inputs one after another, in the order they were made: typed text and keys
   // sent side by side would reach the display mixed up.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+
+  // The rectangles: the whole display first, then only the parts that changed, drawn over it. One
+  // that fails, or shows nothing in a few seconds, gives way to the stream of whole pictures.
+  useEffect(() => {
+    if (mode !== "rects") {
+      return;
+    }
+    let got = false;
+    // Updates are drawn in the order they came, each once all its pictures are decoded.
+    let drawing: Promise<unknown> = Promise.resolve();
+    const stop = rectsDesktop(
+      kitty.id,
+      {
+        size: (w, h) => {
+          if (canvas.current) {
+            canvas.current.width = w;
+            canvas.current.height = h;
+          }
+        },
+        rects: (list) => {
+          drawing = drawing
+            .then(async () => {
+              const pictures = await Promise.all(list.map((r) => createImageBitmap(r.blob)));
+              const ctx = canvas.current?.getContext("2d");
+              list.forEach((r, i) => {
+                ctx?.drawImage(pictures[i], r.x, r.y);
+                pictures[i].close();
+              });
+              if (ctx && !got) {
+                got = true;
+                setLoaded(true);
+              }
+            })
+            .catch(() => undefined);
+        },
+      },
+      () => setMode("stream"),
+    );
+    if (!stop) {
+      setMode("stream");
+      return;
+    }
+    const id = setTimeout(() => !got && setMode("stream"), 6000);
+    return () => {
+      clearTimeout(id);
+      stop();
+    };
+  }, [kitty.id, mode]);
 
   // The stream; one that fails, or shows nothing in a few seconds, gives way to screenshots.
   useEffect(() => {
@@ -251,10 +301,10 @@ export default function LiveDesktop({
 
   // point is where an event falls on the display, in its own pixels.
   const point = (e: MouseEvent) => {
-    const el = img.current!;
+    const el = canvas.current ?? img.current!;
     const r = el.getBoundingClientRect();
-    const w = el.naturalWidth || 1280;
-    const h = el.naturalHeight || 800;
+    const w = (el instanceof HTMLCanvasElement ? el.width : el.naturalWidth) || 1280;
+    const h = (el instanceof HTMLCanvasElement ? el.height : el.naturalHeight) || 800;
     return {
       x: Math.max(0, Math.min(w - 1, Math.round(((e.clientX - r.left) * w) / r.width))),
       y: Math.max(0, Math.min(h - 1, Math.round(((e.clientY - r.top) * h) / r.height))),
@@ -412,7 +462,19 @@ export default function LiveDesktop({
           onPaste={onPaste}
           onContextMenu={(e) => control && e.preventDefault()}
         >
-          {frame && (
+          {mode === "rects" && (
+            <canvas
+              ref={canvas}
+              aria-label={t("{name}'s desktop", { name: kitty.name })}
+              class={`max-w-full max-h-[70vh] select-none ${loaded ? "" : "invisible absolute"}`}
+              onMouseDown={onMouseDown}
+              onMouseUp={onMouseUp}
+              onWheel={onWheel}
+              data-testid="live-frame"
+              data-mode="rects"
+            />
+          )}
+          {mode !== "rects" && frame && (
             <img
               ref={img}
               src={frame}

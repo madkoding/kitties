@@ -919,6 +919,100 @@ export function streamDesktop(
   };
 }
 
+// A DesktopRect is a part of the display that changed, and its picture.
+export type DesktopRect = { x: number; y: number; w: number; h: number; blob: Blob };
+
+// rectsDesktop follows a kitty's display as what changed on it, like VNC: the whole picture
+// first, then only the rectangles that differ from the one before (the gateway's /rects). size
+// says the display's size, and rects the pictures to draw over what is there. It returns the
+// function that stops it, or null where it cannot be had (inside Wails, which gets whole pictures
+// from watchDesktop). onError says why it ended; the caller falls back to streamDesktop.
+export function rectsDesktop(
+  ref: string,
+  on: { size: (w: number, h: number) => void; rects: (list: DesktopRect[]) => void },
+  onError: (why: string) => void,
+): (() => void) | null {
+  if (window.go?.main?.App) {
+    return null;
+  }
+  const stop = new AbortController();
+  void (async () => {
+    try {
+      let conn = savedConnection();
+      if (!conn.token) {
+        conn = await fetchLocalToken(conn);
+      }
+      const res = await fetch(conn.url.replace(/\/$/, "") + `/v1/kitties/${ref}/rects?fps=12`, {
+        headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
+        signal: stop.signal,
+      });
+      if (!res.ok || !res.body) {
+        throw new Error(`HTTP ${res.status}`);
+      }
+      const reader = res.body.getReader();
+      const text = new TextDecoder();
+      let buf = new Uint8Array(0);
+      // want is how many rectangles of the update are still to come; head is the one whose
+      // picture is being waited for; batch is what the update has so far.
+      let want = 0;
+      let head: number[] | null = null;
+      let batch: DesktopRect[] = [];
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) {
+          throw new Error("the stream ended");
+        }
+        const joined = new Uint8Array(buf.length + value.length);
+        joined.set(buf);
+        joined.set(value, buf.length);
+        buf = joined;
+        for (;;) {
+          if (head) {
+            if (buf.length < head[4]) {
+              break;
+            }
+            batch.push({
+              x: head[0],
+              y: head[1],
+              w: head[2],
+              h: head[3],
+              blob: new Blob([buf.slice(0, head[4])]),
+            });
+            buf = buf.slice(head[4]);
+            head = null;
+            if (--want === 0) {
+              on.rects(batch);
+              batch = [];
+            }
+            continue;
+          }
+          const nl = buf.indexOf(10);
+          if (nl < 0) {
+            break;
+          }
+          const line = text.decode(buf.subarray(0, nl)).trim().split(" ");
+          buf = buf.slice(nl + 1);
+          if (line[0] === "SCREEN" && line.length === 3) {
+            on.size(Number(line[1]), Number(line[2]));
+          } else if (line[0] === "UPDATE" && line.length === 2) {
+            want = Number(line[1]);
+            batch = [];
+          } else if (line[0] === "RECT" && line.length === 6 && want > 0) {
+            head = line.slice(1).map(Number);
+          } else {
+            throw new Error("not a stream of rectangles");
+          }
+        }
+      }
+    } catch (e) {
+      if (!stop.signal.aborted) {
+        onError(e instanceof Error ? e.message : String(e));
+      }
+    }
+  })();
+  return () => stop.abort();
+}
+
 // indexOf finds a sequence of bytes, or -1.
 function indexOf(buf: Uint8Array, seq: number[]): number {
   outer: for (let i = 0; i + seq.length <= buf.length; i++) {

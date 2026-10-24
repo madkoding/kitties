@@ -1105,10 +1105,13 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live).toBeVisible();
   await expect(live.getByTestId("live-frame")).toBeVisible();
   await expect(live.getByTestId("live-state")).toHaveText("Watching live");
-  // The picture is a stream (the gateway's motion JPEG, cut into pictures by the page), not
-  // screenshots one by one.
-  await expect(live.getByTestId("live-frame")).toHaveAttribute("data-mode", "stream");
-  await expect(live.getByTestId("live-frame")).toHaveAttribute("src", /^blob:/);
+  // The picture is what changed on the display, drawn on a canvas (the gateway's rectangles,
+  // like VNC), not screenshots one by one.
+  const frame = live.getByTestId("live-frame");
+  await expect(frame).toHaveAttribute("data-mode", "rects");
+  await expect
+    .poll(() => frame.evaluate((c: HTMLCanvasElement) => c.width * c.height))
+    .toBeGreaterThan(0);
   // Taking control: the clicks, the keys and the text reach the display through the gateway.
   const held = page.waitForResponse((r) => r.url().includes("/control") && r.status() === 200);
   await live.getByTestId("take-control").click();
@@ -1150,6 +1153,17 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await live.getByRole("button", { name: "Close", exact: true }).click();
   await expect(live).toHaveCount(0);
   await expect(page.locator("[data-modal]")).toHaveCount(1);
+});
+
+test("a desktop that cannot give rectangles is followed as a stream of whole pictures", async ({
+  page,
+}) => {
+  await page.route("**/v1/kitties/*/rects*", (route) => route.fulfill({ status: 404, body: "no" }));
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("open-desktop").first().click();
+  const frame = page.getByTestId("live-desktop").getByTestId("live-frame");
+  await expect(frame).toHaveAttribute("data-mode", "stream");
+  await expect(frame).toHaveAttribute("src", /^blob:/);
 });
 
 test("a kitty that needs the person asks for help: a window shows what it sees, and giving the desktop back lets it finish", async ({

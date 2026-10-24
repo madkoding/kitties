@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/madkoding/kitties/internal/container"
+	"github.com/madkoding/kitties/internal/rects"
 )
 
 // THE DISPLAY, LIVE, AND ITS CLIPBOARD.
@@ -19,6 +20,7 @@ import (
 func (s *Server) liveRoutes() {
 	api := s.auth
 	s.mux.Handle("GET /v1/kitties/{ref}/stream", api(s.handleStream))
+	s.mux.Handle("GET /v1/kitties/{ref}/rects", api(s.handleRects))
 	s.mux.Handle("GET /v1/kitties/{ref}/clipboard", api(s.handleClipboard))
 	s.mux.Handle("PUT /v1/kitties/{ref}/clipboard", api(s.handleSetClipboard))
 }
@@ -71,6 +73,70 @@ func (s *Server) handleStream(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// handleRects is the display as what changed on it (package rects): the whole picture first,
+// then only the rectangles that differ from the one before, so a view follows it faster and
+// costs far less on a slow link. Clients that cannot read it use /stream.
+func (s *Server) handleRects(w http.ResponseWriter, r *http.Request) {
+	fps := bounded(r.URL.Query().Get("fps"), 8, 1, 15)
+	quality := bounded(r.URL.Query().Get("quality"), 75, 30, 95)
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		fail(w, http.StatusInternalServerError, errors.New("streaming is not supported here"))
+		return
+	}
+	rc, err := s.fleet.Stream(r.Context(), r.PathValue("ref"), fps, quality)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	defer rc.Close()
+	frames := bufio.NewReaderSize(rc, 256<<10)
+	first, err := container.ReadFrame(frames)
+	if err != nil {
+		fail(w, http.StatusBadGateway, fmt.Errorf("the desktop did not answer: %w", err))
+		return
+	}
+	differ := &rects.Differ{Quality: quality}
+	up, err := differ.Next(first)
+	if err != nil {
+		fail(w, http.StatusBadGateway, err)
+		return
+	}
+	w.Header().Set("Content-Type", rectsType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	var size [2]int
+	for {
+		if len(up.Rects) > 0 {
+			if [2]int{up.W, up.H} != size {
+				size = [2]int{up.W, up.H}
+				if rects.WriteScreen(w, up.W, up.H) != nil {
+					return
+				}
+			}
+			if rects.WriteUpdate(w, up.Rects) != nil {
+				return
+			}
+			flusher.Flush()
+		}
+		// A picture that cannot be read is skipped: the next one is compared with the last good one.
+		for {
+			frame, err := container.ReadFrame(frames)
+			if err != nil {
+				return
+			}
+			if next, err := differ.Next(frame); err == nil {
+				up = next
+				break
+			}
+		}
+	}
+}
+
+// rectsType is the type of the stream of rectangles.
+const rectsType = "application/x-kitties-rects"
 
 // bounded is a number of the query, or def when it is missing or out of [lo, hi].
 func bounded(v string, def, lo, hi int) int {
