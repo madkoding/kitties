@@ -216,3 +216,35 @@ func TestWidenPath(t *testing.T) {
 		t.Errorf("empty = %s", path)
 	}
 }
+
+// A command can be given text on its input, and the text is never in the arguments or an error.
+func TestExecInput(t *testing.T) {
+	f := &fake{answer: ok}
+	f.install(t, "docker")
+	var gave string
+	oldIn := runCmdIn
+	runCmdIn = func(_ context.Context, stdin, _ string, args ...string) ([]byte, error) {
+		gave = stdin
+		f.calls = append(f.calls, args)
+		return f.answer(args)
+	}
+	t.Cleanup(func() { runCmdIn = oldIn })
+	m := &Manager{rt: Runtime{Bin: "docker"}}
+	out, err := m.ExecInput(context.Background(), "kitty-a", "hunter2", "xdotool", "type", "--file", "-")
+	if err != nil || out != "abc\n" || gave != "hunter2" {
+		t.Fatalf("ExecInput = %q, %v (input %q)", out, err, gave)
+	}
+	if call := strings.Join(f.calls[len(f.calls)-1], " "); !strings.Contains(call, "exec -i") || strings.Contains(call, "hunter2") {
+		t.Errorf("call = %q", call)
+	}
+	if _, err := m.ExecInput(context.Background(), "Bad", "x", "ls"); err == nil {
+		t.Error("the name is validated")
+	}
+	if _, err := m.ExecInput(context.Background(), "kitty-a", "x"); err == nil {
+		t.Error("it needs a command")
+	}
+	f.answer = func([]string) ([]byte, error) { return []byte("no display"), errors.New("exit 1") }
+	if out, err := m.ExecInput(context.Background(), "kitty-a", "hunter2", "xdotool"); err == nil || out != "no display" || strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("a failure = %q, %v", out, err)
+	}
+}

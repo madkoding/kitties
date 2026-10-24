@@ -50,6 +50,19 @@ func TestHoldAndInput(t *testing.T) {
 	if !m.Held(k.ID) || !strings.Contains(strings.Join(f.calls, " "), "exec") {
 		t.Errorf("input = held %v, calls %v", m.Held(k.ID), f.calls)
 	}
+	// What the person types may be a password: it goes in on the input, never in the arguments.
+	if err := m.Input(ctx, "mimi", desktop.Action{Name: "type", Args: map[string]any{"text": "hunter2"}}); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.inputs) != 1 || f.inputs[0] != "kitty-mimi:hunter2" || strings.Contains(strings.Join(f.execs, " "), "hunter2") {
+		t.Errorf("typed: inputs %v execs %v", f.inputs, f.execs)
+	}
+	if _, err := m.ExecInput(ctx, "brain", "x", "ls"); err == nil {
+		t.Error("a kitty without a desktop has no container")
+	}
+	if _, err := m.ExecInput(ctx, "nobody", "x", "ls"); err == nil {
+		t.Error("unknown kitty")
+	}
 	if err := m.Input(ctx, "mimi", desktop.Action{Name: "run", Args: map[string]any{"argv": []any{"rm"}}}); err == nil {
 		t.Error("the person's input runs no programs")
 	}

@@ -34,6 +34,7 @@ import { ConnectModal } from "./Modals";
 import { Missing, Required, RequiredLegend } from "./Required";
 import { AccountSignIn } from "./SignIn";
 import { ask } from "./Confirm";
+import Secrets from "./Secrets";
 import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 
 // SETTINGS, FOR PEOPLE.
@@ -43,7 +44,7 @@ import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 // they are reached when away (notifications). Every form asks only for what it cannot guess;
 // names, addresses and limits wait under "More options".
 
-export type Tab = "models" | "connectors" | "notifications" | "gateway" | "preferences";
+export type Tab = "models" | "connectors" | "secrets" | "notifications" | "gateway" | "preferences";
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";
 const INPUT = "w-full px-3 py-2 text-sm";
@@ -1711,6 +1712,7 @@ export default function SettingsModal({
   const tabs: { id: Tab; label: string }[] = [
     { id: "models", label: t("Models") },
     { id: "connectors", label: t("Connections") },
+    { id: "secrets", label: t("Secrets") },
     { id: "notifications", label: t("Notifications") },
     { id: "gateway", label: inWails() ? t("Gateway") : t("Connection") },
     { id: "preferences", label: t("Preferences") },
@@ -1909,6 +1911,7 @@ export default function SettingsModal({
           </div>
         )}
 
+        {tab === "secrets" && <Secrets kitties={kitties} />}
         {tab === "notifications" && view && (
           <NotifyForm view={view} onSaved={setView} onSetUp={setUpNtfy} />
         )}

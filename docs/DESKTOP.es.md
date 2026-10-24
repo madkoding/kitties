@@ -99,10 +99,23 @@ control**: ves su escritorio en vivo (solo los rectángulos que cambiaron, como 
 de segundo de retraso), tus clics, arrastres, rueda y teclas van a su pantalla, y el portapapeles funciona en
 ambos sentidos. El kitty espera; cuando respondes o le devuelves el escritorio, sigue solo. La vista
 se dibuja con rectángulos (`/v1/kitties/{ref}/rects`: la imagen entera una vez y luego solo los
-mosaicos que cambian, unidos); la app de escritorio, que aún no lee ese flujo, recibe imágenes
-enteras (`/stream`, motion JPEG), y las capturas una tras otra son el último recurso.
+mosaicos que cambian, unidos); la app de escritorio lee el mismo flujo y se lo pasa a su
+página, un gateway que no lo tenga se sigue como imágenes enteras (`/stream`, motion JPEG), y las
+capturas una tras otra son el último recurso. Las imágenes las saca `kitty-grab`, un programa en C
+de la imagen que se queda conectado a la pantalla, la lee por memoria compartida y comprime solo lo
+que cambió (cerca de un tercio de la CPU del bucle de `scrot` que reemplaza, y que queda de
+respaldo, y hasta 30 imágenes por segundo).
 
 <img src="screenshots/50-help-modal.png" alt="Un kitty pide ayuda: lo que ve y un campo para lo que necesita" width="100%">
+
+Una contraseña o un código no tienen por qué pasar por el modelo de IA. Marca *es un secreto* y el
+texto se escribe del gateway al teclado del kitty por la entrada estándar del comando (nunca en una
+línea de comandos, donde cualquier proceso podría leerla); igual lo que escribes tú mismo mientras
+tienes su escritorio. Dale un nombre y queda en la **bóveda** (Ajustes, Secretos): AES-256-GCM con
+una clave en su propio archivo, o en `KITTIES_VAULT_KEY`, listada por nombre y por los kitties que
+pueden usarla. Al kitty se le dicen los nombres que puede usar y llama a `type_secret {"name": ...}`:
+el secreto va de la bóveda a su teclado, y ni el kitty, ni su modelo, ni los pasos del chat ni los
+registros lo guardan jamás.
 
 Un kitty no tiene que acordarse de pedir. Cuando ve la misma pantalla cuatro veces seguidas se le
 dice que pruebe otro camino, o que pida; y cuando esa pantalla parece un CAPTCHA o un código que
@@ -126,5 +139,6 @@ cada imagen con solo lo que cambió), servido en `/v1/chats/{id}/turns/{n}/repla
 | El ciclo: captura, modelo, acciones, otra vez | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Contenedores: arrancar, `exec`, captura, stream en vivo | [`internal/container/`](../internal/container) |
 | Tomar el control: retenciones, entrada de la persona, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
+| Los secretos guardados que un kitty puede escribir, cifrados | [`internal/vault`](../internal/vault) |
 | Lo que cambió en la pantalla, como rectángulos sobre la última imagen | [`internal/rects`](../internal/rects) |
 | La vista en vivo en la app | [`desktop/frontend/src/LiveDesktop.tsx`](../desktop/frontend/src/LiveDesktop.tsx) |

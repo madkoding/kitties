@@ -59,6 +59,7 @@ var Tools = []struct{ Name, Args, Help string }{
 	{"install", `{"packages": ["gimp"]}`, "install applications from Debian's repository; they are installed again when the desktop restarts"},
 	{"run", `{"argv": ["ls", "-la"]}`, "run a program in your working folder (an argument list, no shell)"},
 	{"wait", `{"seconds": 2}`, "wait for something to load (at most 10 seconds)"},
+	{"type_secret", `{"name": "shop password", "enter": false}`, "type a secret the person saved for you (a password, a code) where the focus is, by its name; it goes from the vault to the keyboard and you never read it; \"enter\": true presses Enter after"},
 	{"ask_help", `{"reason": "..."}`, "ask the person to take control of your desktop for what you cannot do alone (a password, a captcha, a code they receive); you wait until they give it back, then continue"},
 	{"done", `{"summary": "..."}`, "finish the task and report what you achieved"},
 }
@@ -169,7 +170,7 @@ var sleep = func(ctx context.Context, d time.Duration) {
 // done build nothing.
 func Argv(a Action) ([]string, error) {
 	switch a.Name {
-	case "screenshot", "done", "wait", "ask_help":
+	case "screenshot", "done", "wait", "ask_help", "type_secret":
 		return nil, nil
 	case "read_screen":
 		return []string{"kitty-ocr"}, nil
@@ -343,6 +344,33 @@ func packageList(args map[string]any) ([]string, error) {
 	return names, nil
 }
 
+// TypeFromInput is the command that types what it is given on its standard input, for text that
+// must not show in a command line (a password the person types, a secret of the vault).
+var TypeFromInput = []string{"xdotool", "type", "--delay", "20", "--file", "-"}
+
+// InputRunner is a Runner that can also run a command with text on its input.
+type InputRunner interface {
+	Runner
+	ExecInput(ctx context.Context, ref, stdin string, argv ...string) (string, error)
+}
+
+// TypeSecret types text on the display without it appearing in any command line, and presses
+// Enter after when asked. It refuses to when the runner cannot give the text on an input.
+func TypeSecret(ctx context.Context, r Runner, ref, text string, enter bool) error {
+	in, ok := r.(InputRunner)
+	if !ok {
+		return errors.New("this desktop cannot be typed on without showing the text")
+	}
+	if _, err := in.ExecInput(ctx, ref, text, TypeFromInput...); err != nil {
+		return errors.New("typing failed: " + strings.ReplaceAll(err.Error(), text, "…"))
+	}
+	if enter {
+		_, err := r.Exec(ctx, ref, "xdotool", "key", "--", "Return")
+		return err
+	}
+	return nil
+}
+
 // personActions are what the person does on a display they took over: the mouse and the keys.
 var personActions = map[string]bool{"click": true, "double_click": true, "move": true, "type": true, "key": true, "scroll": true, "drag": true}
 
@@ -365,8 +393,9 @@ func Run(ctx context.Context, r Runner, ref string, a Action) (string, error) {
 		return "", err
 	}
 	switch a.Name {
-	case "screenshot", "done", "ask_help":
-		// ask_help is the chat's to run: it waits for the person.
+	case "screenshot", "done", "ask_help", "type_secret":
+		// ask_help and type_secret are the chat's to run: one waits for the person, the other
+		// opens the vault.
 		return "", nil
 	case "wait":
 		seconds, err := num(a.Args, "seconds")

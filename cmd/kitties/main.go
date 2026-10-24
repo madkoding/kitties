@@ -34,6 +34,7 @@ import (
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
+	"github.com/madkoding/kitties/internal/vault"
 	"github.com/madkoding/kitties/internal/web"
 )
 
@@ -81,6 +82,7 @@ type app struct {
 	// approvals hold the actions that wait for a yes; memory is what the kitties know of the
 	// person; notifier tells the person outside the interface.
 	approvals *approvals.Store
+	vault     *vault.Store
 	budget    *budget.Store
 	digest    *digest.Reporter
 	memory    *memory.Store
@@ -227,6 +229,10 @@ func (a *app) open(cmd string) error {
 		return err
 	}
 	a.memory = memory.Open(filepath.Join(dataDir, "memory"))
+	if a.vault, err = vault.Open(dataDir); err != nil {
+		return err
+	}
+	chats.SetVault(a.vault)
 	chats.SetBudget(a.budget)
 	chats.SetApprovals(a.approvals)
 	chats.SetMemory(a.memory)
@@ -260,7 +266,7 @@ func (a *app) open(cmd string) error {
 		Day:     digest.MyDay(fleet.Connectors()),
 	}, filepath.Join(dataDir, "digest.json"))
 	// A removed kitty takes its held actions and its memory along.
-	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget, chats.LeaveChats)
+	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.vault.ForgetKitty, a.budget.Forget, chats.LeaveChats)
 	// Chats whose kitties were removed earlier have nobody to answer: take those kitties out,
 	// and drop the chats left empty.
 	if err := chats.Prune(func(id string) bool { _, err := fleet.Get(id); return err == nil }); err != nil {
@@ -402,7 +408,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	}
 	g := a.cfg.Gateway
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
-		WithApprovals(a.chats).WithMemory(a.chats).WithNotifier(a.notifier).WithDigest(a.digest).
+		WithApprovals(a.chats).WithMemory(a.chats).WithVault(a.vault).WithNotifier(a.notifier).WithDigest(a.digest).
 		WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
 	if site, ok := webFS(); ok {
 		srv.WithWeb(site)

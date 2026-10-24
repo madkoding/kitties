@@ -34,6 +34,7 @@ import (
 	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
+	"github.com/madkoding/kitties/internal/vault"
 )
 
 // Turn is one message of a thread.
@@ -173,6 +174,8 @@ type Service struct {
 	sessions map[string]*Session
 	// running serialises the turns of one session.
 	running map[string]*sync.Mutex
+	// vault holds the secrets a kitty may type without reading them, nil when there is none.
+	vault *vault.Store
 	// helps are the kitties waiting for the person's answer, by turn (help.go).
 	helps map[string]chan HelpAnswer
 	now   func() time.Time
@@ -912,6 +915,11 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	})
 	if k.Desktop {
 		system += "\n" + desktop.Catalogue()
+		if s.vault != nil {
+			if names := s.vault.Names(k.ID); len(names) > 0 {
+				system += "\nSecrets the person saved for you to type with type_secret (you are never shown them): " + strings.Join(names, ", ") + ".\n"
+			}
+		}
 	}
 	if lib := s.libraryPrompt(); lib != "" {
 		system += "\n" + lib
@@ -1250,6 +1258,15 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			if da.Name == "ask_help" {
 				looked = true
 				outs = append(outs, outcome{action: a, text: s.askHelp(ctx, id, index, k, fmt.Sprint(a.args["reason"]))})
+				if ctx.Err() != nil {
+					break
+				}
+				continue
+			}
+			if da.Name == "type_secret" {
+				looked = true
+				o := s.typeSecret(ctx, id, index, k, a)
+				outs = append(outs, o)
 				if ctx.Err() != nil {
 					break
 				}

@@ -89,11 +89,23 @@ its desktop** without the kitty being shown it. Or **take control**: you see its
 (only the rectangles that changed, like VNC, about a quarter of a second behind), your clicks, drags, wheel
 and keys go to its display, and the clipboard works both ways. The kitty waits; when you answer
 or give the desktop back, it goes on by itself. The view is drawn from rectangles (`/v1/kitties/{ref}/rects`:
-the whole picture once, then only the tiles that differ, merged); the desktop app, which cannot
-read that stream yet, gets whole pictures (`/stream`, motion JPEG), and screenshots one after
-another are the last resort.
+the whole picture once, then only the tiles that differ, merged); the desktop app reads the same stream
+and hands it to its page, a gateway without it is followed as whole pictures (`/stream`, motion
+JPEG), and screenshots one after another are the last resort. The pictures come from
+`kitty-grab`, a small C program in the image that stays connected to the display, reads it
+through shared memory and compresses only what changed (about a third of the CPU of the
+`scrot` loop it replaces, which stays as the fallback, and up to 30 pictures a second).
 
 <img src="screenshots/50-help-modal.png" alt="A kitty asks for help: what it sees and a box for what it needs" width="100%">
+
+A password or a code does not have to travel through the AI model. Tick *it is a secret* and the text
+is typed from the gateway to the kitty's keyboard through the command's standard input (never in
+a command line, where any process could read it); the same goes for what you type yourself while
+you hold its desktop. Give it a name and it is kept in the **vault** (Settings, Secrets): AES-256-GCM
+under a key in its own file, or in `KITTIES_VAULT_KEY`, listed by name and by the kitties that may
+use it. A kitty is told the names it may use and calls `type_secret {"name": ...}`: the secret goes
+from the vault to its keyboard, and neither the kitty, its model, the chat's steps nor the logs
+ever hold it.
 
 A kitty does not have to think of asking. When it sees the very same screen four times in a row
 it is told to try another way, or to ask; and when that screen reads like a CAPTCHA or a code
@@ -117,5 +129,6 @@ picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.
 | The loop: screenshot, model, actions, again | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Containers: start, `exec`, screenshot, live stream | [`internal/container/`](../internal/container) |
 | Taking over: holds, the person's input, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
+| The saved secrets a kitty may type, sealed | [`internal/vault`](../internal/vault) |
 | What changed on the display, as rectangles to draw over the last picture | [`internal/rects`](../internal/rects) |
 | The live view in the app | [`desktop/frontend/src/LiveDesktop.tsx`](../desktop/frontend/src/LiveDesktop.tsx) |

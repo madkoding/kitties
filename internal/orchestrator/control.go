@@ -79,6 +79,11 @@ func (m *Manager) Input(ctx context.Context, ref string, a desktop.Action) error
 	if _, err := m.Hold(k.ID, true); err != nil {
 		return err
 	}
+	// What the person types may be a password: it goes in on the input, not in the arguments.
+	if a.Name == "type" {
+		_, err = m.ExecInput(ctx, k.ID, fmt.Sprint(a.Args["text"]), desktop.TypeFromInput...)
+		return err
+	}
 	_, err = m.Exec(ctx, k.ID, argv...)
 	return err
 }

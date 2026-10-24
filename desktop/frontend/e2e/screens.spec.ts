@@ -1218,6 +1218,7 @@ test("a kitty that needs the person gets what it asked for typed in the window, 
   await expect(send).toHaveText("Tell tom");
   // A secret is hidden, and typed on the desktop instead of told to the kitty.
   await modal.getByTestId("help-secret").check();
+  await modal.getByTestId("help-save").fill("Shop password");
   await expect(modal.getByTestId("help-input")).toHaveAttribute("type", "password");
   await expect(send).toHaveText("Type it on the desktop");
   await send.click();
@@ -1228,8 +1229,51 @@ test("a kitty that needs the person gets what it asked for typed in the window, 
   ).toBeVisible({
     timeout: 15000,
   });
-  expect(JSON.parse(typed[0])).toEqual({ text: "hunter2", secret: true, enter: false });
+  expect(JSON.parse(typed[0])).toEqual({
+    text: "hunter2",
+    secret: true,
+    enter: false,
+    save: "Shop password",
+  });
+  // It was kept for tom, and the vault never says a value.
+  const vault = await page.request.get(`${GATEWAY}/v1/vault`, {
+    headers: { Authorization: "Bearer e2e-token" },
+  });
+  const listed = await vault.text();
+  expect(listed).toContain("Shop password");
+  expect(listed).not.toContain("hunter2");
   await expect(page.getByText("hunter2")).toHaveCount(0);
+});
+
+test("the secrets a kitty may type: saved with who may use them, changed and removed, never shown", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Secrets" }).click();
+  const secrets = page.getByTestId("secrets");
+  await expect(secrets).toBeVisible();
+  const save = secrets.getByTestId("secret-save");
+  await expect(save).toBeDisabled();
+  await secrets.locator("#secret-name").fill("Bank code");
+  await secrets.locator("#secret-value").fill("4821");
+  await expect(secrets.locator("#secret-value")).toHaveAttribute("type", "password");
+  await secrets.getByRole("group", { name: "Kitties that may use it" }).getByText("tom").click();
+  await save.click();
+  const row = secrets.locator('[data-secret="Bank code"]');
+  await expect(row).toContainText("May be used by tom");
+  await expect(secrets).not.toContainText("4821");
+  await shot(page, "51-secrets");
+  // Who may use it changes in place.
+  await row.getByRole("group").getByText("mimi").click();
+  await expect(row).toContainText("tom, mimi");
+  await row.getByRole("group").getByText("tom").click();
+  await row.getByRole("group").getByText("mimi").click();
+  await expect(row).toContainText("No kitty may use it yet");
+  // Removing asks first.
+  await row.getByRole("button", { name: "Remove the secret Bank code" }).click();
+  await page.getByRole("button", { name: "Remove", exact: true }).click();
+  await expect(row).toHaveCount(0);
 });
 
 test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) => {

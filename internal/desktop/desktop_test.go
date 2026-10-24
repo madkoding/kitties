@@ -266,3 +266,40 @@ func TestNeedsPerson(t *testing.T) {
 		}
 	}
 }
+
+type inputRunner struct {
+	fakeRunner
+	stdin []string
+	err   error
+}
+
+func (r *inputRunner) ExecInput(_ context.Context, ref, stdin string, argv ...string) (string, error) {
+	r.stdin = append(r.stdin, ref+":"+stdin+":"+strings.Join(argv, " "))
+	return "", r.err
+}
+
+func TestTypeSecretKeepsTheTextOutOfTheCommandLine(t *testing.T) {
+	r := &inputRunner{}
+	if err := TypeSecret(context.Background(), r, "k", "hunter2", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.stdin) != 1 || r.stdin[0] != "k:hunter2:xdotool type --delay 20 --file -" {
+		t.Errorf("input = %v", r.stdin)
+	}
+	if len(r.calls) != 1 || strings.Contains(strings.Join(r.calls[0], " "), "hunter2") || r.calls[0][len(r.calls[0])-1] != "Return" {
+		t.Errorf("calls = %v", r.calls)
+	}
+	// Without Enter nothing else runs.
+	r = &inputRunner{}
+	if err := TypeSecret(context.Background(), r, "k", "x", false); err != nil || len(r.calls) != 0 {
+		t.Errorf("no Enter: %v %v", err, r.calls)
+	}
+	// A failure does not carry the text; a runner without an input is refused, not trusted with it.
+	r = &inputRunner{err: errors.New("exec failed for hunter2")}
+	if err := TypeSecret(context.Background(), r, "k", "hunter2", false); err == nil || strings.Contains(err.Error(), "hunter2") {
+		t.Errorf("failure = %v", err)
+	}
+	if err := TypeSecret(context.Background(), &fakeRunner{}, "k", "hunter2", false); err == nil {
+		t.Error("a runner with no input was used")
+	}
+}

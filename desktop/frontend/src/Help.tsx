@@ -31,6 +31,8 @@ export default function HelpModal({
   const [text, setText] = useState("");
   const [secret, setSecret] = useState(false);
   const [enter, setEnter] = useState(false);
+  // save keeps the secret in the vault under a name, for this kitty, to type it again unasked.
+  const [save, setSave] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   useEffect(() => {
@@ -52,7 +54,12 @@ export default function HelpModal({
     setBusy(true);
     setErr("");
     try {
-      await api.answerHelp(chat, turn, { text, secret, enter: secret && enter });
+      await api.answerHelp(chat, turn, {
+        text,
+        secret,
+        enter: secret && enter,
+        save: secret ? save.trim() : "",
+      });
       onClose();
     } catch (e) {
       setErr(errText(e));
@@ -103,14 +110,27 @@ export default function HelpModal({
           })}
         </label>
         {secret && (
-          <label class="flex items-center gap-2 text-xs text-[var(--t3)] mt-1">
+          <>
+            <label class="flex items-center gap-2 text-xs text-[var(--t3)] mt-1">
+              <input
+                type="checkbox"
+                checked={enter}
+                onChange={(e) => setEnter((e.target as HTMLInputElement).checked)}
+              />
+              {t("Press Enter after")}
+            </label>
+            <label class="block text-xs text-[var(--t3)] mt-2" for="help-save">
+              {t("Keep it for {name} under the name (optional)", { name: kitty.name })}
+            </label>
             <input
-              type="checkbox"
-              checked={enter}
-              onChange={(e) => setEnter((e.target as HTMLInputElement).checked)}
+              id="help-save"
+              class="w-full px-3 py-2 text-sm mt-1"
+              value={save}
+              placeholder={t("Shop password")}
+              onInput={(e) => setSave((e.target as HTMLInputElement).value)}
+              data-testid="help-save"
             />
-            {t("Press Enter after")}
-          </label>
+          </>
         )}
         {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
         <div class="flex flex-wrap items-center gap-2 mt-4">

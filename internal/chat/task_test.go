@@ -30,8 +30,9 @@ type deskFleet struct {
 	execs   []string
 	shotErr error
 	shots   int
-	ocr     string // what kitty-ocr prints
-	png     []byte // the screenshot, when it has to be a real picture
+	ocr     string   // what kitty-ocr prints
+	inputs  []string // what was given to commands on their input
+	png     []byte   // the screenshot, when it has to be a real picture
 	execErr error
 	block   chan struct{} // when set, Exec waits on it (to test cancel)
 }
@@ -49,6 +50,10 @@ func (d *deskFleet) Exec(ctx context.Context, ref string, argv ...string) (strin
 		return d.ocr, nil
 	}
 	return "ok", d.execErr
+}
+func (d *deskFleet) ExecInput(ctx context.Context, ref, stdin string, argv ...string) (string, error) {
+	d.inputs = append(d.inputs, ref+":"+stdin)
+	return d.Exec(ctx, ref, argv...)
 }
 func (d *deskFleet) Screenshot(context.Context, string) ([]byte, error) {
 	d.shots++

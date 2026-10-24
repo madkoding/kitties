@@ -24,6 +24,7 @@ type fakeContainers struct {
 	running map[string]bool
 	fail    string // the operation that fails
 	execs   []string
+	inputs  []string // what was given on an input
 }
 
 func newFake() *fakeContainers {
@@ -70,6 +71,11 @@ func (f *fakeContainers) Remove(_ context.Context, n string) error {
 func (f *fakeContainers) Exec(_ context.Context, n string, argv ...string) (string, error) {
 	f.execs = append(f.execs, n+":"+strings.Join(argv, " "))
 	return n + ":" + strings.Join(argv, " "), f.op("exec")
+}
+func (f *fakeContainers) ExecInput(_ context.Context, n, stdin string, argv ...string) (string, error) {
+	f.inputs = append(f.inputs, n+":"+stdin)
+	f.execs = append(f.execs, n+":"+strings.Join(argv, " "))
+	return "", f.op("exec")
 }
 func (f *fakeContainers) Stream(context.Context, string, int, int) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("FRAME 3\npng")), nil

@@ -8,6 +8,7 @@ import (
 
 	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/vault"
 )
 
 // WHAT THE PERSON ANSWERS WHEN A KITTY ASKS FOR HELP.
@@ -24,6 +25,9 @@ type HelpAnswer struct {
 	Secret bool
 	// Enter presses Enter after typing it (only with Secret).
 	Enter bool
+	// Save keeps the secret in the vault under this name, for the kitty that asked, so it can type
+	// it again when it needs it without asking (only with Secret).
+	Save string
 }
 
 // maxHelpText is the longest answer.
@@ -81,20 +85,49 @@ func (s *Service) applyHelp(ctx context.Context, id string, index int, k *kitty.
 		s.appendStep(id, index, Step{At: s.now(), Action: "helped", Args: map[string]any{"told": true}, Result: a.Text})
 		return "the person answered: " + a.Text + "\nLook at the screenshot and continue."
 	}
-	s.appendStep(id, index, Step{At: s.now(), Action: "helped", Args: map[string]any{"secret": true}, Result: "typed on its desktop"})
-	runner := s.runner()
-	if runner == nil {
-		return "the person has a secret for you but your desktop cannot be typed on from here"
+	step := Step{At: s.now(), Action: "helped", Args: map[string]any{"secret": true}, Result: "typed on its desktop"}
+	if a.Save != "" && s.vault != nil {
+		if err := s.vault.Put(a.Save, a.Text, []string{k.ID}); err != nil {
+			step.Error = "it was not saved: " + err.Error()
+		} else {
+			step.Args["saved"] = a.Save
+		}
 	}
-	argv, err := desktop.Person(desktop.Action{Name: "type", Args: map[string]any{"text": a.Text}})
-	if err == nil {
-		_, err = runner.Exec(ctx, k.ID, argv...)
-	}
-	if err == nil && a.Enter {
-		_, err = runner.Exec(ctx, k.ID, "xdotool", "key", "--", "Return")
-	}
-	if err != nil {
+	s.appendStep(id, index, step)
+	if err := desktop.TypeSecret(ctx, s.runner(), k.ID, a.Text, a.Enter); err != nil {
 		return "the person tried to type it on your desktop and it failed: " + err.Error()
 	}
 	return "the person typed what you asked for on your desktop (you are not shown it, and must not ask for it again). Look at the screenshot and continue."
+}
+
+// SetVault gives the chats the vault of the secrets a kitty may type without reading them.
+func (s *Service) SetVault(v *vault.Store) { s.vault = v }
+
+// typeSecret is a kitty typing a secret the person saved for it, by name: it goes from the vault
+// to the keyboard, and neither the kitty nor its model, the chat's steps or the logs ever hold it.
+func (s *Service) typeSecret(ctx context.Context, id string, index int, k *kitty.Kitty, a action) outcome {
+	name := strings.TrimSpace(argText(a.args, "name", "text"))
+	if s.vault == nil {
+		return outcome{action: a, err: "there are no saved secrets here: ask the person with ask_help"}
+	}
+	text, err := s.vault.Get(name, k.ID)
+	if err != nil {
+		msg := err.Error()
+		if names := s.vault.Names(k.ID); len(names) > 0 {
+			msg += "; the ones you may use: " + strings.Join(names, ", ")
+		} else {
+			msg += "; none is saved for you: ask the person with ask_help"
+		}
+		return outcome{action: a, err: msg}
+	}
+	s.waitWhileHeld(ctx, id, index, k.ID)
+	enter, _ := a.args["enter"].(bool)
+	step := Step{At: s.now(), Action: "type_secret", Args: map[string]any{"name": name}, Result: "typed"}
+	o := outcome{action: a, text: "typed the secret " + name + " (you are not shown it)"}
+	if err := desktop.TypeSecret(ctx, s.runner(), k.ID, text, enter); err != nil {
+		step.Result, step.Error = "", err.Error()
+		o = outcome{action: a, err: err.Error()}
+	}
+	s.appendStep(id, index, step)
+	return o
 }

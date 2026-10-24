@@ -326,6 +326,12 @@ func (d *Desktop) Exec(_ context.Context, name string, argv ...string) (string, 
 	}
 }
 
+// ExecInput implements orchestrator.Containers: the demo types nothing, so the text only has to
+// reach no command line.
+func (d *Desktop) ExecInput(ctx context.Context, name, _ string, argv ...string) (string, error) {
+	return d.Exec(ctx, name, argv...)
+}
+
 // Screenshot implements orchestrator.Containers: a drawing of a browser window.
 func (d *Desktop) Screenshot(_ context.Context, name string) ([]byte, error) {
 	d.mu.Lock()

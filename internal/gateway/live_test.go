@@ -12,10 +12,14 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
+	"github.com/madkoding/kitties/internal/chat"
+	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/rects"
+	"github.com/madkoding/kitties/internal/vault"
 )
 
 // The display as motion JPEG: each picture a part, with its type; the clipboard both ways.
@@ -148,5 +152,65 @@ func TestLiveRects(t *testing.T) {
 	}
 	if code, _, _ := call(t, srv, "GET", "/v1/kitties/ana/rects", "", nil); code != 401 {
 		t.Errorf("no token = %d", code)
+	}
+}
+
+// The saved secrets: names and who may use them, never a value.
+func TestVaultRoutes(t *testing.T) {
+	srv, _, _ := setup(t)
+	if code, _, _ := call(t, srv, "GET", "/v1/vault", "tok", nil); code != 404 {
+		t.Fatalf("no vault = %d", code)
+	}
+	for _, c := range []struct{ method, path string }{{"PUT", "/v1/vault/x"}, {"DELETE", "/v1/vault/x"}} {
+		if code, _, _ := call(t, srv, c.method, c.path, "tok", map[string]any{}); code != 404 {
+			t.Errorf("%s without a vault = %d", c.method, code)
+		}
+	}
+	v, err := vault.Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": {ID: "a1", Name: "ana", Status: kitty.StatusRunning}}}
+	srv = httptest.NewServer(New(f, &fakeChats{sessions: map[string]*chat.Session{}}, "tok", "test").WithVault(v))
+	t.Cleanup(srv.Close)
+	code, m, _ := call(t, srv, "PUT", "/v1/vault/Shop%20password", "tok", map[string]any{"value": "hunter2", "kitties": []string{"ana"}})
+	if code != 200 {
+		t.Fatalf("save = %d %v", code, m)
+	}
+	if _, err := v.Get("shop password", "a1"); err != nil {
+		t.Errorf("the kitty ana (a1) may not use it: %v", err)
+	}
+	// The list has names and kitties, no values.
+	code, m, raw := call(t, srv, "GET", "/v1/vault", "tok", nil)
+	if code != 200 || strings.Contains(string(raw), "hunter2") || len(m["secrets"].([]any)) != 1 {
+		t.Errorf("list = %d %s", code, raw)
+	}
+	// Without a value only who may use it changes; a kitty that is not there, a bad name or value are refused.
+	if code, _, _ := call(t, srv, "PUT", "/v1/vault/Shop%20password", "tok", map[string]any{"kitties": []string{}}); code != 200 {
+		t.Errorf("change kitties = %d", code)
+	}
+	if _, err := v.Get("shop password", "a1"); err == nil {
+		t.Error("the kitty still may use it")
+	}
+	for _, c := range []struct {
+		path string
+		body any
+		want int
+	}{
+		{"/v1/vault/Shop%20password", map[string]any{"kitties": []string{"zz"}}, 404},
+		{"/v1/vault/missing", map[string]any{"kitties": []string{}}, 404},
+		{"/v1/vault/x", map[string]any{"value": "v", "kitties": []string{"ana"}}, 200},
+		{"/v1/vault/" + strings.Repeat("n", 70), map[string]any{"value": "v"}, 400},
+		{"/v1/vault/x", "{not json", 400},
+	} {
+		if code, _, _ := call(t, srv, "PUT", c.path, "tok", c.body); code != c.want {
+			t.Errorf("PUT %s %v = %d, want %d", c.path, c.body, code, c.want)
+		}
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/vault/x", "tok", nil); code != 200 {
+		t.Error("delete")
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/vault/x", "tok", nil); code != 404 {
+		t.Error("delete unknown")
 	}
 }

@@ -180,6 +180,8 @@ jobs:
           docker exec kitty-ci sh -c 'pgrep -x icewm && pgrep -x pcmanfm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/icewm/themes/ceres-pro/default.theme && grep -q ceres-pro ~/.icewm/theme && test -f /usr/share/icons/Haiku/index.theme && test -f /usr/share/backgrounds/kitties/wallpaper.jpg'
           # Reading the screen (OCR) runs and prints lines of "x,y<TAB>text".
           docker exec kitty-ci kitty-ocr | awk -F'\t' 'NF && $1 !~ /^[0-9]+,[0-9]+$/ { bad = 1 } END { exit bad }'
+          # Text for the keyboard (a secret) goes in on the input and is typed.
+          printf 'x' | docker exec -i kitty-ci xdotool type --delay 20 --file -
           # A page is read and acted on from the inside, through the browser's DevTools port.
           docker exec kitty-ci sh -c 'printf "<title>ci page</title><button onclick=\"document.title=1\">Go</button>" > /tmp/p.html && kitty-open file:///tmp/p.html >/dev/null && sleep 5 && kitty-page read | grep -q "ci page" && kitty-page click --text Go && sleep 1 && kitty-page read | grep -q "^title: 1"'
           # The live stream sends pictures, and ends when its input closes.

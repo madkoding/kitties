@@ -35,6 +35,8 @@ type Containers interface {
 	Stop(ctx context.Context, name string) error
 	Remove(ctx context.Context, name string) error
 	Exec(ctx context.Context, name string, argv ...string) (string, error)
+	// ExecInput is Exec with text on the command's input, for what must not show in its arguments.
+	ExecInput(ctx context.Context, name, stdin string, argv ...string) (string, error)
 	Screenshot(ctx context.Context, name string) ([]byte, error)
 	// Stream follows the display: pictures to read with container.ReadFrame, until closed.
 	Stream(ctx context.Context, name string, fps, quality int) (io.ReadCloser, error)
@@ -1012,6 +1014,18 @@ func (m *Manager) Exec(ctx context.Context, ref string, argv ...string) (string,
 		return "", fmt.Errorf("%s has no container", k.Name)
 	}
 	return m.ctr().Exec(ctx, k.Container, argv...)
+}
+
+// ExecInput runs a command in the kitty's container with text on its input.
+func (m *Manager) ExecInput(ctx context.Context, ref, stdin string, argv ...string) (string, error) {
+	k, err := m.Get(ref)
+	if err != nil {
+		return "", err
+	}
+	if !k.Desktop {
+		return "", fmt.Errorf("%s has no container", k.Name)
+	}
+	return m.ctr().ExecInput(ctx, k.Container, stdin, argv...)
 }
 
 // Screenshot captures the kitty's display.

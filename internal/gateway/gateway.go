@@ -122,6 +122,8 @@ type Server struct {
 	agenda Agenda
 	// approver holds actions for the person's yes, nil when none are held.
 	approver Approver
+	// vault holds the secrets the kitties may type, nil when there is none.
+	vault Vault
 	// memories is what the kitties know about the person, nil when they keep none.
 	memories Memories
 	// notifier tests notifications, nil when the gateway sends none.
@@ -229,6 +231,7 @@ func (s *Server) routes() {
 	s.accountRoutes()
 	s.approvalRoutes()
 	s.memoryRoutes()
+	s.vaultRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
@@ -512,7 +515,7 @@ func codeFor(err error) int {
 		strings.Contains(msg, "limits"), strings.HasPrefix(msg, "a limit "), strings.Contains(msg, "not ask or auto"), strings.Contains(msg, "can be for good"), strings.Contains(msg, "always asked"),
 		strings.HasPrefix(msg, "notify."), strings.Contains(msg, "rating is"), strings.Contains(msg, "feedback is for"), strings.Contains(msg, "demand is a level"),
 		strings.Contains(msg, "a note needs"), strings.HasPrefix(msg, "scope "), strings.Contains(msg, "the turn is"),
-		strings.HasPrefix(msg, "there is no "), strings.Contains(msg, "still think with"):
+		strings.HasPrefix(msg, "there is no "), strings.HasPrefix(msg, "a secret"), strings.Contains(msg, "still think with"):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
@@ -935,12 +938,13 @@ func (s *Server) handleHelp(w http.ResponseWriter, r *http.Request) {
 		Text   string `json:"text"`
 		Secret bool   `json:"secret"`
 		Enter  bool   `json:"enter"`
+		Save   string `json:"save"`
 	}
 	if err := decode(r, &body); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.chats.AnswerHelp(r.PathValue("id"), turn, chat.HelpAnswer{Text: body.Text, Secret: body.Secret, Enter: body.Enter}); err != nil {
+	if err := s.chats.AnswerHelp(r.PathValue("id"), turn, chat.HelpAnswer{Text: body.Text, Secret: body.Secret, Enter: body.Enter, Save: body.Save}); err != nil {
 		fail(w, codeFor(err), err)
 		return
 	}

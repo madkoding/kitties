@@ -631,8 +631,22 @@ export const api = {
     request("POST", `/v1/kitties/${ref}/input`, { action, args }),
   // answerHelp is what the person answers a kitty that asked for help: told to it, or (secret)
   // typed on its desktop without showing it.
-  answerHelp: (chat: string, turn: number, a: { text: string; secret: boolean; enter: boolean }) =>
-    request("POST", `/v1/chats/${chat}/turns/${turn}/help`, a),
+  answerHelp: (
+    chat: string,
+    turn: number,
+    a: { text: string; secret: boolean; enter: boolean; save?: string },
+  ) => request("POST", `/v1/chats/${chat}/turns/${turn}/help`, a),
+  // vault lists the secrets a kitty may type (names and kitties, never values); saveSecret saves
+  // one (with a value) or changes who may use it (without).
+  vault: () => request<{ secrets: Secret[] }>("GET", "/v1/vault").then((r) => r.secrets || []),
+  saveSecret: (name: string, body: { value?: string; kitties: string[] }) =>
+    request<{ secrets: Secret[] }>("PUT", `/v1/vault/${encodeURIComponent(name)}`, body).then(
+      (r) => r.secrets || [],
+    ),
+  deleteSecret: (name: string) =>
+    request<{ secrets: Secret[] }>("DELETE", `/v1/vault/${encodeURIComponent(name)}`).then(
+      (r) => r.secrets || [],
+    ),
   // clipboard is the text on a kitty's clipboard; setClipboard gives it the person's.
   clipboard: (ref: string) =>
     request<{ text: string }>("GET", `/v1/kitties/${ref}/clipboard`).then((r) => r.text || ""),
@@ -919,21 +933,77 @@ export function streamDesktop(
   };
 }
 
+// watchRects is rectsDesktop inside Wails: the app's WatchRects emits "kitties:rects:<ref>" events
+// with the display's size and the rectangles as data: URLs, drawn here in the order they came.
+function watchRects(
+  ref: string,
+  on: { size: (w: number, h: number) => void; rects: (list: DesktopRect[]) => void },
+  onError: (why: string) => void,
+): (() => void) | null {
+  const app = window.go?.main?.App as unknown as
+    | {
+        WatchRects?: (ref: string) => Promise<void>;
+        UnwatchRects?: (ref: string) => Promise<void>;
+      }
+    | undefined;
+  const rt = (
+    window as unknown as {
+      runtime?: { EventsOn?: (name: string, cb: (data: unknown) => void) => () => void };
+    }
+  ).runtime;
+  if (!app?.WatchRects || !rt?.EventsOn) {
+    return null;
+  }
+  let ordered: Promise<unknown> = Promise.resolve();
+  const off = rt.EventsOn("kitties:rects:" + ref, (data) => {
+    const d = data as {
+      error?: string;
+      size?: [number, number];
+      rects?: { x: number; y: number; w: number; h: number; data: string }[];
+    };
+    if (d.error) {
+      onError(d.error);
+    } else if (d.size) {
+      const size = d.size;
+      ordered = ordered.then(() => on.size(size[0], size[1]));
+    } else if (d.rects) {
+      const rects = d.rects;
+      ordered = ordered
+        .then(async () => {
+          const list = await Promise.all(
+            rects.map(async (r) => ({ ...r, blob: await (await fetch(r.data)).blob() })),
+          );
+          on.rects(list);
+        })
+        .catch((e) => onError(String(e)));
+    }
+  });
+  void app.WatchRects(ref).catch((e: unknown) => onError(String(e)));
+  return () => {
+    off();
+    void app.UnwatchRects?.(ref);
+  };
+}
+
 // A DesktopRect is a part of the display that changed, and its picture.
+// A Secret is one of the vault: its name and the ids of the kitties that may type it.
+export type Secret = { name: string; kitties: string[]; saved: string };
+
 export type DesktopRect = { x: number; y: number; w: number; h: number; blob: Blob };
 
 // rectsDesktop follows a kitty's display as what changed on it, like VNC: the whole picture
 // first, then only the rectangles that differ from the one before (the gateway's /rects). size
 // says the display's size, and rects the pictures to draw over what is there. It returns the
-// function that stops it, or null where it cannot be had (inside Wails, which gets whole pictures
-// from watchDesktop). onError says why it ended; the caller falls back to streamDesktop.
+// function that stops it, or null where it cannot be had. Inside Wails the page cannot reach the
+// gateway itself: the app reads the stream and hands each update over as runtime events. onError
+// says why it ended (a gateway without /rects answers 404); the caller falls back to streamDesktop.
 export function rectsDesktop(
   ref: string,
   on: { size: (w: number, h: number) => void; rects: (list: DesktopRect[]) => void },
   onError: (why: string) => void,
 ): (() => void) | null {
   if (window.go?.main?.App) {
-    return null;
+    return watchRects(ref, on, onError);
   }
   const stop = new AbortController();
   void (async () => {

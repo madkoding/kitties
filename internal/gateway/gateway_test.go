@@ -341,7 +341,7 @@ func (c *fakeChats) AnswerHelp(id string, turn int, a chat.HelpAnswer) error {
 	case a.Text == "twice":
 		return errors.New("the kitty already has an answer")
 	}
-	c.helped = append(c.helped, fmt.Sprintf("%d:%s:%v:%v", turn, a.Text, a.Secret, a.Enter))
+	c.helped = append(c.helped, fmt.Sprintf("%d:%s:%v:%v:%s", turn, a.Text, a.Secret, a.Enter, a.Save))
 	return nil
 }
 func (c *fakeChats) Replay(id string, turn int) ([]byte, error) {
@@ -631,7 +631,7 @@ func TestChatRoutes(t *testing.T) {
 		t.Error("shot unknown")
 	}
 	help := func(path string, body any) int { code, _, _ := call(t, srv, "POST", path, "tok", body); return code }
-	if code := help("/v1/chats/c1/turns/1/help", map[string]any{"text": "4821", "secret": true, "enter": true}); code != 200 || len(c.helped) != 1 || c.helped[0] != "1:4821:true:true" {
+	if code := help("/v1/chats/c1/turns/1/help", map[string]any{"text": "4821", "secret": true, "enter": true, "save": "Bank code"}); code != 200 || len(c.helped) != 1 || c.helped[0] != "1:4821:true:true:Bank code" {
 		t.Errorf("help = %d %v", code, c.helped)
 	}
 	for path, want := range map[string]int{"/v1/chats/zz/turns/1/help": 404, "/v1/chats/c1/turns/x/help": 400} {
