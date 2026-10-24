@@ -119,6 +119,18 @@ function StepRow({
   );
 }
 
+function isSafeReplaySrc(src: string): boolean {
+  if (src.startsWith("data:image/")) {
+    return true;
+  }
+  try {
+    const u = new URL(src, location.href);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 // ReplayButtons make a task's screenshots into an animated GIF the person can watch and keep.
 function ReplayButtons({
   chat,
@@ -136,6 +148,9 @@ function ReplayButtons({
     setErr("");
     try {
       const src = await shotData(`/v1/chats/${chat}/turns/${index}/replay.gif`, "image/gif");
+      if (!isSafeReplaySrc(src)) {
+        throw new Error("unsafe replay source");
+      }
       if (what === "watch") {
         onOpen(src);
       } else {
