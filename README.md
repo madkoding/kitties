@@ -581,6 +581,17 @@ the patch, a breaking change (`feat!:` or a `BREAKING CHANGE:` footer) the major
 it is 0.x); `docs`, `ci`, `chore`, `test`, `style`, `build` and `refactor` alone make no release.
 It tags the commit and runs CI on the tag, which publishes the release. A tag pushed by hand
 still releases as before.
+## Credits
+
+What the kitty's desktop is made of:
+
++ **Wallpaper**: Kitties' own picture (a cat looking out over a night city), `docker/kitty-desktop/wallpaper/wallpaper.jpg`. *Author and source: to be confirmed.*
++ **GTK Theme**: Adwaita dark, by the GNOME project (Debian's `gnome-themes-extra`; `GTK_THEME=Adwaita:dark`)
++ **Window Theme**: [Numix](https://github.com/numixproject/numix-gtk-theme) by The Numix Project (GPL-3.0+), with [Greybird-dark](https://github.com/shimmerproject/Greybird) by the Shimmer Project (GPL-2.0+ or CC-BY-SA-3.0+) as the alternative; only their Openbox themes are kept, with their licences
++ **Icon Theme**: [Lucide](https://lucide.dev) by the Lucide contributors (ISC), drawn as gradient squares by app group
++ **Fonts**: [Sansation](https://www.dafont.com/sansation.font) by Bernd Montag (freeware) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) patched with [Nerd Fonts](https://www.nerdfonts.com/) by Ryan L McIntyre
++ **Other**: [Openbox](https://github.com/madkoding/openbox), a fork with the shelf (dock, player, weather and clock), and [Mousepad](https://docs.xfce.org/apps/mousepad/start), PCManFM, [Chromium](https://www.chromium.org/), [LibreOffice](https://www.libreoffice.org/) and [Inkscape](https://inkscape.org/) from Debian
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design in more depth.
 
 Free software under [GPL-3.0-or-later](LICENSE) · © 2026 madkoding
