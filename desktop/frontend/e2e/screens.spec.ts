@@ -1121,6 +1121,11 @@ test("every dialog closes: its X, Escape or the backdrop, and the address forget
     await expect(page).toHaveURL(new RegExp(`${chatHash}$`));
     await expect(page.locator(".msg").first()).toBeVisible();
     await page.reload();
+    // Wait for the page to be up before looking at it (and before the next route is typed): a
+    // dialog count of 0 is also true of a page that has not drawn yet, and a hash changed before
+    // the app listens for it opens nothing.
+    await expect(kittyRow(page, "mimi")).toBeAttached();
+    await expect(page.locator(".msg").first()).toBeVisible();
     await expect(dialog).toHaveCount(0);
   }
   // A kitty's drawer goes back to the chat it was opened from.
