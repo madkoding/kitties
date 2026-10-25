@@ -97,7 +97,8 @@ def sheet_html(entries, groups):
         out.append(f"<h2>{group}</h2><div class=row>")
         for name, _, scalable, small, lucide in items:
             sizes = "".join(f'<img src="{small if px <= 24 else scalable}" width={px} height={px}>' for px in (16, 24, 32, 48))
-            out.append(f'<div class=i><div class=px>{sizes}</div>{html.escape(name.split('/')[1])}</div>')
+            label = html.escape(name.split("/")[1])
+            out.append(f"<div class=i><div class=px>{sizes}</div>{label}</div>")
         out.append("</div>")
     return "\n".join(out)
 
