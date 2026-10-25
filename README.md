@@ -304,7 +304,7 @@ connectors:
   (chat completions, responses, Anthropic messages, Gemini), with retries. Profiles are named in
   the configuration and each kitty picks one.
 - **Containers** (`internal/container`): one container per kitty from `docker/kitty-desktop`
-  (Debian, Xvfb, the Openbox desktop with its shelf (a dock of pinned and open apps, and a clock), Chromium, a terminal, LibreOffice, Inkscape,
+  (Debian, Xvfb, the Openbox desktop with its shelf (a dock of pinned and open apps, a player, the weather and a clock), Chromium, a terminal, LibreOffice, Inkscape,
   xdotool, wmctrl, scrot). Openbox ([madkoding/openbox](https://github.com/madkoding/openbox), built at a fixed commit) wears the dark [Numix](https://github.com/numixproject/numix-gtk-theme) (GPL-3, by the Numix project; its licence in `/usr/share/doc/numix-gtk-theme`) from Debian
   (or Greybird-dark, picked in the drawer) in Kitties' own fonts:
   Sansation for the windows and the shelf, JetBrains Mono for the terminal. PCManFM draws the
