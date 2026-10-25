@@ -1,0 +1,7 @@
+[Desktop Entry]
+Type=Application
+Name=Writer
+Comment=Documents
+Exec=soffice --writer
+Icon=libreoffice-writer
+Terminal=false

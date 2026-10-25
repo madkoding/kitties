@@ -14,16 +14,16 @@ for _ in $(seq 1 50); do
     fi
     sleep 0.1
 done
-# The desktop: IceWM with the dark Ceres Pro theme and its taskbar (Chromium, a terminal and the
-# files on it), and the terminal in Kitties' colours.
+# The desktop: Openbox with the shelf (the pinned apps, the open windows and the clock) in the dark
+# Ceres Pro theme, and the terminal in Kitties' colours. Its autostart brings up PCManFM, which
+# draws the wallpaper and the icons on it.
 xrdb -nocpp -merge "$HOME/.Xresources" 2>/dev/null || true
 # The theme picked for this kitty, kept in its workspace (kitty-theme).
 if [ -s "$HOME/work/.desktop/theme" ]; then
-    printf 'Theme="%s/default.theme"\n' "$(head -n 1 "$HOME/work/.desktop/theme" | tr -cd 'A-Za-z0-9@._-')" >"$HOME/.icewm/theme"
+    theme="$(head -n 1 "$HOME/work/.desktop/theme" | tr -cd 'A-Za-z0-9@._-')"
+    sed -i "s|<name>[A-Za-z0-9@._-]*</name>\(<!--theme-->\)|<name>$theme</name>\1|" "$HOME/.config/openbox/rc.xml"
 fi
-icewm-session >/tmp/icewm.log 2>&1 &
-# The wallpaper and the icons on it (PCManFM draws them over IceWM's background).
-pcmanfm --desktop >/tmp/pcmanfm.log 2>&1 &
+openbox-session >/tmp/openbox.log 2>&1 &
 # The programs the kitty installed come back on a container made anew (they are listed in its
 # workspace, which outlives the container).
 if [ -s "$HOME/work/.desktop/packages" ]; then
