@@ -32,6 +32,8 @@ jobs:
         run: make test
       - name: release scripts
         run: scripts/next-version_test.sh
+      - name: release link check
+        run: scripts/check-release-links_test.sh
       - name: coverage gate
         run: make cover
 
@@ -472,6 +474,9 @@ jobs:
         with:
           name: kitties-android-app
           path: dist
+      # A link on the page, the README or the docs to an asset this release lacks would be dead.
+      - name: every download link names an asset of this release
+        run: scripts/check-release-links.sh dist
       - run: cd dist && sha256sum kitties-* > SHA256SUMS
       # What the updater of a gateway looks for: kitties-<os>-<arch> of every system and the signed
       # checksums. The private key is the repository secret KITTIES_SIGNING_KEY (kitties release-key
