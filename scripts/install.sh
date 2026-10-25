@@ -48,7 +48,8 @@ while [ $# -gt 0 ]; do
     esac
 done
 
-[ "$(id -u)" -eq 0 ] || die "run it as root (… | sudo sh)"
+# The service needs root; the binary alone needs only a writable --prefix.
+[ "$SERVICE" -eq 0 ] || [ "$(id -u)" -eq 0 ] || die "run it as root (… | sudo sh), or use --no-service"
 need curl
 need uname
 need sha256sum
