@@ -14,18 +14,18 @@ for _ in $(seq 1 50); do
     fi
     sleep 0.1
 done
-# The desktop: Openbox with the shelf (the pinned apps, the open windows and the clock) in the dark
+# The desktop: Lumen with the shelf (the pinned apps, the open windows and the clock) in the dark
 # Numix theme, and the terminal in Kitties' colours. Its autostart brings up PCManFM, which
 # draws the wallpaper and the icons on it.
 xrdb -nocpp -merge "$HOME/.Xresources" 2>/dev/null || true
 # The theme picked for this kitty, kept in its workspace (kitty-theme).
 if [ -s "$HOME/work/.desktop/theme" ]; then
     theme="$(head -n 1 "$HOME/work/.desktop/theme" | tr -cd 'A-Za-z0-9@._-')"
-    sed -i "s|<name>[A-Za-z0-9@._-]*</name>\(<!--theme-->\)|<name>$theme</name>\1|" "$HOME/.config/openbox/rc.xml"
+    sed -i "s|<name>[A-Za-z0-9@._-]*</name>\(<!--theme-->\)|<name>$theme</name>\1|" "$HOME/.config/lumen/rc.xml"
 fi
 # Under a session bus: the browser announces what it plays there (MPRIS), and the shelf's player
 # island reads it.
-dbus-launch --exit-with-session openbox-session >/tmp/openbox.log 2>&1 &
+dbus-launch --exit-with-session openbox-session >/tmp/lumen.log 2>&1 &
 # The programs the kitty installed come back on a container made anew (they are listed in its
 # workspace, which outlives the container).
 if [ -s "$HOME/work/.desktop/packages" ]; then

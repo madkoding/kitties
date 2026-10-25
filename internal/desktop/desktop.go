@@ -72,7 +72,7 @@ func Catalogue() string {
 		"have changed the display, a screenshot; a batch of only windows, run, install, read_screen or page_read brings " +
 		"none (ask for screenshot or read_screen when you need to look), and you continue. Write `@tool done {\"summary\": \"...\"}` when the task is finished, and write " +
 		"no @tool line at all when you only want to talk. Coordinates are pixels of the 1280x800 display, " +
-		"origin top-left. The display is a desktop with Openbox: a shelf at the bottom (the apps menu at the left " +
+		"origin top-left. The display is a desktop with Lumen (an Openbox fork): a shelf at the bottom (the apps menu at the left " +
 		"of its dock, then Chromium, the files, a terminal, Writer, Calc, Inkscape and a text editor pinned, and the open windows; " +
 		"the clock at the right), a file manager (pcmanfm; /home/kitty/work is your " +
 		"working folder), LibreOffice, Inkscape, Mousepad (text editor) and mtPaint; install what else you need. " +

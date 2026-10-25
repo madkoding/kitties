@@ -6,18 +6,18 @@ it (screenshots, actions, taking control) is in [DESKTOP.md](DESKTOP.md); this p
 desktop itself.
 
 <p align="center">
-<img src="screenshots/desktop-menu.png" alt="The kitty's desktop on Openbox: the apps menu open and the shelf at the bottom" width="100%">
+<img src="screenshots/desktop-menu.png" alt="The kitty's desktop on Lumen: the apps menu open and the shelf at the bottom" width="100%">
 </p>
 
-> The pictures on this page were taken in a test environment (Xvfb with the same Openbox fork,
+> The pictures on this page were taken in a test environment (Xvfb with the same Lumen fork,
 > theme, icons, fonts and configuration as the image, built from `main`), with sample data: the
 > file names, the terminal text, the weather and the track in the player are made up.
 
 ## The shelf
 
-The window manager is [Openbox](https://github.com/madkoding/openbox), a fork that adds a **shelf**
-(off by default upstream; Kitties turns it on in `docker/kitty-desktop/openbox/rc.xml`). The image
-builds the fork at a fixed commit (`OPENBOX_COMMIT` in the Dockerfile): bump that commit to update it.
+The window manager is [Lumen Window Manager](https://github.com/madkoding/lumen-wm), a fork of [Openbox](http://openbox.org) (GPL-2.0+) that adds a **shelf**
+(off by default upstream; Kitties turns it on in `docker/kitty-desktop/lumen/rc.xml`). The image
+builds the fork at a fixed commit (`LUMEN_COMMIT` in the Dockerfile): bump that commit to update it.
 
 <img src="screenshots/desktop-shelf.png" alt="The shelf: the dock with the pinned apps, the player, the weather and the clock with status glyphs" width="100%">
 
@@ -27,7 +27,7 @@ builds the fork at a fixed commit (`OPENBOX_COMMIT` in the Dockerfile): bump tha
   `~/.config/kitties/pins`, which the backup of a kitty's desktop includes, so it survives an update.
 - **Apps menu**: the first button opens the menu below, drawn in the shelf's own dark material with
   rounded corners (`menuRadius`, `menuPadding` in `rc.xml`; the colours are
-  `openbox/menu-style.themerc`, added to both themes).
+  `lumen/menu-style.themerc`, added to both themes).
 - **Player**: shows what the browser plays (MPRIS on the desktop's session bus) with the cover, title,
   artist and previous / play-pause / next. It hides itself when nothing plays.
 - **Weather**: today and the next two days from [Open-Meteo](https://open-meteo.com) (no key). The place
@@ -36,7 +36,7 @@ builds the fork at a fixed commit (`OPENBOX_COMMIT` in the Dockerfile): bump tha
   itself when there is no answer.
 - **Clock and status**: the time and date, and the glyphs for network, volume, power and battery,
   each opening its own menu. The fork's own documentation has the details of the shelf:
-  [madkoding/openbox](https://github.com/madkoding/openbox).
+  [madkoding/lumen-wm](https://github.com/madkoding/lumen-wm).
 
 ## Theme, fonts and icons
 
@@ -67,6 +67,6 @@ published on the host: the orchestrator reaches a kitty with `docker exec`.
 
 ## Changing it
 
-- The look is files: `openbox/rc.xml` (the shelf, fonts, theme and menus), `openbox/menu.xml`,
-  `openbox/menu-style.themerc`, `lucide/*.map` and `wallpaper/`. `make image` rebuilds the image.
+- The look is files: `lumen/rc.xml` (the shelf, fonts, theme and menus), `lumen/menu.xml`,
+  `lumen/menu-style.themerc`, `lucide/*.map` and `wallpaper/`. `make image` rebuilds the image.
 - Credits for everything in it: [README](../README.md#credits).

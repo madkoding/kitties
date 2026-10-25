@@ -8,7 +8,7 @@
 | [CONFIGURATION.md](CONFIGURATION.md) | The YAML file, the connector catalogue, signing in, subscriptions instead of keys |
 | [AUTONOMY.md](AUTONOMY.md) | Goals, events, limits, recovery, memory, approvals, notifications |
 | [DESKTOP.md](DESKTOP.md) · [es](DESKTOP.es.md) | How a kitty sees and uses its desktop |
-| [KITTY-DESKTOP.md](KITTY-DESKTOP.md) | What the desktop is: Openbox shelf, Numix theme, Lucide icons, what is installed |
+| [KITTY-DESKTOP.md](KITTY-DESKTOP.md) | What the desktop is: Lumen shelf, Numix theme, Lucide icons, what is installed |
 | [API.md](API.md) | The gateway's HTTP API |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The packages and how they fit together |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Build, test, end-to-end run, conventions |

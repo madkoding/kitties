@@ -25,7 +25,7 @@ cd desktop && wails dev   # live reload while working on it
 | ![Google Workspace: sign in with OAuth](screenshots/18-connector-oauth.png) | ![A kitty's own display](screenshots/13-tom-display.png) |
 | ![The library: skills](screenshots/15-library-skills.png) | ![The library: artifacts](screenshots/16-library-artifacts.png) |
 | ![New kitty: pick its pixel cat](screenshots/07-new-kitty.png) | ![Light mode](screenshots/11-light.png) |
-| ![A real kitty's desktop, live: Chromium and a terminal on Openbox](screenshots/48-live-desktop.png) | ![Taking control: a command typed in the kitty's terminal](screenshots/49-live-desktop-control.png) |
+| ![A real kitty's desktop, live: Chromium and a terminal on Lumen](screenshots/48-live-desktop.png) | ![Taking control: a command typed in the kitty's terminal](screenshots/49-live-desktop-control.png) |
 | ![A first run is a checklist](screenshots/31-welcome.png) | ![Adding a model: pick the provider](screenshots/32-pick-provider.png) |
 | ![Adding a model: the key and the suggested model](screenshots/34-add-model.png) | ![A connection and the kitties that may use it](screenshots/33-connection-form.png) |
 | ![A Claude subscription, through Claude Code](screenshots/35-claude-subscription.png) | ![GitHub Copilot: sign in with a code](screenshots/36-copilot-code.png) |

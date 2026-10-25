@@ -115,7 +115,7 @@ func (l Limits) Or(d Limits) Limits {
 // ContainerName is the container a kitty called name runs in.
 func ContainerName(name string) string { return "kitty-" + name }
 
-// Themes are the looks a kitty's desktop can wear: Openbox themes the kitty-desktop image carries.
+// Themes are the looks a kitty's desktop can wear: Openbox-format themes the kitty-desktop image carries.
 var Themes = []string{"Numix", "Greybird-dark"}
 
 // ValidTheme reports whether a theme is one of Themes, or empty (the image's own).

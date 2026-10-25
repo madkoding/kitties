@@ -47,7 +47,7 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
   (chat completions, responses, Anthropic messages, Gemini), with retries. Profiles are named in
   the configuration and each kitty picks one.
 - **Containers** (`internal/container`): one container per kitty from `docker/kitty-desktop`: Debian, Xvfb,
-  the Openbox desktop with its shelf, Chromium, a terminal, LibreOffice, Inkscape and the tools the kitty
+  the Lumen desktop with its shelf, Chromium, a terminal, LibreOffice, Inkscape and the tools the kitty
   acts with. Nothing is published on the host; the orchestrator reaches a kitty with `docker exec`.
   What is in the image and how it looks: [KITTY-DESKTOP.md](KITTY-DESKTOP.md).
 - **Orchestrator** (`internal/orchestrator`): the fleet, persisted in `~/.kitties/kitties.json`.
