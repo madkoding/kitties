@@ -137,7 +137,7 @@ connections (with the kitties that may use each one), notifications and the gate
 A first run is a short checklist: a model, a kitty, a chat.
 
 ```sh
-make frontend     # builds the page (node 22)
+make frontend     # builds the page (node 24)
 make desktop      # wails build, with the Wails CLI installed
 (cd desktop/frontend && npm run icon)   # redraw the app icon and the macOS disk image's background
 cd desktop && wails dev   # live reload while working on it
