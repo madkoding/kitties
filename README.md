@@ -309,8 +309,8 @@ connectors:
   [Ceres](https://codeberg.org/sixsixfive/ceres) themes by sixsixfive (BSD 2-Clause, its licence in `/usr/share/doc/ceres-icewm`) in Kitties' own fonts:
   Sansation for the windows and the taskbar, JetBrains Mono for the terminal. PCManFM draws the
   wallpaper (`docker/kitty-desktop/wallpaper/`) and the icons on it (Work, Chromium, Files,
-  Terminal) and is the file manager, all in [Haiku's icons](https://github.com/darealshinji/haiku-icons)
-  (MIT, Haiku, Inc.; the Haiku logo and leaf, trademarks, are left out). It is dark throughout:
+  Terminal) and is the file manager, all in [Lucide's icons](https://lucide.dev)
+  (ISC, the Lucide Contributors; the notice is in `/usr/share/doc/lucide-icons`). It is dark throughout:
   Chromium (its face, and the pages that offer a dark look), GTK programs, LibreOffice (its page
   too, on screen: a printed or exported document keeps its own colours) and the terminal. Each kitty can wear
   another IceWM theme (the light Ceres, IceWM's own, Windows 95…), picked in its drawer. Nothing is published on the host; the orchestrator reaches a kitty
