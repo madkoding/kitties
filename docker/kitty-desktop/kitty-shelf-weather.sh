@@ -2,8 +2,9 @@
 # What the shelf's weather island shows, from Open-Meteo (no key): the temperature, the sky, then
 # three lines "day|temperature|glyph" (glyph: sun, cloud, cloud-sun, rain, snow, storm, fog).
 # The place is KITTY_WEATHER_PLACE, or the first line of ~/.config/kitties/weather-place (a city
-# name); with neither, where the kitty's address is. Prints nothing when a service does not
-# answer (the island hides). Units: Celsius, or Fahrenheit with KITTY_WEATHER_UNITS=f.
+# name); with neither, it is found by itself: where the kitty's address is, and, when that does
+# not answer, the city of the desktop's time zone (TZ, the host's). Prints nothing when a service
+# does not answer (the island hides). Units: Celsius, or Fahrenheit with KITTY_WEATHER_UNITS=f.
 set -u
 # WMO weather codes: a glyph and a word for each.
 glyph() {
@@ -35,12 +36,17 @@ get() { curl -fsS -m 10 "$1" 2>/dev/null; }
 place="${KITTY_WEATHER_PLACE:-}"
 [ -n "$place" ] || place="$(head -n 1 "$HOME/.config/kitties/weather-place" 2>/dev/null)"
 place="$(printf '%s' "$place" | tr -cd 'A-Za-z0-9 ,._-' | sed 's/ /%20/g')"
-if [ -n "$place" ]; then
+loc=
+if [ -z "$place" ]; then
+    # Where the address is; the container leaves through the host's, so it is the host's place.
+    loc="$(get "https://ipwho.is/" | jq -r 'select(.success != false) | "\(.latitude) \(.longitude)"' 2>/dev/null)"
+    # Else the city of the time zone: America/Santiago, Santiago.
+    place="$(printf '%s' "${TZ:-}" | sed 's|.*/||; s/_/ /g' | tr -cd 'A-Za-z0-9 ,._-' | sed 's/ /%20/g')"
+fi
+if [ -z "$loc" ] || [ "$loc" = "null null" ]; then
+    [ -n "$place" ] || exit 0
     geo="$(get "https://geocoding-api.open-meteo.com/v1/search?name=${place}&count=1")" || exit 0
     loc="$(printf '%s' "$geo" | jq -r '.results[0] | "\(.latitude) \(.longitude)"' 2>/dev/null)" || exit 0
-else
-    geo="$(get "https://ipwho.is/")" || exit 0
-    loc="$(printf '%s' "$geo" | jq -r '"\(.latitude) \(.longitude)"' 2>/dev/null)" || exit 0
 fi
 # shellcheck disable=SC2086
 set -- $loc

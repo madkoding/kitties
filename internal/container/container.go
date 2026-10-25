@@ -185,8 +185,44 @@ func (s Spec) Args() []string {
 	for _, k := range keys {
 		args = append(args, "-e", k+"="+s.Env[k])
 	}
+	// The desktop keeps the host's time zone (the clock, and where the weather island looks
+	// when it is not told a city), unless the spec sets its own.
+	if _, own := s.Env["TZ"]; !own {
+		if tz := HostTimezone(); tz != "" {
+			args = append(args, "-e", "TZ="+tz)
+		}
+	}
 	args = append(args, "-e", "KITTY_NAME="+s.KittyName, "-e", "DISPLAY="+Display)
 	return append(args, s.Image)
+}
+
+// zoneName matches an IANA time zone name such as America/Santiago or UTC.
+var zoneName = regexp.MustCompile(`^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$`)
+
+// HostTimezone is the IANA name of the host's time zone: $TZ, /etc/timezone, or where
+// /etc/localtime points (Linux and macOS); empty when it cannot be told.
+func HostTimezone() string {
+	ok := func(z string) string {
+		z = strings.TrimPrefix(strings.TrimSpace(z), ":")
+		if zoneName.MatchString(z) {
+			return z
+		}
+		return ""
+	}
+	if z := ok(os.Getenv("TZ")); z != "" {
+		return z
+	}
+	if b, err := os.ReadFile("/etc/timezone"); err == nil {
+		if z := ok(string(b)); z != "" {
+			return z
+		}
+	}
+	if link, err := os.Readlink("/etc/localtime"); err == nil {
+		if _, after, found := strings.Cut(link, "zoneinfo/"); found {
+			return ok(after)
+		}
+	}
+	return ""
 }
 
 // Manager starts and stops containers with one runtime.

@@ -81,7 +81,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         inkscape imagemagick mtpaint mousepad \
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
         libx11-6 libxext6 libjpeg62-turbo \
-        tini procps \
+        tini procps tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
     && mkdir -p /home/kitty/work && chown -R kitty:kitty /home/kitty \
