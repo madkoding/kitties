@@ -18,14 +18,14 @@ flowchart LR
     box -->|captura con scrot| gw
     subgraph box ["El contenedor del kitty (kitty-desktop)"]
         direction TB
-        x["Pantalla Xvfb 1280×800"] --- wm["Openbox: ventanas y shelf"]
+        x["Pantalla Xvfb 1280×800"] --- wm["Lumen: ventanas y shelf"]
         wm --- apps["Chromium · terminal · archivos · LibreOffice · Inkscape"]
     end
     you -.->|"vista en vivo y<br/>Tomar el control"| gw
 ```
 
 - **El computador.** Un contenedor por kitty, de la imagen `kitty-desktop`: una pantalla virtual
-  (Xvfb) con un escritorio real (Openbox, Chromium, terminal, PCManFM, LibreOffice, Inkscape). No
+  (Xvfb) con un escritorio real (Lumen, Chromium, terminal, PCManFM, LibreOffice, Inkscape). No
   publica ningún puerto: el gateway entra solo con `docker exec`. Su carpeta de trabajo vive en el
   equipo anfitrión, así que sus archivos sobreviven al contenedor.
 - **Los ojos.** El gateway saca una captura de la pantalla y se la entrega al modelo, que puede

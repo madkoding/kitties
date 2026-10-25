@@ -18,14 +18,14 @@ flowchart LR
     box -->|scrot screenshot| gw
     subgraph box ["The kitty's container (kitty-desktop)"]
         direction TB
-        x["Xvfb display 1280×800"] --- wm["Openbox: windows and shelf"]
+        x["Xvfb display 1280×800"] --- wm["Lumen: windows and shelf"]
         wm --- apps["Chromium · terminal · files · LibreOffice · Inkscape"]
     end
     you -.->|"live view and<br/>Take control"| gw
 ```
 
 - **The computer.** One container per kitty, from the `kitty-desktop` image: a virtual display
-  (Xvfb) with a real desktop on it (Openbox, Chromium, a terminal, PCManFM, LibreOffice, Inkscape).
+  (Xvfb) with a real desktop on it (Lumen, Chromium, a terminal, PCManFM, LibreOffice, Inkscape).
   It publishes no port: the gateway reaches it with `docker exec` only. Its work folder lives on the
   host, so its files outlive the container.
 - **The eyes.** The gateway takes a screenshot of the display and hands it to the model, which

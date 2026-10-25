@@ -22,7 +22,7 @@ export interface Kitty {
   // approvals is "ask" (the default: an action that reaches other people waits for a yes until
   // the kitty is trusted with it) or "auto".
   approvals?: "ask" | "auto" | "";
-  // theme is the look of its desktop (an Openbox theme); empty is the image's own, Numix (dark).
+  // theme is the look of its desktop (a Lumen (Openbox) theme); empty is the image's own, Numix (dark).
   theme?: string;
 }
 

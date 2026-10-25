@@ -1,6 +1,6 @@
 # kitty-desktop: the body of a kitty.
 #
-# A desktop on a headless X display (Xvfb) with the Openbox window manager (madkoding/openbox,
+# A desktop on a headless X display (Xvfb) with the Lumen window manager (madkoding/lumen-wm,
 # with its shelf: a dock of pinned and open apps and a clock) in the dark Numix theme and
 # Kitties' fonts: windows to move, focus and close, and PCManFM for the desktop's wallpaper and
 # icons and as the file manager. The
@@ -13,17 +13,17 @@
 #
 #   docker build -t ghcr.io/madkoding/kitty-desktop:latest docker/kitty-desktop
 
-# Openbox with the shelf, from the fork at a fixed commit (a commit is its own checksum).
-FROM debian:bookworm-slim AS openbox
-ARG OPENBOX_COMMIT=737b94ff821f0f8148e3d81fc4970428baa4f4cb
+# Lumen (the Openbox fork) with the shelf, at a fixed commit (a commit is its own checksum).
+FROM debian:bookworm-slim AS lumen
+ARG LUMEN_COMMIT=91d71aa172c65dd427c752dcfb70860024a5b242
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf \
         automake libtool pkg-config gettext autopoint libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev \
         libx11-dev libxft-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev \
         libimlib2-dev \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fsSL -o /tmp/openbox.tar.gz "https://github.com/madkoding/openbox/archive/${OPENBOX_COMMIT}.tar.gz" \
-    && mkdir /tmp/openbox && tar xzf /tmp/openbox.tar.gz -C /tmp/openbox --strip-components=1 \
-    && cd /tmp/openbox && ./bootstrap && ./configure --prefix=/usr --sysconfdir=/etc --disable-nls \
+RUN curl -fsSL -o /tmp/lumen.tar.gz "https://github.com/madkoding/lumen-wm/archive/${LUMEN_COMMIT}.tar.gz" \
+    && mkdir /tmp/lumen && tar xzf /tmp/lumen.tar.gz -C /tmp/lumen --strip-components=1 \
+    && cd /tmp/lumen && ./bootstrap && ./configure --prefix=/usr --sysconfdir=/etc --disable-nls \
     && make -j"$(nproc)" && make DESTDIR=/out install
 
 # The window theme, Numix (GPL-3) and the dark Greybird (GPL-2+ or CC-BY-SA-3.0+) from Debian: only
@@ -44,7 +44,7 @@ RUN mkdir -p /out/themes/Numix /out/themes/Greybird-dark /out/doc/numix /out/doc
     && cp /usr/share/doc/numix-gtk-theme/copyright /out/doc/numix/ \
     && cp /usr/share/doc/greybird-gtk-theme/copyright /out/doc/greybird/
 # the menus wear the shelf's dark material, in both themes
-COPY openbox/menu-style.themerc /tmp/menu-style.themerc
+COPY lumen/menu-style.themerc /tmp/menu-style.themerc
 RUN cat /tmp/menu-style.themerc >> /out/themes/Numix/openbox-3/themerc \
     && cat /tmp/menu-style.themerc >> /out/themes/Greybird-dark/openbox-3/themerc
 COPY fonts/ /tmp/fonts/
@@ -92,7 +92,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && echo 'kitty ALL=(root) NOPASSWD: /usr/local/sbin/kitty-apt' > /etc/sudoers.d/kitty \
     && chmod 440 /etc/sudoers.d/kitty
 
-COPY --from=openbox /out/ /
+COPY --from=lumen /out/ /
 RUN ldconfig
 COPY --from=extras /out/themes/ /usr/share/themes/
 COPY --from=extras /out/doc/numix/ /usr/share/doc/numix-gtk-theme/
@@ -127,7 +127,7 @@ COPY --chmod=755 kitty-clip.sh /usr/local/bin/kitty-clip
 COPY --chmod=755 kitty-theme.sh /usr/local/bin/kitty-theme
 COPY --chmod=755 kitty-shelf-media.sh /usr/local/bin/kitty-shelf-media
 COPY --chmod=755 kitty-shelf-weather.sh /usr/local/bin/kitty-shelf-weather
-COPY --chown=kitty:kitty openbox/rc.xml openbox/menu.xml openbox/autostart /home/kitty/.config/openbox/
+COPY --chown=kitty:kitty lumen/rc.xml lumen/menu.xml lumen/autostart /home/kitty/.config/lumen/
 # The file manager's settings and the desktop's (wallpaper only).
 COPY --chown=kitty:kitty home/ /home/kitty/
 # An empty desktop: PCManFM draws only the wallpaper, no icons (the shelf has the apps).
