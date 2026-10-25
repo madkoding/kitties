@@ -7,5 +7,5 @@ TaskBarShowAPMStatus=0
 ShowThemesMenu=0
 # The clock without seconds: the picture changes only when something happens.
 TimeFormat="%H:%M"
-# The taskbar and the menus in Haiku's icons too.
-IconThemes="Haiku:Adwaita:hicolor"
+# The taskbar and the menus in Lucide's icons too.
+IconThemes="Lucide:Adwaita:hicolor"

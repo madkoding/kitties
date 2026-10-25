@@ -19,8 +19,9 @@
 FROM debian:bookworm-slim AS extras
 ARG CERES_COMMIT=27318b2a9e9baa3146e3be008782a37c5e6c9886
 ARG CERES_SHA256=4b7967960e50a7a94a0ff2eb969d7fdf11fd34578b395d5eddc8020bc8f41f49
-# Haiku's icons (MIT, Haiku, Inc.), as exported by darealshinji/haiku-icons, at a fixed commit.
-ARG HAIKU_ICONS_COMMIT=ccf434a0cf31aae47cc8aac91934651619c1b9b2
+# Lucide's icons (ISC), from npm (lucide-static) at a fixed version and checksum.
+ARG LUCIDE_VERSION=1.61.0
+ARG LUCIDE_SHA256=62773cd2ee411ad2e37c1973d1e4c4b49f9a6c57da6b5d5d0abca08756ba75f1
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git woff2 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL -o /tmp/ceres.tar.gz "https://codeberg.org/sixsixfive/ceres/archive/${CERES_COMMIT}.tar.gz" \
@@ -31,13 +32,13 @@ RUN curl -fsSL -o /tmp/ceres.tar.gz "https://codeberg.org/sixsixfive/ceres/archi
     && cp /tmp/ceres/LICENSE /out/doc/LICENSE
 COPY fonts/ /tmp/fonts/
 RUN for f in /tmp/fonts/*.woff2; do woff2_decompress "$f"; done && mv /tmp/fonts/*.ttf /out/fonts/
-COPY haiku/ /tmp/haiku/
-RUN git init -q /tmp/haiku-icons \
-    && git -C /tmp/haiku-icons fetch -q --depth 1 https://github.com/darealshinji/haiku-icons "${HAIKU_ICONS_COMMIT}" \
-    && git -C /tmp/haiku-icons checkout -q FETCH_HEAD \
-    && test "$(git -C /tmp/haiku-icons rev-parse HEAD)" = "${HAIKU_ICONS_COMMIT}" \
-    && /tmp/haiku/build-theme.sh /tmp/haiku-icons /out/icons/Haiku \
-    && cp /tmp/haiku-icons/LICENSE /out/doc/HAIKU-ICONS-LICENSE
+COPY lucide/ /tmp/lucide-map/
+RUN mkdir -p /tmp/lucide \
+    && curl -fsSL -o /tmp/lucide.tgz "https://registry.npmjs.org/lucide-static/-/lucide-static-${LUCIDE_VERSION}.tgz" \
+    && echo "${LUCIDE_SHA256}  /tmp/lucide.tgz" | sha256sum -c - \
+    && tar xzf /tmp/lucide.tgz -C /tmp/lucide \
+    && /tmp/lucide-map/build-theme.sh /tmp/lucide/package/icons /out/icons/Lucide \
+    && cp /tmp/lucide/package/LICENSE /out/doc/LUCIDE-LICENSE
 
 # kitty-grab, the live view's capture: C, XShm and libjpeg (see kitty-grab.c).
 FROM debian:bookworm-slim AS grab
@@ -74,8 +75,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 COPY --from=extras /out/themes/ /usr/share/icewm/themes/
 COPY --from=extras /out/doc/LICENSE /usr/share/doc/ceres-icewm/LICENSE
-COPY --from=extras /out/icons/Haiku/ /usr/share/icons/Haiku/
-COPY --from=extras /out/doc/HAIKU-ICONS-LICENSE /usr/share/doc/haiku-icons/LICENSE
+COPY --from=extras /out/icons/Lucide/ /usr/share/icons/Lucide/
+COPY --from=extras /out/doc/LUCIDE-LICENSE /usr/share/doc/lucide-icons/LICENSE
 COPY --from=extras /out/fonts/ /usr/share/fonts/truetype/kitties/
 RUN fc-cache -f
 # The wallpaper: whatever picture is in wallpaper/ (jpg, png or webp), cropped to the display.
