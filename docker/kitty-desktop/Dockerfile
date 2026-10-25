@@ -15,7 +15,7 @@
 
 # Openbox with the shelf, from the fork at a fixed commit (a commit is its own checksum).
 FROM debian:bookworm-slim AS openbox
-ARG OPENBOX_COMMIT=7827c2b9883d4577ff22f0bc7f48311311ab8ffb
+ARG OPENBOX_COMMIT=402b7aae448ab49a7853e76b61f2ad9b52c2699e
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf \
         automake libtool pkg-config gettext autopoint libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev \
         libx11-dev libxft-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev \
@@ -72,7 +72,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip \
-        xterm sudo pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
+        xterm sudo playerctl dbus-x11 pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
         libglib2.0-0 libxml2 libpango-1.0-0 libpangocairo-1.0-0 libpangoxft-1.0-0 libcairo2 libxft2 libxrandr2 libxinerama1 \
         libxcursor1 libxi6 libsm6 librsvg2-2 libimlib2 \
         chromium fonts-dejavu fonts-noto-color-emoji \
@@ -121,6 +121,8 @@ COPY --chmod=755 kitty-stream.sh /usr/local/bin/kitty-stream
 COPY --from=grab --chmod=755 /kitty-grab /usr/local/bin/kitty-grab
 COPY --chmod=755 kitty-clip.sh /usr/local/bin/kitty-clip
 COPY --chmod=755 kitty-theme.sh /usr/local/bin/kitty-theme
+COPY --chmod=755 kitty-shelf-media.sh /usr/local/bin/kitty-shelf-media
+COPY --chmod=755 kitty-shelf-weather.sh /usr/local/bin/kitty-shelf-weather
 COPY --chown=kitty:kitty openbox/rc.xml openbox/menu.xml openbox/autostart /home/kitty/.config/openbox/
 # The file manager's settings and the desktop's (wallpaper only).
 COPY --chown=kitty:kitty home/ /home/kitty/

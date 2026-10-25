@@ -220,6 +220,22 @@
       <class>Inkscape</class>
     </pin>
   </pins>
+  <!-- The islands between the dock and the clock. The player shows what the browser plays (MPRIS,
+       on the desktop's session bus): cover, title, artist and the previous, play/pause and next
+       buttons. The weather is wttr.in's, for the place of the kitty's address (or the city in
+       KITTY_WEATHER_PLACE, Fahrenheit with KITTY_WEATHER_UNITS=f). Each hides itself when its
+       command prints nothing. -->
+  <media>
+    <command>kitty-shelf-media</command>
+    <previous>playerctl previous</previous>
+    <toggle>playerctl play-pause</toggle>
+    <next>playerctl next</next>
+    <interval>3</interval>
+  </media>
+  <weather>
+    <command>kitty-shelf-weather</command>
+    <interval>900</interval>
+  </weather>
 </shelf>
 
 <dock>

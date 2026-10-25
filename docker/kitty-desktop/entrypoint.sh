@@ -23,7 +23,9 @@ if [ -s "$HOME/work/.desktop/theme" ]; then
     theme="$(head -n 1 "$HOME/work/.desktop/theme" | tr -cd 'A-Za-z0-9@._-')"
     sed -i "s|<name>[A-Za-z0-9@._-]*</name>\(<!--theme-->\)|<name>$theme</name>\1|" "$HOME/.config/openbox/rc.xml"
 fi
-openbox-session >/tmp/openbox.log 2>&1 &
+# Under a session bus: the browser announces what it plays there (MPRIS), and the shelf's player
+# island reads it.
+dbus-launch --exit-with-session openbox-session >/tmp/openbox.log 2>&1 &
 # The programs the kitty installed come back on a container made anew (they are listed in its
 # workspace, which outlives the container).
 if [ -s "$HOME/work/.desktop/packages" ]; then
