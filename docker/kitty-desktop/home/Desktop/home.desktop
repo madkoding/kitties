@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Home
-Comment=The home folder
-Exec=pcmanfm /home/kitty
-Icon=user-home
-Terminal=false

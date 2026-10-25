@@ -125,9 +125,10 @@ COPY --from=grab --chmod=755 /kitty-grab /usr/local/bin/kitty-grab
 COPY --chmod=755 kitty-clip.sh /usr/local/bin/kitty-clip
 COPY --chmod=755 kitty-theme.sh /usr/local/bin/kitty-theme
 COPY --chown=kitty:kitty openbox/rc.xml openbox/menu.xml openbox/autostart /home/kitty/.config/openbox/
-# The desktop's icons and the file manager's settings; the work folder is on the desktop too.
+# The file manager's settings and the desktop's (wallpaper only).
 COPY --chown=kitty:kitty home/ /home/kitty/
-RUN ln -s /home/kitty/work /home/kitty/Desktop/Work && chown -h kitty:kitty /home/kitty/Desktop/Work
+# An empty desktop: PCManFM draws only the wallpaper, no icons (the shelf has the apps).
+RUN mkdir -p /home/kitty/Desktop && chown kitty:kitty /home/kitty/Desktop
 COPY --chown=kitty:kitty Xresources /home/kitty/.Xresources
 
 USER kitty

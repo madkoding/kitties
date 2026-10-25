@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Calc
-Comment=Spreadsheets
-Exec=soffice --calc
-Icon=libreoffice-calc
-Terminal=false

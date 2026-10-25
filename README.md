@@ -309,8 +309,7 @@ connectors:
   [Ceres](https://codeberg.org/sixsixfive/ceres) themes by sixsixfive (BSD 2-Clause, its licence in `/usr/share/doc/ceres`), ported from
   their IceWM themes at build time by `docker/kitty-desktop/openbox/ceres-to-openbox.py`, in Kitties' own fonts:
   Sansation for the windows and the shelf, JetBrains Mono for the terminal. PCManFM draws the
-  wallpaper (`docker/kitty-desktop/wallpaper/`) and the icons on it (Work, Home, the trash, Chromium, Files,
-  Terminal, Writer, Calc) and is the file manager, all in [Lucide's icons](https://lucide.dev) (ISC, the Lucide
+  wallpaper (`docker/kitty-desktop/wallpaper/`) (no icons on it: the shelf holds the apps) and is the file manager, all in [Lucide's icons](https://lucide.dev) (ISC, the Lucide
   Contributors; the notice is in `/usr/share/doc/lucide-icons`) as white glyphs with a soft shadow on rounded squares
   whose gradient is its group of applications' (internet, office, multimedia…): drawn at build time by
   `docker/kitty-desktop/lucide/build-theme.py`, from `groups.map` (the colours) and `icons.map` (the names). It is dark throughout:
