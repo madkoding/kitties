@@ -67,7 +67,7 @@ test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await expect(trail.getByText("Finished", { exact: true })).toBeVisible();
   await expect(trail).not.toContainText("640, 420");
   await expect(page.locator(".msg .meta").first()).not.toContainText("tokens");
-  await expect(trail.locator(".shot-thumb img").first()).toBeVisible();
+  await expect(page.locator(".desk-hero .shot-thumb img")).toBeVisible();
   await expect(page.getByTestId("step-detail")).toHaveCount(0);
   await shot(page, "04-desktop-task");
   await page.goto(`/?theme=light&motion=off#chat/${ids.desktop}`);
@@ -75,8 +75,84 @@ test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await shot(page, "11-light");
   await page.setViewportSize({ width: 430, height: 900 });
   await page.goto(`/${Q}#chat/${ids.desktop}`);
-  await expect(page.locator(".trail").first().getByText("Finished", { exact: true })).toBeVisible();
+  // On a phone the chat shows first, with the latest picture and step in a strip under it.
+  await expect(page.getByTestId("desk-strip")).toBeVisible();
+  await expect(page.locator(".trail").first()).toBeHidden();
   await shot(page, "12-phone");
+  await page.getByTestId("tab-desk").click();
+  await expect(page.locator(".trail").first().getByText("Finished", { exact: true })).toBeVisible();
+  await shot(page, "12-phone-desktop");
+});
+
+test("a desktop task: two columns, the latest screenshot in view and the earlier ones folded", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  const chat = page.locator(".conv-chat");
+  const desk = page.getByTestId("desk");
+  // The chat column has what the kitty said and no steps; the desktop column has the steps.
+  await expect(chat.locator(".msg").first()).toBeVisible();
+  await expect(chat.locator(".trail")).toHaveCount(0);
+  await expect(desk.locator(".trail").getByText("Finished", { exact: true })).toBeVisible();
+  const [c, d] = [await chat.boundingBox(), await desk.boundingBox()];
+  expect(c!.x + c!.width).toBeLessThanOrEqual(d!.x + 1);
+  // Phone tabs and the strip are for a narrow window only.
+  await expect(page.getByTestId("tab-desk")).toBeHidden();
+  await expect(page.getByTestId("desk-strip")).toBeHidden();
+  // One screenshot is open (the latest); the earlier ones sit behind a button.
+  await expect(desk.locator(".desk-hero .shot-thumb img")).toHaveCount(1);
+  const folds = desk.locator(".shot-fold");
+  const before = await desk.locator(".shot-thumb").count();
+  if ((await folds.count()) > 0) {
+    await folds.first().click();
+    await expect(desk.locator(".shot-thumb")).toHaveCount(before + 1);
+    await folds.first().click();
+    await expect(desk.locator(".shot-thumb")).toHaveCount(before);
+  }
+  // A turn's chip in the chat points at its steps.
+  await expect(chat.getByTestId("desk-link").first()).toBeVisible();
+  // The arrows (and ← →) walk back through the screenshots; the counter says where.
+  const walk = desk.getByTestId("desk-walk");
+  if (await walk.isVisible()) {
+    const last = (await walk.textContent())!.trim();
+    const total = last.match(/\/\s*(\d+)/)![1];
+    await expect(walk).toContainText(`${total} / ${total}`);
+    await desk.getByRole("button", { name: "Previous screenshot" }).click();
+    await expect(walk).toContainText(`${Number(total) - 1} / ${total}`);
+    await desk.getByTestId("desk-latest").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(walk).toContainText(`${total} / ${total}`);
+    await page.keyboard.press("ArrowLeft");
+    await expect(walk).toContainText(`${Number(total) - 1} / ${total}`);
+  }
+  // The divider resizes the column (keys too) and the width is remembered; a double click resets.
+  const bar = page.getByTestId("desk-bar");
+  const wide = (await desk.boundingBox())!.width;
+  await bar.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(async () => (await desk.boundingBox())!.width).toBeGreaterThan(wide + 10);
+  await page.reload();
+  await expect
+    .poll(async () => (await page.getByTestId("desk").boundingBox())?.width)
+    .toBeGreaterThan(wide + 10);
+  await page.getByTestId("desk-bar").dblclick();
+  await expect
+    .poll(async () => Math.abs(((await page.getByTestId("desk").boundingBox())?.width ?? 0) - wide))
+    .toBeLessThan(6);
+});
+
+test("on a phone the desktop tab gives the chat back when the task ends", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/${Q}#chat/${ids.desktop}`);
+  await page.getByTestId("tab-desk").click();
+  await expect(page.getByTestId("tab-desk")).toHaveAttribute("aria-selected", "true");
+  await page.getByPlaceholder("Say something…").fill("tom, open https://example.com again");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("tab-chat")).toHaveAttribute("aria-selected", "true", {
+    timeout: 30000,
+  });
+  await expect(page.locator(".conv-chat .msg.agent").last()).toBeVisible();
+  await shot(page, "12-phone-answer");
 });
 
 test("the technical details show only when asked for", async ({ page }) => {
@@ -1136,7 +1212,7 @@ test("every dialog closes: its X, Escape or the backdrop, and the address forget
   await expect(page).toHaveURL(new RegExp(`${chatHash}$`));
   // A screenshot opened big closes with Escape.
   await open(page, `#chat/${ids.desktop}`);
-  await page.locator(".shot-thumb").first().click();
+  await page.locator(".desk-hero .shot-thumb").click();
   await expect(page.getByTestId("zoom")).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByTestId("zoom")).toHaveCount(0);
@@ -1327,7 +1403,7 @@ test("a kitty that needs the person asks for help: a window shows what it sees, 
   const callout = page.getByTestId("help-callout");
   await expect(callout).toBeVisible();
   await expect(
-    page.getByText("Asked you for help: the shop's sign-in needs your password"),
+    page.locator(".trail").getByText("Asked you for help: the shop's sign-in needs your password"),
   ).toBeVisible();
   await callout.getByTestId("help-take-control").click();
   const live = page.getByTestId("live-desktop");
@@ -1536,7 +1612,9 @@ test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) 
     (r) => r.request().method() === "PATCH" && r.url().includes("/v1/kitties/"),
   );
   await pick.selectOption("Greybird-dark");
-  expect(JSON.parse((await saved).request().postData() || "{}")).toEqual({ theme: "Greybird-dark" });
+  expect(JSON.parse((await saved).request().postData() || "{}")).toEqual({
+    theme: "Greybird-dark",
+  });
   await expect(page.getByText("tom's desktop now wears Greybird.")).toBeVisible();
   await expect(pick).toHaveValue("Greybird-dark");
   await pick.selectOption("");

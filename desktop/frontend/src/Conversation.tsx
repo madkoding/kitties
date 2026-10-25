@@ -8,7 +8,7 @@ import { t } from "./i18n";
 import { useTechDetails } from "./prefs";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
-import { IconHand, IconShield, IconThumbDown, IconThumbUp } from "./icons";
+import { IconCamera, IconHand, IconMonitor, IconShield, IconThumbDown, IconThumbUp } from "./icons";
 import { RULE_LABEL, ruleTarget } from "./Approvals";
 import HelpModal from "./Help";
 import LiveDesktop from "./LiveDesktop";
@@ -33,10 +33,13 @@ function Text({ text }: { text: string }) {
 export function Shot({
   path,
   big,
+  latest,
   onOpen,
 }: {
   path: string;
   big?: boolean;
+  // latest is the picture the desktop column keeps in view: as wide as the column.
+  latest?: boolean;
   onOpen?: (src: string) => void;
 }) {
   const [src, setSrc] = useState<string>("");
@@ -60,14 +63,14 @@ export function Shot({
     };
   }, [path]);
   if (!src) {
-    return <div class={big ? "live-shot" : "shot-thumb"} />;
+    return <div class={big ? "live-shot" : `shot-thumb ${latest ? "shot-latest" : ""}`} />;
   }
   if (big) {
     return <img class="live-shot" src={src} alt={t("The kitty's display")} />;
   }
   return (
     <button
-      class="plain shot-thumb"
+      class={`plain shot-thumb ${latest ? "shot-latest" : ""}`}
       onClick={() => onOpen?.(src)}
       aria-label={t("Open the screenshot")}
     >
@@ -80,12 +83,19 @@ function StepRow({
   step,
   chat,
   onOpen,
+  folded,
+  hero,
 }: {
   step: Step;
   chat: string;
   onOpen: (src: string) => void;
+  // folded is a step whose screenshot is not the latest one: it stays shut until asked for.
+  folded?: boolean;
+  // hero is the step of the screenshot the desktop column shows big: its row does not repeat it.
+  hero?: boolean;
 }) {
   const tech = useTechDetails();
+  const [open, setOpen] = useState(false);
   const cls = step.error ? "failed" : step.action === "done" ? "done" : "";
   // The step reads as a sentence; what it did exactly (coordinates, the command, the result) is
   // on hover, or written out with the technical details on.
@@ -110,12 +120,161 @@ function StepRow({
           </span>
         )}
       </span>
-      {step.shot && (
+      {step.shot && folded && !hero && (
+        <button
+          class="plain shot-fold"
+          aria-expanded={open}
+          aria-label={open ? t("Hide the screenshot") : t("Show the screenshot")}
+          title={open ? t("Hide the screenshot") : t("Show the screenshot")}
+          onClick={() => setOpen(!open)}
+        >
+          <IconCamera size={13} />
+        </button>
+      )}
+      {step.shot && !hero && (!folded || open) && (
         <div class="shot">
           <Shot path={`/v1/chats/${chat}/shots/${step.shot}`} onOpen={onOpen} />
         </div>
       )}
     </div>
+  );
+}
+
+// The steps of a turn that has any, and the position of the step with its latest screenshot.
+const hasSteps = (turn: Turn) => (turn.steps?.length ?? 0) > 0;
+const lastShotIndex = (turn: Turn) => (turn.steps || []).map((s) => !!s.shot).lastIndexOf(true);
+
+// Desk is the second column when a kitty works on its desktop: the steps of one task and the
+// latest screenshot, big and fixed; the earlier ones stay folded so the column is not all pictures.
+function Desk({
+  turns,
+  chat,
+  kitties,
+  picked,
+  onPick,
+  onOpen,
+}: {
+  turns: Turn[];
+  chat: string;
+  kitties: Map<string, Kitty>;
+  picked: number | null;
+  onPick: (i: number) => void;
+  onOpen: (src: string) => void;
+}) {
+  const tasks = turns.map((turn, i) => (hasSteps(turn) ? i : -1)).filter((i) => i >= 0);
+  const index = picked !== null && tasks.includes(picked) ? picked : tasks[tasks.length - 1];
+  const turn = turns[index];
+  const steps = turn.steps || [];
+  // The steps with a screenshot: the big picture is the latest unless the person walked back
+  // (with the arrows, or ← and →); a new picture brings it forward again.
+  const withShot = steps.map((st, i) => (st.shot ? i : -1)).filter((i) => i >= 0);
+  const [back, setBack] = useState<number | null>(null);
+  useEffect(() => setBack(null), [index, withShot.length]);
+  const at =
+    back !== null && withShot.includes(back) ? back : (withShot[withShot.length - 1] ?? -1);
+  const shot = at;
+  const walk = (by: number) => {
+    const n = withShot.indexOf(at) + by;
+    if (n >= 0 && n < withShot.length) {
+      setBack(withShot[n]);
+    }
+  };
+  const list = useRef<HTMLElement>(null);
+  // A task that goes on keeps its newest step in view.
+  useEffect(() => {
+    if (turn.working && list.current) {
+      list.current.scrollTop = list.current.scrollHeight;
+    }
+  }, [steps.length, turn.working, index]);
+  const who = (i: number) =>
+    (turns[i].kitty && kitties.get(turns[i].kitty!)?.name) || turns[i].from;
+  return (
+    <aside
+      class="conv-desk"
+      ref={list}
+      aria-label={t("Desktop")}
+      data-testid="desk"
+      onKeyDown={(e) => {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || e.altKey || e.ctrlKey || e.metaKey) {
+          return;
+        }
+        if (e.key === "ArrowLeft") {
+          walk(-1);
+        } else if (e.key === "ArrowRight") {
+          walk(1);
+        }
+      }}
+    >
+      <header class="desk-head">
+        <IconMonitor size={14} />
+        <span class="flex-1">{t("Desktop")}</span>
+        {turn.working && <span class="spinner" aria-label={t("working on its computer…")} />}
+      </header>
+      {tasks.length > 1 && (
+        <div class="desk-tasks" role="tablist" aria-label={t("Tasks")}>
+          {tasks.map((i, n) => (
+            <button
+              key={i}
+              role="tab"
+              aria-selected={i === index}
+              class={`plain desk-task ${i === index ? "on" : ""}`}
+              onClick={() => onPick(i)}
+            >
+              {n + 1} · {who(i)}
+            </button>
+          ))}
+        </div>
+      )}
+      {shot >= 0 && (
+        <div
+          class="desk-hero"
+          data-testid="desk-latest"
+          tabIndex={0}
+          aria-label={t("Screenshots: use the left and right arrow keys")}
+        >
+          <Shot latest path={`/v1/chats/${chat}/shots/${steps[shot].shot}`} onOpen={onOpen} />
+          {withShot.length > 1 && (
+            <div class="desk-walk" data-testid="desk-walk">
+              <button
+                class="plain"
+                aria-label={t("Previous screenshot")}
+                disabled={withShot.indexOf(at) === 0}
+                onClick={() => walk(-1)}
+              >
+                ‹
+              </button>
+              <span>
+                {withShot.indexOf(at) + 1} / {withShot.length}
+              </span>
+              <button
+                class="plain"
+                aria-label={t("Next screenshot")}
+                disabled={withShot.indexOf(at) === withShot.length - 1}
+                onClick={() => walk(1)}
+              >
+                ›
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+      <div class="trail" aria-label={t("steps")}>
+        {steps.map((s, i) => (
+          <StepRow
+            key={i}
+            step={s}
+            chat={chat}
+            onOpen={onOpen}
+            folded={i !== shot}
+            hero={i === shot}
+          />
+        ))}
+      </div>
+      {!turn.working && steps.filter((s) => s.shot).length > 1 && (
+        <ReplayButtons chat={chat} index={index} onOpen={onOpen} />
+      )}
+    </aside>
   );
 }
 
@@ -310,7 +469,7 @@ function TurnCard({
   user,
   kitty,
   latest,
-  onOpen,
+  onDesk,
   onHelp,
   onContinue,
 }: {
@@ -320,7 +479,8 @@ function TurnCard({
   user: string;
   kitty?: Kitty;
   latest: boolean;
-  onOpen: (src: string) => void;
+  // onDesk shows the steps of this turn in the desktop column.
+  onDesk: (index: number) => void;
   // onHelp opens the kitty's desktop with the controls, when it asked for help.
   onHelp?: () => void;
   // onContinue has a task that stopped on its budget go on from where it was.
@@ -362,14 +522,15 @@ function TurnCard({
         </pre>
       )}
       {turn.steps && turn.steps.length > 0 && (
-        <div class="trail" aria-label={t("steps")}>
-          {turn.steps.map((s, i) => (
-            <StepRow key={i} step={s} chat={chat} onOpen={onOpen} />
-          ))}
-        </div>
-      )}
-      {!turn.working && (turn.steps?.filter((s) => s.shot).length || 0) > 1 && (
-        <ReplayButtons chat={chat} index={index} onOpen={onOpen} />
+        <button
+          class="plain desk-link"
+          onClick={() => onDesk(index)}
+          data-testid="desk-link"
+          title={t("Show it on the desktop")}
+        >
+          <IconMonitor size={12} />
+          {t("{n} steps on the desktop", { n: turn.steps.length })}
+        </button>
       )}
       {turn.resumable && !turn.working && latest && onContinue && (
         <div class="callout flex items-center gap-2 mt-2" data-testid="resume-callout">
@@ -497,6 +658,50 @@ export default function Conversation({ session, kitties, user, pending, waiting,
   const [later, setLater] = useState<Record<string, boolean>>({});
   const end = useRef<HTMLDivElement>(null);
   const count = session?.turns?.length ?? 0;
+  // With a task on a desktop the chat has two columns: what the kitty says, and what it does.
+  // On a phone they are two tabs, and a strip under the chat keeps the latest picture in view.
+  const [tab, setTab] = useState<"chat" | "desk">("chat");
+  // picked is the task the person chose to look at; none follows the latest one.
+  const [picked, setPicked] = useState<number | null>(null);
+  const all = session?.turns || [];
+  const tasks = all.map((turn, i) => (hasSteps(turn) ? i : -1)).filter((i) => i >= 0);
+  const split = tasks.length > 0;
+  const lastTask = tasks[tasks.length - 1] ?? -1;
+  // The width of the desktop column in a window, kept in this browser.
+  const [deskW, setDeskW] = useState<number | null>(() => {
+    try {
+      return Number(localStorage.getItem("kitties.desk")) || null;
+    } catch {
+      return null;
+    }
+  });
+  const conv = useRef<HTMLDivElement>(null);
+  const resize = (w: number | null) => {
+    const room = conv.current?.clientWidth ?? 1200;
+    const next = w === null ? null : Math.round(Math.max(300, Math.min(w, 900, room * 0.7)));
+    setDeskW(next);
+    try {
+      localStorage.setItem("kitties.desk", next ? String(next) : "");
+    } catch {
+      /* kept for this visit only */
+    }
+  };
+  // On a phone, the answer is what the person wants when a task ends: the desktop tab gives the
+  // chat back then.
+  const running = lastTask >= 0 && !!all[lastTask]?.working;
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !running) {
+      setTab("chat");
+    }
+    wasRunning.current = running;
+  }, [running]);
+  useEffect(() => {
+    setPicked(null);
+    if (lastTask < 0) {
+      setTab("chat");
+    }
+  }, [lastTask, session?.id]);
   // Escape closes a screenshot opened big, like a click on it does.
   useLayoutEffect(() => {
     if (!zoom) {
@@ -525,97 +730,187 @@ export default function Conversation({ session, kitties, user, pending, waiting,
       </main>
     );
   }
+  const showDesk = (i: number) => {
+    setPicked(i);
+    setTab("desk");
+  };
+  const strip = split ? all[picked !== null && tasks.includes(picked) ? picked : lastTask] : null;
+  const stripShot = strip ? lastShotIndex(strip) : -1;
+  const stripStep = strip?.steps?.[strip.steps.length - 1];
   return (
     <div
-      class="flex-1 overflow-y-auto px-4 sm:px-8 py-5 flex flex-col gap-3 scroll-thin"
-      role="log"
+      ref={conv}
+      class={`conv ${split ? "conv-split" : ""} tab-${tab}`}
+      style={deskW ? { "--desk-w": `${deskW}px` } : undefined}
     >
-      {(session.turns || []).length === 0 && !pending && (
-        <div class="empty-card max-w-md mx-auto mt-10 p-5 text-center" data-testid="chat-empty">
-          <div class="text-2xl mb-1">👋</div>
-          <p class="text-sm text-[var(--t2)]">
-            {session.members.length > 1
-              ? t("Say hello to the team, or give them a task. Write @name to pick who answers.")
-              : t("Say hello, ask a question, or give it a task to work on.")}
-          </p>
+      {split && (
+        <div class="conv-tabs" role="tablist">
+          {(["chat", "desk"] as const).map((id) => (
+            <button
+              key={id}
+              role="tab"
+              class={`plain conv-tab ${tab === id ? "on" : ""}`}
+              aria-selected={tab === id}
+              data-testid={`tab-${id}`}
+              onClick={() => setTab(id)}
+            >
+              {id === "chat" ? t("Chat") : t("Desktop")}
+              {id === "desk" && strip?.working && <span class="spinner" />}
+            </button>
+          ))}
         </div>
       )}
-      {(session.turns || []).map((turn, i, all) => (
-        <TurnCard
-          key={i}
-          turn={turn}
-          index={i}
-          chat={session.id}
-          user={user}
-          kitty={turn.kitty ? byId.get(turn.kitty) : undefined}
-          latest={i >= all.length - session.members.length}
-          onOpen={setZoom}
-          onHelp={() => {
-            const k = turn.kitty ? byId.get(turn.kitty) : undefined;
-            if (k) {
-              setHelping(k);
-            }
-          }}
-          onContinue={
-            onSend
-              ? () => {
-                  const k = turn.kitty ? byId.get(turn.kitty) : undefined;
-                  const who = k && session.members.length > 1 ? `@${k.name} ` : "";
-                  onSend(who + t("Continue where you left off."));
+      <div class="conv-chat">
+        <div
+          class="flex-1 overflow-y-auto px-4 sm:px-8 py-5 flex flex-col gap-3 scroll-thin"
+          role="log"
+        >
+          {(session.turns || []).length === 0 && !pending && (
+            <div class="empty-card max-w-md mx-auto mt-10 p-5 text-center" data-testid="chat-empty">
+              <div class="text-2xl mb-1">👋</div>
+              <p class="text-sm text-[var(--t2)]">
+                {session.members.length > 1
+                  ? t(
+                      "Say hello to the team, or give them a task. Write @name to pick who answers.",
+                    )
+                  : t("Say hello, ask a question, or give it a task to work on.")}
+              </p>
+            </div>
+          )}
+          {(session.turns || []).map((turn, i, all) => (
+            <TurnCard
+              key={i}
+              turn={turn}
+              index={i}
+              chat={session.id}
+              user={user}
+              kitty={turn.kitty ? byId.get(turn.kitty) : undefined}
+              latest={i >= all.length - session.members.length}
+              onDesk={showDesk}
+              onHelp={() => {
+                const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+                if (k) {
+                  setHelping(k);
                 }
-              : undefined
-          }
-        />
-      ))}
-      {pending && (
-        <div class="msg user" data-who={user}>
-          <Text text={pending} />
-        </div>
-      )}
-      {(pending || waiting) && (
-        <>
-          <div class="flex items-end gap-2 px-2 mt-2" data-testid="thinking">
-            {session.members.map((id) => {
-              const k = byId.get(id);
-              return k ? (
-                <PixelCat
-                  key={id}
-                  breed={k.avatar?.breed}
-                  color={k.avatar?.color}
-                  mood="thinking"
-                  size={36}
+              }}
+              onContinue={
+                onSend
+                  ? () => {
+                      const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+                      const who = k && session.members.length > 1 ? `@${k.name} ` : "";
+                      onSend(who + t("Continue where you left off."));
+                    }
+                  : undefined
+              }
+            />
+          ))}
+          {pending && (
+            <div class="msg user" data-who={user}>
+              <Text text={pending} />
+            </div>
+          )}
+          {(pending || waiting) && (
+            <>
+              <div class="flex items-end gap-2 px-2 mt-2" data-testid="thinking">
+                {session.members.map((id) => {
+                  const k = byId.get(id);
+                  return k ? (
+                    <PixelCat
+                      key={id}
+                      breed={k.avatar?.breed}
+                      color={k.avatar?.color}
+                      mood="thinking"
+                      size={36}
+                    />
+                  ) : null;
+                })}
+                <span class="working-line !mt-0">
+                  <span class="spinner" /> {t("thinking…")}
+                </span>
+              </div>
+            </>
+          )}
+          <div ref={end} />
+          {session &&
+            !helping &&
+            (session.turns || []).map((turn, i) => {
+              const last = turn.steps?.[turn.steps.length - 1];
+              const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+              const key = `${session.id}:${i}:${turn.steps?.length}`;
+              return turn.working && last?.action === "ask_help" && k && !later[key] ? (
+                <HelpModal
+                  key={key}
+                  kitty={k}
+                  chat={session.id}
+                  turn={i}
+                  step={last}
+                  onTakeControl={() => {
+                    setLater({ ...later, [key]: true });
+                    setHelping(k);
+                  }}
+                  onClose={() => setLater({ ...later, [key]: true })}
                 />
               ) : null;
             })}
-            <span class="working-line !mt-0">
-              <span class="spinner" /> {t("thinking…")}
-            </span>
+          {helping && <LiveDesktop kitty={helping} autoControl onClose={() => setHelping(null)} />}
+        </div>
+        {strip && stripStep && (
+          <div class="desk-strip" data-testid="desk-strip">
+            {stripShot >= 0 && (
+              <Shot
+                path={`/v1/chats/${session.id}/shots/${strip.steps![stripShot].shot}`}
+                onOpen={setZoom}
+              />
+            )}
+            <button class="plain desk-strip-text" onClick={() => setTab("desk")}>
+              {strip.working && <span class="spinner" />}
+              <span class="flex-1">{stepSentence(stripStep.action, stripStep.args)}</span>
+              <IconMonitor size={14} />
+            </button>
           </div>
-        </>
+        )}
+      </div>
+      {split && (
+        <div
+          class="conv-bar"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("Resize the desktop column")}
+          aria-valuenow={deskW ?? undefined}
+          tabIndex={0}
+          data-testid="desk-bar"
+          title={t("Drag to resize; double-click to reset")}
+          onDblClick={() => resize(null)}
+          onPointerDown={(e) => (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)}
+          onPointerMove={(e) => {
+            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+              const box = conv.current?.getBoundingClientRect();
+              box && resize(box.right - e.clientX);
+            }
+          }}
+          onKeyDown={(e) => {
+            const now =
+              deskW ??
+              (conv.current?.querySelector(".conv-desk") as HTMLElement | null)?.offsetWidth ??
+              450;
+            if (e.key === "ArrowLeft") {
+              resize(now + 24);
+            } else if (e.key === "ArrowRight") {
+              resize(now - 24);
+            }
+          }}
+        />
       )}
-      <div ref={end} />
-      {session &&
-        !helping &&
-        (session.turns || []).map((turn, i) => {
-          const last = turn.steps?.[turn.steps.length - 1];
-          const k = turn.kitty ? byId.get(turn.kitty) : undefined;
-          const key = `${session.id}:${i}:${turn.steps?.length}`;
-          return turn.working && last?.action === "ask_help" && k && !later[key] ? (
-            <HelpModal
-              key={key}
-              kitty={k}
-              chat={session.id}
-              turn={i}
-              step={last}
-              onTakeControl={() => {
-                setLater({ ...later, [key]: true });
-                setHelping(k);
-              }}
-              onClose={() => setLater({ ...later, [key]: true })}
-            />
-          ) : null;
-        })}
-      {helping && <LiveDesktop kitty={helping} autoControl onClose={() => setHelping(null)} />}
+      {split && (
+        <Desk
+          turns={all}
+          chat={session.id}
+          kitties={byId}
+          picked={picked}
+          onPick={setPicked}
+          onOpen={setZoom}
+        />
+      )}
       {zoom && (
         <div
           class="fixed inset-0 z-40 bg-black/80 flex items-center justify-center p-6 backdrop"

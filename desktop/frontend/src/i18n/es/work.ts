@@ -28,6 +28,23 @@ const dict: Dictionary = {
   "thinking…": "pensando…",
   Screenshot: "Captura de pantalla",
 
+  // The desktop column
+  "Hide the screenshot": "Ocultar la captura",
+  "Show the screenshot": "Ver la captura",
+  Desktop: "Escritorio",
+  Chat: "Chat",
+  Tasks: "Tareas",
+  "Show it on the desktop": "Verlo en el escritorio",
+  "{n} steps on the desktop": "{n} pasos en el escritorio",
+
+  "Previous screenshot": "Captura anterior",
+  "Next screenshot": "Captura siguiente",
+  "Resize the desktop column": "Cambiar el ancho de la columna del escritorio",
+  "Drag to resize; double-click to reset":
+    "Arrastra para cambiar el ancho; doble clic para restablecer",
+
+  "Screenshots: use the left and right arrow keys": "Capturas: usa las flechas izquierda y derecha",
+
   // Steps of a desktop task
   "Opened {host}": "Abrió {host}",
   "Opened a page": "Abrió una página",
