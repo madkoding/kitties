@@ -73,7 +73,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip \
         xterm sudo pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
-        libglib2.0-0 libxml2 libpango-1.0-0 libpangocairo-1.0-0 libcairo2 libxft2 libxrandr2 libxinerama1 \
+        libglib2.0-0 libxml2 libpango-1.0-0 libpangocairo-1.0-0 libpangoxft-1.0-0 libcairo2 libxft2 libxrandr2 libxinerama1 \
         libxcursor1 libxi6 libsm6 librsvg2-2 libimlib2 \
         chromium fonts-dejavu fonts-noto-color-emoji \
         ca-certificates curl git jq python3 python3-websocket openssh-client \
