@@ -3,6 +3,12 @@
 A theme for a kitty's IceWM desktop, next to Ceres: flat, dark and calm, in the manner of
 LumaUI's dark appearance. Pick it in a kitty's drawer, or run `kitty-theme luma` in the kitty.
 
+![luma theme](screenshots/luma-theme.png)
+![luma theme with the menu open](screenshots/luma-theme-menu.png)
+
+For comparison, IceWM's own default theme in the same scene: [screenshot](screenshots/luma-vs-icewm-default.png).
+(Taken in a test X display with Kitties' wallpaper; the menu's folder icons come from Adwaita.)
+
 ## What it is
 
 - **Colours**: LumaUI's dark roles (`@luma_window` #202124, `@luma_content` #25282d, `@luma_ink`
