@@ -415,7 +415,7 @@ write it in the YAML with `kind` and `settings`. Signed-in tokens are refreshed 
 background ahead of their expiry, so a kitty's first call after a quiet night never waits or
 fails on a stale token. In a chat, every call a kitty makes shows up as a chip with the
 service's logo. Inside its
-container a kitty also has LibreOffice, Inkscape, ImageMagick and mtPaint for office documents
+container a kitty also has LibreOffice, Inkscape, Mousepad (text editor), ImageMagick and mtPaint for office documents
 and drawing on its own display.
 
 For iCloud calendars and contacts use `https://caldav.icloud.com` and `https://contacts.icloud.com`
