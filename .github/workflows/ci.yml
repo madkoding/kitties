@@ -191,7 +191,7 @@ jobs:
           sleep 5
           docker exec kitty-ci kitty-shot > shot.png
           head -c 8 shot.png | od -An -c | grep -q 'P   N   G'
-          docker exec kitty-ci sh -c 'pgrep -x openbox && pgrep -x pcmanfm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/themes/Numix/openbox-3/themerc && grep -q "name>Numix<" ~/.config/openbox/rc.xml && grep -q "enabled>yes<" ~/.config/openbox/rc.xml && test -f /usr/share/icons/Lucide/index.theme && test -f /usr/share/icons/Lucide/small/apps/web-browser.svg && test -f /usr/share/backgrounds/kitties/wallpaper.jpg'
+          docker exec kitty-ci sh -xc 'pgrep -x openbox && pgrep -x pcmanfm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/themes/Numix/openbox-3/themerc && grep -q "name>Numix<" ~/.config/openbox/rc.xml && grep -q "enabled>yes<" ~/.config/openbox/rc.xml && test -f /usr/share/icons/Lucide/index.theme && test -f /usr/share/icons/Lucide/small/apps/web-browser.svg && test -f /usr/share/backgrounds/kitties/wallpaper.jpg'
           # Reading the screen (OCR) runs and prints lines of "x,y<TAB>text".
           docker exec kitty-ci kitty-ocr | awk -F'\t' 'NF && $1 !~ /^[0-9]+,[0-9]+$/ { bad = 1 } END { exit bad }'
           # What a kitty keeps (a key, the browser's profile) is backed up and put back, and the browser
@@ -212,6 +212,9 @@ jobs:
           sleep 1
           ! docker exec kitty-ci pgrep kitty-grab
           docker rm -f kitty-ci
+      - name: the desktop's logs, when a check above failed
+        if: failure()
+        run: docker exec kitty-ci sh -c 'ps aux; tail -n 40 /tmp/xvfb.log /tmp/openbox.log /tmp/pcmanfm.log' || true
 
   # The gateway as a server image: the web page and the binary inside. Built on every push, it
   # proves the Dockerfile and that the container answers its health check.
