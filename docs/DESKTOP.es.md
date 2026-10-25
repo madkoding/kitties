@@ -158,7 +158,7 @@ se abre en uno nuevo.
 
 El **respaldo** (`kitty-backup`) añade una copia fuera del contenedor: cookies, sesiones, contraseñas
 guardadas, almacenamiento local y preferencias del navegador, y `~/.ssh`, `~/.gitconfig`,
-`~/.git-credentials`, `~/.netrc`, `~/.config/gh` y `~/.config/git`. El gateway lo guarda cifrado
+`~/.git-credentials`, `~/.netrc`, `~/.config/gh`, `~/.config/git` y las apps ancladas a la barra (`~/.config/kitties/pins`). El gateway lo guarda cifrado
 (AES-256-GCM, la clave de la bóveda) en `backups/` de su carpeta de datos, uno por kitty, reemplazado
 por cada nuevo; se hace cuando el escritorio se detiene, antes de una actualización y con **Respaldar
 ahora**. `kitty-restore` se lo devuelve a un contenedor que se rehace (nunca sobrescribe un archivo

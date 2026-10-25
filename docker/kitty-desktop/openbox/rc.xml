@@ -180,6 +180,9 @@
   <!-- where a pin's icon given as a bare name is looked up (a folder of
        /usr/share/icons); a pin's icon may also be a file path -->
   <iconTheme>Lucide</iconTheme>
+  <!-- pinning and unpinning from the dock is saved here (kept by kitty-backup);
+       once the file exists it replaces the pins below -->
+  <pinsFile>~/.config/kitties/pins</pinsFile>
   <!-- The applications the image carries that Kitties use most, pinned to the dock
        (a click starts one, or focuses its window). -->
   <pins>
