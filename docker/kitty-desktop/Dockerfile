@@ -19,10 +19,11 @@
 FROM debian:bookworm-slim AS extras
 ARG CERES_COMMIT=27318b2a9e9baa3146e3be008782a37c5e6c9886
 ARG CERES_SHA256=4b7967960e50a7a94a0ff2eb969d7fdf11fd34578b395d5eddc8020bc8f41f49
-# Lucide's icons (ISC), from npm (lucide-static) at a fixed version and checksum.
+# Lucide's icons (ISC), from npm (lucide-static) at a fixed version and checksum, drawn by
+# lucide/build-theme.py as gradient squares by group of applications.
 ARG LUCIDE_VERSION=1.61.0
 ARG LUCIDE_SHA256=62773cd2ee411ad2e37c1973d1e4c4b49f9a6c57da6b5d5d0abca08756ba75f1
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git woff2 \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git python3 woff2 \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL -o /tmp/ceres.tar.gz "https://codeberg.org/sixsixfive/ceres/archive/${CERES_COMMIT}.tar.gz" \
     && echo "${CERES_SHA256}  /tmp/ceres.tar.gz" | sha256sum -c - \
@@ -37,7 +38,7 @@ RUN mkdir -p /tmp/lucide \
     && curl -fsSL -o /tmp/lucide.tgz "https://registry.npmjs.org/lucide-static/-/lucide-static-${LUCIDE_VERSION}.tgz" \
     && echo "${LUCIDE_SHA256}  /tmp/lucide.tgz" | sha256sum -c - \
     && tar xzf /tmp/lucide.tgz -C /tmp/lucide \
-    && /tmp/lucide-map/build-theme.sh /tmp/lucide/package/icons /out/icons/Lucide \
+    && /tmp/lucide-map/build-theme.py /tmp/lucide/package/icons /out/icons/Lucide \
     && cp /tmp/lucide/package/LICENSE /out/doc/LUCIDE-LICENSE
 
 # kitty-grab, the live view's capture: C, XShm and libjpeg (see kitty-grab.c).
