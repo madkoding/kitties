@@ -242,9 +242,11 @@ jobs:
           KITTIES_DOMAIN=kitties.example.com KITTIES_TOKEN=x docker compose -f deploy/docker-compose.yml config -q
 
   # The desktop app for the three systems, built with the Wails CLI. Linux needs the webkit
-  # headers; macOS and Windows build out of the box. Only on tags: a Wails build is slow.
+  # headers; macOS and Windows build out of the box. The Intel Mac and the arm64 Windows apps are
+  # cross-built (no cgo on Windows, clang -arch on macOS); Linux arm64 builds on an arm runner.
+  # Only on tags: a Wails build is slow.
   wails:
-    name: desktop app · ${{ matrix.os }}
+    name: desktop app · ${{ matrix.name }}
     # On tags, and by hand (Actions → ci → Run workflow) to try the packaging without a release.
     if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     needs: [check, desktop]
@@ -255,12 +257,33 @@ jobs:
           - os: ubuntu-latest
             out: build/bin/kitties-desktop
             name: kitties-desktop-linux-amd64
+            goos: linux
+            goarch: amd64
+          - os: ubuntu-24.04-arm
+            out: build/bin/kitties-desktop
+            name: kitties-desktop-linux-arm64
+            goos: linux
+            goarch: arm64
           - os: windows-latest
             out: build/bin/kitties-desktop.exe
             name: kitties-desktop-windows-amd64
+            goos: windows
+            goarch: amd64
+          - os: windows-latest
+            out: build/bin/kitties-desktop.exe
+            name: kitties-desktop-windows-arm64
+            goos: windows
+            goarch: arm64
           - os: macos-latest
             out: build/bin/kitties-desktop.app
             name: kitties-desktop-macos-arm64
+            goos: darwin
+            goarch: arm64
+          - os: macos-latest
+            out: build/bin/kitties-desktop.app
+            name: kitties-desktop-macos-amd64
+            goos: darwin
+            goarch: amd64
     runs-on: ${{ matrix.os }}
     timeout-minutes: 40
     steps:
@@ -280,7 +303,8 @@ jobs:
         shell: bash
         run: |
           cd desktop
-          if [ "${{ runner.os }}" = "Linux" ]; then wails build -tags webkit2_41; else wails build; fi
+          tags=""; if [ "${{ runner.os }}" = "Linux" ]; then tags="-tags webkit2_41"; fi
+          wails build $tags -platform "${{ matrix.goos }}/${{ matrix.goarch }}"
       # The app is a window onto a gateway: the release carries one next to it and the app starts
       # it when none is running (desktop/gateway.go), so nothing else has to be installed.
       - name: build the gateway the app starts
@@ -290,7 +314,7 @@ jobs:
           UPDATE_PUBKEY: ${{ vars.KITTIES_UPDATE_PUBKEY }}
         run: |
           ext=""; if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi
-          CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }} -X 'github.com/madkoding/kitties/internal/oauth.builtin=$OAUTH_APPS' -X 'github.com/madkoding/kitties/internal/selfupdate.builtinKey=$UPDATE_PUBKEY'" -o "desktop/build/bin/kitties-gateway$ext" ./cmd/kitties
+          CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }} -X 'github.com/madkoding/kitties/internal/oauth.builtin=$OAUTH_APPS' -X 'github.com/madkoding/kitties/internal/selfupdate.builtinKey=$UPDATE_PUBKEY'" -o "desktop/build/bin/kitties-gateway$ext" ./cmd/kitties
           ls -la desktop/build/bin
       - name: pack
         shell: bash

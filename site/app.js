@@ -9,4 +9,6 @@ if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){b.textCo
 var lg=document.querySelector('.lang');if(lg)lg.addEventListener('click',function(){try{localStorage.setItem('kitties-lang',lg.getAttribute('hreflang'))}catch(e){}});
 var u=navigator.userAgent,os=/Android/i.test(u)?'android':/Windows/i.test(u)?'windows':/Macintosh|Mac OS/i.test(u)?'mac':/Linux|X11/i.test(u)?'linux':'';
 var me=os&&document.querySelector('.dl[data-os='+os+']');if(me){me.classList.add('me');me.parentNode.insertBefore(me,me.parentNode.firstChild)}
+try{fetch('https://api.github.com/repos/madkoding/kitties/releases/latest').then(function(r){return r.ok?r.json():null}).then(function(d){
+if(!d||!/^v[\w.-]+$/.test(d.tag_name))return;[].forEach.call(document.querySelectorAll('.dl .btn'),function(b){b.textContent+=' · '+d.tag_name})}).catch(function(){})}catch(e){}
 })();
