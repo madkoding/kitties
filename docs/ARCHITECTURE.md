@@ -10,6 +10,92 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
                                               config ──────┘  (yamlx: the YAML parser)
 ```
 
+## Overview
+
+```
+          kitties CLI / browser page / your program
+                          │  HTTP + bearer token
+                          ▼
+                 ┌──────────────────┐
+                 │     gateway      │  /v1/kitties  /v1/chats  /v1/providers
+                 └────────┬─────────┘
+                          ▼
+                 ┌──────────────────┐      ┌───────────────┐
+                 │   orchestrator   │──────│   providers   │ openai · anthropic · gemini
+                 │  create · start  │      │ (one per name)│ ollama · groq · ... (motita-style)
+                 │  stop · scale    │      └───────────────┘
+                 └───┬─────────┬────┘
+                     │         │
+          ┌──────────┘         └──────────┐
+          ▼                               ▼
+ ┌─────────────────┐             ┌─────────────────┐
+ │ kitty "mimi"    │             │ kitty "tom-1"   │   ... × NNN
+ │ soul + brain    │             │ soul + brain    │
+ │ container:      │             │ container:      │
+ │  Xvfb :99       │             │  Xvfb :99       │
+ │  chromium, …    │             │  chromium, …    │
+ │  /home/kitty/work             │  /home/kitty/work
+ └─────────────────┘             └─────────────────┘
+          │  connectors: slack · discord · telegram · webhook · shell · motita
+          ▼
+     the outside world
+```
+
+- **Soul** (`internal/soul`): a YAML document (`persona`, `tone`, `traits`, `skills`, `language`,
+  `instructions`) rendered into the system prompt. The default is helpful, kind and adaptable.
+- **Providers** (`internal/provider`): dependency-free clients for the four API families
+  (chat completions, responses, Anthropic messages, Gemini), with retries. Profiles are named in
+  the configuration and each kitty picks one.
+- **Containers** (`internal/container`): one container per kitty from `docker/kitty-desktop`: Debian, Xvfb,
+  the Openbox desktop with its shelf, Chromium, a terminal, LibreOffice, Inkscape and the tools the kitty
+  acts with. Nothing is published on the host; the orchestrator reaches a kitty with `docker exec`.
+  What is in the image and how it looks: [KITTY-DESKTOP.md](KITTY-DESKTOP.md).
+- **Orchestrator** (`internal/orchestrator`): the fleet, persisted in `~/.kitties/kitties.json`.
+  Creates the kitties the configuration lists (`replicas: n` gives `name-1 … name-n`) and scales
+  them on demand.
+- **Chat** (`internal/chat`): one-to-one and group threads, persisted as JSON. In a group every
+  kitty sees the others' turns labelled by name and answers in turn; `@name` addresses one.
+- **Desktop tasks** (`internal/desktop`): a kitty with a container writes `@tool click {"x": 640,
+  "y": 420}` lines; the runtime executes them (click, type, keys, scroll, drag, list and focus
+  windows, open the browser, launch or install a program, run a command), takes a screenshot,
+  shows it to the model and continues in the background until `@tool done`. Every step and
+  picture lands in the thread; the chat can be cancelled. How it works, with diagrams:
+  [DESKTOP.md](DESKTOP.md) ([en español](DESKTOP.es.md)).
+- **Taking the desktop over**: the **Desktop** button of a chat (or *Live and take control* in a
+  kitty's drawer) shows its display live, streamed as motion JPEG (a picture whenever it
+  changes, about a quarter of a second behind). **Take control** sends your clicks, drags, wheel
+  and keys to it, like a remote screen, for what the kitty cannot do alone (a password, a
+  captcha); the clipboard goes both ways. The kitty's own actions wait until you give it back,
+  and a hold left idle for five minutes ends by itself. A kitty that needs you says so with
+  `ask_help`: the chat shows a **Take control** button and a notification goes out, and it goes
+  on when you give the desktop back. Frames and input go through the gateway's API: no VNC port
+  is opened.
+- **Settings** (`internal/orchestrator/settings.go`): models and connectors edited from the app
+  are kept in `settings.json` on top of the YAML, keys included and never shown again.
+- **Demo** (`internal/demo`): a scripted brain and a drawn desktop, for `kitties -demo`.
+- **Connectors** (`internal/connector`): a catalogue of services by category, each with its
+  settings and actions. A kitty writes `@connector github {"action": "create_issue", "title":
+  "..."}` in a reply; the runtime runs it and feeds the result back before the kitty answers.
+  A connector that answers with a file (a rendered diagram) lands in the artifacts library.
+- **Skills and artifacts** (`internal/skills`, `internal/artifacts`): a library like motita's.
+  Skills are markdown procedures the kitties read with `@skill read <name>` and propose with
+  `@skill save` (a person accepts them in the Library); three ship built in. Artifacts are the
+  files they keep for later with `@artifact save` and read with `@artifact read`, shared by
+  every kitty and every chat, downloadable from the page.
+- **Avatars**: every kitty is an animated pixel cat (five breeds, ten coats) that reacts as a bot
+  would: idle, thinking, talking, working, happy, error, sleeping.
+- **Native tool calling**: with every provider family (OpenAI chat and responses, Anthropic,
+  Gemini) the desktop tools, the connectors and the library are offered as real tools and the
+  model calls them in its own format; `tools: text` on a profile keeps the `@tool` lines for a
+  server without tool support. Both run through the same actions.
+- **Live events**: the gateway streams every turn, step and finish of a chat as server-sent
+  events (`GET /v1/chats/{id}/events`); the page and the desktop app follow a chat live instead
+  of polling.
+- **OAuth**: Google Workspace (Gmail, Calendar, Drive, Sheets, Docs) and Microsoft 365 (Outlook
+  mail, Calendar, OneDrive) sign in with the person's own OAuth app from Settings; the gateway
+  runs the authorization-code flow with PKCE, keeps the refresh token and renews access tokens.
+- **Gateway** (`internal/gateway`): the HTTP API and the browser page.
+
 ## A kitty
 
 | Part       | Package              | What it is                                                         |
@@ -219,7 +305,7 @@ webhook pointed at a stub of its own, so the post lands), a skill, an artifact, 
 skill and four chats through the API, waits for the scripted brain to answer, then each test
 checks one screen (the catalogue has a logo on every button, the OAuth form offers the
 sign-in and the consent URL comes back, the chip of a connector call carries its logo) and
-photographs it into `docs/screenshots` under the README's names. `make e2e` runs it; CI runs it
+photographs it into `docs/screenshots` under the names the docs use. `make e2e` runs it; CI runs it
 on every push and uploads the screenshots and the report.
 
 ## Run-time settings (`internal/orchestrator/settings.go`)

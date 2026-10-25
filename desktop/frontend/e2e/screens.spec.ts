@@ -4,7 +4,7 @@ import path from "node:path";
 import { GATEWAY, HOOK_LOG, SHOTS, STATE } from "./playwright.config";
 
 // Every screen of the desktop app, checked and photographed. The pictures go to
-// docs/screenshots under the names the README uses, so the documentation is never stale.
+// docs/screenshots under the names the docs use, so the documentation is never stale.
 const ids = JSON.parse(fs.readFileSync(STATE, "utf8")) as {
   single: string;
   group: string;
@@ -1168,7 +1168,7 @@ test("the buttons of a kitty's drawer never sit over its model and container", a
 test("a kitty's desktop opens live from the chat, and the person can take control and give it back", async ({
   page,
 }) => {
-  // The demo draws its desktop: the pictures of the README (48, 49) are of a real container, taken
+  // The demo draws its desktop: the pictures of the docs (48, 49) are of a real container, taken
   // with desktop/frontend/scripts/live-desktop-shots.mjs, so this test takes none.
   await open(page, `#chat/${ids.desktop}`);
   await page.getByTestId("open-desktop").first().click();
