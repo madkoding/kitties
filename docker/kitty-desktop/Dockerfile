@@ -15,7 +15,7 @@
 
 # Openbox with the shelf, from the fork at a fixed commit (a commit is its own checksum).
 FROM debian:bookworm-slim AS openbox
-ARG OPENBOX_COMMIT=c5904c862888945f897a31567b024ce47e9708ee
+ARG OPENBOX_COMMIT=6e42925fc4c9f33f70c58e04f52cdaa39590a0e9
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf \
         automake libtool pkg-config gettext autopoint libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev \
         libx11-dev libxft-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev \
@@ -43,6 +43,10 @@ RUN mkdir -p /out/themes/Numix /out/themes/Greybird-dark /out/doc/numix /out/doc
     && cp -a /usr/share/themes/Greybird-dark/openbox-3 /out/themes/Greybird-dark/ \
     && cp /usr/share/doc/numix-gtk-theme/copyright /out/doc/numix/ \
     && cp /usr/share/doc/greybird-gtk-theme/copyright /out/doc/greybird/
+# the menus wear the shelf's dark material, in both themes
+COPY openbox/menu-style.themerc /tmp/menu-style.themerc
+RUN cat /tmp/menu-style.themerc >> /out/themes/Numix/openbox-3/themerc \
+    && cat /tmp/menu-style.themerc >> /out/themes/Greybird-dark/openbox-3/themerc
 COPY fonts/ /tmp/fonts/
 RUN for f in /tmp/fonts/*.woff2; do woff2_decompress "$f"; done && mv /tmp/fonts/*.ttf /out/fonts/
 COPY lucide/ /tmp/lucide-map/

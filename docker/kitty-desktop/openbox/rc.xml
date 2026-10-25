@@ -83,7 +83,7 @@
   </font>
   <font place="MenuHeader">
     <name>Sansation</name>
-    <size>10</size>
+    <size>11</size>
     <!-- font size in points -->
     <weight>normal</weight>
     <!-- 'bold' or 'normal' -->
@@ -92,7 +92,7 @@
   </font>
   <font place="MenuItem">
     <name>Sansation</name>
-    <size>10</size>
+    <size>11</size>
     <!-- font size in points -->
     <weight>normal</weight>
     <!-- 'bold' or 'normal' -->
