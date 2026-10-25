@@ -1,6 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Terminal
-Exec=xterm
-Icon=utilities-terminal
-Terminal=false

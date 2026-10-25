@@ -22,23 +22,14 @@ export interface Kitty {
   // approvals is "ask" (the default: an action that reaches other people waits for a yes until
   // the kitty is trusted with it) or "auto".
   approvals?: "ask" | "auto" | "";
-  // theme is the look of its desktop (an IceWM theme); empty is the image's own, Ceres Pro (dark).
+  // theme is the look of its desktop (an Openbox theme); empty is the image's own, Numix (dark).
   theme?: string;
 }
 
 // THEMES are the looks a kitty's desktop can wear, as the gateway knows them.
 export const THEMES: [string, string][] = [
-  ["", "Ceres Pro"],
-  ["ceres", "Ceres"],
-  ["default", "IceWM"],
-  ["CrystalBlue", "Crystal Blue"],
-  ["Helix", "Helix"],
-  ["Infadel2", "Infadel"],
-  ["NanoBlue", "Nano Blue"],
-  ["icedesert", "Ice Desert"],
-  ["metal2", "Metal"],
-  ["motif", "Motif"],
-  ["win95", "Windows 95"],
+  ["", "Numix"],
+  ["Greybird-dark", "Greybird"],
 ];
 
 // Approval is an action a kitty wants to take and is waiting to be allowed.

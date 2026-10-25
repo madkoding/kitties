@@ -1,7 +1,0 @@
-[Desktop Entry]
-Type=Application
-Name=Chromium
-Comment=The web
-Exec=kitty-open
-Icon=web-browser
-Terminal=false

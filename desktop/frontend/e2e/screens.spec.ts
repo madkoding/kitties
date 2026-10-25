@@ -1530,10 +1530,10 @@ test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) 
   const saved = page.waitForResponse(
     (r) => r.request().method() === "PATCH" && r.url().includes("/v1/kitties/"),
   );
-  await pick.selectOption("ceres");
-  expect(JSON.parse((await saved).request().postData() || "{}")).toEqual({ theme: "ceres" });
-  await expect(page.getByText("tom's desktop now wears Ceres.")).toBeVisible();
-  await expect(pick).toHaveValue("ceres");
+  await pick.selectOption("Greybird-dark");
+  expect(JSON.parse((await saved).request().postData() || "{}")).toEqual({ theme: "Greybird-dark" });
+  await expect(page.getByText("tom's desktop now wears Greybird.")).toBeVisible();
+  await expect(pick).toHaveValue("Greybird-dark");
   await pick.selectOption("");
   await expect(pick).toHaveValue("");
 });
