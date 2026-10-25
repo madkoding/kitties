@@ -1475,3 +1475,182 @@ html.mac-inset aside .titlebar {
   overflow-x: auto;
   white-space: nowrap;
 }
+
+/* ─── A chat with a task on a desktop: two columns (chat | desktop), two tabs on a phone ───── */
+.conv {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.conv-chat {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.conv-tabs,
+.conv-desk {
+  display: none;
+}
+.desk-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 3px 8px;
+  font-size: 12px;
+  color: var(--t3);
+  border: 1px solid rgb(var(--neon-rgb) / 0.3);
+  border-radius: var(--radius-cut);
+}
+.desk-link:hover {
+  color: var(--t1);
+}
+.desk-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--t4);
+}
+.desk-tasks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.desk-task {
+  padding: 2px 8px;
+  font-size: 12px;
+  color: var(--t3);
+  border: 1px solid rgb(var(--ov-rgb) / 0.12);
+  border-radius: var(--radius-cut);
+}
+.desk-task.on {
+  color: var(--t1);
+  border-color: var(--color-accent);
+}
+.desk-hero {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  flex: none;
+  padding: 0 0 6px;
+  background: rgb(var(--bg-rgb) / 0.96);
+}
+.shot-thumb.shot-latest {
+  width: 100%;
+}
+.shot-fold {
+  grid-column: 2;
+  justify-self: start;
+  padding: 2px 6px;
+  color: var(--t3);
+  border: 1px solid rgb(var(--ov-rgb) / 0.12);
+  border-radius: var(--radius-cut);
+}
+.shot-fold[aria-expanded="true"] {
+  color: var(--t1);
+  border-color: rgb(var(--neon-rgb) / 0.4);
+}
+.conv-desk .trail {
+  flex: none;
+  margin: 0;
+}
+.conv-desk .step .shot .shot-thumb {
+  width: 100%;
+  max-width: 260px;
+}
+.desk-strip {
+  display: none;
+}
+
+/* A phone: the tabs choose one column; the strip under the chat keeps the latest picture and
+   step in view without covering the answer. */
+@media (max-width: 767px) {
+  .conv-split .conv-tabs {
+    display: flex;
+    gap: 6px;
+    padding: 8px 16px 0;
+  }
+  .conv-tab {
+    flex: 1;
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    font-size: 14px;
+    color: var(--t3);
+    border-bottom: 2px solid rgb(var(--ov-rgb) / 0.12);
+  }
+  .conv-tab.on {
+    color: var(--t1);
+    border-bottom-color: var(--color-accent);
+  }
+  .conv-split.tab-chat .conv-desk {
+    display: none;
+  }
+  .conv-split.tab-desk .conv-chat {
+    display: none;
+  }
+  .conv-split.tab-desk .conv-desk {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px 16px;
+    overflow-y: auto;
+    background: rgb(var(--bg-rgb) / 0.94);
+  }
+  .conv-split.tab-chat .desk-strip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 16px;
+    border-top: 1px solid rgb(var(--ov-rgb) / 0.1);
+    background: rgb(var(--bg-rgb) / 0.94);
+  }
+  .desk-strip .shot-thumb {
+    width: 72px;
+    flex: none;
+  }
+  .desk-strip-text {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+    text-align: left;
+    font-size: 13px;
+    color: var(--t2);
+  }
+}
+
+/* A window: the desktop is a column beside the chat. */
+@media (min-width: 768px) {
+  .conv-split {
+    flex-direction: row;
+  }
+  .conv-split .conv-chat {
+    flex: 1 1 55%;
+  }
+  .conv-split .conv-desk {
+    display: flex;
+    flex: 1 1 45%;
+    max-width: 560px;
+    min-width: 300px;
+    flex-direction: column;
+    gap: 10px;
+    padding: 16px 16px 12px;
+    overflow-y: auto;
+    border-left: 1px solid rgb(var(--ov-rgb) / 0.1);
+    background: rgb(var(--bg-rgb) / 0.94);
+  }
+}

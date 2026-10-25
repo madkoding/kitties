@@ -28,6 +28,15 @@ const dict: Dictionary = {
   "thinking…": "pensando…",
   Screenshot: "Captura de pantalla",
 
+  // The desktop column
+  "Hide the screenshot": "Ocultar la captura",
+  "Show the screenshot": "Ver la captura",
+  Desktop: "Escritorio",
+  Chat: "Chat",
+  Tasks: "Tareas",
+  "Show it on the desktop": "Verlo en el escritorio",
+  "{n} steps on the desktop": "{n} pasos en el escritorio",
+
   // Steps of a desktop task
   "Opened {host}": "Abrió {host}",
   "Opened a page": "Abrió una página",
