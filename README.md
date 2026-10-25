@@ -42,8 +42,7 @@ Openbox with its own shelf (a dock of pinned apps, a player, the weather and a c
 Numix theme, Lucide icons and Kitties' fonts. [More about it](docs/KITTY-DESKTOP.md).
 
 <p align="center">
-<img src="docs/screenshots/desktop-windows.png" alt="The desktop with a terminal, an editor and the file manager" width="49%">
-<img src="docs/screenshots/desktop-apps-menu.png" alt="The apps menu open over the windows" width="49%">
+<img src="docs/screenshots/desktop-menu.png" alt="The kitty's desktop with the apps menu open" width="100%">
 </p>
 
 <sub>Pictures of the desktop are from a test environment (Xvfb) with sample data. The app's screens
@@ -85,8 +84,15 @@ make image                   # builds the kitty-desktop image
 kitties gateway              # creates the kitties, starts them, serves the API and the page
 ```
 
-Or download the desktop app, the CLI or the Android app from the
-[releases](https://github.com/madkoding/kitties/releases).
+Or download the app (it carries its own gateway), from the
+[latest release](https://github.com/madkoding/kitties/releases/latest):
+
+| System | Desktop app | CLI |
+| --- | --- | --- |
+| Windows | [x64 zip](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-windows-amd64.zip) · [arm64 zip](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-windows-arm64.zip) | [x64](https://github.com/madkoding/kitties/releases/latest/download/kitties-windows-amd64.exe) · [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-windows-arm64.exe) |
+| macOS | [Apple silicon dmg](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-macos-arm64.dmg) · [Intel dmg](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-macos-amd64.dmg) | [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-darwin-arm64) · [Intel](https://github.com/madkoding/kitties/releases/latest/download/kitties-darwin-amd64) |
+| Linux | [x64 zip](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-linux-amd64.zip) · [arm64 zip](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-linux-arm64.zip) | [x64](https://github.com/madkoding/kitties/releases/latest/download/kitties-linux-amd64) · [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-linux-arm64) · [arm](https://github.com/madkoding/kitties/releases/latest/download/kitties-linux-arm) |
+| Android | [kitties-android-app.apk](https://github.com/madkoding/kitties/releases/latest/download/kitties-android-app.apk) | [Termux (arm64)](https://github.com/madkoding/kitties/releases/latest/download/kitties-android-arm64) |
 
 ## Documentation
 
