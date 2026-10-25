@@ -115,8 +115,8 @@ func (l Limits) Or(d Limits) Limits {
 // ContainerName is the container a kitty called name runs in.
 func ContainerName(name string) string { return "kitty-" + name }
 
-// Themes are the looks a kitty's desktop can wear: IceWM themes the kitty-desktop image carries.
-var Themes = []string{"ceres", "ceres-pro", "default", "CrystalBlue", "Helix", "Infadel2", "NanoBlue", "icedesert", "metal2", "motif", "win95"}
+// Themes are the looks a kitty's desktop can wear: Openbox themes (ported from Ceres's IceWM ones) the kitty-desktop image carries.
+var Themes = []string{"ceres", "ceres-pro"}
 
 // ValidTheme reports whether a theme is one of Themes, or empty (the image's own).
 func ValidTheme(name string) bool {

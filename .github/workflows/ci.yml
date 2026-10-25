@@ -191,7 +191,7 @@ jobs:
           sleep 5
           docker exec kitty-ci kitty-shot > shot.png
           head -c 8 shot.png | od -An -c | grep -q 'P   N   G'
-          docker exec kitty-ci sh -c 'pgrep -x icewm && pgrep -x pcmanfm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/icewm/themes/ceres-pro/default.theme && grep -q ceres-pro ~/.icewm/theme && test -f /usr/share/icons/Lucide/index.theme && test -f /usr/share/icons/Lucide/small/apps/web-browser.svg && test -f /usr/share/backgrounds/kitties/wallpaper.jpg'
+          docker exec kitty-ci sh -c 'pgrep -x openbox && pgrep -x pcmanfm && wmctrl -m && fc-list : family | grep -q Sansation && test -f /usr/share/themes/ceres-pro/openbox-3/themerc && grep -q '<name>ceres-pro</name>' ~/.config/openbox/rc.xml && grep -q '<enabled>yes</enabled>' ~/.config/openbox/rc.xml && test -f /usr/share/icons/Lucide/index.theme && test -f /usr/share/icons/Lucide/small/apps/web-browser.svg && test -f /usr/share/backgrounds/kitties/wallpaper.jpg'
           # Reading the screen (OCR) runs and prints lines of "x,y<TAB>text".
           docker exec kitty-ci kitty-ocr | awk -F'\t' 'NF && $1 !~ /^[0-9]+,[0-9]+$/ { bad = 1 } END { exit bad }'
           # What a kitty keeps (a key, the browser's profile) is backed up and put back, and the browser

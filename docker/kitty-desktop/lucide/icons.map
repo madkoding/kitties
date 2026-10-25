@@ -44,7 +44,7 @@ apps/vlc                                  video             multimedia
 apps/multimedia-video-player              video             multimedia
 apps/internet-mail                        mail              internet
 apps/office-calendar                      calendar          office
-# The folders of IceWM's menu (the freedesktop categories).
+# The folders of the desktop's menus (the freedesktop categories).
 apps/applications-accessories             wrench            accessories
 apps/applications-development             code              development
 apps/applications-games                   gamepad-2         games

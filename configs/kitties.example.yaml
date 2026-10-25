@@ -1,7 +1,7 @@
 # kitties: example configuration. Copy it to ~/.kitties/kitties.yaml (or ./kitties.yaml).
 #
 # Every kitty is an autonomous agent with its own soul (personality), its own AI provider and,
-# by default, its own container with an IceWM desktop. The gateway is the HTTP API the CLI, the
+# by default, its own container with an Openbox desktop. The gateway is the HTTP API the CLI, the
 # web UI and other programs talk to.
 
 data_dir: ""                     # state (kitties, chats); empty is ~/.kitties

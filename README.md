@@ -151,7 +151,7 @@ cd desktop && wails dev   # live reload while working on it
 | ![Google Workspace: sign in with OAuth](docs/screenshots/18-connector-oauth.png) | ![A kitty's own display](docs/screenshots/13-tom-display.png) |
 | ![The library: skills](docs/screenshots/15-library-skills.png) | ![The library: artifacts](docs/screenshots/16-library-artifacts.png) |
 | ![New kitty: pick its pixel cat](docs/screenshots/07-new-kitty.png) | ![Light mode](docs/screenshots/11-light.png) |
-| ![A real kitty's desktop, live: Chromium and a terminal on IceWM](docs/screenshots/48-live-desktop.png) | ![Taking control: a command typed in the kitty's terminal](docs/screenshots/49-live-desktop-control.png) |
+| ![A real kitty's desktop, live: Chromium and a terminal on Openbox](docs/screenshots/48-live-desktop.png) | ![Taking control: a command typed in the kitty's terminal](docs/screenshots/49-live-desktop-control.png) |
 | ![A first run is a checklist](docs/screenshots/31-welcome.png) | ![Adding a model: pick the provider](docs/screenshots/32-pick-provider.png) |
 | ![Adding a model: the key and the suggested model](docs/screenshots/34-add-model.png) | ![A connection and the kitties that may use it](docs/screenshots/33-connection-form.png) |
 | ![A Claude subscription, through Claude Code](docs/screenshots/35-claude-subscription.png) | ![GitHub Copilot: sign in with a code](docs/screenshots/36-copilot-code.png) |
@@ -304,18 +304,19 @@ connectors:
   (chat completions, responses, Anthropic messages, Gemini), with retries. Profiles are named in
   the configuration and each kitty picks one.
 - **Containers** (`internal/container`): one container per kitty from `docker/kitty-desktop`
-  (Debian, Xvfb, the IceWM desktop with a taskbar, Chromium, a terminal, LibreOffice, Inkscape,
-  xdotool, wmctrl, scrot). IceWM wears the dark Ceres Pro of the
-  [Ceres](https://codeberg.org/sixsixfive/ceres) themes by sixsixfive (BSD 2-Clause, its licence in `/usr/share/doc/ceres-icewm`) in Kitties' own fonts:
-  Sansation for the windows and the taskbar, JetBrains Mono for the terminal. PCManFM draws the
-  wallpaper (`docker/kitty-desktop/wallpaper/`) and the icons on it (Work, Chromium, Files,
-  Terminal) and is the file manager, all in [Lucide's icons](https://lucide.dev) (ISC, the Lucide
+  (Debian, Xvfb, the Openbox desktop with its shelf (a dock of pinned and open apps, and a clock), Chromium, a terminal, LibreOffice, Inkscape,
+  xdotool, wmctrl, scrot). Openbox ([madkoding/openbox](https://github.com/madkoding/openbox), built at a fixed commit) wears the dark Ceres Pro of the
+  [Ceres](https://codeberg.org/sixsixfive/ceres) themes by sixsixfive (BSD 2-Clause, its licence in `/usr/share/doc/ceres`), ported from
+  their IceWM themes at build time by `docker/kitty-desktop/openbox/ceres-to-openbox.py`, in Kitties' own fonts:
+  Sansation for the windows and the shelf, JetBrains Mono for the terminal. PCManFM draws the
+  wallpaper (`docker/kitty-desktop/wallpaper/`) and the icons on it (Work, Home, the trash, Chromium, Files,
+  Terminal, Writer, Calc) and is the file manager, all in [Lucide's icons](https://lucide.dev) (ISC, the Lucide
   Contributors; the notice is in `/usr/share/doc/lucide-icons`) as white glyphs with a soft shadow on rounded squares
   whose gradient is its group of applications' (internet, office, multimedia…): drawn at build time by
   `docker/kitty-desktop/lucide/build-theme.py`, from `groups.map` (the colours) and `icons.map` (the names). It is dark throughout:
   Chromium (its face, and the pages that offer a dark look), GTK programs, LibreOffice (its page
   too, on screen: a printed or exported document keeps its own colours) and the terminal. Each kitty can wear
-  another IceWM theme (the light Ceres, IceWM's own, Windows 95…), picked in its drawer. Nothing is published on the host; the orchestrator reaches a kitty
+  the light Ceres theme, picked in its drawer. Nothing is published on the host; the orchestrator reaches a kitty
   with `docker exec`, and `kitty-shot` returns a PNG of its display. `kitty-install` adds
   programs from Debian (sudo only runs the installer, by package name) and remembers them in the
   workspace, so a container made anew installs them again.

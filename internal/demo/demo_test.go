@@ -202,7 +202,7 @@ func TestDesktopStreamAndClipboard(t *testing.T) {
 	if out, _ := d.Exec(ctx, "kitty-a", "kitty-clip", "get"); out != "hola" {
 		t.Errorf("get = %q", out)
 	}
-	if out, _ := d.Exec(ctx, "kitty-a", "kitty-theme", "win95"); out != "theme win95" {
+	if out, _ := d.Exec(ctx, "kitty-a", "kitty-theme", "ceres"); out != "theme ceres" {
 		t.Errorf("theme = %q", out)
 	}
 }
