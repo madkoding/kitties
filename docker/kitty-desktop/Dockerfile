@@ -15,7 +15,7 @@
 
 # Openbox with the shelf, from the fork at a fixed commit (a commit is its own checksum).
 FROM debian:bookworm-slim AS openbox
-ARG OPENBOX_COMMIT=dc1527d9e2fc6f39f25b7679cac56a448e571eaf
+ARG OPENBOX_COMMIT=c5904c862888945f897a31567b024ce47e9708ee
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf \
         automake libtool pkg-config gettext autopoint libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev \
         libx11-dev libxft-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev \

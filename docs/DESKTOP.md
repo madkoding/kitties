@@ -147,7 +147,7 @@ loses the last ones), and it continues where it left off (a Chromium policy), wh
 
 The **backup** (`kitty-backup`) adds a copy away from the container: the browser's cookies, sessions,
 saved passwords, local storage and preferences, and `~/.ssh`, `~/.gitconfig`, `~/.git-credentials`,
-`~/.netrc`, `~/.config/gh` and `~/.config/git`. The gateway keeps it sealed (AES-256-GCM, the key of
+`~/.netrc`, `~/.config/gh`, `~/.config/git` and the apps pinned to the dock (`~/.config/kitties/pins`). The gateway keeps it sealed (AES-256-GCM, the key of
 the vault) under `backups/` in its data folder, one per kitty, replaced by each new one; it is made
 when the desktop stops, before an update, and with **Back up now**. `kitty-restore` gives it back to
 a container that is made anew (it never overwrites a file that is there: a workspace that kept its

@@ -198,7 +198,7 @@ jobs:
           docker exec kitty-ci kitty-ocr | awk -F'\t' 'NF && $1 !~ /^[0-9]+,[0-9]+$/ { bad = 1 } END { exit bad }'
           # What a kitty keeps (a key, the browser's profile) is backed up and put back, and the browser
           # closes in an orderly way and keeps its session cookies across a restart.
-          docker exec kitty-ci sh -c 'test -f /etc/chromium/policies/managed/kitties.json && mkdir -p ~/.ssh && echo k > ~/.ssh/id_ci && kitty-backup | base64 -d > /tmp/b.tgz && tar tzf /tmp/b.tgz | grep -q id_ci && rm -rf ~/.ssh && kitty-restore < /tmp/b.tgz && test -f ~/.ssh/id_ci'
+          docker exec kitty-ci sh -c 'test -f /etc/chromium/policies/managed/kitties.json && mkdir -p ~/.ssh && echo k > ~/.ssh/id_ci && mkdir -p ~/.config/kitties && echo p > ~/.config/kitties/pins && kitty-backup | base64 -d > /tmp/b.tgz && tar tzf /tmp/b.tgz | grep -q kitties/pins && tar tzf /tmp/b.tgz | grep -q id_ci && rm -rf ~/.ssh ~/.config/kitties && kitty-restore < /tmp/b.tgz && test -f ~/.ssh/id_ci && test -f ~/.config/kitties/pins'
           # Text for the keyboard (a secret) goes in on the input and is typed.
           printf 'x' | docker exec -i kitty-ci xdotool type --delay 20 --file -
           # A page is read and acted on from the inside, through the browser's DevTools port.
