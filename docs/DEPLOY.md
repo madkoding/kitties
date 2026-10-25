@@ -55,6 +55,9 @@ kitties' containers mount their workspaces by host path.
 
 ## 2. A binary and systemd
 
+The quick way is the installer (`curl -fsSL .../scripts/install.sh | sudo sh`,
+[INSTALL.md](INSTALL.md#on-a-linux-server-one-line)); by hand:
+
 ```sh
 sudo useradd --system --create-home --home-dir /var/lib/kitties --groups docker kitties
 sudo install -m 0755 kitties-linux-amd64 /usr/local/bin/kitties    # from the release page
