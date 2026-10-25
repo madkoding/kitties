@@ -34,7 +34,7 @@ type Kitty struct {
 	// BodyLater is true when the kitty wanted a container but no engine answered when it was
 	// made: it gets one as soon as Docker or Podman does.
 	BodyLater bool `json:"body_later,omitempty"`
-	// Theme is the look of its desktop, one of Themes; empty is the image's own (Ceres Pro, dark).
+	// Theme is the look of its desktop, one of Themes; empty is the image's own (Numix, dark).
 	Theme string `json:"theme,omitempty"`
 	// Container is the container name, empty without a desktop.
 	Container string    `json:"container,omitempty"`
@@ -115,8 +115,8 @@ func (l Limits) Or(d Limits) Limits {
 // ContainerName is the container a kitty called name runs in.
 func ContainerName(name string) string { return "kitty-" + name }
 
-// Themes are the looks a kitty's desktop can wear: Openbox themes (ported from Ceres's IceWM ones) the kitty-desktop image carries.
-var Themes = []string{"ceres", "ceres-pro"}
+// Themes are the looks a kitty's desktop can wear: Openbox themes the kitty-desktop image carries.
+var Themes = []string{"Numix", "Greybird-dark"}
 
 // ValidTheme reports whether a theme is one of Themes, or empty (the image's own).
 func ValidTheme(name string) bool {

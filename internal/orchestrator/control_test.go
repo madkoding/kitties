@@ -109,19 +109,19 @@ func TestStreamClipboardAndTheme(t *testing.T) {
 	if _, err := m.Edit("mimi", Update{Theme: &bad}); err == nil {
 		t.Error("an unknown theme")
 	}
-	light := "ceres"
+	light := "Greybird-dark"
 	got, err := m.Edit("mimi", Update{Theme: &light})
-	if err != nil || got.Theme != "ceres" || f.execs[len(f.execs)-1] != k.Container+":kitty-theme ceres" {
+	if err != nil || got.Theme != "Greybird-dark" || f.execs[len(f.execs)-1] != k.Container+":kitty-theme Greybird-dark" {
 		t.Fatalf("theme = %+v %v %v", got, err, f.execs)
 	}
 	f.execs = nil
-	if err := m.Start(ctx, "mimi"); err != nil || len(f.execs) != 1 || f.execs[0] != k.Container+":kitty-theme ceres" {
+	if err := m.Start(ctx, "mimi"); err != nil || len(f.execs) != 1 || f.execs[0] != k.Container+":kitty-theme Greybird-dark" {
 		t.Errorf("start = %v %v", err, f.execs)
 	}
-	// Back to the image's own theme: Ceres Pro goes on the running desktop again.
+	// Back to the image's own theme: Numix goes on the running desktop again.
 	own := ""
 	f.execs = nil
-	if got, err := m.Edit("mimi", Update{Theme: &own}); err != nil || got.Theme != "" || len(f.execs) != 1 || f.execs[0] != k.Container+":kitty-theme ceres-pro" {
+	if got, err := m.Edit("mimi", Update{Theme: &own}); err != nil || got.Theme != "" || len(f.execs) != 1 || f.execs[0] != k.Container+":kitty-theme Numix" {
 		t.Errorf("own theme = %+v %v %v", got, err, f.execs)
 	}
 }

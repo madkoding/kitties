@@ -15,7 +15,7 @@ for _ in $(seq 1 50); do
     sleep 0.1
 done
 # The desktop: Openbox with the shelf (the pinned apps, the open windows and the clock) in the dark
-# Ceres Pro theme, and the terminal in Kitties' colours. Its autostart brings up PCManFM, which
+# Numix theme, and the terminal in Kitties' colours. Its autostart brings up PCManFM, which
 # draws the wallpaper and the icons on it.
 xrdb -nocpp -merge "$HOME/.Xresources" 2>/dev/null || true
 # The theme picked for this kitty, kept in its workspace (kitty-theme).

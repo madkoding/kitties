@@ -1,6 +1,6 @@
 #!/bin/sh
 # Puts Openbox in a theme and remembers it in the workspace, so a container made anew wears it:
-#   kitty-theme ceres | ceres-pro | <any theme installed>
+#   kitty-theme Numix | Greybird-dark | <any theme installed>
 set -eu
 : "${DISPLAY:=:99}"
 name="${1:-}"

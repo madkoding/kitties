@@ -1,7 +1,7 @@
 # kitty-desktop: the body of a kitty.
 #
 # A desktop on a headless X display (Xvfb) with the Openbox window manager (madkoding/openbox,
-# with its shelf: a dock of pinned and open apps and a clock) in the dark Ceres Pro theme and
+# with its shelf: a dock of pinned and open apps and a clock) in the dark Numix theme and
 # Kitties' fonts: windows to move, focus and close, and PCManFM for the desktop's wallpaper and
 # icons and as the file manager. The
 # kitty acts on it with xdotool and wmctrl, and the person can watch it live and take it over
@@ -26,27 +26,23 @@ RUN curl -fsSL -o /tmp/openbox.tar.gz "https://github.com/madkoding/openbox/arch
     && cd /tmp/openbox && ./bootstrap && ./configure --prefix=/usr --sysconfdir=/etc --disable-nls \
     && make -j"$(nproc)" && make DESTDIR=/out install
 
-# The window theme, Ceres by sixsixfive (BSD 2-Clause), at a fixed commit and checksum, ported from
-# its IceWM theme to Openbox's (ceres takes its menus, icons and wallpaper from ceres-pro, so
-# both come);
+# The window theme, Numix (GPL-3) and the dark Greybird (GPL-2+ or CC-BY-SA-3.0+) from Debian: only
+# their Openbox themes and licences are kept;
 # and Kitties' own fonts (Sansation, JetBrains Mono Nerd Font, the same files as the app's page),
 # from the web's woff2 to the ttf the desktop reads.
 FROM debian:bookworm-slim AS extras
-ARG CERES_COMMIT=27318b2a9e9baa3146e3be008782a37c5e6c9886
-ARG CERES_SHA256=4b7967960e50a7a94a0ff2eb969d7fdf11fd34578b395d5eddc8020bc8f41f49
 # Lucide's icons (ISC), from npm (lucide-static) at a fixed version and checksum, drawn by
 # lucide/build-theme.py as gradient squares by group of applications.
 ARG LUCIDE_VERSION=1.61.0
 ARG LUCIDE_SHA256=62773cd2ee411ad2e37c1973d1e4c4b49f9a6c57da6b5d5d0abca08756ba75f1
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git python3 woff2 \
+        numix-gtk-theme greybird-gtk-theme \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fsSL -o /tmp/ceres.tar.gz "https://codeberg.org/sixsixfive/ceres/archive/${CERES_COMMIT}.tar.gz" \
-    && echo "${CERES_SHA256}  /tmp/ceres.tar.gz" | sha256sum -c - \
-    && tar xzf /tmp/ceres.tar.gz -C /tmp \
-    && mkdir -p /out/themes /out/doc /out/fonts \
-    && cp /tmp/ceres/LICENSE /out/doc/LICENSE
-COPY openbox/ceres-to-openbox.py /tmp/ceres-to-openbox.py
-RUN for t in ceres ceres-pro; do /tmp/ceres-to-openbox.py /tmp/ceres/ceres-extra/ceres-icewm/$t /out/themes $t; done
+RUN mkdir -p /out/themes/Numix /out/themes/Greybird-dark /out/doc/numix /out/doc/greybird /out/fonts \
+    && cp -a /usr/share/themes/Numix/openbox-3 /out/themes/Numix/ \
+    && cp -a /usr/share/themes/Greybird-dark/openbox-3 /out/themes/Greybird-dark/ \
+    && cp /usr/share/doc/numix-gtk-theme/copyright /out/doc/numix/ \
+    && cp /usr/share/doc/greybird-gtk-theme/copyright /out/doc/greybird/
 COPY fonts/ /tmp/fonts/
 RUN for f in /tmp/fonts/*.woff2; do woff2_decompress "$f"; done && mv /tmp/fonts/*.ttf /out/fonts/
 COPY lucide/ /tmp/lucide-map/
@@ -95,7 +91,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY --from=openbox /out/ /
 RUN ldconfig
 COPY --from=extras /out/themes/ /usr/share/themes/
-COPY --from=extras /out/doc/LICENSE /usr/share/doc/ceres/LICENSE
+COPY --from=extras /out/doc/numix/ /usr/share/doc/numix-gtk-theme/
+COPY --from=extras /out/doc/greybird/ /usr/share/doc/greybird-gtk-theme/
 COPY --from=extras /out/icons/Lucide/ /usr/share/icons/Lucide/
 COPY --from=extras /out/doc/LUCIDE-LICENSE /usr/share/doc/lucide-icons/LICENSE
 COPY --from=extras /out/fonts/ /usr/share/fonts/truetype/kitties/

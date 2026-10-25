@@ -49,7 +49,7 @@
 </placement>
 
 <theme>
-  <name>ceres-pro</name><!--theme-->
+  <name>Numix</name><!--theme-->
   <titleLayout>NDLSIMC</titleLayout>
   <!--
       available characters are NDSLIMC, each can occur at most once.
