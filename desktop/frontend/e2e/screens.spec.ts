@@ -111,6 +111,48 @@ test("a desktop task: two columns, the latest screenshot in view and the earlier
   }
   // A turn's chip in the chat points at its steps.
   await expect(chat.getByTestId("desk-link").first()).toBeVisible();
+  // The arrows (and ← →) walk back through the screenshots; the counter says where.
+  const walk = desk.getByTestId("desk-walk");
+  if (await walk.isVisible()) {
+    const last = (await walk.textContent())!.trim();
+    const total = last.match(/\/\s*(\d+)/)![1];
+    await expect(walk).toContainText(`${total} / ${total}`);
+    await desk.getByRole("button", { name: "Previous screenshot" }).click();
+    await expect(walk).toContainText(`${Number(total) - 1} / ${total}`);
+    await desk.getByTestId("desk-latest").focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(walk).toContainText(`${total} / ${total}`);
+    await page.keyboard.press("ArrowLeft");
+    await expect(walk).toContainText(`${Number(total) - 1} / ${total}`);
+  }
+  // The divider resizes the column (keys too) and the width is remembered; a double click resets.
+  const bar = page.getByTestId("desk-bar");
+  const wide = (await desk.boundingBox())!.width;
+  await bar.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(async () => (await desk.boundingBox())!.width).toBeGreaterThan(wide + 10);
+  await page.reload();
+  await expect
+    .poll(async () => (await page.getByTestId("desk").boundingBox())?.width)
+    .toBeGreaterThan(wide + 10);
+  await page.getByTestId("desk-bar").dblclick();
+  await expect
+    .poll(async () => Math.abs(((await page.getByTestId("desk").boundingBox())?.width ?? 0) - wide))
+    .toBeLessThan(6);
+});
+
+test("on a phone the desktop tab gives the chat back when the task ends", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/${Q}#chat/${ids.desktop}`);
+  await page.getByTestId("tab-desk").click();
+  await expect(page.getByTestId("tab-desk")).toHaveAttribute("aria-selected", "true");
+  await page.getByPlaceholder("Say something…").fill("tom, open https://example.com again");
+  await page.keyboard.press("Enter");
+  await expect(page.getByTestId("tab-chat")).toHaveAttribute("aria-selected", "true", {
+    timeout: 30000,
+  });
+  await expect(page.locator(".conv-chat .msg.agent").last()).toBeVisible();
+  await shot(page, "12-phone-answer");
 });
 
 test("the technical details show only when asked for", async ({ page }) => {

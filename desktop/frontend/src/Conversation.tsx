@@ -165,7 +165,20 @@ function Desk({
   const index = picked !== null && tasks.includes(picked) ? picked : tasks[tasks.length - 1];
   const turn = turns[index];
   const steps = turn.steps || [];
-  const shot = lastShotIndex(turn);
+  // The steps with a screenshot: the big picture is the latest unless the person walked back
+  // (with the arrows, or ← and →); a new picture brings it forward again.
+  const withShot = steps.map((st, i) => (st.shot ? i : -1)).filter((i) => i >= 0);
+  const [back, setBack] = useState<number | null>(null);
+  useEffect(() => setBack(null), [index, withShot.length]);
+  const at =
+    back !== null && withShot.includes(back) ? back : (withShot[withShot.length - 1] ?? -1);
+  const shot = at;
+  const walk = (by: number) => {
+    const n = withShot.indexOf(at) + by;
+    if (n >= 0 && n < withShot.length) {
+      setBack(withShot[n]);
+    }
+  };
   const list = useRef<HTMLElement>(null);
   // A task that goes on keeps its newest step in view.
   useEffect(() => {
@@ -176,7 +189,23 @@ function Desk({
   const who = (i: number) =>
     (turns[i].kitty && kitties.get(turns[i].kitty!)?.name) || turns[i].from;
   return (
-    <aside class="conv-desk" ref={list} aria-label={t("Desktop")} data-testid="desk">
+    <aside
+      class="conv-desk"
+      ref={list}
+      aria-label={t("Desktop")}
+      data-testid="desk"
+      onKeyDown={(e) => {
+        const tag = (e.target as HTMLElement).tagName;
+        if (tag === "INPUT" || tag === "TEXTAREA" || e.altKey || e.ctrlKey || e.metaKey) {
+          return;
+        }
+        if (e.key === "ArrowLeft") {
+          walk(-1);
+        } else if (e.key === "ArrowRight") {
+          walk(1);
+        }
+      }}
+    >
       <header class="desk-head">
         <IconMonitor size={14} />
         <span class="flex-1">{t("Desktop")}</span>
@@ -198,8 +227,36 @@ function Desk({
         </div>
       )}
       {shot >= 0 && (
-        <div class="desk-hero" data-testid="desk-latest">
+        <div
+          class="desk-hero"
+          data-testid="desk-latest"
+          tabIndex={0}
+          aria-label={t("Screenshots: use the left and right arrow keys")}
+        >
           <Shot latest path={`/v1/chats/${chat}/shots/${steps[shot].shot}`} onOpen={onOpen} />
+          {withShot.length > 1 && (
+            <div class="desk-walk" data-testid="desk-walk">
+              <button
+                class="plain"
+                aria-label={t("Previous screenshot")}
+                disabled={withShot.indexOf(at) === 0}
+                onClick={() => walk(-1)}
+              >
+                ‹
+              </button>
+              <span>
+                {withShot.indexOf(at) + 1} / {withShot.length}
+              </span>
+              <button
+                class="plain"
+                aria-label={t("Next screenshot")}
+                disabled={withShot.indexOf(at) === withShot.length - 1}
+                onClick={() => walk(1)}
+              >
+                ›
+              </button>
+            </div>
+          )}
         </div>
       )}
       <div class="trail" aria-label={t("steps")}>
@@ -610,6 +667,35 @@ export default function Conversation({ session, kitties, user, pending, waiting,
   const tasks = all.map((turn, i) => (hasSteps(turn) ? i : -1)).filter((i) => i >= 0);
   const split = tasks.length > 0;
   const lastTask = tasks[tasks.length - 1] ?? -1;
+  // The width of the desktop column in a window, kept in this browser.
+  const [deskW, setDeskW] = useState<number | null>(() => {
+    try {
+      return Number(localStorage.getItem("kitties.desk")) || null;
+    } catch {
+      return null;
+    }
+  });
+  const conv = useRef<HTMLDivElement>(null);
+  const resize = (w: number | null) => {
+    const room = conv.current?.clientWidth ?? 1200;
+    const next = w === null ? null : Math.round(Math.max(300, Math.min(w, 900, room * 0.7)));
+    setDeskW(next);
+    try {
+      localStorage.setItem("kitties.desk", next ? String(next) : "");
+    } catch {
+      /* kept for this visit only */
+    }
+  };
+  // On a phone, the answer is what the person wants when a task ends: the desktop tab gives the
+  // chat back then.
+  const running = lastTask >= 0 && !!all[lastTask]?.working;
+  const wasRunning = useRef(false);
+  useEffect(() => {
+    if (wasRunning.current && !running) {
+      setTab("chat");
+    }
+    wasRunning.current = running;
+  }, [running]);
   useEffect(() => {
     setPicked(null);
     if (lastTask < 0) {
@@ -652,7 +738,11 @@ export default function Conversation({ session, kitties, user, pending, waiting,
   const stripShot = strip ? lastShotIndex(strip) : -1;
   const stripStep = strip?.steps?.[strip.steps.length - 1];
   return (
-    <div class={`conv ${split ? "conv-split" : ""} tab-${tab}`}>
+    <div
+      ref={conv}
+      class={`conv ${split ? "conv-split" : ""} tab-${tab}`}
+      style={deskW ? { "--desk-w": `${deskW}px` } : undefined}
+    >
       {split && (
         <div class="conv-tabs" role="tablist">
           {(["chat", "desk"] as const).map((id) => (
@@ -780,6 +870,37 @@ export default function Conversation({ session, kitties, user, pending, waiting,
           </div>
         )}
       </div>
+      {split && (
+        <div
+          class="conv-bar"
+          role="separator"
+          aria-orientation="vertical"
+          aria-label={t("Resize the desktop column")}
+          aria-valuenow={deskW ?? undefined}
+          tabIndex={0}
+          data-testid="desk-bar"
+          title={t("Drag to resize; double-click to reset")}
+          onDblClick={() => resize(null)}
+          onPointerDown={(e) => (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)}
+          onPointerMove={(e) => {
+            if ((e.currentTarget as HTMLElement).hasPointerCapture(e.pointerId)) {
+              const box = conv.current?.getBoundingClientRect();
+              box && resize(box.right - e.clientX);
+            }
+          }}
+          onKeyDown={(e) => {
+            const now =
+              deskW ??
+              (conv.current?.querySelector(".conv-desk") as HTMLElement | null)?.offsetWidth ??
+              450;
+            if (e.key === "ArrowLeft") {
+              resize(now + 24);
+            } else if (e.key === "ArrowRight") {
+              resize(now - 24);
+            }
+          }}
+        />
+      )}
       {split && (
         <Desk
           turns={all}

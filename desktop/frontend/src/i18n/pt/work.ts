@@ -37,6 +37,14 @@ const dict: Dictionary = {
   "Show it on the desktop": "Ver na área de trabalho",
   "{n} steps on the desktop": "{n} passos na área de trabalho",
 
+  "Previous screenshot": "Captura anterior",
+  "Next screenshot": "Próxima captura",
+  "Resize the desktop column": "Mudar a largura da coluna da área de trabalho",
+  "Drag to resize; double-click to reset":
+    "Arraste para mudar a largura; clique duplo para restaurar",
+
+  "Screenshots: use the left and right arrow keys": "Capturas: use as setas esquerda e direita",
+
   // Steps of a desktop task
   "Opened {host}": "Abriu {host}",
   "Opened a page": "Abriu uma página",
