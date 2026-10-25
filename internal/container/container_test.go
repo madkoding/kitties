@@ -55,6 +55,22 @@ func TestDetect(t *testing.T) {
 	}
 }
 
+func TestTimezoneOfTheHostReachesTheDesktop(t *testing.T) {
+	t.Setenv("TZ", "America/Santiago")
+	args := strings.Join(Spec{Name: "a", Image: "i"}.Args(), " ")
+	if !strings.Contains(args, "-e TZ=America/Santiago") {
+		t.Errorf("args lack the host's zone: %s", args)
+	}
+	own := strings.Join(Spec{Name: "a", Image: "i", Env: map[string]string{"TZ": "Europe/Madrid"}}.Args(), " ")
+	if strings.Count(own, "TZ=") != 1 || !strings.Contains(own, "TZ=Europe/Madrid") {
+		t.Errorf("a zone in the spec must win: %s", own)
+	}
+	t.Setenv("TZ", "not a zone; rm -rf /")
+	if z := HostTimezone(); strings.ContainsAny(z, " ;") {
+		t.Errorf("HostTimezone = %q", z)
+	}
+}
+
 func TestSpecValidateAndArgs(t *testing.T) {
 	good := Spec{Name: "kitty-mimi", KittyName: "mimi", Image: "ghcr.io/x/y:latest", MemoryMB: 1024, CPUs: 1.5,
 		Network: "cats", Workspace: "/data/mimi", Env: map[string]string{"B": "2", "A": "1"}}

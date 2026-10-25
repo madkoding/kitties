@@ -78,10 +78,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         chromium fonts-dejavu fonts-noto-color-emoji \
         ca-certificates curl git jq python3 python3-websocket openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
-        inkscape imagemagick mtpaint \
+        inkscape imagemagick mtpaint mousepad \
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
         libx11-6 libxext6 libjpeg62-turbo \
-        tini procps \
+        tini procps tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
     && mkdir -p /home/kitty/work && chown -R kitty:kitty /home/kitty \
