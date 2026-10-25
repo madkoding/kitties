@@ -317,7 +317,9 @@ func TestDelegateWaitsForTheDesktop(t *testing.T) {
 	sess2, _ := s2.Create("", []string{"bo"})
 	_, _ = s2.Send(context.Background(), sess2.ID, "go")
 	s2.Wait()
-	if fed := sb2.seen[1][len(sb2.seen[1])-1].Content; !strings.Contains(fed, "ana: did not finish in time") {
+	// ana's own one second budget and the wait for her end at about the same time: on a
+	// slow machine either one speaks first, and both tell bo that time ran out.
+	if fed := sb2.seen[1][len(sb2.seen[1])-1].Content; !strings.Contains(fed, "ana: did not finish in time") && !strings.Contains(fed, "the time budget (1s) is spent") {
 		t.Errorf("timeout feedback = %q", fed)
 	}
 	// ana giving up on it: bo hears that too.
