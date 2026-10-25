@@ -30,6 +30,7 @@ export interface Kitty {
 export const THEMES: [string, string][] = [
   ["", "Ceres Pro"],
   ["ceres", "Ceres"],
+  ["luma", "Luma"],
   ["default", "IceWM"],
   ["CrystalBlue", "Crystal Blue"],
   ["Helix", "Helix"],

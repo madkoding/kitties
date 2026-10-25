@@ -58,7 +58,7 @@ func TestLimits(t *testing.T) {
 }
 
 func TestValidTheme(t *testing.T) {
-	for _, ok := range []string{"", "ceres", "ceres-pro", "default", "win95"} {
+	for _, ok := range []string{"", "ceres", "ceres-pro", "luma", "default", "win95"} {
 		if !ValidTheme(ok) {
 			t.Errorf("%q is a theme", ok)
 		}

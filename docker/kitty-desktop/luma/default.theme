@@ -1,0 +1,57 @@
+# Luma: a flat dark desktop in the colours of LumaUI's dark appearance (the @luma_* roles:
+# window #202124, content #25282d, ink #f2f3f5, muted #8d8f93, accent #80a8d2), Figtree for the
+# type and Lucide for the icons. A look in the manner of Luma's panel and windows; it is not
+# Luma, and carries no Luma name or logo.
+ThemeDescription="Luma, a flat dark desktop"
+ThemeAuthor="Kitties"
+
+Look=flat
+TitleBarHeight=34
+TitleBarJustify=0
+TitleButtonsLeft=""
+TitleButtonsRight="ihmxc"
+TitleButtonsSupported="ihmrxdc"
+ShowMenuButtonIcon=1
+BorderSizeX=1
+BorderSizeY=1
+CornerSizeX=12
+CornerSizeY=12
+DlgBorderSizeX=1
+DlgBorderSizeY=1
+TaskBarHeight=44
+
+ColorNormalBorder="rgb:2b/2e/33"
+ColorActiveBorder="rgb:80/a8/d2"
+ColorNormalTitleBar="rgb:20/21/24"
+ColorActiveTitleBar="rgb:25/28/2d"
+ColorNormalTitleBarText="rgb:8d/8f/93"
+ColorActiveTitleBarText="rgb:f2/f3/f5"
+ColorNormalButton="rgb:20/21/24"
+ColorNormalMenu="rgb:25/2a/30"
+ColorActiveMenuItem="rgb:30/36/3d"
+ColorNormalMenuItemText="rgb:f2/f3/f5"
+ColorActiveMenuItemText="rgb:f2/f3/f5"
+ColorDisabledMenuItemText="rgb:61/63/67"
+ColorMoveSizeStatus="rgb:25/2a/30"
+ColorMoveSizeStatusText="rgb:f2/f3/f5"
+ColorToolTip="rgb:30/36/3d"
+ColorToolTipText="rgb:f2/f3/f5"
+ColorDefaultTaskBar="rgb:20/21/24"
+ColorNormalTaskBarApp="rgb:20/21/24"
+ColorNormalTaskBarAppText="rgb:8d/8f/93"
+ColorActiveTaskBarApp="rgb:30/36/3d"
+ColorActiveTaskBarAppText="rgb:f2/f3/f5"
+ColorMinimizedTaskBarApp="rgb:20/21/24"
+ColorMinimizedTaskBarAppText="rgb:61/63/67"
+ColorClock="rgb:20/21/24"
+ColorClockText="rgb:f2/f3/f5"
+ColorListBox="rgb:25/28/2d"
+ColorListBoxText="rgb:f2/f3/f5"
+ColorListBoxSelection="rgb:3a/4a/5c"
+ColorListBoxSelectionText="rgb:f2/f3/f5"
+ColorScrollBar="rgb:20/21/24"
+ColorScrollBarSlider="rgb:3a/3e/45"
+ColorScrollBarButtonArrow="rgb:8d/8f/93"
+
+TaskBarClockLeds=0
+MenuMaximalWidth=0

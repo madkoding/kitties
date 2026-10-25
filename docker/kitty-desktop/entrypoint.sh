@@ -14,13 +14,11 @@ for _ in $(seq 1 50); do
     fi
     sleep 0.1
 done
-# The desktop: IceWM with the dark Ceres Pro theme and its taskbar (Chromium, a terminal and the
+# The desktop: IceWM with the dark Ceres Pro theme (or the one picked) and its taskbar (Chromium, a terminal and the
 # files on it), and the terminal in Kitties' colours.
 xrdb -nocpp -merge "$HOME/.Xresources" 2>/dev/null || true
 # The theme picked for this kitty, kept in its workspace (kitty-theme).
-if [ -s "$HOME/work/.desktop/theme" ]; then
-    printf 'Theme="%s/default.theme"\n' "$(head -n 1 "$HOME/work/.desktop/theme" | tr -cd 'A-Za-z0-9@._-')" >"$HOME/.icewm/theme"
-fi
+kitty-theme --boot || true
 icewm-session >/tmp/icewm.log 2>&1 &
 # The wallpaper and the icons on it (PCManFM draws them over IceWM's background).
 pcmanfm --desktop >/tmp/pcmanfm.log 2>&1 &

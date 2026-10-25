@@ -1,7 +1,7 @@
 # kitty-desktop: the body of a kitty.
 #
 # A desktop on a headless X display (Xvfb) with the IceWM window manager in the dark Ceres Pro
-# theme and Kitties' fonts: a taskbar with Chromium, a terminal and the files, windows to move,
+# theme (or the flat dark "luma" one) and Kitties' fonts: a taskbar with Chromium, a terminal and the files, windows to move,
 # focus and close, and PCManFM for the desktop's wallpaper and icons and as the file manager. The
 # kitty acts on it with xdotool and wmctrl, and the person can watch it live and take it over
 # from the chat. Chromium for the web, LibreOffice for office documents (also headless: `soffice
@@ -14,14 +14,20 @@
 
 # The window manager's theme, Ceres by sixsixfive (BSD 2-Clause), at a fixed commit and checksum
 # (ceres takes its taskbar, menus, icons and wallpaper from ceres-pro, so both come);
-# and Kitties' own fonts (Sansation, JetBrains Mono Nerd Font, the same files as the app's page),
-# from the web's woff2 to the ttf the desktop reads.
+# Kitties' own fonts (Sansation, JetBrains Mono Nerd Font, the same files as the app's page),
+# from the web's woff2 to the ttf the desktop reads; and the pieces of the "luma" theme, a flat dark
+# desktop after LumaUI's dark appearance: Figtree (SIL OFL 1.1) and Lucide's icons (ISC), from npm
+# at fixed versions and checksums.
 FROM debian:bookworm-slim AS extras
 ARG CERES_COMMIT=27318b2a9e9baa3146e3be008782a37c5e6c9886
 ARG CERES_SHA256=4b7967960e50a7a94a0ff2eb969d7fdf11fd34578b395d5eddc8020bc8f41f49
 # Haiku's icons (MIT, Haiku, Inc.), as exported by darealshinji/haiku-icons, at a fixed commit.
 ARG HAIKU_ICONS_COMMIT=ccf434a0cf31aae47cc8aac91934651619c1b9b2
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git woff2 \
+ARG LUCIDE_VERSION=1.61.0
+ARG LUCIDE_SHA256=62773cd2ee411ad2e37c1973d1e4c4b49f9a6c57da6b5d5d0abca08756ba75f1
+ARG FIGTREE_VERSION=5.3.0
+ARG FIGTREE_SHA256=745eb850be26774948b5aa9342b7182660ed3a48ac40509c7babcfdcd90c39d7
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git woff2 imagemagick \
     && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL -o /tmp/ceres.tar.gz "https://codeberg.org/sixsixfive/ceres/archive/${CERES_COMMIT}.tar.gz" \
     && echo "${CERES_SHA256}  /tmp/ceres.tar.gz" | sha256sum -c - \
@@ -38,6 +44,22 @@ RUN git init -q /tmp/haiku-icons \
     && test "$(git -C /tmp/haiku-icons rev-parse HEAD)" = "${HAIKU_ICONS_COMMIT}" \
     && /tmp/haiku/build-theme.sh /tmp/haiku-icons /out/icons/Haiku \
     && cp /tmp/haiku-icons/LICENSE /out/doc/HAIKU-ICONS-LICENSE
+
+COPY luma/ /tmp/luma/
+RUN mkdir -p /tmp/lucide /tmp/figtree \
+    && curl -fsSL -o /tmp/lucide.tgz "https://registry.npmjs.org/lucide-static/-/lucide-static-${LUCIDE_VERSION}.tgz" \
+    && echo "${LUCIDE_SHA256}  /tmp/lucide.tgz" | sha256sum -c - \
+    && tar xzf /tmp/lucide.tgz -C /tmp/lucide \
+    && curl -fsSL -o /tmp/figtree.tgz "https://registry.npmjs.org/@fontsource-variable/figtree/-/figtree-${FIGTREE_VERSION}.tgz" \
+    && echo "${FIGTREE_SHA256}  /tmp/figtree.tgz" | sha256sum -c - \
+    && tar xzf /tmp/figtree.tgz -C /tmp/figtree \
+    && /tmp/luma/build-icons.sh /tmp/lucide/package/icons /out/icons/Luma \
+    && /tmp/luma/build-theme.sh /out/themes/luma \
+    && cp /tmp/lucide/package/LICENSE /out/doc/LUCIDE-LICENSE \
+    && cp /tmp/figtree/package/LICENSE /out/doc/FIGTREE-LICENSE \
+    && cp /tmp/figtree/package/files/figtree-latin-wght-normal.woff2 /tmp/figtree/package/files/figtree-latin-wght-italic.woff2 /tmp/ \
+    && for f in /tmp/figtree-latin-wght-*.woff2; do woff2_decompress "$f"; done \
+    && mv /tmp/figtree-latin-wght-*.ttf /out/fonts/
 
 # kitty-grab, the live view's capture: C, XShm and libjpeg (see kitty-grab.c).
 FROM debian:bookworm-slim AS grab
@@ -76,7 +98,12 @@ COPY --from=extras /out/themes/ /usr/share/icewm/themes/
 COPY --from=extras /out/doc/LICENSE /usr/share/doc/ceres-icewm/LICENSE
 COPY --from=extras /out/icons/Haiku/ /usr/share/icons/Haiku/
 COPY --from=extras /out/doc/HAIKU-ICONS-LICENSE /usr/share/doc/haiku-icons/LICENSE
+COPY --from=extras /out/icons/Luma/ /usr/share/icons/Luma/
+COPY --from=extras /out/doc/LUCIDE-LICENSE /usr/share/doc/luma-theme/LUCIDE-LICENSE
+COPY --from=extras /out/doc/FIGTREE-LICENSE /usr/share/doc/luma-theme/FIGTREE-LICENSE
 COPY --from=extras /out/fonts/ /usr/share/fonts/truetype/kitties/
+# "Figtree" is the name the luma theme asks for; the variable font calls itself "Figtree Light".
+COPY luma/60-figtree.conf /etc/fonts/conf.d/60-figtree.conf
 RUN fc-cache -f
 # The wallpaper: whatever picture is in wallpaper/ (jpg, png or webp), cropped to the display.
 COPY wallpaper/ /tmp/wallpaper/

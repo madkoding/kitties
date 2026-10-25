@@ -313,7 +313,8 @@ connectors:
   (MIT, Haiku, Inc.; the Haiku logo and leaf, trademarks, are left out). It is dark throughout:
   Chromium (its face, and the pages that offer a dark look), GTK programs, LibreOffice (its page
   too, on screen: a printed or exported document keeps its own colours) and the terminal. Each kitty can wear
-  another IceWM theme (the light Ceres, IceWM's own, Windows 95…), picked in its drawer. Nothing is published on the host; the orchestrator reaches a kitty
+  another IceWM theme (the light Ceres, IceWM's own, Windows 95…), picked in its drawer, among them
+  **Luma**, a flat dark desktop after LumaUI's dark appearance with Figtree and Lucide's icons (see `docs/LUMA-THEME.md`). Nothing is published on the host; the orchestrator reaches a kitty
   with `docker exec`, and `kitty-shot` returns a PNG of its display. `kitty-install` adds
   programs from Debian (sudo only runs the installer, by package name) and remembers them in the
   workspace, so a container made anew installs them again.
