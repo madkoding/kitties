@@ -179,12 +179,14 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: shell scripts parse
         run: |
-          for f in docker/kitty-desktop/*.sh; do sh -n "$f"; done
+          for f in docker/kitty-desktop/*.sh docker/kitty-desktop/test/*.sh; do sh -n "$f"; done
           python3 -m py_compile docker/kitty-desktop/kitty-page.py
       - name: the desktop's fonts are the app's
         run: for f in docker/kitty-desktop/fonts/*.woff2; do cmp "$f" "desktop/frontend/public/$(basename "$f")"; done
       - name: build the image
         run: docker build -t kitty-desktop:ci docker/kitty-desktop
+      - name: the shelf's weather and player feeds, and its font
+        run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/shelf-feeds.sh
       - name: the display comes up and a screenshot is a PNG
         run: |
           docker run -d --name kitty-ci -e KITTY_NAME=ci kitty-desktop:ci
