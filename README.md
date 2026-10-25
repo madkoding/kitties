@@ -69,6 +69,13 @@ go install github.com/madkoding/kitties/cmd/kitties@latest   # or: make build
 kitties -demo gateway        # then open http://127.0.0.1:7488 and ask Tom to open https://example.com
 ```
 
+On a Linux server, one line (release binary, checksum check, `kitties` user, systemd service; see
+[INSTALL.md](docs/INSTALL.md#on-a-linux-server-one-line)):
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/madkoding/kitties/main/scripts/install.sh | sudo sh
+```
+
 The real thing (needs Docker or Podman for the desktops):
 
 ```sh

@@ -1,6 +1,6 @@
 # Install and first steps
 
-Three ways in, from the quickest: a demo with no key and no Docker, a release you download, or
+Four ways in: a demo with no key and no Docker, one line on a Linux server, a release you download, or
 the real thing with containers. For a server, see [DEPLOY.md](DEPLOY.md).
 
 ## Try it in two minutes, no key and no Docker
@@ -12,6 +12,39 @@ kitties -demo gateway        # three kitties with a scripted brain and a drawn d
 
 Open `http://127.0.0.1:7488` (on the same machine no token is typed: the page gets it from the
 gateway) or run the desktop app, then ask Tom to *open https://example.com*.
+
+## On a Linux server, one line
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/madkoding/kitties/main/scripts/install.sh | sudo sh
+```
+
+It picks the release for the machine (amd64, arm64 or arm), checks it against the release's
+`SHA256SUMS`, installs `/usr/local/bin/kitties`, creates the `kitties` user (in the `docker` group
+when there is one), writes `/etc/kitties/kitties.env` with a generated token and installs and
+starts the `kitties` systemd service ([DEPLOY.md](DEPLOY.md) is the same by hand). At the end it
+prints the token. The gateway listens on `127.0.0.1:7488`: reach it with
+`ssh -L 7488:127.0.0.1:7488 you@server`, or put nginx or Caddy with https in front.
+
+Options go after `sh -s --`:
+
+```sh
+curl -fsSL .../install.sh | sudo sh -s -- --version v0.5.0 --public-url https://kitties.example.com
+```
+
+| Option | What it does |
+| --- | --- |
+| `--version vX.Y.Z` | a release instead of the latest |
+| `--listen ADDR` | another address (`0.0.0.0:7488` for the network) |
+| `--public-url URL` | where the page is reached from, behind https |
+| `--pubkey KEY` | the release signing key: the Ed25519 signature of `SHA256SUMS` must then check, or nothing is installed |
+| `--no-service` | the binary only, without user or systemd |
+| `--prefix DIR` | another folder for the binary |
+
+Run it again to update: it replaces the binary and the unit, restarts only if something changed,
+and keeps `kitties.env` and the token. The service cannot replace its own binary (the unit makes
+the system read-only), so updates on a server are this one line, not `updates.gateway: auto`.
+Read the script before piping it if you like: [`scripts/install.sh`](../scripts/install.sh).
 
 ## Downloading a release
 
