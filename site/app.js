@@ -6,4 +6,5 @@ var d=document.querySelector('[data-tab]');if(d)d.addEventListener('click',funct
 [].forEach.call(document.querySelectorAll('.copy'),function(b){b.addEventListener('click',function(){
 var t=b.parentNode.querySelector('code').textContent,o=b.textContent;
 if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){b.textContent=b.dataset.c;setTimeout(function(){b.textContent=o},1500)})})});
+var lg=document.querySelector('.lang');if(lg)lg.addEventListener('click',function(){try{localStorage.setItem('kitties-lang',lg.getAttribute('hreflang'))}catch(e){}});
 })();
