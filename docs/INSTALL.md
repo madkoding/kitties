@@ -48,6 +48,15 @@ Read the script before piping it if you like: [`scripts/install.sh`](../scripts/
 
 ## Downloading a release
 
+| System | Desktop app | CLI |
+| --- | --- | --- |
+| Windows | [zip](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-windows-amd64.zip) | [x64](https://github.com/madkoding/kitties/releases/latest/download/kitties-windows-amd64.exe) · [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-windows-arm64.exe) |
+| macOS | [dmg, Apple silicon](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-macos-arm64.dmg) | [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-darwin-arm64) · [Intel](https://github.com/madkoding/kitties/releases/latest/download/kitties-darwin-amd64) |
+| Linux | [zip, x64](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-linux-amd64.zip) | [x64](https://github.com/madkoding/kitties/releases/latest/download/kitties-linux-amd64) · [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-linux-arm64) · [arm](https://github.com/madkoding/kitties/releases/latest/download/kitties-linux-arm) |
+| Android | [apk](https://github.com/madkoding/kitties/releases/latest/download/kitties-android-app.apk) | [Termux, arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-android-arm64) |
+
+There is no desktop app for Intel Macs, or for Windows and Linux on arm, yet: use the CLI there.
+
 Each release has binaries for Linux, macOS, Windows and Android (Termux), the desktop app (a disk
 image for macOS, a zip for Linux and Windows), the Android app (`kitties-android-app.apk`) and
 `SHA256SUMS`. The desktop app carries its own

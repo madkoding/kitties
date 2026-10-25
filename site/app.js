@@ -7,4 +7,6 @@ var d=document.querySelector('[data-tab]');if(d)d.addEventListener('click',funct
 var t=b.parentNode.querySelector('code').textContent,o=b.textContent;
 if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){b.textContent=b.dataset.c;setTimeout(function(){b.textContent=o},1500)})})});
 var lg=document.querySelector('.lang');if(lg)lg.addEventListener('click',function(){try{localStorage.setItem('kitties-lang',lg.getAttribute('hreflang'))}catch(e){}});
+var u=navigator.userAgent,os=/Android/i.test(u)?'android':/Windows/i.test(u)?'windows':/Macintosh|Mac OS/i.test(u)?'mac':/Linux|X11/i.test(u)?'linux':'';
+var me=os&&document.querySelector('.dl[data-os='+os+']');if(me){me.classList.add('me');me.parentNode.insertBefore(me,me.parentNode.firstChild)}
 })();

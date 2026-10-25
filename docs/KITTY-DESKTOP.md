@@ -6,7 +6,7 @@ it (screenshots, actions, taking control) is in [DESKTOP.md](DESKTOP.md); this p
 desktop itself.
 
 <p align="center">
-<img src="screenshots/desktop-windows.png" alt="The kitty's desktop: a terminal, a text editor and the file manager on Openbox, with the shelf at the bottom" width="100%">
+<img src="screenshots/desktop-menu.png" alt="The kitty's desktop on Openbox: the apps menu open and the shelf at the bottom" width="100%">
 </p>
 
 > The pictures on this page were taken in a test environment (Xvfb with the same Openbox fork,
@@ -37,8 +37,6 @@ builds the fork at a fixed commit (`OPENBOX_COMMIT` in the Dockerfile): bump tha
 - **Clock and status**: the time and date, and the glyphs for network, volume, power and battery,
   each opening its own menu. The fork's own documentation has the details of the shelf:
   [madkoding/openbox](https://github.com/madkoding/openbox).
-
-<img src="screenshots/desktop-apps-menu.png" alt="The apps menu open over the windows, in the shelf's dark rounded style" width="100%">
 
 ## Theme, fonts and icons
 
