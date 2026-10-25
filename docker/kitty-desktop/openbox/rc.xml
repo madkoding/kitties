@@ -185,6 +185,8 @@
   <pinsFile>~/.config/kitties/pins</pinsFile>
   <!-- rounded corners for every menu -->
   <menuRadius>10</menuRadius>
+  <!-- air around and inside every menu -->
+  <menuPadding>8</menuPadding>
   <!-- The applications the image carries that Kitties use most, pinned to the dock
        (a click starts one, or focuses its window). -->
   <pins>
