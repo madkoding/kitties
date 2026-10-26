@@ -112,6 +112,10 @@ const dict: Dictionary = {
     "Dar a ele um computador próprio (uma área de trabalho com um navegador que ele pode usar)",
   "Needs Docker running on the gateway's machine. Without it the kitty still thinks, talks and uses connections.":
     "Precisa do Docker rodando na máquina do gateway. Sem ele, o kitty continua pensando, falando e usando conexões.",
+  "Docker is not installed on the gateway's machine. Install Docker Desktop to give kitties a computer; without it they still think, talk and use connections.":
+    "O Docker não está instalado na máquina do gateway. Instale o Docker Desktop para dar um computador aos kitties; sem ele eles continuam pensando, falando e usando conexões.",
+  "Docker is installed but not running. Open Docker Desktop and wait for it to start; the option unlocks by itself.":
+    "O Docker está instalado, mas não está rodando. Abra o Docker Desktop e espere iniciar; a opção é liberada sozinha.",
   "Creating…": "Criando…",
   Create: "Criar",
   "a name": "um nome",
