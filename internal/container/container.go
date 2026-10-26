@@ -66,38 +66,71 @@ var ErrNoRuntime = errors.New("no container runtime: install Docker or Podman, o
 // A Mac app opened from the Finder gets a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin), without
 // the folders Docker Desktop, Homebrew, OrbStack, Rancher Desktop or Podman put their programs
 // in: they are added, so docker is found and finds its own helpers (docker-credential-desktop).
+// A Windows app started before Docker Desktop was installed keeps the PATH it started with, so
+// the folders the Windows installers use are added too.
 var (
 	goos      = runtime.GOOS
 	homeDir   = os.UserHomeDir
 	setPath   = func(v string) { _ = os.Setenv("PATH", v) }
 	getPath   = func() string { return os.Getenv("PATH") }
+	getEnv    = os.Getenv
 	isDir     = func(p string) bool { st, err := os.Stat(p); return err == nil && st.IsDir() }
 	pathOnce  sync.Once
 	macPlaces = []string{"/usr/local/bin", "/opt/homebrew/bin", "~/.docker/bin", "/Applications/Docker.app/Contents/Resources/bin",
 		"~/.orbstack/bin", "~/.rd/bin", "/opt/podman/bin", "/opt/local/bin"}
 )
 
+// winPlaces lists the folders the Windows installers of Docker Desktop, Podman and Rancher
+// Desktop use, built from the environment variables that name their parents.
+func winPlaces() []string {
+	var out []string
+	for _, root := range []string{getEnv("ProgramFiles"), getEnv("ProgramW6432")} {
+		if root != "" {
+			out = append(out, filepath.Join(root, "Docker", "Docker", "resources", "bin"), filepath.Join(root, "RedHat", "Podman"))
+		}
+	}
+	if local := getEnv("LOCALAPPDATA"); local != "" {
+		out = append(out, filepath.Join(local, "Programs", "Podman"), filepath.Join(local, "Programs", "Rancher Desktop", "resources", "resources", "win32", "bin"))
+	}
+	if home := getEnv("USERPROFILE"); home != "" {
+		out = append(out, filepath.Join(home, ".rd", "bin"))
+	}
+	return out
+}
+
 // widenPath adds the folders container engines live in that PATH lacks.
 func widenPath() {
-	if goos != "darwin" {
+	var places []string
+	switch goos {
+	case "darwin":
+		places = macPlaces
+	case "windows":
+		places = winPlaces()
+	default:
 		return
 	}
 	home, _ := homeDir()
 	path := getPath()
+	key := func(dir string) string {
+		if goos == "windows" {
+			return strings.ToLower(dir) // Windows folders are not case sensitive
+		}
+		return dir
+	}
 	have := map[string]bool{}
 	for _, dir := range filepath.SplitList(path) {
-		have[dir] = true
+		have[key(dir)] = true
 	}
-	for _, dir := range macPlaces {
+	for _, dir := range places {
 		if strings.HasPrefix(dir, "~/") {
 			if home == "" {
 				continue
 			}
 			dir = filepath.Join(home, dir[2:])
 		}
-		if !have[dir] && isDir(dir) {
+		if !have[key(dir)] && isDir(dir) {
 			path += string(filepath.ListSeparator) + dir
-			have[dir] = true
+			have[key(dir)] = true
 		}
 	}
 	setPath(strings.TrimPrefix(path, string(filepath.ListSeparator)))

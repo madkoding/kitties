@@ -3,6 +3,7 @@ package container
 import (
 	"context"
 	"errors"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -230,6 +231,26 @@ func TestWidenPath(t *testing.T) {
 	widenPath()
 	if path != "/usr/local/bin:/opt/homebrew/bin" {
 		t.Errorf("empty = %s", path)
+	}
+}
+
+// A Windows app started before Docker Desktop was installed has a PATH without its folder.
+func TestWidenPathWindows(t *testing.T) {
+	oldOS, oldEnv, oldSet, oldGet, oldDir := goos, getEnv, setPath, getPath, isDir
+	t.Cleanup(func() { goos, getEnv, setPath, getPath, isDir = oldOS, oldEnv, oldSet, oldGet, oldDir })
+	goos = "windows"
+	docker := filepath.Join("/pf", "Docker", "Docker", "resources", "bin")
+	path := "/win/system32"
+	getPath = func() string { return path }
+	setPath = func(v string) { path = v }
+	getEnv = func(k string) string {
+		return map[string]string{"ProgramFiles": "/pf", "ProgramW6432": "/pf"}[k]
+	}
+	isDir = func(p string) bool { return p == docker }
+	widenPath()
+	widenPath()
+	if want := "/win/system32" + string(filepath.ListSeparator) + docker; path != want {
+		t.Errorf("windows = %s, want %s", path, want)
 	}
 }
 
