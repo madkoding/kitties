@@ -16,7 +16,7 @@ Commits and pull request titles follow [Conventional Commits](https://www.conven
 
 - `kitties-<os>-<arch>` for Linux (amd64, arm64, arm), macOS (amd64, arm64), Windows (amd64, arm64)
   and Android (arm64, under Termux).
-- The desktop app: a disk image for macOS, a zip for Linux and Windows, each for amd64 and arm64. Each carries its own gateway.
+- The desktop app: a disk image for macOS, a zip for Linux and an installer (`-setup.exe`) for Windows, each for amd64 and arm64. Each carries its own gateway.
 - `kitties-android-app.apk`.
 - `SHA256SUMS` and `SHA256SUMS.sig`.
 - Container images on `ghcr.io`: `kitty-desktop` (the kitties' bodies) and `kitties` (the gateway),

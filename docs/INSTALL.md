@@ -50,13 +50,13 @@ Read the script before piping it if you like: [`scripts/install.sh`](../scripts/
 
 | System | Desktop app | CLI |
 | --- | --- | --- |
-| Windows | [x64 zip](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-windows-amd64.zip) · [arm64 zip](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-windows-arm64.zip) | [x64](https://github.com/madkoding/kitties/releases/latest/download/kitties-windows-amd64.exe) · [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-windows-arm64.exe) |
+| Windows | [x64 installer](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-windows-amd64-setup.exe) · [arm64 installer](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-windows-arm64-setup.exe) | [x64](https://github.com/madkoding/kitties/releases/latest/download/kitties-windows-amd64.exe) · [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-windows-arm64.exe) |
 | macOS | [Apple silicon dmg](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-macos-arm64.dmg) · [Intel dmg](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-macos-amd64.dmg) | [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-darwin-arm64) · [Intel](https://github.com/madkoding/kitties/releases/latest/download/kitties-darwin-amd64) |
 | Linux | [x64 zip](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-linux-amd64.zip) · [arm64 zip](https://github.com/madkoding/kitties/releases/latest/download/kitties-desktop-linux-arm64.zip) | [x64](https://github.com/madkoding/kitties/releases/latest/download/kitties-linux-amd64) · [arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-linux-arm64) · [arm](https://github.com/madkoding/kitties/releases/latest/download/kitties-linux-arm) |
 | Android | [apk](https://github.com/madkoding/kitties/releases/latest/download/kitties-android-app.apk) | [Termux, arm64](https://github.com/madkoding/kitties/releases/latest/download/kitties-android-arm64) |
 
 Each release has binaries for Linux, macOS, Windows and Android (Termux), the desktop app (a disk
-image for macOS, a zip for Linux and Windows, each for amd64 and arm64), the Android app (`kitties-android-app.apk`) and
+image for macOS, a zip for Linux and an installer (`-setup.exe`) for Windows, each for amd64 and arm64), the Android app (`kitties-android-app.apk`) and
 `SHA256SUMS`. The desktop app carries its own
 gateway and starts it when none is running, so it needs nothing else installed. They are not yet signed with an Apple Developer ID, so macOS blocks a file that
 came through a browser ("Apple could not verify..."). It is the quarantine flag, not damage:
@@ -68,7 +68,7 @@ xattr -d com.apple.quarantine kitties-darwin-arm64 && chmod +x kitties-darwin-ar
 xattr -dr com.apple.quarantine /Applications/Kitties.app
 ```
 
-On Windows, SmartScreen asks once: *More info* then *Run anyway*.
+On Windows, run `kitties-desktop-windows-amd64-setup.exe` (or `-arm64-` on an Arm PC): it installs for your user without administrator rights, adds a Start menu entry and an uninstaller, and installs the WebView2 runtime if the PC lacks it. SmartScreen asks once: *More info* then *Run anyway*.
 
 ## With containers
 
