@@ -88,15 +88,8 @@ func Kinds() []string {
 
 // Lookup returns the kind called name.
 func Lookup(name string) (Kind, bool) {
-	// The kind comes from the table, never from the text asked for, so what a caller sends
-	// does not travel into the kind's address.
-	want := strings.ToLower(strings.TrimSpace(name))
-	for known, k := range kinds {
-		if known == want {
-			return k, true
-		}
-	}
-	return Kind{}, false
+	k, ok := kinds[strings.ToLower(strings.TrimSpace(name))]
+	return k, ok
 }
 
 // Options configures one client.
