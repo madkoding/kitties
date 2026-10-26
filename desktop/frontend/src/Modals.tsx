@@ -148,6 +148,7 @@ export function NewKittyModal({
   onCreated,
   onNeedModel,
   containers = true,
+  dockerState,
   taken = [],
 }: {
   onClose: () => void;
@@ -156,6 +157,8 @@ export function NewKittyModal({
   onCreated: (note?: string) => void;
   onNeedModel?: () => void;
   containers?: boolean;
+  // dockerState says why there are no containers: Docker is not installed, or it is closed.
+  dockerState?: "not_installed" | "not_running";
   // taken are the names of the kitties there are already.
   taken?: string[];
 }) {
@@ -335,9 +338,17 @@ export function NewKittyModal({
       </label>
       {!containers && (
         <p class="text-xs text-[var(--t4)] mt-1">
-          {t(
-            "Needs Docker running on the gateway's machine. Without it the kitty still thinks, talks and uses connections.",
-          )}
+          {dockerState === "not_installed"
+            ? t(
+                "Docker is not installed on the gateway's machine. Install Docker Desktop to give kitties a computer; without it they still think, talk and use connections.",
+              )
+            : dockerState === "not_running"
+              ? t(
+                  "Docker is installed but not running. Open Docker Desktop and wait for it to start; the option unlocks by itself.",
+                )
+              : t(
+                  "Needs Docker running on the gateway's machine. Without it the kitty still thinks, talks and uses connections.",
+                )}
         </p>
       )}
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}

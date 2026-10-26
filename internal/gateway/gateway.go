@@ -23,6 +23,7 @@ import (
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/llmauth"
@@ -553,6 +554,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 		"kitties": len(s.fleet.List()), "containers": has}
 	if err != nil {
 		out["containers_error"] = err.Error()
+		switch {
+		case errors.Is(err, container.ErrNotRunning):
+			out["containers_state"] = "not_running"
+		case errors.Is(err, container.ErrNotInstalled):
+			out["containers_state"] = "not_installed"
+		}
 	}
 	reply(w, http.StatusOK, out)
 }
