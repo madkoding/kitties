@@ -41,17 +41,41 @@ func TestDetect(t *testing.T) {
 	if err != nil || rt.Bin != "/usr/bin/podman" {
 		t.Errorf("Detect = %+v, %v", rt, err)
 	}
-	if _, err := Detect(context.Background(), "docker"); !errors.Is(err, ErrNoRuntime) {
+	if _, err := Detect(context.Background(), "docker"); !errors.Is(err, ErrNotInstalled) {
 		t.Errorf("missing docker: %v", err)
 	}
 	f = &fake{answer: func([]string) ([]byte, error) { return []byte("daemon down"), errors.New("x") }}
 	f.install(t, "docker")
-	if _, err := Detect(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "daemon down") {
+	if _, err := Detect(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "daemon down") || !errors.Is(err, ErrNotRunning) {
 		t.Errorf("a runtime that does not answer: %v", err)
 	}
 	f.install(t)
-	if _, err := Detect(context.Background(), "auto"); !errors.Is(err, ErrNoRuntime) {
+	if _, err := Detect(context.Background(), "auto"); !errors.Is(err, ErrNotInstalled) || errors.Is(err, ErrNotRunning) {
 		t.Error("no binary at all")
+	}
+}
+
+func TestWindowsPlacesComeFromTheEnvironment(t *testing.T) {
+	old := getEnv
+	t.Cleanup(func() { getEnv = old })
+	getEnv = func(k string) string {
+		return map[string]string{"ProgramFiles": `C:\Program Files`}[k]
+	}
+	got := placesFor("windows")
+	found := false
+	for _, p := range got {
+		if strings.Contains(p, "Docker") && strings.HasPrefix(p, `C:\Program Files`) {
+			found = true
+		}
+		if strings.Contains(p, "%") {
+			t.Errorf("unexpanded place %q", p)
+		}
+	}
+	if !found {
+		t.Errorf("Docker Desktop's folder missing: %v", got)
+	}
+	if len(placesFor("linux")) != 0 {
+		t.Error("linux needs no extra places")
 	}
 }
 

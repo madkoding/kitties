@@ -63,9 +63,17 @@ type Runtime struct {
 // ErrNoRuntime is returned when neither docker nor podman answers.
 var ErrNoRuntime = errors.New("no container runtime: install Docker or Podman, or set containers.runtime")
 
+// ErrNotInstalled is ErrNoRuntime when no docker or podman program was found anywhere.
+var ErrNotInstalled = fmt.Errorf("%w: it is not installed", ErrNoRuntime)
+
+// ErrNotRunning is ErrNoRuntime when docker or podman is installed but its engine does not
+// answer: Docker Desktop is closed or still starting.
+var ErrNotRunning = fmt.Errorf("%w: it is installed but not running", ErrNoRuntime)
+
 // A Mac app opened from the Finder gets a bare PATH (/usr/bin:/bin:/usr/sbin:/sbin), without
 // the folders Docker Desktop, Homebrew, OrbStack, Rancher Desktop or Podman put their programs
 // in: they are added, so docker is found and finds its own helpers (docker-credential-desktop).
+// A Windows app started before Docker Desktop was installed has the same stale PATH.
 var (
 	goos      = runtime.GOOS
 	homeDir   = os.UserHomeDir
@@ -75,11 +83,40 @@ var (
 	pathOnce  sync.Once
 	macPlaces = []string{"/usr/local/bin", "/opt/homebrew/bin", "~/.docker/bin", "/Applications/Docker.app/Contents/Resources/bin",
 		"~/.orbstack/bin", "~/.rd/bin", "/opt/podman/bin", "/opt/local/bin"}
+	// winPlaces are relative to a Windows environment variable ("%ProgramFiles%/…").
+	winPlaces = []string{"%ProgramFiles%/Docker/Docker/resources/bin", "%ProgramFiles%/RedHat/Podman",
+		"%ProgramFiles%/Podman", "%LOCALAPPDATA%/Programs/Rancher Desktop/resources/resources/win32/bin",
+		"%ProgramFiles%/Rancher Desktop/resources/resources/win32/bin", "~/.rd/bin"}
+	getEnv = os.Getenv
 )
+
+// placesFor lists the folders container engines live in on this system.
+func placesFor(goos string) []string {
+	switch goos {
+	case "darwin":
+		return macPlaces
+	case "windows":
+		var out []string
+		for _, p := range winPlaces {
+			if strings.HasPrefix(p, "%") {
+				end := strings.Index(p[1:], "%") + 1
+				base := getEnv(p[1:end])
+				if base == "" {
+					continue
+				}
+				p = filepath.Join(base, filepath.FromSlash(p[end+1:]))
+			}
+			out = append(out, p)
+		}
+		return out
+	}
+	return nil
+}
 
 // widenPath adds the folders container engines live in that PATH lacks.
 func widenPath() {
-	if goos != "darwin" {
+	places := placesFor(goos)
+	if len(places) == 0 {
 		return
 	}
 	home, _ := homeDir()
@@ -88,7 +125,7 @@ func widenPath() {
 	for _, dir := range filepath.SplitList(path) {
 		have[dir] = true
 	}
-	for _, dir := range macPlaces {
+	for _, dir := range places {
 		if strings.HasPrefix(dir, "~/") {
 			if home == "" {
 				continue
@@ -111,19 +148,25 @@ func Detect(ctx context.Context, want string) (Runtime, error) {
 		candidates = []string{want}
 	}
 	var reasons []string
+	installed := false
 	for _, bin := range candidates {
 		path, err := lookPath(bin)
 		if err != nil {
 			reasons = append(reasons, bin+" is not installed")
 			continue
 		}
+		installed = true
 		if out, err := runCmd(ctx, path, "info", "--format", "{{.ID}}"); err != nil {
 			reasons = append(reasons, fmt.Sprintf("%s does not answer: %s", bin, strings.TrimSpace(string(out))))
 			continue
 		}
 		return Runtime{Bin: path}, nil
 	}
-	return Runtime{}, fmt.Errorf("%w (%s)", ErrNoRuntime, strings.Join(reasons, "; "))
+	why := ErrNotInstalled
+	if installed {
+		why = ErrNotRunning
+	}
+	return Runtime{}, fmt.Errorf("%w (%s)", why, strings.Join(reasons, "; "))
 }
 
 // Spec is one container to run.

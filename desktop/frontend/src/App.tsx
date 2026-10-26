@@ -93,6 +93,7 @@ export default function App() {
   // The models (to guide a first run) and whether the gateway can give kitties a desktop.
   const [models, setModels] = useState<ProviderInfo[]>([]);
   const [containers, setContainers] = useState(true);
+  const [dockerState, setDockerState] = useState<"not_installed" | "not_running" | undefined>();
 
   const user = t("You");
 
@@ -103,6 +104,7 @@ export default function App() {
       setChats(c);
       setVersion(h.version || "");
       setContainers(h.containers !== false);
+      setDockerState(h.containers_state);
       api
         .providers()
         .then(setModels)
@@ -493,6 +495,7 @@ export default function App() {
       {modal === "kitty" && (
         <NewKittyModal
           containers={containers}
+          dockerState={dockerState}
           taken={kitties.map((k) => k.name)}
           onNeedModel={() => {
             go("#new-models-add");
