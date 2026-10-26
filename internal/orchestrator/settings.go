@@ -440,16 +440,34 @@ func (m *Manager) TestProvider(ctx context.Context, name string) (string, error)
 	return strings.TrimSpace(reply.Content), nil
 }
 
+// ErrUnsavedAddress is returned by ProviderModels for a server address that is neither the
+// provider's own nor one already saved: the gateway only asks addresses it was configured with.
+var ErrUnsavedAddress = errors.New("save the model first to list the models of a custom server address")
+
 // ProviderModels checks the API key of a profile that is not saved yet, and lists the models it
 // can use. Nothing is stored. An empty key falls back to the one saved under name, when that
-// profile is of the same kind, so editing a profile does not ask for the key again.
+// profile is of the same kind, so editing a profile does not ask for the key again. The address
+// asked is the provider's own or the one saved under name, never one that only the page sent.
 func (m *Manager) ProviderModels(ctx context.Context, name string, p config.Provider) ([]string, error) {
-	if p.APIKey == "" && p.APIKeyEnv == "" && name != "" {
-		m.mu.RLock()
-		if old, ok := m.cfg.Providers[name]; ok && old.Kind == p.Kind {
+	requested := strings.TrimRight(p.BaseURL, "/")
+	p.BaseURL = ""
+	m.mu.RLock()
+	old, saved := m.cfg.Providers[name]
+	m.mu.RUnlock()
+	if saved && old.Kind == p.Kind {
+		if p.APIKey == "" && p.APIKeyEnv == "" {
 			p.APIKey, p.APIKeyEnv = old.APIKey, old.APIKeyEnv
 		}
-		m.mu.RUnlock()
+		if requested != "" && requested == strings.TrimRight(old.BaseURL, "/") {
+			p.BaseURL = old.BaseURL
+			requested = ""
+		}
+	}
+	if k, ok := provider.Lookup(p.Kind); ok && requested != "" && requested == strings.TrimRight(k.BaseURL, "/") {
+		requested = ""
+	}
+	if requested != "" {
+		return nil, ErrUnsavedAddress
 	}
 	return provider.ListModels(ctx, p.Options(), nil)
 }
