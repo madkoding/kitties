@@ -365,10 +365,22 @@ jobs:
             test -e "$mnt/Applications"
             test -f "$mnt/READ ME FIRST.txt"
             hdiutil detach "$mnt"
+          elif [ "$RUNNER_OS" = "Windows" ]; then
+            # Windows: an installer (per user, no administrator) that puts the app and its gateway
+            # side by side, adds the Start menu entry and the uninstaller, and installs the WebView2
+            # runtime when the machine lacks it (desktop/windows/installer.nsi).
+            if ! command -v makensis >/dev/null 2>&1; then
+              choco install nsis -y --no-progress
+              export PATH="$PATH:/c/Program Files (x86)/NSIS"
+            fi
+            args=(-V2 "-DARCH=${{ matrix.goarch }}" "-DVERSION=${{ github.ref_name }}" "-DBIN=$(cygpath -w "$PWD/desktop/build/bin")" "-DOUT=$(cygpath -w "$PWD/out/${{ matrix.name }}-setup.exe")")
+            ico="$(find desktop/build -name '*.ico' | head -n 1)"
+            if [ -n "$ico" ]; then args+=("-DICON=$(cygpath -w "$PWD/$ico")"); fi
+            makensis "${args[@]}" "$(cygpath -w "$PWD/desktop/windows/installer.nsi")"
+            test -s "out/${{ matrix.name }}-setup.exe"
           else
-            # Linux and Windows: the app and its gateway side by side in one zip.
-            ext=""; if [ "$RUNNER_OS" = "Windows" ]; then ext=".exe"; fi
-            files=("$(basename "${{ matrix.out }}")" "kitties-gateway$ext")
+            # Linux: the app and its gateway side by side in one zip.
+            files=("$(basename "${{ matrix.out }}")" "kitties-gateway")
             if command -v zip >/dev/null 2>&1; then
               (cd desktop/build/bin && zip -q "../../../out/${{ matrix.name }}.zip" "${files[@]}")
             else
@@ -502,3 +514,15 @@ jobs:
             dist/SHA256SUMS
             dist/SHA256SUMS.sig
           generate_release_notes: true
+          body: |
+            ## Which file do I download?
+
+            | You have | Download |
+            | --- | --- |
+            | Windows | `kitties-desktop-windows-amd64-setup.exe` (`-arm64-` on an Arm PC): run it |
+            | macOS | `kitties-desktop-macos-arm64.dmg` (Apple silicon) or `-amd64.dmg` (Intel) |
+            | Linux | `kitties-desktop-linux-amd64.zip` (or `-arm64`): unzip and run `kitties-desktop` |
+            | Android | `kitties-android-app.apk` |
+            | A server | `kitties-<system>-<arch>` is the command-line gateway; you do not need it for the desktop app |
+
+            The desktop apps carry their own gateway. `SHA256SUMS` lists every file.
