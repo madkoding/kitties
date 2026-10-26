@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -39,6 +41,9 @@ func ListModels(ctx context.Context, opts Options, rt http.RoundTripper) ([]stri
 	}
 	if base == "" {
 		return nil, fmt.Errorf("provider %s needs a base_url", kind.Name)
+	}
+	if err := checkBase(base); err != nil {
+		return nil, err
 	}
 	path, headers := "/models", map[string]string{}
 	switch kind.Family {
@@ -87,6 +92,23 @@ func ListModels(ctx context.Context, opts Options, rt http.RoundTripper) ([]stri
 		return nil, &HTTPError{Code: resp.StatusCode, Body: string(data)}
 	}
 	return parseModels(kind.Family, data)
+}
+
+// checkBase refuses an address the model list should never be asked from: not http(s), with
+// credentials in it, or a link-local IP (the cloud metadata service). The base_url comes from
+// the page, so it is checked before anything is sent to it.
+func checkBase(base string) error {
+	if !strings.HasPrefix(base, "https://") && !strings.HasPrefix(base, "http://") {
+		return fmt.Errorf("the server address must start with http:// or https://")
+	}
+	u, err := url.Parse(base)
+	if err != nil || u.Host == "" || u.User != nil {
+		return fmt.Errorf("the server address is not valid")
+	}
+	if ip, err := netip.ParseAddr(u.Hostname()); err == nil && (ip.IsLinkLocalUnicast() || ip.IsUnspecified()) {
+		return fmt.Errorf("the server address is not allowed")
+	}
+	return nil
 }
 
 // parseModels reads the ids out of a model list, sorted and without repeats.

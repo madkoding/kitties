@@ -64,3 +64,18 @@ func TestListModelsNeedsKey(t *testing.T) {
 		t.Error("the CLI has no model list")
 	}
 }
+
+func TestListModelsRefusesOddAddresses(t *testing.T) {
+	for _, base := range []string{"ftp://x/v1", "file:///etc", "http://u:p@host/v1", "http://169.254.169.254/latest", "http://[fe80::1]/v1", "http://0.0.0.0/v1", "https://"} {
+		_, err := ListModels(context.Background(), Options{Kind: "openai", APIKey: "k", BaseURL: base}, modelsRT(func(*http.Request) (int, string) {
+			t.Errorf("%s: a request was sent", base)
+			return 200, "{}"
+		}))
+		if err == nil {
+			t.Errorf("%s: accepted", base)
+		}
+	}
+	if _, err := ListModels(context.Background(), Options{Kind: "ollama", BaseURL: "http://127.0.0.1:11434/v1"}, modelsRT(func(*http.Request) (int, string) { return 200, `{"data":[]}` })); err != nil {
+		t.Errorf("a local server is fine: %v", err)
+	}
+}
