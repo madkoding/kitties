@@ -440,6 +440,40 @@ func (m *Manager) TestProvider(ctx context.Context, name string) (string, error)
 	return strings.TrimSpace(reply.Content), nil
 }
 
+// ErrUnsavedAddress is returned by ProviderModels for a server address that is neither the
+// provider's own nor one already saved: the gateway only asks addresses it was configured with.
+var ErrUnsavedAddress = errors.New("save the model first to list the models of a custom server address")
+
+// ProviderModels checks the API key of a profile that is not saved yet, and lists the models it
+// can use. Nothing is stored. An empty key falls back to the one saved under name, when that
+// profile is of the same kind, so editing a profile does not ask for the key again. The address
+// asked is the provider's own or the one saved under name, never one that only the page sent.
+func (m *Manager) ProviderModels(ctx context.Context, name string, p config.Provider) ([]string, error) {
+	// The options are built here from the kind, the key and an address chosen on the gateway
+	// (the provider's own, or the saved one): nothing else the page sent is carried along, not
+	// even the name of an environment variable to read the key from.
+	opts := provider.Options{Kind: p.Kind, APIKey: p.APIKey}
+	requested := strings.TrimRight(p.BaseURL, "/")
+	m.mu.RLock()
+	old, saved := m.cfg.Providers[name]
+	m.mu.RUnlock()
+	if saved && old.Kind == p.Kind {
+		if opts.APIKey == "" {
+			opts.APIKey = old.Options().APIKey
+		}
+		if requested != "" && requested == strings.TrimRight(old.BaseURL, "/") {
+			opts.BaseURL, requested = old.BaseURL, ""
+		}
+	}
+	if k, ok := provider.Lookup(p.Kind); ok && requested != "" && requested == strings.TrimRight(k.BaseURL, "/") {
+		requested = ""
+	}
+	if requested != "" {
+		return nil, ErrUnsavedAddress
+	}
+	return provider.ListModels(ctx, opts, nil)
+}
+
 // ConnectorChange says how a save treats what the connector had.
 type ConnectorChange struct {
 	// SigningIn lets a connector that signs in be saved without an account yet: the sign-in

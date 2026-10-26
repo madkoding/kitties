@@ -163,6 +163,13 @@ function ModelForm({
   const [err, setErr] = useState("");
   const [phase, setPhase] = useState<"edit" | "saving" | "testing" | "failed">("edit");
   const [saved, setSaved] = useState<SettingsView | null>(null);
+  // The key is checked before the models are listed: the provider answers the list only to a
+  // key it accepts, so the suggestions are the ones this key can use.
+  const [keyCheck, setKeyCheck] = useState<"idle" | "checking" | "ok" | "invalid" | "error">(
+    "idle",
+  );
+  const [keyNote, setKeyNote] = useState("");
+  const [liveModels, setLiveModels] = useState<string[]>([]);
   const defaultModel = (k: string) => kinds.find((x) => x.Name === k)?.DefaultModel || "";
   const pick = (k: string) => {
     // Copilot has no key of its own to speak of: its sign-in comes first.
@@ -225,6 +232,35 @@ function ModelForm({
     } catch (e) {
       setErr(friendlyError(errText(e)));
       setPhase("edit");
+    }
+  };
+  const checkKey = async () => {
+    if (!key.trim() && !view?.api_key_set) {
+      return;
+    }
+    setKeyCheck("checking");
+    setKeyNote("");
+    try {
+      const body: Record<string, unknown> = { kind, base_url: base.trim() };
+      if (key.trim()) {
+        body.api_key = key.trim();
+      }
+      const r = await api.providerModels(view?.name || "", body);
+      if (r.ok) {
+        setLiveModels(r.models || []);
+        setKeyCheck("ok");
+      } else {
+        setLiveModels([]);
+        setKeyCheck(r.invalid_key ? "invalid" : "error");
+        setKeyNote(
+          r.invalid_key
+            ? t("The provider refused this key: check that it is complete and still valid.")
+            : friendlyError(r.error || ""),
+        );
+      }
+    } catch (e) {
+      setKeyCheck("error");
+      setKeyNote(friendlyError(errText(e)));
     }
   };
   const missingKey = needsKey && !key.trim() && !(view?.api_key_set && view.kind === kind);
@@ -292,11 +328,38 @@ function ModelForm({
             type="password"
             autocomplete="off"
             value={key}
-            onInput={(e) => setKey((e.target as HTMLInputElement).value)}
+            onInput={(e) => {
+              setKey((e.target as HTMLInputElement).value);
+              setKeyCheck("idle");
+              setLiveModels([]);
+            }}
+            onBlur={() => keyCheck === "idle" && needsKey && checkKey()}
             placeholder={
               view?.api_key_set ? t("saved: leave empty to keep it") : t("paste the key here")
             }
           />
+          {needsKey && (
+            <div class="flex items-center gap-2 mt-2" data-testid="key-check">
+              <button
+                type="button"
+                class="btn-ghost px-3 py-1.5 text-xs"
+                disabled={keyCheck === "checking" || (!key.trim() && !view?.api_key_set)}
+                onClick={checkKey}
+              >
+                {keyCheck === "checking" ? t("Checking…") : t("Check key")}
+              </button>
+              {keyCheck === "ok" && (
+                <span class="text-xs" role="status">
+                  {t("Key accepted: {n} models available.", { n: String(liveModels.length) })}
+                </span>
+              )}
+              {(keyCheck === "invalid" || keyCheck === "error") && (
+                <span class="text-xs text-[var(--c-red)]" role="alert">
+                  {keyNote}
+                </span>
+              )}
+            </div>
+          )}
           <p class={HELP}>
             {t("Kept on your gateway and never shown again.")}{" "}
             {meta.keyURL && (
@@ -361,7 +424,9 @@ function ModelForm({
           ...new Set(
             [
               info?.DefaultModel,
-              ...((way === "login" ? signIn?.models : meta.models) || []),
+              ...(way === "key" && keyCheck === "ok" && liveModels.length
+                ? liveModels
+                : (way === "login" ? signIn?.models : meta.models) || []),
             ].filter(Boolean),
           ),
         ].map((m) => (

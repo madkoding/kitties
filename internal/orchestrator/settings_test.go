@@ -475,3 +475,14 @@ func TestSettingsAccounts(t *testing.T) {
 		t.Errorf("a profile without its account = %v", err)
 	}
 }
+
+func TestProviderModelsAddress(t *testing.T) {
+	m, err := New(testConfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = m.ProviderModels(context.Background(), "x", config.Provider{Kind: "openai", APIKey: "k", BaseURL: "http://evil.example/v1"})
+	if !errors.Is(err, ErrUnsavedAddress) {
+		t.Errorf("an unsaved address = %v", err)
+	}
+}

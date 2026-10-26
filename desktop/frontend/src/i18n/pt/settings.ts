@@ -39,6 +39,10 @@ const dict: Dictionary = {
   "Sign in with your subscription": "Entre com sua assinatura",
   " (if the server asks for one)": " (se o servidor pedir)",
   "saved: leave empty to keep it": "salva: deixe vazio para manter",
+  "The provider refused this key: check that it is complete and still valid.":
+    "O provedor recusou esta chave: confira se está completa e ainda é válida.",
+  "Check key": "Verificar chave",
+  "Key accepted: {n} models available.": "Chave aceita: {n} modelos disponíveis.",
   "paste the key here": "cole a chave aqui",
   "Kept on your gateway and never shown again.":
     "Fica guardada no seu gateway e não aparece de novo.",

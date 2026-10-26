@@ -202,6 +202,12 @@ func (f *fakeFleet) TestProvider(_ context.Context, name string) (string, error)
 	}
 	return "hello", nil
 }
+func (f *fakeFleet) ProviderModels(_ context.Context, _ string, p config.Provider) ([]string, error) {
+	if p.APIKey != "good" {
+		return nil, fmt.Errorf("%w by x (HTTP 401)", provider.ErrInvalidKey)
+	}
+	return []string{"m1", "m2"}, nil
+}
 func (f *fakeFleet) SetConnector(name string, c config.Connector, change orchestrator.ConnectorChange) error {
 	f.signingIn, f.cleared = change.SigningIn, change.Clear
 	return config.ValidateConnector(name, c, "")
@@ -690,6 +696,12 @@ func TestSettingsRoutes(t *testing.T) {
 	}
 	if code, m, _ := call(t, srv, "POST", "/v1/settings/providers/zz/test", "tok", nil); code != 200 || m["ok"] != false {
 		t.Errorf("test unknown provider = %v", m)
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/settings/provider-models", "tok", map[string]any{"kind": "openai", "api_key": "good"}); code != 200 || m["ok"] != true || len(m["models"].([]any)) != 2 {
+		t.Errorf("provider models = %v", m)
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/settings/provider-models", "tok", map[string]any{"kind": "openai", "api_key": "bad"}); code != 200 || m["ok"] != false || m["invalid_key"] != true {
+		t.Errorf("provider models with a bad key = %v", m)
 	}
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/default-provider", "tok", map[string]any{"name": "p"}); code != 200 {
 		t.Error("default provider")

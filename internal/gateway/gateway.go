@@ -66,6 +66,8 @@ type Fleet interface {
 	RemoveProvider(name string) error
 	SetDefaultProvider(name string) error
 	TestProvider(ctx context.Context, name string) (string, error)
+	// ProviderModels checks an API key and lists the models it can use, without saving anything.
+	ProviderModels(ctx context.Context, name string, p config.Provider) ([]string, error)
 	// SetConnector saves a connector; the change may clear saved secrets or the sign-in, or let
 	// one that signs in be saved without an account yet, as the step before its sign-in.
 	SetConnector(name string, c config.Connector, change orchestrator.ConnectorChange) error
@@ -226,6 +228,7 @@ func (s *Server) routes() {
 	s.mux.Handle("PUT /v1/settings/providers/{name}", api(s.handleSetProvider))
 	s.mux.Handle("DELETE /v1/settings/providers/{name}", api(s.handleRemoveProvider))
 	s.mux.Handle("POST /v1/settings/providers/{name}/test", api(s.handleTestProvider))
+	s.mux.Handle("POST /v1/settings/provider-models", api(s.handleProviderModels))
 	s.mux.Handle("PUT /v1/settings/default-provider", api(s.handleDefaultProvider))
 	s.mux.Handle("PUT /v1/settings/connectors/{name}", api(s.handleSetConnector))
 	s.mux.Handle("DELETE /v1/settings/connectors/{name}", api(s.handleRemoveConnector))
@@ -862,6 +865,32 @@ func (s *Server) handleTestProvider(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusOK, map[string]any{"ok": true, "reply": answer})
+}
+
+// handleProviderModels validates the API key of a provider being set up and lists its models.
+// A key the provider refuses answers {"ok": false, "invalid_key": true}.
+func (s *Server) handleProviderModels(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Name string `json:"name"`
+		config.Provider
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	models, err := s.fleet.ProviderModels(ctx, body.Name, body.Provider)
+	if err != nil {
+		reply(w, http.StatusOK, map[string]any{
+			"ok": false, "invalid_key": errors.Is(err, provider.ErrInvalidKey), "error": err.Error(),
+		})
+		return
+	}
+	if models == nil {
+		models = []string{}
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true, "models": models})
 }
 
 func (s *Server) handleDefaultProvider(w http.ResponseWriter, r *http.Request) {

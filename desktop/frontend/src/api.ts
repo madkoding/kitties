@@ -736,6 +736,13 @@ export const api = {
       "POST",
       `/v1/settings/providers/${name}/test`,
     ),
+  // providerModels checks an API key that is not saved yet and lists the models it can use.
+  providerModels: (name: string, p: Record<string, unknown>) =>
+    request<{ ok: boolean; models?: string[]; invalid_key?: boolean; error?: string }>(
+      "POST",
+      "/v1/settings/provider-models",
+      { name, ...p },
+    ),
   testConnector: (name: string) =>
     request<ConnectorTest>("POST", `/v1/settings/connectors/${name}/test`),
   startLogin: (kind: string, project?: string) =>
