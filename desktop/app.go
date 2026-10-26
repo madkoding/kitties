@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,12 @@ func NewApp() *App {
 }
 
 func (a *App) startup(ctx context.Context) {
+	defer func() {
+		if r := recover(); r != nil {
+			logCrash(r, debug.Stack())
+			a.gatewayNote = fmt.Sprintf("the app failed to start (see desktop.log): %v", r)
+		}
+	}()
 	a.ctx = ctx
 	a.conn = loadConnection()
 	a.gatewayNote = a.startGateway()

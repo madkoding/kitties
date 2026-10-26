@@ -10,6 +10,11 @@ package main
 
 import (
 	"embed"
+	"fmt"
+	"os"
+	"path/filepath"
+	"runtime/debug"
+	"time"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -28,7 +33,28 @@ var assets embed.FS
 //go:embed build/appicon.png
 var icon []byte
 
+// logCrash keeps what ended the app in ~/.kitties/desktop.log: a Windows build has no console, so
+// a panic or a webview that could not start would otherwise close the window without a word.
+func logCrash(what any, stack []byte) {
+	path := filepath.Join(filepath.Dir(configPath()), "desktop.log")
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return
+	}
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	fmt.Fprintf(f, "%s %v\n%s\n", time.Now().Format(time.RFC3339), what, stack)
+}
+
 func main() {
+	defer func() {
+		if r := recover(); r != nil {
+			logCrash(r, debug.Stack())
+			panic(r)
+		}
+	}()
 	app := NewApp()
 	err := wails.Run(&options.App{
 		Title:            "Kitties",
@@ -46,6 +72,7 @@ func main() {
 		Linux:            &linux.Options{Icon: icon, ProgramName: "Kitties", WindowIsTranslucent: false, WebviewGpuPolicy: linux.WebviewGpuPolicyOnDemand},
 	})
 	if err != nil {
+		logCrash(err, nil)
 		panic(err)
 	}
 }
