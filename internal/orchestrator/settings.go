@@ -440,6 +440,20 @@ func (m *Manager) TestProvider(ctx context.Context, name string) (string, error)
 	return strings.TrimSpace(reply.Content), nil
 }
 
+// ProviderModels checks the API key of a profile that is not saved yet, and lists the models it
+// can use. Nothing is stored. An empty key falls back to the one saved under name, when that
+// profile is of the same kind, so editing a profile does not ask for the key again.
+func (m *Manager) ProviderModels(ctx context.Context, name string, p config.Provider) ([]string, error) {
+	if p.APIKey == "" && p.APIKeyEnv == "" && name != "" {
+		m.mu.RLock()
+		if old, ok := m.cfg.Providers[name]; ok && old.Kind == p.Kind {
+			p.APIKey, p.APIKeyEnv = old.APIKey, old.APIKeyEnv
+		}
+		m.mu.RUnlock()
+	}
+	return provider.ListModels(ctx, p.Options(), nil)
+}
+
 // ConnectorChange says how a save treats what the connector had.
 type ConnectorChange struct {
 	// SigningIn lets a connector that signs in be saved without an account yet: the sign-in
