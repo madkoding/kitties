@@ -449,18 +449,20 @@ var ErrUnsavedAddress = errors.New("save the model first to list the models of a
 // profile is of the same kind, so editing a profile does not ask for the key again. The address
 // asked is the provider's own or the one saved under name, never one that only the page sent.
 func (m *Manager) ProviderModels(ctx context.Context, name string, p config.Provider) ([]string, error) {
+	// The options are built here from the kind, the key and an address chosen on the gateway
+	// (the provider's own, or the saved one): nothing else the page sent is carried along, not
+	// even the name of an environment variable to read the key from.
+	opts := provider.Options{Kind: p.Kind, APIKey: p.APIKey}
 	requested := strings.TrimRight(p.BaseURL, "/")
-	p.BaseURL = ""
 	m.mu.RLock()
 	old, saved := m.cfg.Providers[name]
 	m.mu.RUnlock()
 	if saved && old.Kind == p.Kind {
-		if p.APIKey == "" && p.APIKeyEnv == "" {
-			p.APIKey, p.APIKeyEnv = old.APIKey, old.APIKeyEnv
+		if opts.APIKey == "" {
+			opts.APIKey = old.Options().APIKey
 		}
 		if requested != "" && requested == strings.TrimRight(old.BaseURL, "/") {
-			p.BaseURL = old.BaseURL
-			requested = ""
+			opts.BaseURL, requested = old.BaseURL, ""
 		}
 	}
 	if k, ok := provider.Lookup(p.Kind); ok && requested != "" && requested == strings.TrimRight(k.BaseURL, "/") {
@@ -469,7 +471,7 @@ func (m *Manager) ProviderModels(ctx context.Context, name string, p config.Prov
 	if requested != "" {
 		return nil, ErrUnsavedAddress
 	}
-	return provider.ListModels(ctx, p.Options(), nil)
+	return provider.ListModels(ctx, opts, nil)
 }
 
 // ConnectorChange says how a save treats what the connector had.
