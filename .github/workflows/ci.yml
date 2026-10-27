@@ -17,7 +17,7 @@ concurrency:
 jobs:
   check:
     name: fmt · vet · test · coverage
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -37,7 +37,7 @@ jobs:
 
   build:
     name: cross-platform build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: check
     steps:
@@ -60,7 +60,7 @@ jobs:
 
   desktop:
     name: desktop app · page · wails module
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -81,7 +81,7 @@ jobs:
   # restarted into in place, a bad signature is refused, and a version that does not hold is gone back from.
   selfupdate:
     name: updating itself
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -96,7 +96,7 @@ jobs:
   # a debug key.
   android:
     name: android app
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     needs: desktop
     steps:
@@ -136,7 +136,7 @@ jobs:
   # checks are photographed into docs/screenshots and kept as an artifact.
   e2e:
     name: desktop app · end to end
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     needs: desktop
     steps:
@@ -174,7 +174,7 @@ jobs:
 
   image:
     name: kitty-desktop image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -223,7 +223,7 @@ jobs:
   # proves the Dockerfile and that the container answers its health check.
   gateway-image:
     name: gateway image
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -398,7 +398,7 @@ jobs:
     name: publish kitty-desktop image
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [image]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read
@@ -425,7 +425,7 @@ jobs:
     name: publish gateway image
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [gateway-image, check]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read
@@ -455,7 +455,7 @@ jobs:
     name: release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [check, build, wails, android, selfupdate, publish-image, publish-gateway-image]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
