@@ -14,7 +14,7 @@
 #   docker build -t ghcr.io/madkoding/kitty-desktop:latest docker/kitty-desktop
 
 # Lumen (the Openbox fork) with the shelf, at a fixed commit (a commit is its own checksum).
-FROM debian:bookworm-slim AS lumen
+FROM debian:trixie-slim AS lumen
 ARG LUMEN_COMMIT=91d71aa172c65dd427c752dcfb70860024a5b242
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf \
         automake libtool pkg-config gettext autopoint libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev \
@@ -30,7 +30,7 @@ RUN curl -fsSL -o /tmp/lumen.tar.gz "https://github.com/madkoding/lumen-wm/archi
 # their Openbox themes and licences are kept;
 # and Kitties' own fonts (Sansation, JetBrains Mono Nerd Font, the same files as the app's page),
 # from the web's woff2 to the ttf the desktop reads.
-FROM debian:bookworm-slim AS extras
+FROM debian:trixie-slim AS extras
 # Lucide's icons (ISC), from npm (lucide-static) at a fixed version and checksum, drawn by
 # lucide/build-theme.py as gradient squares by group of applications.
 ARG LUCIDE_VERSION=1.61.0
@@ -58,13 +58,13 @@ RUN mkdir -p /tmp/lucide \
     && cp /tmp/lucide/package/LICENSE /out/doc/LUCIDE-LICENSE
 
 # kitty-grab, the live view's capture: C, XShm and libjpeg (see kitty-grab.c).
-FROM debian:bookworm-slim AS grab
+FROM debian:trixie-slim AS grab
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev libx11-dev libxext-dev libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY kitty-grab.c /tmp/kitty-grab.c
 RUN gcc -O2 -Wall -Werror -o /kitty-grab /tmp/kitty-grab.c -lX11 -lXext -ljpeg && strip /kitty-grab
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 # Dark everywhere: GTK 3 programs (LibreOffice among them) in Adwaita's dark variant.
 ENV DEBIAN_FRONTEND=noninteractive \

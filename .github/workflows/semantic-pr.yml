@@ -14,7 +14,7 @@ permissions:
 jobs:
   title:
     name: semantic title
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
       - name: the title is a semantic commit
