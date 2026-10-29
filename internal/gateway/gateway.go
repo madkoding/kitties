@@ -136,6 +136,8 @@ type Server struct {
 	// notifier tests notifications, nil when the gateway sends none.
 	notifier NotifyTester
 	digester Digester
+	// exposure shows and changes where the gateway listens, nil when it cannot.
+	exposure Exposing
 }
 
 // WithLibrary serves the skills and the artifacts.
@@ -242,6 +244,7 @@ func (s *Server) routes() {
 	s.vaultRoutes()
 	s.desktopRoutes()
 	s.updateRoutes()
+	s.exposureRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
@@ -1047,6 +1050,19 @@ func (s *Server) Listen(ctx context.Context, addr string, logf func(string, ...a
 	scheme := "http"
 	if tls {
 		scheme = "https"
+	}
+	// On the local network's address alone, this machine still reaches it on 127.0.0.1 (the
+	// desktop app and a local browser do), the same as when it listens on every interface.
+	if _, port, err := net.SplitHostPort(addr); err == nil && config.ExposureOf(addr) == config.ExposureLAN {
+		if lo, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", port)); err == nil {
+			go func() {
+				if tls {
+					_ = srv.ServeTLS(lo, s.tlsCert, s.tlsKey)
+				} else {
+					_ = srv.Serve(lo)
+				}
+			}()
+		}
 	}
 	where := s.publicURL
 	if where == "" {

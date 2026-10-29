@@ -637,7 +637,13 @@ export async function shotData(path: string, mime = "image/png"): Promise<string
 }
 
 export const api = {
-  health: () => request<{ ok: boolean; version: string; containers: boolean; containers_state?: "not_installed" | "not_running" }>("GET", "/v1/health"),
+  health: () =>
+    request<{
+      ok: boolean;
+      version: string;
+      containers: boolean;
+      containers_state?: "not_installed" | "not_running";
+    }>("GET", "/v1/health"),
   kitties: () => request<{ kitties: Kitty[] }>("GET", "/v1/kitties").then((r) => r.kitties || []),
   kitty: (ref: string) =>
     request<{ kitty: Kitty }>("GET", `/v1/kitties/${ref}`).then((r) => r.kitty),
@@ -682,6 +688,11 @@ export const api = {
     request<UpdateStatus>("GET", "/v1/update" + (refresh ? "?refresh=1" : "")),
   applyUpdate: () =>
     request<{ updated_to: string; restarting: boolean }>("POST", "/v1/update/apply"),
+  // exposure is where the gateway can be reached from (local, lan, wan); setExposure keeps the
+  // choice and the gateway restarts to listen there (wan needs acceptRisk).
+  exposure: () => request<Exposure>("GET", "/v1/exposure"),
+  setExposure: (mode: ExposureMode, acceptRisk = false) =>
+    request<{ restarting: boolean }>("PUT", "/v1/exposure", { mode, accept_risk: acceptRisk }),
   // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
   // up; backupKitty backs them up now; updateKitty moves the desktop to the newest image.
   desktopInfo: (ref: string) => request<DesktopInfo>("GET", `/v1/kitties/${ref}/desktop`),
@@ -1056,6 +1067,18 @@ export type DesktopInfo = {
   update_available: boolean;
   auto_update?: boolean;
   backup?: { saved: string; bytes: number };
+};
+
+export type ExposureMode = "local" | "lan" | "wan";
+
+// Exposure is where the gateway listens: local (127.0.0.1), lan (this machine's network address)
+// or wan (0.0.0.0).
+export type Exposure = {
+  mode: ExposureMode;
+  listen: string;
+  lan_ip?: string;
+  can_change: boolean;
+  why?: string;
 };
 
 // UpdateStatus says which version of Kitties runs, whether a newer one is out, and whether this

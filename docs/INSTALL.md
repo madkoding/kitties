@@ -28,11 +28,13 @@ prints the URL, the token and the next steps.
 From a terminal (also with `curl | sudo sh`) it explains each step and asks, on a first install:
 
 1. the **port** (default 7488);
-2. **where to expose the gateway**: only this machine (`127.0.0.1`, the default and the safest;
-   reach it with `ssh -L 7488:127.0.0.1:7488 you@server` or nginx/Caddy with https in front), the
-   local network (the machine's LAN address), every interface (`0.0.0.0`, with a warning: plain
-   http and the token as the only password, so use a firewall, a VPN or https in front), or another
-   `host:port`;
+2. **where to expose the gateway**, three choices (the same in the Windows installer and in
+   Settings, Preferences, Network access):
+   1) **local**: `127.0.0.1`, only this machine (the default and the safest; reach it with
+      `ssh -L 7488:127.0.0.1:7488 you@server` or nginx/Caddy with https in front);
+   2) **LAN**: the machine's address in the local network;
+   3) **WAN**: `0.0.0.0`, every interface (with a warning and a confirmation: plain http and the
+      token as the only password, so use a firewall, a VPN or https in front);
 3. an optional **public URL** when it sits behind a domain with https;
 4. when the gateway leaves the machine and **ufw** or **firewalld** is active, whether to open the
    port (it defaults to yes for the local network and no for `0.0.0.0`);
@@ -49,7 +51,7 @@ To skip the questions (scripts, automation) give the options, or `--yes` for the
 terminal it never asks:
 
 ```sh
-curl -fsSL .../install.sh | sudo sh -s -- --yes --listen 0.0.0.0:7488
+curl -fsSL .../install.sh | sudo sh -s -- --yes --expose wan
 ```
 
 Options go after `sh -s --`:
@@ -61,7 +63,8 @@ curl -fsSL .../install.sh | sudo sh -s -- --version v0.5.0 --public-url https://
 | Option | What it does |
 | --- | --- |
 | `--version vX.Y.Z` | a release instead of the latest |
-| `--listen ADDR` | another address (`0.0.0.0:7488` for the network) |
+| `--expose local\|lan\|wan` | where the gateway is reachable: `127.0.0.1` (default), this machine's LAN address, or `0.0.0.0` (`KITTIES_EXPOSE`) |
+| `--listen ADDR` | an exact `host:port` instead of `--expose` |
 | `--public-url URL` | where the page is reached from, behind https |
 | `--pubkey KEY` | the release signing key: the Ed25519 signature of `SHA256SUMS` must then check, or nothing is installed |
 | `-y`, `--yes` | ask nothing: the defaults plus the options given (`KITTIES_YES=1`) |
@@ -112,7 +115,7 @@ xattr -d com.apple.quarantine kitties-darwin-arm64 && chmod +x kitties-darwin-ar
 xattr -dr com.apple.quarantine /Applications/Kitties.app
 ```
 
-On Windows, run `kitties-desktop-windows-amd64-setup.exe` (or `-arm64-` on an Arm PC): it installs for your user without administrator rights, adds a Start menu entry and an uninstaller, and installs the WebView2 runtime if the PC lacks it. SmartScreen asks once: *More info* then *Run anyway*.
+On Windows, run `kitties-desktop-windows-amd64-setup.exe` (or `-arm64-` on an Arm PC): it installs for your user without administrator rights, adds a Start menu entry and an uninstaller, and installs the WebView2 runtime if the PC lacks it. It asks where the gateway may be reached from (local, LAN or WAN; the default is local, WAN asks for a confirmation); silently, pass `/S /EXPOSE=lan`. You can change it later in Settings. SmartScreen asks once: *More info* then *Run anyway*.
 
 ## With containers
 

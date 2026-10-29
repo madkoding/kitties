@@ -222,6 +222,31 @@ const dict: Dictionary = {
     "Esta atualização é verificada apenas pelas somas de verificação, que não dizem quem a fez: defina updates.public_key para exigir a assinatura da chave dos releases.",
   "{version} did not hold here and Kitties went back to {current}: it is not offered again.":
     "{version} não se sustentou aqui e o Kitties voltou para {current}: não será oferecida de novo.",
+
+  // Network access (local, LAN, WAN)
+  "Network access": "Acesso de rede",
+  "Where Kitties can be reached from. Now: {addr}.":
+    "De onde o Kitties pode ser acessado. Agora: {addr}.",
+  Local: "Local",
+  LAN: "LAN",
+  WAN: "WAN",
+  "Only this computer. The safest choice.": "Somente este computador. A opção mais segura.",
+  "your network address": "o endereço da sua rede",
+  "Other devices in your home or office network.":
+    "Outros dispositivos da sua rede de casa ou escritório.",
+  "Every network interface: the internet too if this computer is public.":
+    "Todas as interfaces de rede: a internet também, se este computador for público.",
+  "You are using Kitties from another device: with Local you will not be able to reach it from here. Continue?":
+    "Você está usando o Kitties de outro dispositivo: com Local não será possível acessá-lo daqui. Continuar?",
+  Continue: "Continuar",
+  "Kitties did not answer here after the change: it may now listen only elsewhere. Try {addr}.":
+    "O Kitties não respondeu aqui após a mudança: talvez agora ele escute só em outro endereço. Tente {addr}.",
+  "WAN listens on every interface": "WAN escuta em todas as interfaces",
+  "The page and its token travel over plain http and the token is the only password. Use it only behind a firewall or a VPN, or put https in front.":
+    "A página e seu token trafegam por http sem criptografia e o token é a única senha. Use somente atrás de um firewall ou VPN, ou coloque https na frente.",
+  "I understand the risk": "Entendo o risco",
+  "Saved: restarting Kitties…": "Salvo: reiniciando o Kitties…",
+  "Apply and restart": "Aplicar e reiniciar",
 };
 
 export default dict;

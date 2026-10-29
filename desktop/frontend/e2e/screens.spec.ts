@@ -1620,3 +1620,39 @@ test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) 
   await pick.selectOption("");
   await expect(pick).toHaveValue("");
 });
+
+test("Settings: the gateway is exposed local, LAN or WAN, WAN after accepting the risk", async ({
+  page,
+}) => {
+  let exposure = {
+    mode: "local",
+    listen: "127.0.0.1:7488",
+    lan_ip: "192.168.1.20",
+    can_change: true,
+  };
+  const put: unknown[] = [];
+  await page.route("**/v1/exposure", (route) => {
+    if (route.request().method() === "PUT") {
+      put.push(route.request().postDataJSON());
+      return route.fulfill({ status: 202, json: { restarting: true } });
+    }
+    return route.fulfill({ json: exposure });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("exposure");
+  await expect(box).toContainText("127.0.0.1:7488");
+  await expect(box.getByTestId("exposure-lan")).toContainText("192.168.1.20:7488");
+  await expect(box.getByTestId("exposure-apply")).toBeDisabled();
+  // WAN warns and cannot be applied until the risk is accepted.
+  await box.getByTestId("exposure-wan").click();
+  await expect(box.getByTestId("exposure-warning")).toContainText("every interface");
+  await expect(box.getByTestId("exposure-apply")).toBeDisabled();
+  await shot(page, "55-settings-exposure-wan");
+  await box.getByTestId("exposure-accept").check();
+  exposure = { ...exposure, mode: "wan", listen: "0.0.0.0:7488" };
+  await box.getByTestId("exposure-apply").click();
+  await expect(box.getByTestId("exposure-restarting")).toBeVisible();
+  expect(put).toEqual([{ mode: "wan", accept_risk: true }]);
+});

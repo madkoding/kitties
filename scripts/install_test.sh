@@ -44,7 +44,7 @@ ask '\n\n\ny\n'; grep -q "LISTEN=127.0.0.1:7488 PUBLIC_URL= " "$work/ask.out" ||
 ask '9000\n3\ny\nhttps://k.example.com\ny\n'; grep -q "LISTEN=0.0.0.0:9000 PUBLIC_URL=https://k.example.com" "$work/ask.out" || fail "0.0.0.0 answers"
 ask '\n3\nn\n1\n\ny\n'; grep -q "LISTEN=127.0.0.1:7488" "$work/ask.out" || fail "declining 0.0.0.0 must fall back"
 ask '\n3\n'; grep -q "EVERY network interface" "$work/ask.out" || fail "no 0.0.0.0 warning"
-ask '\n4\n10.0.0.5:8080\n\ny\n'; grep -q "LISTEN=10.0.0.5:8080" "$work/ask.out" || fail "custom address"
+ask '\n4\n\ny\n'; grep -q "choose 1, 2 or 3" "$work/ask.out" || fail "there are only three options"
 ask '\n\n\n\nn\n'; grep -q "cancelled" "$work/ask.out" || fail "no cancel on a refused confirmation"
 # firewall: only asked when ufw is active and the gateway leaves the machine; 0.0.0.0 defaults to no
 export FAKE_UFW=active
@@ -64,6 +64,11 @@ LANG_T=es ask '\n\n\n4\ny\n'; grep -q "Instalador de Kitties" "$work/ask.out" ||
 KITTIES_LANG=en KITTIES_CONF_DIR="$work/none" sh scripts/install.sh --dry-run --yes --open-firewall --caddy --public-url https://k.example.com > "$work/ask.out" 2>&1; grep -q "FIREWALL=1 CADDY=1" "$work/ask.out" || fail "--open-firewall --caddy"
 # flags skip the question they answer, --yes asks nothing
 KITTIES_LANG=en KITTIES_CONF_DIR="$work/none" KITTIES_TTY="$work/nonexistent" sh scripts/install.sh --dry-run --yes --listen 192.168.1.5:7000 > "$work/ask.out" 2>&1; grep -q "LISTEN=192.168.1.5:7000" "$work/ask.out" || fail "--yes --listen"
+for m in "local 127.0.0.1:7000" "wan 0.0.0.0:7000"; do
+    KITTIES_LANG=en KITTIES_CONF_DIR="$work/none" KITTIES_TTY="$work/nonexistent" sh scripts/install.sh --dry-run --yes --listen 127.0.0.1:7000 --expose "${m%% *}" > "$work/ask.out" 2>&1; grep -q "LISTEN=${m##* }" "$work/ask.out" || fail "--expose ${m%% *}"
+done
+grep -q "EVERY network interface" "$work/ask.out" || fail "--expose wan must warn"
+KITTIES_LANG=en KITTIES_CONF_DIR="$work/none" KITTIES_TTY="$work/nonexistent" sh scripts/install.sh --dry-run --yes --expose moon > "$work/ask.out" 2>&1 && fail "--expose moon must fail"
 KITTIES_LANG=es KITTIES_CONF_DIR="$work/none" KITTIES_TTY="$work/nonexistent" sh scripts/install.sh --dry-run > "$work/ask.out" 2>&1; grep -q "dry run" "$work/ask.out" || fail "no terminal: must not ask"
 
 # the unit written by the installer is the shipped one (path and user substituted)

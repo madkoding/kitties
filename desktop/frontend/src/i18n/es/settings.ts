@@ -223,6 +223,30 @@ const dict: Dictionary = {
     "Esta actualización se comprueba solo con sus sumas de verificación, que no dicen quién la hizo: define updates.public_key para exigir la firma de la clave de los releases.",
   "{version} did not hold here and Kitties went back to {current}: it is not offered again.":
     "{version} no se sostuvo aquí y Kitties volvió a {current}: no se ofrece de nuevo.",
+
+  // Network access (local, LAN, WAN)
+  "Network access": "Acceso de red",
+  "Where Kitties can be reached from. Now: {addr}.":
+    "Desde dónde se puede llegar a Kitties. Ahora: {addr}.",
+  Local: "Local",
+  LAN: "LAN",
+  WAN: "WAN",
+  "Only this computer. The safest choice.": "Solo este equipo. La opción más segura.",
+  "your network address": "la dirección de tu red",
+  "Other devices in your home or office network.": "Otros equipos de tu red de casa u oficina.",
+  "Every network interface: the internet too if this computer is public.":
+    "Todas las interfaces de red: también internet si este equipo es público.",
+  "You are using Kitties from another device: with Local you will not be able to reach it from here. Continue?":
+    "Estás usando Kitties desde otro equipo: con Local no podrás llegar desde aquí. ¿Continuar?",
+  Continue: "Continuar",
+  "Kitties did not answer here after the change: it may now listen only elsewhere. Try {addr}.":
+    "Kitties no respondió aquí tras el cambio: quizá ahora solo escucha en otra dirección. Prueba {addr}.",
+  "WAN listens on every interface": "WAN escucha en todas las interfaces",
+  "The page and its token travel over plain http and the token is the only password. Use it only behind a firewall or a VPN, or put https in front.":
+    "La página y su token viajan por http sin cifrar y el token es la única contraseña. Úsalo solo tras un firewall o una VPN, o pon https delante.",
+  "I understand the risk": "Entiendo el riesgo",
+  "Saved: restarting Kitties…": "Guardado: reiniciando Kitties…",
+  "Apply and restart": "Aplicar y reiniciar",
 };
 
 export default dict;

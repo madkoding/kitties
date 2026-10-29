@@ -19,6 +19,12 @@ https. Three ways to run it, from the quickest.
 - **Models and connectors are set from the page**, once signed in. Provider keys can also come
   from the environment (`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`...).
 
+Where it is reachable from is one of three choices: **local** (`127.0.0.1`), **LAN** (this
+machine's network address, and `127.0.0.1` too) or **WAN** (`0.0.0.0`). Pick it in the installers or in
+Settings, Preferences, Network access, which keeps it in `<data dir>/exposure`, restarts the gateway
+and asks for an explicit yes for WAN. That file wins over `KITTIES_LISTEN`; in a container, set
+`KITTIES_LISTEN` and the published port instead (Settings shows it read-only there).
+
 The settings that matter, as environment variables (they override the `gateway` block of the
 configuration file, and no file is needed):
 
