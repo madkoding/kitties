@@ -90,6 +90,8 @@ jobs:
           go-version-file: go.mod
       - run: scripts/selfupdate_test.sh
       - run: scripts/install_test.sh   # the one-line installer, against a fake signed release
+      - name: the installer as a real systemd service
+        run: sudo env "PATH=$PATH" scripts/install_systemd_test.sh   # install, kitties gateway start/stop/restart, run again
 
   # The Android app: the same page in a WebView, a remote for a gateway on the network. Signed
   # with the KITTIES_KEYSTORE_* secrets when they are set (so an installed app updates), else with
