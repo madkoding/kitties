@@ -20,9 +20,13 @@
 #   --prefix DIR        folder of the binary; default /usr/local/bin   [KITTIES_PREFIX]
 #   -y, --yes           ask nothing: use the defaults and the options given [KITTIES_YES=1]
 #   --lang en|es        language of the messages; default from $LANG   [KITTIES_LANG]
+#   --open-firewall     open the port in ufw/firewalld when one is active (asked otherwise)
+#   --caddy             write the Caddy site for --public-url (https) into <caddy dir>/conf.d
 #   --dry-run           ask the questions, print the choices and stop
 #   -h, --help
-# Testing: KITTIES_BASE_URL replaces the release download URL, KITTIES_TTY the file the answers are read from.
+# Afterwards: kitties gateway start|stop|restart|status|logs manage the service.
+# Testing: KITTIES_BASE_URL replaces the release download URL, KITTIES_TTY the file the answers are read from,
+# KITTIES_CADDY_DIR the folder of the Caddyfile (default /etc/caddy).
 set -eu
 
 REPO="${KITTIES_REPO:-madkoding/kitties}"
@@ -38,6 +42,11 @@ ASSUME_YES=0; [ -z "${KITTIES_YES:-}" ] || [ "${KITTIES_YES:-}" = 0 ] || ASSUME_
 LANG_UI="${KITTIES_LANG:-}"
 SERVICE=1
 DRY_RUN=0
+OPEN_FW=0; FW_GIVEN=0
+CADDY=0; CADDY_GIVEN=0
+CADDY_DIR="${KITTIES_CADDY_DIR:-/etc/caddy}"
+KEY_VAR=
+KEY_VAL=
 TTY="${KITTIES_TTY:-/dev/tty}"
 CONF_DIR="${KITTIES_CONF_DIR:-/etc/kitties}"
 UNIT="${KITTIES_UNIT_DIR:-/etc/systemd/system}/kitties.service"
@@ -65,6 +74,8 @@ while [ $# -gt 0 ]; do
         -y|--yes) ASSUME_YES=1; shift ;;
         --no-service) SERVICE=0; shift ;;
         --dry-run) DRY_RUN=1; shift ;;
+        --open-firewall) OPEN_FW=1; FW_GIVEN=1; shift ;;
+        --caddy) CADDY=1; CADDY_GIVEN=1; shift ;;
         -h|--help) sed -n '2,/^set -eu/p' "$0" | sed '$d' | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "unknown option: $1 (try --help)" ;;
     esac
@@ -160,6 +171,73 @@ ask_public_url() {
     esac
 }
 
+# the active firewall front end, if any: ufw or firewalld
+fw_kind() {
+    if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
+        printf 'ufw'
+    elif command -v firewall-cmd >/dev/null 2>&1 && firewall-cmd --state >/dev/null 2>&1; then
+        printf 'firewalld'
+    fi
+}
+
+is_loopback() { case "${1%:*}" in 127.*|localhost) return 0 ;; esac; return 1; }
+
+# the domain of an https:// address
+domain_of() { d="${1#https://}"; printf '%s' "${d%%/*}"; }
+
+# a Caddy site for the gateway on this machine
+caddy_site() {
+    up="${LISTEN%:*}"; case "$up" in 0.0.0.0|'') up=127.0.0.1 ;; esac
+    printf '%s {\n\tencode zstd gzip\n\treverse_proxy %s:%s {\n\t\t# Live chat events are a stream: send each chunk as it comes.\n\t\tflush_interval -1\n\t}\n}\n' \
+        "$(domain_of "$PUBLIC_URL")" "$up" "${LISTEN##*:}"
+}
+
+# Caddy can take a file of ours when its Caddyfile imports conf.d
+caddy_ready() {
+    command -v caddy >/dev/null 2>&1 && [ -f "$CADDY_DIR/Caddyfile" ] \
+        && grep -Eq '^[[:space:]]*import[[:space:]]+.*conf\.d' "$CADDY_DIR/Caddyfile"
+}
+
+# model key: which provider, then the key (typed hidden)
+ask_model_key() {
+    echo
+    note "$(L 'Do you have an AI model key to add now? (you can also add it later in the page Settings)' '¿Tienes una clave de modelo de IA para añadir ahora? (también puedes hacerlo luego en Ajustes de la página)')"
+    note "  1) Anthropic   2) OpenAI   3) Gemini   4) $(L 'Not now' 'Ahora no')"
+    ask "$(L 'Choose 1-4 [4]: ' 'Elige 1-4 [4]: ')"
+    case "$REPLY_TEXT" in
+        1) KEY_VAR=ANTHROPIC_API_KEY ;;
+        2) KEY_VAR=OPENAI_API_KEY ;;
+        3) KEY_VAR=GEMINI_API_KEY ;;
+        *) return ;;
+    esac
+    printf '    %s' "$(L 'Key (hidden while typing): ' 'Clave (oculta al escribir): ')" >&2
+    stty -echo <&3 2>/dev/null || true
+    KEY_VAL=; IFS= read -r KEY_VAL <&3 || KEY_VAL=
+    stty echo <&3 2>/dev/null || true
+    echo >&2
+    case "$KEY_VAL" in
+        ''|*[[:space:]\"\'\\]*)
+            [ -z "$KEY_VAL" ] || warn "$(L 'the key has spaces or quotes; skipped' 'la clave tiene espacios o comillas; omitida')"
+            KEY_VAR=; KEY_VAL= ;;
+    esac
+}
+
+ask_firewall() {
+    fw=$(fw_kind)
+    [ -n "$fw" ] || return 0
+    echo
+    note "$(L "$fw is active on this machine, so other computers cannot reach the port yet." "$fw está activo en esta máquina, así que otros equipos aún no pueden llegar al puerto.")"
+    case "${LISTEN%:*}" in 0.0.0.0) def=n ;; *) def=y ;; esac
+    if confirm "$(L "Open port ${LISTEN##*:}/tcp in $fw?" "¿Abrir el puerto ${LISTEN##*:}/tcp en $fw?")" "$def"; then OPEN_FW=1; fi
+}
+
+ask_caddy() {
+    echo
+    note "$(L "Caddy is installed and imports $CADDY_DIR/conf.d: it can serve $PUBLIC_URL with automatic https." "Caddy está instalado e importa $CADDY_DIR/conf.d: puede servir $PUBLIC_URL con https automático.")"
+    note "$(L 'The domain must already point to this server (ports 80 and 443 open).' 'El dominio debe apuntar ya a este servidor (puertos 80 y 443 abiertos).')"
+    if confirm "$(L "Write $CADDY_DIR/conf.d/kitties.caddy and reload Caddy?" "¿Escribir $CADDY_DIR/conf.d/kitties.caddy y recargar Caddy?")" y; then CADDY=1; fi
+}
+
 case "$LISTEN" in
     *:*) valid_port "${LISTEN##*:}" || die "--listen: $(L 'expected host:port' 'se espera host:puerto')" ;;
     *) die "--listen: $(L 'expected host:port' 'se espera host:puerto')" ;;
@@ -186,6 +264,9 @@ if [ "$INTERACTIVE" -eq 1 ] && [ "$SERVICE" -eq 1 ]; then
     if [ "$FIRST_INSTALL" -eq 1 ]; then
         [ "$LISTEN_GIVEN" -eq 1 ] || ask_listen
         [ "$PUBLIC_URL_GIVEN" -eq 1 ] || ask_public_url
+        if ! is_loopback "$LISTEN" && [ "$FW_GIVEN" -eq 0 ]; then ask_firewall; fi
+        case "$PUBLIC_URL" in https://*) if [ "$CADDY_GIVEN" -eq 0 ] && caddy_ready; then ask_caddy; fi ;; esac
+        ask_model_key
     else
         note "$(L "Found $env_file: the settings and the token are kept (this run updates the program)." "Encontré $env_file: se conservan la configuración y el token (esto solo actualiza el programa).")"
     fi
@@ -195,13 +276,16 @@ if [ "$INTERACTIVE" -eq 1 ] && [ "$SERVICE" -eq 1 ]; then
     note "  $(L 'binary:    ' 'binario:   ')$PREFIX/kitties"
     [ "$FIRST_INSTALL" -eq 0 ] || note "  $(L 'listens on: ' 'escucha en: ')$LISTEN"
     [ -z "$PUBLIC_URL" ] || note "  $(L 'public URL: ' 'URL pública: ')$PUBLIC_URL"
+    [ "$OPEN_FW" -eq 0 ] || note "  $(L 'firewall:   ' 'firewall:   ')$(L "open port ${LISTEN##*:}/tcp" "abrir puerto ${LISTEN##*:}/tcp")"
+    [ "$CADDY" -eq 0 ] || note "  Caddy:      $(L 'https site for' 'sitio https para') $(domain_of "$PUBLIC_URL")"
+    [ -z "$KEY_VAR" ] || note "  $(L 'model key:  ' 'clave:      ')$KEY_VAR"
     confirm "$(L 'Install now?' '¿Instalar ahora?')" y || die "$(L 'cancelled, nothing was changed' 'cancelado, no se cambió nada')"
 elif [ "$FIRST_INSTALL" -eq 1 ] && [ "$SERVICE" -eq 1 ]; then
     case "$LISTEN" in 127.0.0.1:*|localhost:*) ;; *) warn "$(L "listening on $LISTEN: the page and its token travel over plain http; use a firewall, a VPN or https in front" "escuchando en $LISTEN: la página y su token viajan por http sin cifrar; usa firewall, VPN o https delante")" ;; esac
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
-    say "dry run: LISTEN=$LISTEN PUBLIC_URL=$PUBLIC_URL"
+    say "dry run: LISTEN=$LISTEN PUBLIC_URL=$PUBLIC_URL FIREWALL=$OPEN_FW CADDY=$CADDY KEY=$KEY_VAR"
     exit 0
 fi
 
@@ -323,9 +407,9 @@ if [ ! -f "$env_file" ]; then
         echo "KITTIES_LISTEN=$LISTEN"
         [ -z "$PUBLIC_URL" ] || echo "KITTIES_PUBLIC_URL=$PUBLIC_URL"
         echo "KITTIES_TOKEN=$token"
-        echo "OPENAI_API_KEY="
-        echo "ANTHROPIC_API_KEY="
-        echo "GEMINI_API_KEY="
+        for v in OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY; do
+            if [ "$v" = "$KEY_VAR" ]; then echo "$v=$KEY_VAL"; else echo "$v="; fi
+        done
     } > "$env_file"
     chown "$USER_NAME:$USER_NAME" "$env_file"
     chmod 0600 "$env_file"
@@ -384,6 +468,34 @@ else
     say "$(L 'started the service' 'servicio arrancado')"
 fi
 
+# ---- the port, the https site ----
+open_firewall() {
+    port="$1"
+    case "$(fw_kind)" in
+        ufw) ufw allow "$port/tcp" >/dev/null && say "$(L "opened $port/tcp in ufw" "puerto $port/tcp abierto en ufw")" ;;
+        firewalld) firewall-cmd --permanent --add-port="$port/tcp" >/dev/null && firewall-cmd --reload >/dev/null \
+            && say "$(L "opened $port/tcp in firewalld" "puerto $port/tcp abierto en firewalld")" ;;
+        *) warn "$(L 'no active ufw or firewalld found: open the port yourself if needed' 'no hay ufw ni firewalld activos: abre el puerto tú si hace falta')" ;;
+    esac
+}
+write_caddy() {
+    mkdir -p "$CADDY_DIR/conf.d"
+    caddy_site > "$CADDY_DIR/conf.d/kitties.caddy"
+    if systemctl reload caddy >/dev/null 2>&1 || caddy reload --config "$CADDY_DIR/Caddyfile" >/dev/null 2>&1; then
+        say "$(L "Caddy now serves $PUBLIC_URL" "Caddy ya sirve $PUBLIC_URL")"
+    else
+        warn "$(L "wrote $CADDY_DIR/conf.d/kitties.caddy but could not reload Caddy: systemctl reload caddy" "escribí $CADDY_DIR/conf.d/kitties.caddy pero no pude recargar Caddy: systemctl reload caddy")"
+    fi
+}
+if [ "$OPEN_FW" -eq 1 ]; then open_firewall "${LISTEN##*:}"; fi
+CADDY_DONE=0
+if [ "$CADDY" -eq 1 ]; then
+    case "$PUBLIC_URL" in
+        https://*) if caddy_ready; then write_caddy; CADDY_DONE=1; else warn "$(L "Caddy does not import $CADDY_DIR/conf.d; add the site below to your Caddyfile" "Caddy no importa $CADDY_DIR/conf.d; añade el sitio de abajo a tu Caddyfile")"; fi ;;
+        *) warn "--caddy: $(L 'needs an https:// --public-url' 'necesita una --public-url https://')" ;;
+    esac
+fi
+
 sleep 1
 systemctl is-active --quiet kitties || die "$(L "the service did not stay up; see: journalctl -u kitties -e" "el servicio no se mantuvo activo; mira: journalctl -u kitties -e")"
 
@@ -428,7 +540,21 @@ case "$host" in
     *)
         note "  1. $(L "Reachable from your local network. Put https in front before using it over the internet." "Accesible desde tu red local. Pon https delante antes de usarlo por internet.")" ;;
 esac
-note "  2. $(L "Add a model key (OPENAI_API_KEY, ANTHROPIC_API_KEY or GEMINI_API_KEY) in $env_file, or in Settings on the page," "Añade una clave de modelo (OPENAI_API_KEY, ANTHROPIC_API_KEY o GEMINI_API_KEY) en $env_file, o en Ajustes de la página,")"
-note "     $(L 'then: systemctl restart kitties' 'y luego: systemctl restart kitties')"
-note "  3. $(L 'Logs: journalctl -u kitties -f' 'Logs: journalctl -u kitties -f')"
-note "  4. $(L 'Update: run the same install line again (keeps your config and token).' 'Actualizar: ejecuta la misma línea de instalación otra vez (conserva tu configuración y token).')"
+case "$cur_public" in
+    https://*)
+        if [ "$CADDY_DONE" -eq 1 ]; then
+            note "  2. $(L "Caddy serves $cur_public (certificate by itself once the domain points here)." "Caddy sirve $cur_public (el certificado, solo, cuando el dominio apunte aquí).")"
+        else
+            PUBLIC_URL="$cur_public"; LISTEN="$cur_listen"
+            note "  2. $(L 'For https with Caddy, add this to your Caddyfile:' 'Para https con Caddy, añade esto a tu Caddyfile:')"
+            caddy_site | sed 's/^/       /'
+        fi ;;
+esac
+if [ -n "$KEY_VAR" ]; then
+    note "  3. $(L "$KEY_VAR is saved. Add more models in Settings on the page." "$KEY_VAR quedó guardada. Añade más modelos en Ajustes de la página.")"
+else
+    note "  3. $(L "Add a model key (OPENAI_API_KEY, ANTHROPIC_API_KEY or GEMINI_API_KEY) in $env_file, or in Settings on the page," "Añade una clave de modelo (OPENAI_API_KEY, ANTHROPIC_API_KEY o GEMINI_API_KEY) en $env_file, o en Ajustes de la página,")"
+    note "     $(L 'then: kitties gateway restart' 'y luego: kitties gateway restart')"
+fi
+note "  4. $(L 'Manage the service: kitties gateway start | stop | restart | status | logs' 'Gestiona el servicio: kitties gateway start | stop | restart | status | logs')"
+note "  5. $(L 'Update: run the same install line again (keeps your config and token).' 'Actualizar: ejecuta la misma línea de instalación otra vez (conserva tu configuración y token).')"

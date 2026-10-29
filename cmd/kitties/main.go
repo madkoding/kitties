@@ -50,6 +50,8 @@ Usage: kitties [-config file] <command> [arguments]
 Commands:
   init                      write an example configuration (and a sample soul) to start from
   gateway [-listen addr]    bootstrap the fleet and serve the HTTP API and the web interface
+  gateway start|stop|restart|status|logs
+                            manage the systemd service installed by scripts/install.sh
   token                     print the gateway's token (to sign in to the web interface)
   ls                        list the kitties and their state
   create <name> [flags]     create a kitty (-provider, -persona, -soul file, -avatar breed/color, -no-desktop)
@@ -138,6 +140,10 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	case "help", "-h", "--help":
 		fs.Usage()
 		return 0
+	case "gateway":
+		if len(rest) > 0 && isServiceVerb(rest[0]) {
+			return cmdGatewayService(rest[0], rest[1:], in, out, errOut)
+		}
 	}
 	// A gateway that was just updated is counted before anything else can go wrong (even reading
 	// the configuration): one that does not hold goes back to the version before.

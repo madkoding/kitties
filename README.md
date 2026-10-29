@@ -68,7 +68,7 @@ go install github.com/madkoding/kitties/cmd/kitties@latest   # or: make build
 kitties -demo gateway        # then open http://127.0.0.1:7488 and ask Tom to open https://example.com
 ```
 
-On a Linux server, one line (interactive: it explains each step and asks where to expose the gateway; release binary, checksum check, `kitties` user, systemd service; see
+On a Linux server, one line (interactive: it explains each step and asks where to expose the gateway, the firewall, https and a model key; afterwards `kitties gateway start|stop|restart|status|logs`; release binary, checksum check, `kitties` user, systemd service; see
 [INSTALL.md](docs/INSTALL.md#on-a-linux-server-one-line)):
 
 ```sh

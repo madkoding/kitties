@@ -65,7 +65,7 @@ sudo install -d -m 0750 -o kitties /etc/kitties
 sudo install -m 0600 -o kitties deploy/kitties.env.example /etc/kitties/kitties.env   # edit it
 sudo cp deploy/kitties.service /etc/systemd/system/
 sudo systemctl enable --now kitties
-journalctl -u kitties -f
+journalctl -u kitties -f      # or, with the installer: kitties gateway logs
 ```
 
 The unit runs as its own user with a read-only system and only its state folder writable. Put

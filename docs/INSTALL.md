@@ -33,7 +33,13 @@ From a terminal (also with `curl | sudo sh`) it explains each step and asks, on 
    local network (the machine's LAN address), every interface (`0.0.0.0`, with a warning: plain
    http and the token as the only password, so use a firewall, a VPN or https in front), or another
    `host:port`;
-3. an optional **public URL** when it sits behind a domain with https.
+3. an optional **public URL** when it sits behind a domain with https;
+4. when the gateway leaves the machine and **ufw** or **firewalld** is active, whether to open the
+   port (it defaults to yes for the local network and no for `0.0.0.0`);
+5. when the public URL is https and **Caddy** imports `/etc/caddy/conf.d`, whether to write
+   `conf.d/kitties.caddy` (a site with automatic https that proxies to the gateway) and reload
+   Caddy; otherwise the Caddyfile snippet is printed at the end;
+6. an optional **model key** (Anthropic, OpenAI or Gemini), typed hidden and saved in `kitties.env`.
 
 It shows a summary and asks to confirm before changing anything. On a re-run it asks nothing about
 the settings: it keeps `kitties.env` and only updates the program. The messages are in English or
@@ -61,8 +67,23 @@ curl -fsSL .../install.sh | sudo sh -s -- --version v0.5.0 --public-url https://
 | `-y`, `--yes` | ask nothing: the defaults plus the options given (`KITTIES_YES=1`) |
 | `--lang en\|es` | language of the messages (default from `$LANG`) |
 | `--dry-run` | ask the questions, print the choices and stop |
+| `--open-firewall` | open the port in ufw/firewalld (when one is active) without asking |
+| `--caddy` | write the Caddy site for an https `--public-url` (Caddy must import `conf.d`) |
 | `--no-service` | the binary only, without user or systemd |
 | `--prefix DIR` | another folder for the binary |
+
+### Managing the service
+
+The installer leaves `kitties` in `/usr/local/bin`; these wrap `systemctl` and `journalctl` (and
+ask for `sudo` when you are not root):
+
+```sh
+kitties gateway start      # also: stop, restart
+kitties gateway status
+kitties gateway logs       # the last 100 lines, followed; extra arguments go to journalctl (-n 20 --since today)
+```
+
+Plain `kitties gateway` still runs the gateway in the foreground, which is what the unit runs.
 
 Run it again to update: it replaces the binary and the unit, restarts only if something changed,
 and keeps `kitties.env` and the token. The service cannot replace its own binary (the unit makes
