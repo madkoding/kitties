@@ -23,8 +23,28 @@ It picks the release for the machine (amd64, arm64 or arm), checks it against th
 `SHA256SUMS`, installs `/usr/local/bin/kitties`, creates the `kitties` user (in the `docker` group
 when there is one), writes `/etc/kitties/kitties.env` with a generated token and installs and
 starts the `kitties` systemd service ([DEPLOY.md](DEPLOY.md) is the same by hand). At the end it
-prints the token. The gateway listens on `127.0.0.1:7488`: reach it with
-`ssh -L 7488:127.0.0.1:7488 you@server`, or put nginx or Caddy with https in front.
+prints the URL, the token and the next steps.
+
+From a terminal (also with `curl | sudo sh`) it explains each step and asks, on a first install:
+
+1. the **port** (default 7488);
+2. **where to expose the gateway**: only this machine (`127.0.0.1`, the default and the safest;
+   reach it with `ssh -L 7488:127.0.0.1:7488 you@server` or nginx/Caddy with https in front), the
+   local network (the machine's LAN address), every interface (`0.0.0.0`, with a warning: plain
+   http and the token as the only password, so use a firewall, a VPN or https in front), or another
+   `host:port`;
+3. an optional **public URL** when it sits behind a domain with https.
+
+It shows a summary and asks to confirm before changing anything. On a re-run it asks nothing about
+the settings: it keeps `kitties.env` and only updates the program. The messages are in English or
+Spanish according to `$LANG` (`--lang es`).
+
+To skip the questions (scripts, automation) give the options, or `--yes` for the defaults; with no
+terminal it never asks:
+
+```sh
+curl -fsSL .../install.sh | sudo sh -s -- --yes --listen 0.0.0.0:7488
+```
 
 Options go after `sh -s --`:
 
@@ -38,6 +58,9 @@ curl -fsSL .../install.sh | sudo sh -s -- --version v0.5.0 --public-url https://
 | `--listen ADDR` | another address (`0.0.0.0:7488` for the network) |
 | `--public-url URL` | where the page is reached from, behind https |
 | `--pubkey KEY` | the release signing key: the Ed25519 signature of `SHA256SUMS` must then check, or nothing is installed |
+| `-y`, `--yes` | ask nothing: the defaults plus the options given (`KITTIES_YES=1`) |
+| `--lang en\|es` | language of the messages (default from `$LANG`) |
+| `--dry-run` | ask the questions, print the choices and stop |
 | `--no-service` | the binary only, without user or systemd |
 | `--prefix DIR` | another folder for the binary |
 
