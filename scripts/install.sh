@@ -8,12 +8,13 @@
 # terminal it asks nothing and uses the defaults.
 #
 #   curl -fsSL https://raw.githubusercontent.com/madkoding/kitties/main/scripts/install.sh | sudo sh
-#   curl -fsSL .../install.sh | sudo sh -s -- --yes --listen 0.0.0.0:7488
+#   curl -fsSL .../install.sh | sudo sh -s -- --yes --expose wan
 #   curl -fsSL .../install.sh | sudo sh -s -- --version v0.5.0 --public-url https://kitties.example.com
 #
 # Options (or the environment variable in brackets):
 #   --version vX.Y.Z    release to install; default the latest        [KITTIES_VERSION]
-#   --listen ADDR       address of the gateway; default 127.0.0.1:7488 [KITTIES_LISTEN]
+#   --expose MODE       local (127.0.0.1, default) | lan (this machine's LAN IP) | wan (0.0.0.0) [KITTIES_EXPOSE]
+#   --listen ADDR       exact address of the gateway, instead of --expose; default 127.0.0.1:7488 [KITTIES_LISTEN]
 #   --public-url URL    where the page is reached from (behind https)  [KITTIES_PUBLIC_URL]
 #   --pubkey KEY        release signing key (base64); with it the signature is required [KITTIES_PUBKEY]
 #   --no-service        install the binary only (no user, no systemd)
@@ -33,6 +34,7 @@ REPO="${KITTIES_REPO:-madkoding/kitties}"
 VERSION="${KITTIES_VERSION:-latest}"
 LISTEN="${KITTIES_LISTEN:-127.0.0.1:7488}"
 LISTEN_GIVEN=0; [ -z "${KITTIES_LISTEN:-}" ] || LISTEN_GIVEN=1
+EXPOSE="${KITTIES_EXPOSE:-}"
 PUBLIC_URL="${KITTIES_PUBLIC_URL:-}"
 PUBLIC_URL_GIVEN=0; [ -z "${KITTIES_PUBLIC_URL:-}" ] || PUBLIC_URL_GIVEN=1
 PUBKEY="${KITTIES_PUBKEY:-}"
@@ -66,6 +68,7 @@ need() { command -v "$1" >/dev/null 2>&1 || die "$1 $(L 'is needed and not insta
 while [ $# -gt 0 ]; do
     case "$1" in
         --version) [ $# -ge 2 ] || die "--version needs a value"; VERSION="$2"; shift 2 ;;
+        --expose) [ $# -ge 2 ] || die "--expose needs a value"; EXPOSE="$2"; shift 2 ;;
         --listen) [ $# -ge 2 ] || die "--listen needs a value"; LISTEN="$2"; LISTEN_GIVEN=1; shift 2 ;;
         --public-url) [ $# -ge 2 ] || die "--public-url needs a value"; PUBLIC_URL="$2"; PUBLIC_URL_GIVEN=1; shift 2 ;;
         --pubkey) [ $# -ge 2 ] || die "--pubkey needs a value"; PUBKEY="$2"; shift 2 ;;
@@ -134,11 +137,10 @@ ask_listen() {
         [ "$NO_ANSWER" -eq 0 ] || die "$(L 'no answer from the terminal, nothing was changed' 'sin respuesta de la terminal, no se cambió nada')"
         echo
         note "$(L 'Where should the gateway be reachable from?' '¿Desde dónde se podrá llegar al gateway?')"
-        note "  1) $(L "Only this machine (127.0.0.1:$port)   - safest, the default" "Solo esta máquina (127.0.0.1:$port)   - lo más seguro, por defecto")"
-        note "  2) $(L "Local network (${ip:-your LAN IP}:$port)   - other devices at home/office" "Red local (${ip:-IP de tu LAN}:$port)   - otros equipos de tu casa/oficina")"
-        note "  3) $(L "Every interface (0.0.0.0:$port)   - also the internet if the server is public" "Todas las interfaces (0.0.0.0:$port)   - también internet si el servidor es público")"
-        note "  4) $(L 'Another address' 'Otra dirección')"
-        ask "$(L 'Choose 1-4 [1]: ' 'Elige 1-4 [1]: ')"
+        note "  1) $(L "Local (127.0.0.1:$port)   - only this machine, safest, the default" "Local (127.0.0.1:$port)   - solo esta máquina, lo más seguro, por defecto")"
+        note "  2) $(L "LAN (${ip:-your LAN IP}:$port)   - other devices at home/office" "LAN (${ip:-IP de tu LAN}:$port)   - otros equipos de tu casa/oficina")"
+        note "  3) $(L "WAN (0.0.0.0:$port)   - every interface, also the internet if the server is public" "WAN (0.0.0.0:$port)   - todas las interfaces, también internet si el servidor es público")"
+        ask "$(L 'Choose 1-3 [1]: ' 'Elige 1-3 [1]: ')"
         case "$REPLY_TEXT" in
             ''|1) LISTEN="127.0.0.1:$port"; return ;;
             2)
@@ -146,15 +148,11 @@ ask_listen() {
                 LISTEN="$ip:$port"; return ;;
             3)
                 echo
-                warn "$(L '0.0.0.0 listens on EVERY network interface.' '0.0.0.0 escucha en TODAS las interfaces de red.')"
+                warn "$(L 'WAN (0.0.0.0) listens on EVERY network interface.' 'WAN (0.0.0.0) escucha en TODAS las interfaces de red.')"
                 note "$(L 'The page and its token travel over plain http, and the token is the only password.' 'La página y su token viajan por http sin cifrar, y el token es la única contraseña.')"
                 note "$(L 'Do it only behind a firewall or a VPN, or put nginx/Caddy with https in front.' 'Hazlo solo tras un firewall o VPN, o pon nginx/Caddy con https delante.')"
                 if confirm "$(L 'Listen on every interface anyway?' '¿Escuchar en todas las interfaces de todos modos?')" n; then LISTEN="0.0.0.0:$port"; return; fi ;;
-            4)
-                ask "$(L 'Address (host:port): ' 'Dirección (host:puerto): ')"
-                if valid_port "${REPLY_TEXT##*:}" && [ "${REPLY_TEXT%:*}" != "$REPLY_TEXT" ]; then LISTEN="$REPLY_TEXT"; return; fi
-                warn "$(L 'expected host:port, e.g. 192.168.1.20:7488' 'se espera host:puerto, p. ej. 192.168.1.20:7488')" ;;
-            *) warn "$(L 'choose 1, 2, 3 or 4' 'elige 1, 2, 3 o 4')" ;;
+            *) warn "$(L 'choose 1, 2 or 3' 'elige 1, 2 o 3')" ;;
         esac
     done
 }
@@ -237,6 +235,22 @@ ask_caddy() {
     note "$(L 'The domain must already point to this server (ports 80 and 443 open).' 'El dominio debe apuntar ya a este servidor (puertos 80 y 443 abiertos).')"
     if confirm "$(L "Write $CADDY_DIR/conf.d/kitties.caddy and reload Caddy?" "¿Escribir $CADDY_DIR/conf.d/kitties.caddy y recargar Caddy?")" y; then CADDY=1; fi
 }
+
+if [ -n "$EXPOSE" ]; then
+    xport="${LISTEN##*:}"
+    case "$EXPOSE" in
+        local) LISTEN="127.0.0.1:$xport" ;;
+        lan)
+            xip=$(lan_ip)
+            [ -n "$xip" ] || die "--expose lan: $(L 'could not find the LAN address; use --listen host:port' 'no encontré la dirección de la LAN; usa --listen host:puerto')"
+            LISTEN="$xip:$xport" ;;
+        wan)
+            LISTEN="0.0.0.0:$xport"
+            warn "$(L 'WAN (0.0.0.0) listens on EVERY network interface: plain http and the token as the only password; use a firewall, a VPN or https in front.' 'WAN (0.0.0.0) escucha en TODAS las interfaces: http sin cifrar y el token como única contraseña; usa firewall, VPN o https delante.')" ;;
+        *) die "--expose: $(L 'expected local, lan or wan' 'se espera local, lan o wan')" ;;
+    esac
+    LISTEN_GIVEN=1
+fi
 
 case "$LISTEN" in
     *:*) valid_port "${LISTEN##*:}" || die "--listen: $(L 'expected host:port' 'se espera host:puerto')" ;;

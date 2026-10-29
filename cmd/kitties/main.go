@@ -171,6 +171,10 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	if err == nil {
 		err = cfg.ApplyEnv(os.Getenv)
 	}
+	if err == nil && cmd == "gateway" {
+		// What the person chose in Settings or an installer (local, lan, wan) wins over the file and the environment.
+		cfg.ApplyExposure()
+	}
 	if err != nil {
 		fmt.Fprintf(errOut, "kitties: %v\nRun `kitties init` to write an example configuration.\n", err)
 		return 1
@@ -407,6 +411,10 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
+	if os.Getenv("KITTIES_RELAUNCH") != "" {
+		// A copy that replaced the one that was running (Windows cannot exec in place): the port is freed first.
+		time.Sleep(1500 * time.Millisecond)
+	}
 	if *listen != "" {
 		a.cfg.Gateway.Listen = *listen
 		if err := a.cfg.Validate(); err != nil {
@@ -441,7 +449,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	g := a.cfg.Gateway
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
 		WithApprovals(a.chats).WithMemory(a.chats).WithMaintenance(a.fleet).WithUpdater(a.updater).WithNotifier(a.notifier).WithDigest(a.digest).
-		WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
+		WithExposure(exposureOf(a.cfg, g.Listen)).WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
 	if a.vault != nil {
 		srv.WithVault(a.vault)
 	}

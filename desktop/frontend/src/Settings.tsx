@@ -35,6 +35,7 @@ import { Missing, Required, RequiredLegend } from "./Required";
 import { AccountSignIn } from "./SignIn";
 import { ask } from "./Confirm";
 import Secrets from "./Secrets";
+import Exposure from "./Exposure";
 import Updates from "./Updates";
 import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 
@@ -1986,6 +1987,7 @@ export default function SettingsModal({
         {tab === "preferences" && (
           <>
             <Preferences />
+            <Exposure />
             <Updates />
           </>
         )}
