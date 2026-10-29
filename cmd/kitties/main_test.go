@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/selfupdate"
 	"io"
@@ -333,6 +334,14 @@ func TestGatewayCommand(t *testing.T) {
 	_ = os.WriteFile(badCfg, []byte(strings.Replace(mustRead(t, badCfg), "listen: 127.0.0.1:0", "listen: 127.0.0.1:99999", 1)), 0o600)
 	if code, _, errOut := exec(t, "", "-config", badCfg, "gateway"); code != 1 || !strings.Contains(errOut, "brain-only") || !strings.Contains(errOut, "listen on") {
 		t.Errorf("gateway on a busy port: %d %s", code, errOut)
+	}
+	// A copy that replaced a running gateway waits for the port, and a saved exposure picks the address.
+	t.Setenv("KITTIES_RELAUNCH", "1")
+	if err := config.SaveExposure(filepath.Join(filepath.Dir(badCfg), "data"), config.ExposureLocal); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, errOut := exec(t, "", "-config", badCfg, "gateway"); code != 1 || !strings.Contains(errOut, "listen on 127.0.0.1:99999") {
+		t.Errorf("gateway relaunched with a saved exposure: %d %s", code, errOut)
 	}
 }
 
