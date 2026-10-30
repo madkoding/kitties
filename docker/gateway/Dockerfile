@@ -26,7 +26,7 @@ ARG TARGETOS
 ARG TARGETARCH
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -trimpath -ldflags "-s -w -X main.version=${VERSION}" -o /out/kitties ./cmd/kitties
 
-FROM alpine:3.23
+FROM alpine:3.24
 # docker-cli: the gateway starts a container per kitty through the host's docker socket.
 RUN apk add --no-cache docker-cli ca-certificates tzdata \
  && adduser -D -u 10001 kitties
