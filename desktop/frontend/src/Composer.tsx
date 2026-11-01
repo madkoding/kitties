@@ -28,7 +28,7 @@ export default function Composer(p: Props) {
     >
       <div class="well flex-1 flex items-center min-h-[44px] max-h-[120px] p-2 rounded-2xl focus-within:border-accent">
         <textarea
-          class="flex-1 min-h-[28px] max-h-[100px] px-1 py-1 bg-transparent border-0 outline-hidden text-[var(--t1)] resize-none font-sans text-[14px] leading-relaxed disabled:opacity-50"
+          class="flex-1 min-h-[28px] max-h-[100px] px-1 py-1 bg-transparent border-0 outline-hidden text-[var(--t1)] resize-none font-sans text-[14px] leading-relaxed read-only:opacity-50"
           placeholder={
             p.working
               ? t("A kitty is working on its desktop…")
@@ -37,7 +37,10 @@ export default function Composer(p: Props) {
                 : t("Say something…")
           }
           value={text}
-          disabled={p.disabled}
+          // readOnly, not disabled: a disabled field drops the focus (and the caret) the moment a
+          // kitty starts working or the poll flips the state, and never gets it back.
+          readOnly={p.disabled}
+          aria-disabled={p.disabled}
           rows={1}
           onInput={(e) => setText((e.target as HTMLTextAreaElement).value)}
           onKeyDown={(e) => {

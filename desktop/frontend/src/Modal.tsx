@@ -1,4 +1,4 @@
-import { useLayoutEffect } from "preact/hooks";
+import { useLayoutEffect, useRef } from "preact/hooks";
 import { t } from "./i18n";
 import { IconX } from "./icons";
 
@@ -14,6 +14,44 @@ export function Modal({
   children: preact.ComponentChildren;
   wide?: boolean;
 }) {
+  const dialog = useRef<HTMLDivElement>(null);
+  // The focus lives in the window while it is open, and goes back to where it was when it closes.
+  useLayoutEffect(() => {
+    const before = document.activeElement as HTMLElement | null;
+    const box = dialog.current;
+    if (box && !box.contains(document.activeElement)) {
+      box.focus({ preventScroll: true });
+    }
+    return () => {
+      if (before?.isConnected) {
+        before.focus({ preventScroll: true });
+      }
+    };
+  }, []);
+  // Tab cycles inside the window, so a key never moves the focus to the page behind it.
+  const trap = (e: KeyboardEvent) => {
+    if (e.key !== "Tab" || !dialog.current) {
+      return;
+    }
+    const items = [
+      ...dialog.current.querySelectorAll<HTMLElement>(
+        'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+      ),
+    ];
+    if (!items.length) {
+      return;
+    }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const at = document.activeElement;
+    if (e.shiftKey && (at === first || at === dialog.current)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && at === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
   useLayoutEffect(() => {
     // A window inside this one that used the key (the live desktop) keeps this one open.
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && onClose();
@@ -30,6 +68,10 @@ export function Modal({
         class={`chat-modal w-full ${wide ? "max-w-3xl" : "max-w-md"} p-5 max-h-[90vh] overflow-y-auto scroll-thin`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
+        tabIndex={-1}
+        ref={dialog}
+        onKeyDown={trap}
       >
         <div class="flex items-center justify-between mb-4">
           <h2 class="font-mono text-base tracking-wide">{title}</h2>
