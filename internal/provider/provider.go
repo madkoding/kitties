@@ -51,7 +51,7 @@ type Kind struct {
 	KeyEnv  string
 	// NoKey is true for a service that runs without a key (a local Ollama).
 	NoKey bool
-	// PublicList is true when the provider lists its models without a key (Ollama Cloud), so
+	// PublicList is true when the provider lists its models without a key (Ollama Cloud, OpenRouter), so
 	// the list can be shown before the key is pasted.
 	PublicList bool
 	// DefaultModel is the model used when the profile names none.
@@ -71,7 +71,7 @@ var kinds = map[string]Kind{
 	"ollama":       {Name: "ollama", Family: FamilyChat, BaseURL: "http://127.0.0.1:11434/v1", KeyEnv: "OLLAMA_API_KEY", NoKey: true, DefaultModel: "qwen3:8b"},
 	"ollama-cloud": {Name: "ollama-cloud", Family: FamilyChat, BaseURL: "https://ollama.com/v1", KeyEnv: "OLLAMA_API_KEY", PublicList: true, DefaultModel: "gpt-oss:120b"},
 	"groq":         {Name: "groq", Family: FamilyChat, BaseURL: "https://api.groq.com/openai/v1", KeyEnv: "GROQ_API_KEY", DefaultModel: "llama-3.3-70b-versatile"},
-	"openrouter":   {Name: "openrouter", Family: FamilyChat, BaseURL: "https://openrouter.ai/api/v1", KeyEnv: "OPENROUTER_API_KEY", DefaultModel: "openai/gpt-5.5"},
+	"openrouter":   {Name: "openrouter", Family: FamilyChat, BaseURL: "https://openrouter.ai/api/v1", KeyEnv: "OPENROUTER_API_KEY", PublicList: true, DefaultModel: "openai/gpt-5.5"},
 	"deepseek":     {Name: "deepseek", Family: FamilyChat, BaseURL: "https://api.deepseek.com/v1", KeyEnv: "DEEPSEEK_API_KEY", DefaultModel: "deepseek-chat"},
 	"qwen":         {Name: "qwen", Family: FamilyChat, BaseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", KeyEnv: "DASHSCOPE_API_KEY", DefaultModel: "qwen-plus", Login: "qwen"},
 	"mistral":      {Name: "mistral", Family: FamilyChat, BaseURL: "https://api.mistral.ai/v1", KeyEnv: "MISTRAL_API_KEY", DefaultModel: "mistral-large-latest"},

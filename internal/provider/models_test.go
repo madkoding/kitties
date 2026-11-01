@@ -92,3 +92,12 @@ func TestListModelsOllamaCloudWithoutKey(t *testing.T) {
 		t.Errorf("got %v, %v", got, err)
 	}
 }
+
+func TestListModelsOpenRouterWithoutKey(t *testing.T) {
+	t.Setenv("OPENROUTER_API_KEY", "")
+	if _, err := ListModels(context.Background(), Options{Kind: "openrouter"}, modelsRT(func(*http.Request) (int, string) {
+		return 200, `{"data":[{"id":"openai/gpt-5.5"}]}`
+	})); err != nil {
+		t.Errorf("openrouter lists without a key: %v", err)
+	}
+}

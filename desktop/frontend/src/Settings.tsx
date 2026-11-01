@@ -88,6 +88,11 @@ function Err({ text }: { text: string }) {
   ) : null;
 }
 
+// The model list of a provider that serves it without a key is kept for a few minutes, so
+// opening the form again does not ask for it again.
+const PUBLIC_MODELS_TTL = 5 * 60 * 1000;
+const publicModels = new Map<string, { at: number; models: string[] }>();
+
 // ─── Models ─────────────────────────────────────────────────────────────────────────────────
 
 // ProviderPicker offers the providers as buttons, the common ones first.
@@ -179,9 +184,19 @@ function ModelForm({
       return;
     }
     let live = true;
+    const hit = publicModels.get(kind);
+    if (hit && Date.now() - hit.at < PUBLIC_MODELS_TTL) {
+      setLiveModels(hit.models);
+      return;
+    }
     api
       .providerModels(view?.name || "", { kind, base_url: base.trim() })
-      .then((r) => live && r.ok && setLiveModels(r.models || []))
+      .then((r) => {
+        if (r.ok) {
+          publicModels.set(kind, { at: Date.now(), models: r.models || [] });
+          live && setLiveModels(r.models || []);
+        }
+      })
       .catch(() => undefined);
     return () => {
       live = false;
@@ -365,6 +380,11 @@ function ModelForm({
               >
                 {keyCheck === "checking" ? t("Checking…") : t("Check key")}
               </button>
+              {keyCheck === "idle" && listsOpenly && liveModels.length > 0 && (
+                <span class="text-xs text-[var(--t3)]" role="status">
+                  {t("{n} models available.", { n: String(liveModels.length) })}
+                </span>
+              )}
               {keyCheck === "ok" && (
                 <span class="text-xs" role="status">
                   {t("Key accepted: {n} models available.", { n: String(liveModels.length) })}
