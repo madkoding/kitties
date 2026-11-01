@@ -267,7 +267,7 @@ export default function ApprovalsModal({
                   >
                     {a.kitty_name} · {a.summary}
                   </span>
-                  <span class="text-[10px] text-[var(--t4)] font-mono whitespace-nowrap">
+                  <span class="text-[0.625rem] text-[var(--t4)] font-mono whitespace-nowrap">
                     {when(a.decided_at || a.at)}
                   </span>
                 </div>

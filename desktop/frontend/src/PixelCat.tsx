@@ -9,7 +9,15 @@
 import { useEffect, useState } from "preact/hooks";
 
 export type Mood = "idle" | "thinking" | "talking" | "working" | "happy" | "error" | "sleeping";
-export const MOODS: Mood[] = ["idle", "thinking", "talking", "working", "happy", "error", "sleeping"];
+export const MOODS: Mood[] = [
+  "idle",
+  "thinking",
+  "talking",
+  "working",
+  "happy",
+  "error",
+  "sleeping",
+];
 export const BREEDS = ["tabby", "shorthair", "tuxedo", "fluffy", "siamese"] as const;
 export type Breed = (typeof BREEDS)[number];
 
@@ -314,9 +322,18 @@ interface Props {
 }
 
 // PixelCat draws the avatar and keeps it moving.
-export default function PixelCat({ breed = "tabby", color = "orange", mood = "idle", size = 32, still, class: cls, title }: Props) {
+export default function PixelCat({
+  breed = "tabby",
+  color = "orange",
+  mood = "idle",
+  size = 32,
+  still,
+  class: cls,
+  title,
+}: Props) {
   const [frame, setFrame] = useState(0);
-  const period = mood === "idle" ? 700 : mood === "sleeping" ? 1200 : mood === "working" ? 260 : 380;
+  const period =
+    mood === "idle" ? 700 : mood === "sleeping" ? 1200 : mood === "working" ? 260 : 380;
   useEffect(() => {
     if (still || document.documentElement.dataset.motion === "off") {
       return;
@@ -339,8 +356,20 @@ export default function PixelCat({ breed = "tabby", color = "orange", mood = "id
   // The tail swishes on idle: the tip moves one pixel every other frame.
   const tailUp = mood === "idle" && frame % 4 >= 2;
   return (
-    <span class={`pixelcat mood-${mood} ${cls || ""}`} style={`width:${size}px;height:${size}px`} title={title} data-frame={frame}>
-      <svg viewBox="0 0 17 16" width={size} height={size} shape-rendering="crispEdges" aria-label={`${b} ${color} cat, ${mood}`} role="img">
+    <span
+      class={`pixelcat mood-${mood} ${cls || ""}`}
+      style={`width:${size / 16}rem;height:${size / 16}rem`}
+      title={title}
+      data-frame={frame}
+    >
+      <svg
+        viewBox="0 0 17 16"
+        width={`${size / 16}rem`}
+        height={`${size / 16}rem`}
+        shape-rendering="crispEdges"
+        aria-label={`${b} ${color} cat, ${mood}`}
+        role="img"
+      >
         <g transform={tailUp ? "translate(0,0)" : "translate(0,0)"}>{rects}</g>
         {tailUp && <rect x="16" y="10" width="1" height="1" fill={coat.dark} />}
       </svg>
@@ -352,14 +381,29 @@ export default function PixelCat({ breed = "tabby", color = "orange", mood = "id
 }
 
 // Picker lets a person choose the breed and the coat, with every cat shown alive.
-export function CatPicker({ breed, color, onChange }: { breed: string; color: string; onChange: (a: { breed: string; color: string }) => void }) {
+export function CatPicker({
+  breed,
+  color,
+  onChange,
+}: {
+  breed: string;
+  color: string;
+  onChange: (a: { breed: string; color: string }) => void;
+}) {
   return (
     <div>
       <div class="flex flex-wrap gap-2 mt-1">
         {BREEDS.map((b) => (
-          <button key={b} type="button" class={`plain cat-choice ${b === breed ? "on" : ""}`} onClick={() => onChange({ breed: b, color })} aria-label={b} title={b}>
+          <button
+            key={b}
+            type="button"
+            class={`plain cat-choice ${b === breed ? "on" : ""}`}
+            onClick={() => onChange({ breed: b, color })}
+            aria-label={b}
+            title={b}
+          >
             <PixelCat breed={b} color={color} mood={b === breed ? "happy" : "idle"} size={44} />
-            <span class="text-[10px] font-mono uppercase tracking-wider">{b}</span>
+            <span class="text-[0.625rem] font-mono uppercase tracking-wider">{b}</span>
           </button>
         ))}
       </div>

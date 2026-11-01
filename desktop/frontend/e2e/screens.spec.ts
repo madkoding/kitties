@@ -141,6 +141,14 @@ test("a desktop task: two columns, the latest screenshot in view and the earlier
     .toBeLessThan(6);
 });
 
+test("on a phone the menu button opens the sidebar", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/${Q}#chat/${ids.desktop}`);
+  await page.getByLabel("Menu").click();
+  await expect(page.locator("aside.sidebar")).toBeVisible();
+  await shot(page, "12-phone-menu");
+});
+
 test("on a phone the desktop tab gives the chat back when the task ends", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/${Q}#chat/${ids.desktop}`);
