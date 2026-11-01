@@ -102,7 +102,7 @@ export function NewChatModal({
             />
             <span class={`dot ${k.status}`} />
             <span class="flex-1 text-sm">{k.name}</span>
-            <span class="text-xs text-[var(--t4)] truncate max-w-[220px]">
+            <span class="text-xs text-[var(--t4)] truncate max-w-[13.75rem]">
               {k.soul?.persona || ""}
             </span>
           </label>
@@ -491,7 +491,7 @@ function KittyBasics({
       </label>
       <textarea
         id="drawer-persona"
-        class={`${INPUT} min-h-[60px]`}
+        class={`${INPUT} min-h-[3.75rem]`}
         value={persona}
         onInput={(e) => setPersona((e.target as HTMLTextAreaElement).value)}
       />

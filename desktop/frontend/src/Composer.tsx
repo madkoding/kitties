@@ -26,9 +26,9 @@ export default function Composer(p: Props) {
       class="frosted flex gap-2 px-3 py-2.5 sm:px-5 sm:py-3 border-t border-white/5 flex-none z-10 relative"
       onSubmit={submit}
     >
-      <div class="well flex-1 flex items-center min-h-[44px] max-h-[120px] p-2 rounded-2xl focus-within:border-accent">
+      <div class="well flex-1 flex items-center min-h-[44px] max-h-[7.5rem] p-2 rounded-2xl focus-within:border-accent">
         <textarea
-          class="flex-1 min-h-[28px] max-h-[100px] px-1 py-1 bg-transparent border-0 outline-hidden text-[var(--t1)] resize-none font-sans text-[14px] leading-relaxed read-only:opacity-50"
+          class="flex-1 min-h-[1.75rem] max-h-[6.25rem] px-1 py-1 bg-transparent border-0 outline-hidden text-[var(--t1)] resize-none font-sans text-[0.875rem] leading-relaxed read-only:opacity-50"
           placeholder={
             p.working
               ? t("A kitty is working on its desktop…")

@@ -352,7 +352,7 @@ export function JournalPanel({
       <div class="journal" data-testid="journal">
         {(allLines ? entries : entries.slice(0, FEW_LINES)).map((e, i) => (
           <div key={i} class="journal-line">
-            <span class="text-[var(--t4)] font-mono text-[10px] whitespace-nowrap">
+            <span class="text-[var(--t4)] font-mono text-[0.625rem] whitespace-nowrap">
               {when(e.at)}
             </span>
             <span class={`tag ${KIND_TAG[e.kind] || ""}`}>{t(e.kind)}</span>

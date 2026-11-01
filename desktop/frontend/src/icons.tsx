@@ -3,8 +3,8 @@ import type { JSX } from "preact";
 type P = { size?: number; class?: string };
 const svg = (p: P, children: JSX.Element | JSX.Element[]) => (
   <svg
-    width={p.size || 16}
-    height={p.size || 16}
+    width={`${(p.size || 16) / 16}rem`}
+    height={`${(p.size || 16) / 16}rem`}
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -78,8 +78,8 @@ export const IconBook = (p: P) =>
 
 export const IconHand = ({ size = 16 }: { size?: number }) => (
   <svg
-    width={size}
-    height={size}
+    width={`${size / 16}rem`}
+    height={`${size / 16}rem`}
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -96,8 +96,8 @@ export const IconHand = ({ size = 16 }: { size?: number }) => (
 );
 export const IconClock = ({ size = 16 }: { size?: number }) => (
   <svg
-    width={size}
-    height={size}
+    width={`${size / 16}rem`}
+    height={`${size / 16}rem`}
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -112,8 +112,8 @@ export const IconClock = ({ size = 16 }: { size?: number }) => (
 );
 export const IconTarget = ({ size = 16 }: { size?: number }) => (
   <svg
-    width={size}
-    height={size}
+    width={`${size / 16}rem`}
+    height={`${size / 16}rem`}
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -128,8 +128,8 @@ export const IconTarget = ({ size = 16 }: { size?: number }) => (
 
 export const IconThumbUp = ({ size = 16 }: { size?: number }) => (
   <svg
-    width={size}
-    height={size}
+    width={`${size / 16}rem`}
+    height={`${size / 16}rem`}
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -144,8 +144,8 @@ export const IconThumbUp = ({ size = 16 }: { size?: number }) => (
 );
 export const IconThumbDown = ({ size = 16 }: { size?: number }) => (
   <svg
-    width={size}
-    height={size}
+    width={`${size / 16}rem`}
+    height={`${size / 16}rem`}
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"
@@ -160,8 +160,8 @@ export const IconThumbDown = ({ size = 16 }: { size?: number }) => (
 );
 export const IconShield = ({ size = 16 }: { size?: number }) => (
   <svg
-    width={size}
-    height={size}
+    width={`${size / 16}rem`}
+    height={`${size / 16}rem`}
     viewBox="0 0 24 24"
     fill="none"
     stroke="currentColor"

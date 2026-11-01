@@ -193,7 +193,7 @@ export default function ConnectorLogo({
     return (
       <span
         class="logo-fallback"
-        style={`width:${size}px;height:${size}px;font-size:${size * 0.5}px`}
+        style={`width:${size / 16}rem;height:${size / 16}rem;font-size:${size / 32}rem`}
         aria-hidden="true"
       >
         {kind.slice(0, 2).toUpperCase()}
@@ -203,8 +203,8 @@ export default function ConnectorLogo({
   const fill = mono || DARK_MARKS.has(kind) ? "currentColor" : "#" + m.hex;
   return (
     <svg
-      width={size}
-      height={size}
+      width={`${size / 16}rem`}
+      height={`${size / 16}rem`}
       viewBox={m.viewBox || "0 0 24 24"}
       role="img"
       aria-label={kind}
@@ -240,7 +240,14 @@ const dark = (hex: string) => {
 export function ProviderLogo({ kind, size = 24 }: { kind: string; size?: number }) {
   if (kind === "openai" || kind === "codex") {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={kind} class="logo">
+      <svg
+        width={`${size / 16}rem`}
+        height={`${size / 16}rem`}
+        viewBox="0 0 24 24"
+        role="img"
+        aria-label={kind}
+        class="logo"
+      >
         <g fill="none" stroke="currentColor" stroke-width="1.7">
           {[0, 60, 120, 180, 240, 300].map((a) => (
             <rect
@@ -259,7 +266,14 @@ export function ProviderLogo({ kind, size = 24 }: { kind: string; size?: number 
   }
   if (kind === "groq") {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" role="img" aria-label={kind} class="logo">
+      <svg
+        width={`${size / 16}rem`}
+        height={`${size / 16}rem`}
+        viewBox="0 0 24 24"
+        role="img"
+        aria-label={kind}
+        class="logo"
+      >
         <g fill="none" stroke="#F55036" stroke-width="2.6" stroke-linecap="round">
           <circle cx="11.5" cy="10" r="5.5" />
           <path d="M17 10v7.5a3.5 3.5 0 0 1-3.5 3.5H11" />
@@ -272,7 +286,7 @@ export function ProviderLogo({ kind, size = 24 }: { kind: string; size?: number 
     return (
       <span
         class="logo-fallback"
-        style={`width:${size}px;height:${size}px;font-size:${size * 0.5}px`}
+        style={`width:${size / 16}rem;height:${size / 16}rem;font-size:${size / 32}rem`}
         aria-hidden="true"
       >
         {kind.slice(0, 2).toUpperCase()}
@@ -281,8 +295,8 @@ export function ProviderLogo({ kind, size = 24 }: { kind: string; size?: number 
   }
   return (
     <svg
-      width={size}
-      height={size}
+      width={`${size / 16}rem`}
+      height={`${size / 16}rem`}
       viewBox={m.viewBox || "0 0 24 24"}
       role="img"
       aria-label={kind}

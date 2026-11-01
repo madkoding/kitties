@@ -36,7 +36,10 @@
 }
 
 /* motita, dark */
-:is(html[data-mode="dark"][data-scheme="motita"], html[data-mode="dark"] .theme-card[data-scheme="motita"]) {
+:is(
+  html[data-mode="dark"][data-scheme="motita"],
+  html[data-mode="dark"] .theme-card[data-scheme="motita"]
+) {
   --color-accent: #4cc2ff;
   --accent-rgb: 76 194 255;
   --neon-cyan: #00f0ff;
@@ -66,7 +69,10 @@
 }
 
 /* motita, light */
-:is(html[data-mode="light"][data-scheme="motita"], html[data-mode="light"] .theme-card[data-scheme="motita"]) {
+:is(
+  html[data-mode="light"][data-scheme="motita"],
+  html[data-mode="light"] .theme-card[data-scheme="motita"]
+) {
   --color-accent: #0a6698;
   --accent-rgb: 10 102 152;
   --neon-cyan: #0a6698;

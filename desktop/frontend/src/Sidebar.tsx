@@ -65,7 +65,7 @@ export default function Sidebar(p: Props) {
         <div class="titlebar flex items-center gap-2 px-4 py-3 border-b border-white/5 flex-none">
           <span class="text-accent text-lg">🐱</span>
           <h1 class="text-base font-semibold tracking-wide">Kitties</h1>
-          <span class="text-[10px] text-[var(--t4)] font-mono mt-0.5">{p.version}</span>
+          <span class="text-[0.625rem] text-[var(--t4)] font-mono mt-0.5">{p.version}</span>
           <button class="plain ml-auto p-1.5 md:hidden" onClick={p.onClose} aria-label={t("Close")}>
             <IconX />
           </button>
@@ -128,7 +128,7 @@ export default function Sidebar(p: Props) {
               />
               <span class={`dot ${k.status}`} />
               <span class="flex-1 min-w-0 truncate text-sm">{k.name}</span>
-              <span class="text-[10px] font-mono text-[var(--t4)] truncate max-w-[70px]">
+              <span class="text-[0.625rem] font-mono text-[var(--t4)] truncate max-w-[4.375rem]">
                 {k.provider}
               </span>
               {k.desktop ? (
