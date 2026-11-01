@@ -201,6 +201,8 @@ export interface ProviderKind {
   BaseURL: string;
   KeyEnv: string;
   NoKey: boolean;
+  // PublicList: the model list needs no key (Ollama Cloud), so it can be shown right away.
+  PublicList?: boolean;
   DefaultModel: string;
   // Login names the account a profile of this kind can sign in with instead of a key.
   Login?: string;

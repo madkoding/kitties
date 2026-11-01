@@ -79,3 +79,25 @@ func TestListModelsRefusesOddAddresses(t *testing.T) {
 		t.Errorf("a local server is fine: %v", err)
 	}
 }
+
+func TestListModelsOllamaCloudWithoutKey(t *testing.T) {
+	t.Setenv("OLLAMA_API_KEY", "")
+	got, err := ListModels(context.Background(), Options{Kind: "ollama-cloud"}, modelsRT(func(r *http.Request) (int, string) {
+		if r.URL.String() != "https://ollama.com/v1/models" || r.Header.Get("Authorization") != "" {
+			t.Errorf("request %s auth %q", r.URL, r.Header.Get("Authorization"))
+		}
+		return 200, `{"data":[{"id":"kimi-k3"},{"id":"gpt-oss:120b"}]}`
+	}))
+	if err != nil || len(got) != 2 || got[0] != "gpt-oss:120b" {
+		t.Errorf("got %v, %v", got, err)
+	}
+}
+
+func TestListModelsOpenRouterWithoutKey(t *testing.T) {
+	t.Setenv("OPENROUTER_API_KEY", "")
+	if _, err := ListModels(context.Background(), Options{Kind: "openrouter"}, modelsRT(func(*http.Request) (int, string) {
+		return 200, `{"data":[{"id":"openai/gpt-5.5"}]}`
+	})); err != nil {
+		t.Errorf("openrouter lists without a key: %v", err)
+	}
+}
