@@ -171,6 +171,22 @@ function ModelForm({
   );
   const [keyNote, setKeyNote] = useState("");
   const [liveModels, setLiveModels] = useState<string[]>([]);
+  // A provider that lists its models without a key (Ollama Cloud) shows them before the key is
+  // pasted; once a key is typed, its own check takes over.
+  const listsOpenly = Boolean(info?.PublicList) && way === "key";
+  useEffect(() => {
+    if (!listsOpenly || key.trim()) {
+      return;
+    }
+    let live = true;
+    api
+      .providerModels(view?.name || "", { kind, base_url: base.trim() })
+      .then((r) => live && r.ok && setLiveModels(r.models || []))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [listsOpenly, kind, key === ""]);
   const defaultModel = (k: string) => kinds.find((x) => x.Name === k)?.DefaultModel || "";
   const pick = (k: string) => {
     // Copilot has no key of its own to speak of: its sign-in comes first.
@@ -425,7 +441,7 @@ function ModelForm({
           ...new Set(
             [
               info?.DefaultModel,
-              ...(way === "key" && keyCheck === "ok" && liveModels.length
+              ...(way === "key" && liveModels.length
                 ? liveModels
                 : (way === "login" ? signIn?.models : meta.models) || []),
             ].filter(Boolean),

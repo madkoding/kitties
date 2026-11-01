@@ -51,6 +51,9 @@ type Kind struct {
 	KeyEnv  string
 	// NoKey is true for a service that runs without a key (a local Ollama).
 	NoKey bool
+	// PublicList is true when the provider lists its models without a key (Ollama Cloud), so
+	// the list can be shown before the key is pasted.
+	PublicList bool
 	// DefaultModel is the model used when the profile names none.
 	DefaultModel string
 	// Login names the account a profile of this kind can sign in with instead of a key
@@ -66,7 +69,7 @@ var kinds = map[string]Kind{
 	"claude-code":  {Name: "claude-code", Family: FamilyCLI, NoKey: true, DefaultModel: "sonnet", Login: "claude"},
 	"gemini":       {Name: "gemini", Family: FamilyGemini, BaseURL: "https://generativelanguage.googleapis.com", KeyEnv: "GEMINI_API_KEY", DefaultModel: "gemini-2.5-flash", Login: "google"},
 	"ollama":       {Name: "ollama", Family: FamilyChat, BaseURL: "http://127.0.0.1:11434/v1", KeyEnv: "OLLAMA_API_KEY", NoKey: true, DefaultModel: "qwen3:8b"},
-	"ollama-cloud": {Name: "ollama-cloud", Family: FamilyChat, BaseURL: "https://ollama.com/v1", KeyEnv: "OLLAMA_API_KEY", DefaultModel: "gpt-oss:120b"},
+	"ollama-cloud": {Name: "ollama-cloud", Family: FamilyChat, BaseURL: "https://ollama.com/v1", KeyEnv: "OLLAMA_API_KEY", PublicList: true, DefaultModel: "gpt-oss:120b"},
 	"groq":         {Name: "groq", Family: FamilyChat, BaseURL: "https://api.groq.com/openai/v1", KeyEnv: "GROQ_API_KEY", DefaultModel: "llama-3.3-70b-versatile"},
 	"openrouter":   {Name: "openrouter", Family: FamilyChat, BaseURL: "https://openrouter.ai/api/v1", KeyEnv: "OPENROUTER_API_KEY", DefaultModel: "openai/gpt-5.5"},
 	"deepseek":     {Name: "deepseek", Family: FamilyChat, BaseURL: "https://api.deepseek.com/v1", KeyEnv: "DEEPSEEK_API_KEY", DefaultModel: "deepseek-chat"},
