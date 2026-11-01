@@ -1656,3 +1656,29 @@ test("Settings: the gateway is exposed local, LAN or WAN, WAN after accepting th
   await expect(box.getByTestId("exposure-restarting")).toBeVisible();
   expect(put).toEqual([{ mode: "wan", accept_risk: true }]);
 });
+
+// A kitty that starts working while the person types must not take the focus (or the text).
+test("the composer keeps focus and text when a kitty starts working", async ({ page }) => {
+  await page.clock.install();
+  let working = false;
+  await page.route(`**/v1/chats/${ids.single}`, async (route) => {
+    if (route.request().method() !== "GET") {
+      return route.continue();
+    }
+    const res = await route.fetch();
+    const body = await res.json();
+    if (working) {
+      body.chat.turns = [...(body.chat.turns ?? []), { from: "mimi", working: true, parts: [] }];
+    }
+    await route.fulfill({ response: res, json: body });
+  });
+  await open(page, `#chat/${ids.single}`);
+  const box = page.getByRole("textbox").last();
+  await box.focus();
+  await page.keyboard.type("still typing");
+  working = true;
+  await page.clock.fastForward(16000);
+  await expect(page.getByText("working", { exact: true })).toBeVisible();
+  await expect(box).toBeFocused();
+  await expect(box).toHaveValue("still typing");
+});
