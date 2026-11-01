@@ -23,6 +23,12 @@ if [ -s "$HOME/work/.desktop/theme" ]; then
     theme="$(head -n 1 "$HOME/work/.desktop/theme" | tr -cd 'A-Za-z0-9@._-')"
     sed -i "s|<name>[A-Za-z0-9@._-]*</name>\(<!--theme-->\)|<name>$theme</name>\1|" "$HOME/.config/lumen/rc.xml"
 fi
+# The dock's saved pins replace the defaults of rc.xml; an old file may lack the browser, which a
+# kitty needs, so it is put back at the front.
+pins="$HOME/.config/kitties/pins"
+if [ -s "$pins" ] && ! grep -q '|kitty-open|' "$pins"; then
+    { echo 'Chromium|web-browser|kitty-open|Chromium'; cat "$pins"; } >"$pins.new" && mv "$pins.new" "$pins"
+fi
 # Under a session bus: the browser announces what it plays there (MPRIS), and the shelf's player
 # island reads it.
 dbus-launch --exit-with-session openbox-session >/tmp/lumen.log 2>&1 &
