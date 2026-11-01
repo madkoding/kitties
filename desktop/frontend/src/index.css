@@ -86,6 +86,12 @@
 html {
   font-size: 80%;
 }
+/* Phones keep a bigger base (14px) so labels stay readable under a thumb. */
+@media (max-width: 767px) {
+  html {
+    font-size: 87.5%;
+  }
+}
 html,
 body,
 #root {
