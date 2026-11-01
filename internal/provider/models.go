@@ -32,7 +32,7 @@ func ListModels(ctx context.Context, opts Options, rt http.RoundTripper) ([]stri
 	if opts.APIKey == "" && kind.KeyEnv != "" {
 		opts.APIKey = os.Getenv(kind.KeyEnv)
 	}
-	if opts.APIKey == "" && !kind.NoKey {
+	if opts.APIKey == "" && !kind.NoKey && !kind.PublicList {
 		return nil, fmt.Errorf("%w for %s: paste it first", ErrNoKey, kind.Name)
 	}
 	base := strings.TrimRight(opts.BaseURL, "/")

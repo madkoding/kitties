@@ -43,6 +43,7 @@ const dict: Dictionary = {
     "O provedor recusou esta chave: confira se está completa e ainda é válida.",
   "Check key": "Verificar chave",
   "Key accepted: {n} models available.": "Chave aceita: {n} modelos disponíveis.",
+  "{n} models available.": "{n} modelos disponíveis.",
   "paste the key here": "cole a chave aqui",
   "Kept on your gateway and never shown again.":
     "Fica guardada no seu gateway e não aparece de novo.",
