@@ -36,6 +36,11 @@ const dict: Dictionary = {
   Desktop: "Área de trabalho",
   Chat: "Chat",
   Tasks: "Tarefas",
+  "{n} earlier steps": "{n} passos anteriores",
+  "Hide earlier steps": "Ocultar passos anteriores",
+  "Previous task": "Tarefa anterior",
+  "Next task": "Próxima tarefa",
+  "{n} tasks": "{n} tarefas",
   "Show it on the desktop": "Ver na área de trabalho",
   "{n} steps on the desktop": "{n} passos na área de trabalho",
 

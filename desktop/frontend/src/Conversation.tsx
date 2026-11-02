@@ -79,6 +79,21 @@ export function Shot({
   );
 }
 
+// ShotMini is a small picture with no button around it, for a row that is a button itself.
+function ShotMini({ path }: { path: string }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let alive = true;
+    shotData(path)
+      .then((s) => alive && setSrc(s))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+  return src ? <img class="desk-taskthumb" src={src} alt="" /> : <span class="desk-taskthumb" />;
+}
+
 function StepRow({
   step,
   chat,
@@ -144,6 +159,9 @@ function StepRow({
 const hasSteps = (turn: Turn) => (turn.steps?.length ?? 0) > 0;
 const lastShotIndex = (turn: Turn) => (turn.steps || []).map((s) => !!s.shot).lastIndexOf(true);
 
+// How many steps of a task the desktop column lists before folding the earlier ones.
+const STEPS_SHOWN = 5;
+
 // Desk is the second column when a kitty works on its desktop: the steps of one task and the
 // latest screenshot, big and fixed; the earlier ones stay folded so the column is not all pictures.
 function Desk({
@@ -186,8 +204,27 @@ function Desk({
       list.current.scrollTop = list.current.scrollHeight;
     }
   }, [steps.length, turn.working, index]);
+  const [listOpen, setListOpen] = useState(false);
+  // Only the latest steps of a long task are listed; the earlier ones open on demand.
+  const [allSteps, setAllSteps] = useState(false);
+  useEffect(() => setAllSteps(false), [index]);
+  const earlier = Math.max(0, steps.length - STEPS_SHOWN);
+  const hidden = allSteps ? 0 : earlier;
   const who = (i: number) =>
     (turns[i].kitty && kitties.get(turns[i].kitty!)?.name) || turns[i].from;
+  // A task is named by what the person asked (the turn before it), not by the kitty, which is
+  // the same on every row; the position goes first on the bar.
+  const lastShot = (i: number) => (turns[i].steps || []).filter((st) => st.shot).pop()?.shot;
+  const taskLabel = (i: number, position = true) => {
+    const ask = turns
+      .slice(0, i)
+      .reverse()
+      .find((x) => x.from === "user")
+      ?.text.replace(/\s+/g, " ")
+      .trim();
+    const name = ask ? (ask.length > 48 ? `${ask.slice(0, 47)}…` : ask) : who(i);
+    return position ? `${tasks.indexOf(i) + 1}/${tasks.length} · ${name}` : name;
+  };
   return (
     <aside
       class="conv-desk"
@@ -212,18 +249,57 @@ function Desk({
         {turn.working && <span class="spinner" aria-label={t("working on its computer…")} />}
       </header>
       {tasks.length > 1 && (
-        <div class="desk-tasks" role="tablist" aria-label={t("Tasks")}>
-          {tasks.map((i, n) => (
+        <div class="desk-tasks" data-testid="desk-tasks">
+          <div class="desk-taskbar">
             <button
-              key={i}
-              role="tab"
-              aria-selected={i === index}
-              class={`plain desk-task ${i === index ? "on" : ""}`}
-              onClick={() => onPick(i)}
+              class="plain"
+              aria-label={t("Previous task")}
+              disabled={tasks.indexOf(index) === 0}
+              onClick={() => onPick(tasks[tasks.indexOf(index) - 1])}
             >
-              {n + 1} · {who(i)}
+              ‹
             </button>
-          ))}
+            <span class="desk-tasklabel" title={taskLabel(index)}>
+              {taskLabel(index)}
+            </span>
+            <button
+              class="plain"
+              aria-label={t("Next task")}
+              disabled={tasks.indexOf(index) === tasks.length - 1}
+              onClick={() => onPick(tasks[tasks.indexOf(index) + 1])}
+            >
+              ›
+            </button>
+            <button
+              class="plain desk-taskcount"
+              aria-expanded={listOpen}
+              data-testid="desk-tasks-toggle"
+              onClick={() => setListOpen(!listOpen)}
+            >
+              {t("{n} tasks", { n: tasks.length })}
+            </button>
+          </div>
+          {listOpen && (
+            <div class="desk-tasklist" role="tablist" aria-label={t("Tasks")}>
+              {tasks.map((i, n) => (
+                <button
+                  key={i}
+                  role="tab"
+                  aria-selected={i === index}
+                  class={`plain desk-task ${i === index ? "on" : ""}`}
+                  onClick={() => {
+                    onPick(i);
+                    setListOpen(false);
+                  }}
+                >
+                  {lastShot(i) && <ShotMini path={`/v1/chats/${chat}/shots/${lastShot(i)}`} />}
+                  <span class="desk-tasktext">
+                    {n + 1} · {taskLabel(i, false)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {shot >= 0 && (
@@ -260,16 +336,29 @@ function Desk({
         </div>
       )}
       <div class="trail" aria-label={t("steps")}>
-        {steps.map((s, i) => (
-          <StepRow
-            key={i}
-            step={s}
-            chat={chat}
-            onOpen={onOpen}
-            folded={i !== shot}
-            hero={i === shot}
-          />
-        ))}
+        {earlier > 0 && (
+          <button
+            class="plain trail-more"
+            data-testid="trail-more"
+            aria-expanded={allSteps}
+            onClick={() => setAllSteps(!allSteps)}
+          >
+            {allSteps ? t("Hide earlier steps") : t("{n} earlier steps", { n: earlier })}
+          </button>
+        )}
+        {steps.map(
+          (s, i) =>
+            i >= hidden && (
+              <StepRow
+                key={i}
+                step={s}
+                chat={chat}
+                onOpen={onOpen}
+                folded={i !== shot}
+                hero={i === shot}
+              />
+            ),
+        )}
       </div>
       {!turn.working && steps.filter((s) => s.shot).length > 1 && (
         <ReplayButtons chat={chat} index={index} onOpen={onOpen} />

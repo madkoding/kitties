@@ -1533,6 +1533,56 @@ html.mac-inset aside .titlebar {
   flex-wrap: wrap;
   gap: 0.375rem;
 }
+.desk-taskbar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--t3);
+}
+.desk-taskbar button:disabled {
+  opacity: 0.35;
+}
+.desk-tasklabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-taskcount {
+  color: var(--t3);
+  font-size: 0.7rem;
+  text-decoration: underline dotted;
+}
+.desk-tasklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 11rem;
+  overflow-y: auto;
+  margin-top: 0.375rem;
+}
+.desk-tasklist .desk-task {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-align: left;
+}
+.desk-tasktext {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-taskthumb {
+  flex: none;
+  width: 2.5rem;
+  height: 1.5rem;
+  object-fit: cover;
+  border-radius: 2px;
+  background: rgb(var(--ov-rgb) / 0.08);
+}
 .desk-task {
   padding: 0.125rem 0.5rem;
   font-size: 0.75rem;
@@ -1543,6 +1593,13 @@ html.mac-inset aside .titlebar {
 .desk-task.on {
   color: var(--t1);
   border-color: var(--color-accent);
+}
+.trail-more {
+  font-size: 0.7rem;
+  color: var(--t3);
+  text-decoration: underline dotted;
+  text-align: left;
+  padding: 0.125rem 0;
 }
 .desk-hero {
   position: sticky;

@@ -131,6 +131,10 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await say(group, "@luna can you summarise the plan and @tom check the numbers?");
   const desktop = await newChat(["tom"], "Tom on the desktop");
   await say(desktop, "Tom, open https://example.com and tell me what the page says.");
+  // A desktop chat with several tasks: the desktop column folds them into one bar.
+  const tasks = await newChat(["tom"], "Tom on many tasks");
+  await say(tasks, "Tom, browse https://example.net and tell me what the page says.");
+  await say(tasks, "Tom, now visit https://example.org and tell me what it says.");
   // Nothing is limited by default: the person asked mimi to show posts to the team first.
   await api("POST", "/v1/approvals/rules", {
     kitty: "mimi",
@@ -245,7 +249,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
 
   fs.writeFileSync(
     STATE,
-    JSON.stringify({ single, group, desktop, post, tom, mimi, delegated }, null, 2),
+    JSON.stringify({ single, group, desktop, tasks, post, tom, mimi, delegated }, null, 2),
   );
   return async () => {
     await new Promise<void>((resolve) => stub.close(() => resolve()));

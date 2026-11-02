@@ -9,6 +9,7 @@ const ids = JSON.parse(fs.readFileSync(STATE, "utf8")) as {
   single: string;
   group: string;
   desktop: string;
+  tasks: string;
   post: string;
   tom: string;
   mimi: string;
@@ -61,6 +62,10 @@ test("a group chat shows every member", async ({ page }) => {
 test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await open(page, `#chat/${ids.desktop}`);
   const trail = page.locator(".trail").first();
+  // A long task lists its latest steps; the earlier ones open behind a button.
+  await expect(trail.getByText("Opened example.com", { exact: true })).toBeHidden();
+  await page.getByTestId("trail-more").click();
+  await expect(page.getByTestId("trail-more")).toContainText("Hide earlier steps");
   // Each step reads as a sentence; the coordinates and the tokens are only on hover.
   await expect(trail.getByText("Opened example.com", { exact: true })).toBeVisible();
   await expect(trail.getByText("Clicked on the screen", { exact: true })).toBeVisible();
@@ -69,6 +74,10 @@ test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await expect(page.locator(".msg .meta").first()).not.toContainText("tokens");
   await expect(page.locator(".desk-hero .shot-thumb img")).toBeVisible();
   await expect(page.getByTestId("step-detail")).toHaveCount(0);
+  // The picture for the docs is a chat with two tasks, so the folded task bar shows in it.
+  await page.goto(`/${Q}#chat/${ids.tasks}`);
+  await expect(page.getByTestId("desk-tasks")).toBeVisible();
+  await expect(page.locator(".desk-hero .shot-thumb img")).toBeVisible();
   await shot(page, "04-desktop-task");
   await page.goto(`/?theme=light&motion=off#chat/${ids.desktop}`);
   await expect(trail.getByText("Finished", { exact: true })).toBeVisible();
@@ -1104,6 +1113,9 @@ test("the page speaks Spanish: the system's language, or the one picked", async 
   await expect(page.locator("aside").getByRole("button", { name: "Nuevo chat" })).toBeVisible();
   await expect(page.locator("textarea")).toHaveAttribute("placeholder", "Escribe algo…");
   const trail = page.locator(".trail").first();
+  // The earlier steps of a long task wait behind a button that speaks Spanish too.
+  await page.getByTestId("trail-more").click();
+  await expect(page.getByTestId("trail-more")).toHaveText("Ocultar pasos anteriores");
   await expect(trail.getByText("Abrió example.com", { exact: true })).toBeVisible();
   await expect(trail.getByText("Terminó", { exact: true })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "es");
@@ -1730,4 +1742,23 @@ test("a kitty's machine is turned on and off and has its own idle time", async (
   await expect(page.getByTestId("machine-power").getByTestId("machine-state")).toContainText("On", {
     timeout: 30_000,
   });
+});
+
+test("many desktop tasks fold into one bar: the latest shows, the rest open on demand", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.tasks}`);
+  const bar = page.getByTestId("desk-tasks");
+  await expect(bar).toBeVisible();
+  // Only the latest task is on the bar; there is no row of chips.
+  await expect(bar).toContainText("2/2");
+  await expect(bar.getByRole("tab")).toHaveCount(0);
+  await bar.getByRole("button", { name: "Previous task" }).click();
+  await expect(bar).toContainText("1/2");
+  await page.getByTestId("desk-tasks-toggle").click();
+  await expect(bar.getByRole("tab")).toHaveCount(2);
+  await expect(bar.locator(".desk-taskthumb")).toHaveCount(2);
+  await bar.getByRole("tab").nth(1).click();
+  await expect(bar).toContainText("2/2");
+  await expect(bar.getByRole("tab")).toHaveCount(0);
 });
