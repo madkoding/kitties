@@ -399,6 +399,7 @@ export function LimitsForm({
     retries: l.retries || 0,
     day_tokens: l.day_tokens || 0,
     day_actions: l.day_actions || 0,
+    attended: !!l.attended,
   });
   const [backup, setBackup] = useState(kitty.backup || "");
   const [approvals, setApprovals] = useState(kitty.approvals === "ask" ? "ask" : "");
@@ -454,6 +455,21 @@ export function LimitsForm({
           </div>
         ))}
       </div>
+      <label class="flex items-center gap-2 mt-3 text-sm" for="limit-attended">
+        <input
+          id="limit-attended"
+          type="checkbox"
+          checked={!limits.attended}
+          onChange={(e) => setLimits({ ...limits, attended: !(e.target as HTMLInputElement).checked })}
+        />
+        {t("Work on its own until the task is done")}
+      </label>
+      <p class="text-xs text-[var(--t4)]">
+        {t(
+          "On: {name} goes on by itself past its rounds and only stops at the token, time and rounds ceilings above, saying so. Off: it stops at the end of its rounds and waits for you.",
+          { name: kitty.name },
+        )}
+      </p>
       <label class={LABEL} for="limit-backup">
         {t("Backup (takes over a task {name} gives up on)", { name: kitty.name })}
       </label>

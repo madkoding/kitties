@@ -52,7 +52,8 @@ kitties:
     limits:                      # what one task may spend; 0 takes the default
       max_tokens: 200000
       max_seconds: 900
-      max_rounds: 25
+      max_rounds: 25             # a window of rounds; unattended, up to 8 windows by themselves
+      attended: false            # true: stop at the end of the rounds and wait to be told to go on
       retries: 2                 # failed attempts tried another way
       day_tokens: 2000000        # all its work in a day; spent, it rests until tomorrow (0: no limit)
       day_actions: 20            # posts, replies, mail, refunds in a day; past it each one waits for a yes
