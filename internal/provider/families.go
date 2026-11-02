@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -28,6 +30,13 @@ type chatResponse struct {
 	Usage *struct {
 		Prompt     int `json:"prompt_tokens"`
 		Completion int `json:"completion_tokens"`
+		// Cached tokens: OpenAI and the servers that copy it (Groq, Qwen, OpenRouter...) report
+		// them in prompt_tokens_details; DeepSeek has its own pair of fields.
+		Details *struct {
+			Cached     int `json:"cached_tokens"`
+			CacheWrite int `json:"cache_write_tokens"`
+		} `json:"prompt_tokens_details"`
+		DeepSeekHit int `json:"prompt_cache_hit_tokens"`
 	} `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
@@ -41,6 +50,7 @@ func (c *HTTPClient) callChat(ctx context.Context, t target, messages []Message,
 		"max_tokens":  c.opts.MaxTokens,
 		"temperature": c.temperature(0.7),
 	}
+	c.chatCache(body, messages)
 	if len(tools) > 0 {
 		defs := make([]map[string]any, 0, len(tools))
 		for _, t := range tools {
@@ -71,12 +81,72 @@ func (c *HTTPClient) callChat(ctx context.Context, t target, messages []Message,
 		reply.Calls = append(reply.Calls, ToolCall{ID: id, Name: tc.Function.Name, Args: argsOf(tc.Function.Arguments)})
 	}
 	if resp.Usage != nil {
-		reply.Usage = Usage{Input: resp.Usage.Prompt, Output: resp.Usage.Completion}
+		u := resp.Usage
+		reply.Usage = Usage{Input: u.Prompt, Output: u.Completion, CacheRead: u.DeepSeekHit}
+		if u.Details != nil {
+			reply.Usage.CacheRead, reply.Usage.CacheWrite = u.Details.Cached, u.Details.CacheWrite
+		}
 	}
 	if emptyReply(reply) {
 		return Reply{}, fmt.Errorf("the provider returned an empty answer (finish_reason=%q)", resp.Choices[0].FinishReason)
 	}
 	return reply, nil
+}
+
+// chatCache adds what a chat-completions server needs for prompt caching beyond the automatic
+// kind (OpenAI, DeepSeek, Groq, Qwen, Gemini's compatible API and the like cache a repeated
+// prefix by themselves, with nothing to send):
+//   - OpenAI takes a prompt_cache_key, which routes the requests that share a start (the same
+//     system prompt) to the same cache;
+//   - OpenRouter passes cache_control marks on to Anthropic and Gemini models, which only cache
+//     what is marked: the system turn and the last one.
+func (c *HTTPClient) chatCache(body map[string]any, messages []Message) {
+	if !c.cacheOn() {
+		return
+	}
+	switch c.kind.Name {
+	case "openai":
+		if system, _ := splitSystem(messages); system != "" {
+			body["prompt_cache_key"] = cacheKey(c.opts.Model, system)
+		}
+	case "openrouter":
+		model := strings.ToLower(c.opts.Model)
+		if !strings.HasPrefix(model, "anthropic/") && !strings.HasPrefix(model, "google/") {
+			return
+		}
+		list, _ := body["messages"].([]map[string]any)
+		mark := func(i int) {
+			var parts []map[string]any
+			switch v := list[i]["content"].(type) {
+			case string:
+				if v == "" {
+					return
+				}
+				parts = []map[string]any{{"type": "text", "text": v}}
+			case []map[string]any:
+				parts = v
+			default:
+				return
+			}
+			parts[len(parts)-1]["cache_control"] = c.cacheControl()
+			list[i]["content"] = parts
+		}
+		for i, m := range list {
+			if m["role"] == "system" {
+				mark(i)
+				break
+			}
+		}
+		if n := len(list); n > 0 && list[n-1]["role"] != "system" {
+			mark(n - 1)
+		}
+	}
+}
+
+// cacheKey is a short, stable key for a model and the start of its prompt.
+func cacheKey(model, system string) string {
+	sum := sha256.Sum256([]byte(model + "\x00" + system))
+	return "kitties-" + hex.EncodeToString(sum[:8])
 }
 
 // chatMessages renders the conversation for /chat/completions: plain text, or text and image
@@ -122,13 +192,27 @@ type responsesResponse struct {
 		Name      string `json:"name"`
 		Arguments string `json:"arguments"`
 	} `json:"output"`
-	Usage *struct {
-		Input  int `json:"input_tokens"`
-		Output int `json:"output_tokens"`
-	} `json:"usage"`
+	Usage *responsesUsage `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+// responsesUsage is the token count of a /responses answer; cached input is reported apart.
+type responsesUsage struct {
+	Input   int `json:"input_tokens"`
+	Output  int `json:"output_tokens"`
+	Details *struct {
+		Cached int `json:"cached_tokens"`
+	} `json:"input_tokens_details"`
+}
+
+func (u responsesUsage) usage() Usage {
+	out := Usage{Input: u.Input, Output: u.Output}
+	if u.Details != nil {
+		out.CacheRead = u.Details.Cached
+	}
+	return out
 }
 
 func (c *HTTPClient) callResponses(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
@@ -160,6 +244,11 @@ func (c *HTTPClient) callResponses(ctx context.Context, t target, messages []Mes
 	}
 	if system != "" {
 		body["instructions"] = system
+	}
+	if c.cacheOn() && system != "" && !t.chatgpt {
+		// OpenAI caches a repeated prefix by itself; the key routes requests that share a system
+		// prompt to the same cache.
+		body["prompt_cache_key"] = cacheKey(c.opts.Model, system)
 	}
 	if t.chatgpt {
 		// The ChatGPT backend wants the request streamed and not stored, with instructions
@@ -211,7 +300,7 @@ func (c *HTTPClient) callResponses(ctx context.Context, t target, messages []Mes
 	}
 	reply := Reply{Content: strings.TrimSpace(sb.String()), Calls: calls}
 	if resp.Usage != nil {
-		reply.Usage = Usage{Input: resp.Usage.Input, Output: resp.Usage.Output}
+		reply.Usage = resp.Usage.usage()
 	}
 	if emptyReply(reply) {
 		return Reply{}, errors.New("the provider returned no text")
@@ -243,10 +332,7 @@ type responsesEvent struct {
 		Arguments string `json:"arguments"`
 	} `json:"item"`
 	Response struct {
-		Usage *struct {
-			Input  int `json:"input_tokens"`
-			Output int `json:"output_tokens"`
-		} `json:"usage"`
+		Usage *responsesUsage `json:"usage"`
 		Error *struct {
 			Message string `json:"message"`
 		} `json:"error"`
@@ -282,7 +368,7 @@ func readResponsesStream(data []byte) (Reply, error) {
 		case "response.completed", "response.done", "response.incomplete":
 			done = true
 			if u := ev.Response.Usage; u != nil {
-				reply.Usage = Usage{Input: u.Input, Output: u.Output}
+				reply.Usage = u.usage()
 			}
 		case "response.failed":
 			msg := "the response failed"
@@ -315,8 +401,10 @@ type anthropicResponse struct {
 		Input map[string]any `json:"input"`
 	} `json:"content"`
 	Usage *struct {
-		Input  int `json:"input_tokens"`
-		Output int `json:"output_tokens"`
+		Input      int `json:"input_tokens"`
+		Output     int `json:"output_tokens"`
+		CacheRead  int `json:"cache_read_input_tokens"`
+		CacheWrite int `json:"cache_creation_input_tokens"`
 	} `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
@@ -386,6 +474,7 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Mes
 	if system != "" {
 		body["system"] = system
 	}
+	c.anthropicCache(body, system, conversation)
 	data, err := c.post(ctx, t, "/v1/messages", body)
 	if err != nil {
 		return Reply{}, err
@@ -417,12 +506,37 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Mes
 	}
 	reply := Reply{Content: strings.TrimSpace(sb.String()), Calls: calls}
 	if resp.Usage != nil {
-		reply.Usage = Usage{Input: resp.Usage.Input, Output: resp.Usage.Output}
+		u := resp.Usage
+		// input_tokens leaves out what was read from or written to the cache: the sum is the prompt.
+		reply.Usage = Usage{Input: u.Input + u.CacheRead + u.CacheWrite, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}
 	}
 	if emptyReply(reply) {
 		return Reply{}, errors.New("anthropic returned a response with no text")
 	}
 	return reply, nil
+}
+
+// anthropicCache marks the cacheable prefix of a request with cache_control breakpoints, which
+// is what the Messages API asks for (it caches in the order tools, system, messages): the last
+// tool (the whole tool list), the system prompt, and the last block of the conversation, so each
+// turn of a long chat or tool loop reads everything before it from the cache. That is three of
+// the four breakpoints a request may have. A prefix under the model's minimum length is simply
+// not cached, with no error.
+func (c *HTTPClient) anthropicCache(body map[string]any, system string, conversation []map[string]any) {
+	if !c.cacheOn() {
+		return
+	}
+	if defs, ok := body["tools"].([]map[string]any); ok && len(defs) > 0 {
+		defs[len(defs)-1]["cache_control"] = c.cacheControl()
+	}
+	if system != "" {
+		body["system"] = []map[string]any{{"type": "text", "text": system, "cache_control": c.cacheControl()}}
+	}
+	if n := len(conversation); n > 0 {
+		if blocks, ok := conversation[n-1]["content"].([]map[string]any); ok && len(blocks) > 0 {
+			blocks[len(blocks)-1]["cache_control"] = c.cacheControl()
+		}
+	}
 }
 
 // --- gemini --------------------------------------------------------------------------------
@@ -444,6 +558,9 @@ type geminiResponse struct {
 	UsageMetadata *struct {
 		Prompt     int `json:"promptTokenCount"`
 		Candidates int `json:"candidatesTokenCount"`
+		// Cached is the part of the prompt served from Gemini's implicit cache (2.5 and later
+		// cache a repeated prefix by themselves, with nothing to send).
+		Cached int `json:"cachedContentTokenCount"`
 	} `json:"usageMetadata"`
 	Error *struct {
 		Message string `json:"message"`
@@ -533,7 +650,7 @@ func (c *HTTPClient) callGemini(ctx context.Context, t target, messages []Messag
 	}
 	reply := Reply{Content: strings.TrimSpace(sb.String()), Calls: calls}
 	if resp.UsageMetadata != nil {
-		reply.Usage = Usage{Input: resp.UsageMetadata.Prompt, Output: resp.UsageMetadata.Candidates}
+		reply.Usage = Usage{Input: resp.UsageMetadata.Prompt, Output: resp.UsageMetadata.Candidates, CacheRead: resp.UsageMetadata.Cached}
 	}
 	if emptyReply(reply) {
 		return Reply{}, fmt.Errorf("gemini returned an empty answer (finishReason=%q)", resp.Candidates[0].FinishReason)

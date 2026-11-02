@@ -981,8 +981,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 			return Turn{}, nil, err
 		}
 		s.spendTokens(k, reply.Usage)
-		turn.Usage.Input += reply.Usage.Input
-		turn.Usage.Output += reply.Usage.Output
+		turn.Usage = turn.Usage.Add(reply.Usage)
 		var actions []action
 		text := reply.Content
 		if native && len(reply.Calls) > 0 {
@@ -1450,8 +1449,7 @@ func (s *Service) markShot(id string, index int, name string) {
 
 func (s *Service) addUsage(id string, index int, u provider.Usage) {
 	s.edit(id, index, func(t *Turn) {
-		t.Usage.Input += u.Input
-		t.Usage.Output += u.Output
+		t.Usage = t.Usage.Add(u)
 	})
 }
 

@@ -70,6 +70,28 @@ its own; other methods ask first only if you or a kitty set a limit for them. Si
 the broad permissions of each service (Dropbox gets whatever the app has enabled in its
 console), so accounts signed in before need to sign in once more to get them.
 
+### Prompt caching
+
+Every turn of a long chat or tool loop re-sends the same start (system prompt, tool list, earlier
+turns). Providers can reuse that start from a cache at a fraction of the price and latency, and
+kitties asks for it by default. `prompt_cache: false` on a profile turns off what kitties adds;
+`cache_ttl: 1h` makes Anthropic keep it an hour instead of five minutes (writes cost more, so it
+pays off for kitties that are asked something every few minutes to an hour).
+
+| Provider | What kitties does |
+| --- | --- |
+| `anthropic` | Marks the last tool, the system prompt and the last message with `cache_control` (3 of the 4 allowed breakpoints), so each turn reads everything before it from the cache. A prefix under the model's minimum (1024 tokens on most models, 4096 on some) is not cached, with no error. |
+| `claude-code` | The `claude` program caches by itself; kitties only counts what it reports. |
+| `openai`, `codex` | Caching is automatic from 1024 tokens; kitties adds a `prompt_cache_key` derived from the system prompt so requests that share it land on the same cache. |
+| `openrouter` | Anthropic and Google models get `cache_control` on the system prompt and the last turn; other models cache by themselves. |
+| `gemini` | Implicit caching (2.5 and later) is automatic; kitties reads `cachedContentTokenCount`. Explicit `cachedContents` is not used. |
+| `deepseek`, `groq`, `qwen`, `mistral`, `copilot` | Automatic, server side, nothing to send; the hits are read from the usage the server reports when it does. |
+| `ollama` | Local: the server keeps its own KV cache between requests. There is no billing, so nothing is sent or counted. |
+
+Each reply's usage carries `cache_read` and `cache_write` (tokens served from, or written to,
+the cache) next to `input` and `output`; `input` always includes them, so the daily token
+budget counts the whole prompt either way.
+
 ### Signing in instead of pasting keys
 
 Most connections sign in: **Sign in with …** opens the service, you allow Kitties, and the token

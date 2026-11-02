@@ -229,7 +229,7 @@ func (c *ClaudeClient) Complete(ctx context.Context, messages []Message) (Reply,
 	}
 	reply := Reply{Content: strings.TrimSpace(res.Result)}
 	if u := res.Usage; u != nil {
-		reply.Usage = Usage{Input: u.Input + u.CacheRead + u.CacheWrite, Output: u.Output}
+		reply.Usage = Usage{Input: u.Input + u.CacheRead + u.CacheWrite, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}
 	}
 	if reply.Content == "" {
 		return Reply{}, errors.New("claude returned an empty answer")

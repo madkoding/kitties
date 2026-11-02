@@ -94,7 +94,7 @@ func TestChatFamily(t *testing.T) {
 		return 200, `{"choices":[{"message":{"content":" yo "}}],"usage":{"prompt_tokens":3,"completion_tokens":1}}`
 	})
 	reply, err := c.Complete(context.Background(), convo)
-	if err != nil || reply.Content != "yo" || reply.Usage != (Usage{3, 1}) {
+	if err != nil || reply.Content != "yo" || reply.Usage != (Usage{Input: 3, Output: 1}) {
 		t.Fatalf("reply = %+v, %v", reply, err)
 	}
 	if r.paths[0] != "https://api.groq.com/openai/v1/chat/completions" || r.heads[0].Get("Authorization") != "Bearer k" {
@@ -169,7 +169,7 @@ func TestResponsesFamily(t *testing.T) {
 		return 200, `{"output":[{"type":"reasoning"},{"type":"message","content":[{"type":"output_text","text":"a"},{"type":"refusal","text":"z"}]}],"usage":{"input_tokens":2,"output_tokens":5}}`
 	})
 	reply, err := c.Complete(context.Background(), convo)
-	if err != nil || reply.Content != "a" || reply.Usage != (Usage{2, 5}) {
+	if err != nil || reply.Content != "a" || reply.Usage != (Usage{Input: 2, Output: 5}) {
 		t.Fatalf("reply = %+v, %v", reply, err)
 	}
 	if r.calls[0]["instructions"] != "be brief" || len(r.calls[0]["input"].([]any)) != 3 || !strings.HasSuffix(r.paths[0], "/responses") {
@@ -197,7 +197,7 @@ func TestAnthropicFamily(t *testing.T) {
 	}}
 	c.WithTransport(r)
 	reply, err := c.Complete(context.Background(), convo)
-	if err != nil || reply.Content != "sure" || reply.Usage != (Usage{1, 2}) {
+	if err != nil || reply.Content != "sure" || reply.Usage != (Usage{Input: 1, Output: 2}) {
 		t.Fatalf("reply = %+v, %v", reply, err)
 	}
 	h := r.heads[0]
@@ -205,7 +205,7 @@ func TestAnthropicFamily(t *testing.T) {
 		t.Errorf("headers = %v", h)
 	}
 	call := r.calls[0]
-	if call["system"] != "be brief" || call["temperature"] != 0.3 || len(call["messages"].([]any)) != 3 || !strings.HasSuffix(r.paths[0], "/v1/messages") {
+	if sys := call["system"].([]any); sys[0].(map[string]any)["text"] != "be brief" || call["temperature"] != 0.3 || len(call["messages"].([]any)) != 3 || !strings.HasSuffix(r.paths[0], "/v1/messages") {
 		t.Errorf("request = %v", call)
 	}
 	if part := imagePart(t, call, "messages", "content"); part["type"] != "image" || part["source"].(map[string]any)["data"] != "UE5H" {
@@ -224,7 +224,7 @@ func TestGeminiFamily(t *testing.T) {
 		return 200, `{"candidates":[{"content":{"parts":[{"text":"think","thought":true},{"text":"yes"}]}}],"usageMetadata":{"promptTokenCount":4,"candidatesTokenCount":6}}`
 	})
 	reply, err := c.Complete(context.Background(), convo)
-	if err != nil || reply.Content != "yes" || reply.Usage != (Usage{4, 6}) {
+	if err != nil || reply.Content != "yes" || reply.Usage != (Usage{Input: 4, Output: 6}) {
 		t.Fatalf("reply = %+v, %v", reply, err)
 	}
 	if r.heads[0].Get("x-goog-api-key") != "k" || !strings.Contains(r.paths[0], "/v1beta/models/gemini-2.5-flash:generateContent") {
