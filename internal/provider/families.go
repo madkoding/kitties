@@ -411,6 +411,23 @@ type anthropicResponse struct {
 	} `json:"error"`
 }
 
+// anthropicToolID makes a tool call id acceptable to Anthropic, which only takes [a-zA-Z0-9_-]+.
+// Ids born with another provider (Gemini's "name#0") or saved in an old history can carry other
+// characters. It is deterministic, so a tool_use and its tool_result always map to the same id.
+func anthropicToolID(id string) string {
+	if id == "" {
+		return "call"
+	}
+	b := []byte(id)
+	for i, ch := range b {
+		ok := ch >= 'a' && ch <= 'z' || ch >= 'A' && ch <= 'Z' || ch >= '0' && ch <= '9' || ch == '_' || ch == '-'
+		if !ok {
+			b[i] = '_'
+		}
+	}
+	return string(b)
+}
+
 func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
 	conversation := make([]map[string]any, 0, len(rest))
@@ -426,7 +443,7 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Mes
 			if content == "" {
 				content = "done"
 			}
-			blocks = append(blocks, map[string]any{"type": "tool_result", "tool_use_id": m.ToolCallID, "content": content})
+			blocks = append(blocks, map[string]any{"type": "tool_result", "tool_use_id": anthropicToolID(m.ToolCallID), "content": content})
 		default:
 			if m.Content != "" || len(m.ToolCalls) == 0 {
 				text := m.Content
@@ -440,7 +457,7 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Mes
 				if args == nil {
 					args = map[string]any{}
 				}
-				blocks = append(blocks, map[string]any{"type": "tool_use", "id": tc.ID, "name": tc.Name, "input": args})
+				blocks = append(blocks, map[string]any{"type": "tool_use", "id": anthropicToolID(tc.ID), "name": tc.Name, "input": args})
 			}
 		}
 		for _, img := range m.Images {
