@@ -104,6 +104,15 @@ required.
 | Mastodon, Home Assistant | nothing to set up: Kitties registers itself on the instance, or uses the gateway's own address as its app |
 | Google, Microsoft, Slack, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
 
+**The redirect address.** The service matches it to the letter, so register exactly the one Settings shows
+in the connection (a copy-ready box under "needs an app of your own"): this gateway's `/v1/oauth/callback`,
+on the public address when `gateway.public_url` is set, else on the host you opened Kitties at
+(`http://127.0.0.1:7488/v1/oauth/callback` on a desktop). Spotify refuses `localhost`, so Kitties sends
+`127.0.0.1` there. An "INVALID_CLIENT: Invalid redirect URI" or "redirect_uri: Not matching configuration"
+means the dashboard has another address (for example `http://127.0.0.1:8888/callback`, the example in
+Spotify's own docs): add the one from Settings. Behind a proxy or Docker, set `gateway.public_url` (and
+`trust_proxy`) so the address is the one you reach from the browser.
+
 Signing in also fills what you would otherwise look up: your Facebook Page and its token (one
 that does not expire), the Instagram account linked to it, your LinkedIn author URN, your X user
 id, your Jira site. Telegram, WhatsApp, email, Stripe, Discord and the webhooks keep their keys:

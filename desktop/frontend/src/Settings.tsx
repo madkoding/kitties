@@ -10,7 +10,7 @@ import type {
   ProviderView,
   SettingsView,
 } from "./api";
-import { api, errText, inWails, oauthStart, openExternal, savedConnection } from "./api";
+import { api, errText, inWails, oauthRedirect, oauthStart, openExternal, savedConnection } from "./api";
 import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,
@@ -964,6 +964,16 @@ function ConnectionForm({
   const [signedIn, setSignedIn] = useState(Boolean(view?.signed_in));
   const [account, setAccount] = useState(view?.account || "");
   const [waiting, setWaiting] = useState(false);
+  // callback is the exact redirect address the sign-in sends: what goes in the service's dashboard.
+  const [callback, setCallback] = useState(`${gatewayBase()}/v1/oauth/callback`);
+  useEffect(() => {
+    if (!def.oauth) {
+      return;
+    }
+    oauthRedirect(view?.name || def.name, def.oauth)
+      .then(setCallback)
+      .catch(() => {});
+  }, [def.oauth, def.name, view?.name]);
   // Signing in needs no app of the person's when Kitties has one or the service needs none.
   const builtin = signs && readyList.includes(def.oauth || "");
   const label = OAUTH_LABEL[def.oauth || ""] || t(def.label);
@@ -1196,7 +1206,7 @@ function ConnectionForm({
                     )}
                   </p>
                   <code class="command mt-2" data-testid="callback-address">
-                    {gatewayBase()}/v1/oauth/callback
+                    {callback}
                   </code>
                   {appFields.map((f) => field(f, f.name === "client_id"))}
                 </>
@@ -1227,7 +1237,7 @@ function ConnectionForm({
           {builtin && appFields.length > 0 && !signedIn && (
             <More label={t("Use an app of your own")}>
               <p class={HELP}>{t("Its callback address:")}</p>
-              <code class="command mt-1">{gatewayBase()}/v1/oauth/callback</code>
+              <code class="command mt-1">{callback}</code>
               {appFields.map((f) => field(f))}
             </More>
           )}

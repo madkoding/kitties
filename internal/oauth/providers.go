@@ -37,7 +37,7 @@ var Providers = map[string]Provider{
 		Scopes: []string{"api"}, Defaults: map[string]string{"url": "https://gitlab.com"},
 	},
 	"spotify": {
-		Name: "spotify", Label: "Spotify", AuthURL: "https://accounts.spotify.com/authorize", TokenURL: "https://accounts.spotify.com/api/token",
+		Name: "spotify", Label: "Spotify", LoopbackIP: true, AuthURL: "https://accounts.spotify.com/authorize", TokenURL: "https://accounts.spotify.com/api/token",
 		Scopes: []string{"user-read-playback-state", "user-modify-playback-state", "user-read-currently-playing", "user-read-recently-played", "user-top-read",
 			"playlist-read-private", "playlist-read-collaborative", "playlist-modify-private", "playlist-modify-public", "user-library-read", "user-library-modify",
 			"user-follow-read", "user-follow-modify", "user-read-private", "user-read-email"},
