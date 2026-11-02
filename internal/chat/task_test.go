@@ -509,3 +509,10 @@ func TestUnattendedTaskGoesOnPastItsWindow(t *testing.T) {
 		t.Errorf("cap: %+v", turn)
 	}
 }
+
+func TestUnattendedTaskHasNoTokenLimitByDefault(t *testing.T) {
+	s, _, _ := deskService(t, "@tool click {\"x\": 1, \"y\": 1}", "@tool done {\"summary\": \"ok\"}")
+	if s.DefaultLimits.MaxTokens != 0 || s.DefaultLimits.MaxSeconds < 3600 {
+		t.Errorf("unattended defaults: %+v", s.DefaultLimits)
+	}
+}

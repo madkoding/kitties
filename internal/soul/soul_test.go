@@ -76,3 +76,13 @@ func TestUnattendedPromptTellsToFinish(t *testing.T) {
 		}
 	}
 }
+
+func TestUnattendedPromptKeepsTheListInTheWorkspace(t *testing.T) {
+	s := Soul{Name: "Mimi"}
+	if p := s.SystemPrompt(Context{Unattended: true}); strings.Contains(p, "TODO.md") {
+		t.Error("no workspace, no file")
+	}
+	if p := s.SystemPrompt(Context{Unattended: true, Workspace: "/work"}); !strings.Contains(p, "TODO.md") {
+		t.Error("the list lives in the workspace")
+	}
+}

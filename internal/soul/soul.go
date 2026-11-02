@@ -198,6 +198,10 @@ func (s Soul) SystemPrompt(c Context) string {
 	}
 	if c.Unattended {
 		b.WriteString(persistWords)
+		if c.Workspace != "" {
+			b.WriteString("For a long task keep that list in a file called TODO.md in your working folder and update it as you " +
+				"go; if you start with no memory of the task, read TODO.md first and continue from it.\n")
+		}
 	}
 	if s.Instructions != "" {
 		b.WriteString("\n" + strings.TrimSpace(s.Instructions) + "\n")

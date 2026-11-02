@@ -15,11 +15,11 @@ A kitty is not only something you talk to. Each one has an agenda:
   lists them, ticks them off and does all twelve instead of stopping at two to ask "shall I
   continue?". It only asks when something truly blocks it (a login, a code only you get), and
   keeps working on the rest meanwhile. Past its rounds it goes on by itself, writing a
-  checkpoint of what is done and left (up to 8 windows of `max_rounds` on the desktop, 40 rounds of
+  checkpoint of what is done and left (it also keeps its list of pending items in `TODO.md` in its workspace, so a cut-off task resumes from it) (up to 8 windows of `max_rounds` on the desktop, 40 rounds of
   connector calls per answer). `limits.attended: true` (Settings → Limits → *Work on its own*
-  off) brings back the old way: stop at the end of the rounds and wait for a "continue".
+  off) brings back the old way (and its 400k tokens and 30 minutes per task): stop at the end of the rounds and wait for a "continue".
 - **Limits.** Per kitty: tokens, seconds and rounds per task, and how many times a failed
-  attempt is tried another way. They are the safety net of unattended work: a task that hits
+  attempt is tried another way. Unattended, there is no per-task token limit by default and a task may run four hours; set `max_tokens`/`max_seconds` to cap one, and `day_tokens` caps the whole day. They are the safety net of unattended work: a task that hits
   one stops, says so (and can be resumed) instead of running on. A **daily budget** caps what a kitty spends around the clock: out of tokens it rests until
   tomorrow (and tells you once); past its actions for the day, every post, reply or refund waits
   for your yes even if it normally acts alone.

@@ -288,7 +288,7 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
 		now: time.Now, newID: randomID, MaxRounds: 4, UnattendedRounds: 40, UnattendedWindows: 8, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
-		DefaultLimits: kitty.Limits{MaxTokens: 400000, MaxSeconds: 1800, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
+		DefaultLimits: kitty.Limits{MaxTokens: 0, MaxSeconds: 14400, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -1183,6 +1183,16 @@ type taskState struct {
 // left with the person.
 func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Kitty, p *pendingTask) {
 	limits := k.Limits.Or(s.DefaultLimits)
+	if limits.Attended {
+		// The old cautious defaults, for a kitty that asked for them: unattended work has no
+		// per-task token limit unless one is set (the day's tokens still cap it).
+		if k.Limits.MaxTokens == 0 {
+			limits.MaxTokens = attendedTokens
+		}
+		if k.Limits.MaxSeconds == 0 {
+			limits.MaxSeconds = attendedSeconds
+		}
+	}
 	if limits.MaxSeconds > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(limits.MaxSeconds)*time.Second)
@@ -1225,6 +1235,12 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 		})
 	}
 }
+
+// attendedTokens and attendedSeconds are the per-task limits of an attended kitty that sets none.
+const (
+	attendedTokens  = 400000
+	attendedSeconds = 1800
+)
 
 // recapSteps is how many of its last steps a kitty is reminded of when it goes on with a task.
 const recapSteps = 30
