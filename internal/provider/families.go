@@ -137,8 +137,16 @@ func (c *HTTPClient) chatCache(body map[string]any, messages []Message) {
 				break
 			}
 		}
-		if n := len(list); n > 0 && list[n-1]["role"] != "system" {
-			mark(n - 1)
+		// The last message that stays the same from one request to the next (a volatile one at
+		// the end would change the cached prefix every time).
+		last := len(list) - 1
+		if len(list) == len(messages) {
+			for last > 0 && messages[last].Volatile {
+				last--
+			}
+		}
+		if last >= 0 && list[last]["role"] != "system" {
+			mark(last)
 		}
 	}
 }
@@ -431,6 +439,8 @@ func anthropicToolID(id string) string {
 func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
 	conversation := make([]map[string]any, 0, len(rest))
+	// stable is the last entry of the conversation that is not volatile: the cache ends there.
+	stable := -1
 	for _, m := range rest {
 		role := "user"
 		if m.Role == "assistant" {
@@ -468,10 +478,16 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Mes
 		if n := len(conversation); m.Role == "tool" && n > 0 && conversation[n-1]["role"] == "user" {
 			if prev, ok := conversation[n-1]["content"].([]map[string]any); ok && len(prev) > 0 && prev[0]["type"] == "tool_result" {
 				conversation[n-1]["content"] = append(prev, blocks...)
+				if !m.Volatile {
+					stable = n - 1
+				}
 				continue
 			}
 		}
 		conversation = append(conversation, map[string]any{"role": role, "content": blocks})
+		if !m.Volatile {
+			stable = len(conversation) - 1
+		}
 	}
 	body := map[string]any{
 		"model":      c.opts.Model,
@@ -491,7 +507,7 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Mes
 	if system != "" {
 		body["system"] = system
 	}
-	c.anthropicCache(body, system, conversation)
+	c.anthropicCache(body, system, conversation, stable)
 	data, err := c.post(ctx, t, "/v1/messages", body)
 	if err != nil {
 		return Reply{}, err
@@ -537,9 +553,11 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Mes
 // is what the Messages API asks for (it caches in the order tools, system, messages): the last
 // tool (the whole tool list), the system prompt, and the last block of the conversation, so each
 // turn of a long chat or tool loop reads everything before it from the cache. That is three of
-// the four breakpoints a request may have. A prefix under the model's minimum length is simply
+// the four breakpoints a request may have. The last one goes on the last message that is not
+// volatile (stable is its index; -1 when all are), so a message that changes every request, like
+// the state of a machine, comes after the cached prefix and never spoils it. A prefix under the model's minimum length is simply
 // not cached, with no error.
-func (c *HTTPClient) anthropicCache(body map[string]any, system string, conversation []map[string]any) {
+func (c *HTTPClient) anthropicCache(body map[string]any, system string, conversation []map[string]any, stable int) {
 	if !c.cacheOn() {
 		return
 	}
@@ -549,7 +567,7 @@ func (c *HTTPClient) anthropicCache(body map[string]any, system string, conversa
 	if system != "" {
 		body["system"] = []map[string]any{{"type": "text", "text": system, "cache_control": c.cacheControl()}}
 	}
-	if n := len(conversation); n > 0 {
+	if n := stable + 1; n > 0 {
 		if blocks, ok := conversation[n-1]["content"].([]map[string]any); ok && len(blocks) > 0 {
 			blocks[len(blocks)-1]["cache_control"] = c.cacheControl()
 		}

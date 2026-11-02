@@ -47,7 +47,7 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 				}
 			}
 		}
-		if m.Role == "user" {
+		if m.Role == "user" && !m.Volatile {
 			last = m.Content
 		}
 	}

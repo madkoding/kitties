@@ -162,3 +162,50 @@ func mustJSON(v any) []byte {
 	b, _ := json.Marshal(v)
 	return b
 }
+
+// A volatile message at the end (the state of the kitty's machine) comes after the last cache
+// breakpoint, so the cached prefix is the same whatever it says.
+func TestVolatileMessageStaysOutOfTheCachedPrefix(t *testing.T) {
+	withNote := func(note string) []Message {
+		return append(append([]Message{}, convo...), Message{Role: "user", Content: note, Volatile: true})
+	}
+	c, r := client(t, "anthropic", func(int) (int, string) { return 200, `{"content":[{"type":"text","text":"ok"}]}` })
+	for _, note := range []string{"machine: on", "machine: off"} {
+		if _, err := c.CompleteTools(context.Background(), withNote(note), tools1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The marked message is the last stable one, in both requests, and the note is not marked.
+	for _, call := range r.calls {
+		msgs := call["messages"].([]any)
+		for i, m := range msgs {
+			blocks := m.(map[string]any)["content"].([]any)
+			marked := cc(blocks[len(blocks)-1]) != nil
+			if marked != (i == len(msgs)-2) {
+				t.Errorf("message %d marked = %v of %d", i, marked, len(msgs))
+			}
+		}
+	}
+	a, b := mustJSON(r.calls[0]["messages"].([]any)[:3]), mustJSON(r.calls[1]["messages"].([]any)[:3])
+	if string(a) != string(b) {
+		t.Error("the cached prefix changed with the note")
+	}
+	if !strings.Contains(string(mustJSON(r.calls[1])), "machine: off") {
+		t.Error("the note was not sent")
+	}
+
+	// OpenRouter's Anthropic models: same rule.
+	o, ro := client(t, "openrouter", func(int) (int, string) { return 200, `{"choices":[{"message":{"content":"hi"}}]}` })
+	o.opts.Model = "anthropic/claude-sonnet-5-5"
+	if _, err := o.Complete(context.Background(), withNote("machine: on")); err != nil {
+		t.Fatal(err)
+	}
+	list := ro.calls[0]["messages"].([]any)
+	for i, m := range list[1:] {
+		parts, _ := m.(map[string]any)["content"].([]any)
+		marked := len(parts) > 0 && cc(parts[len(parts)-1]) != nil
+		if marked != (i+1 == len(list)-2) {
+			t.Errorf("openrouter message %d marked = %v", i+1, marked)
+		}
+	}
+}
