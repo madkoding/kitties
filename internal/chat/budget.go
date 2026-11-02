@@ -42,7 +42,22 @@ func (s *Service) SpentBy(k *kitty.Kitty) Spent {
 // spendTokens counts the tokens of one model reply.
 func (s *Service) spendTokens(k *kitty.Kitty, u provider.Usage) {
 	if s.budget != nil {
-		s.budget.AddTokens(k.ID, u.Input+u.Output)
+		s.budget.AddTokens(k.ID, u.Counted())
+		s.warnTokens(k)
+	}
+}
+
+// warnAt is the share of the day's tokens (percent) at which the person is warned.
+const warnAt = 80
+
+// warnTokens tells the person, once a day, that a kitty is close to its day's tokens.
+func (s *Service) warnTokens(k *kitty.Kitty) {
+	sp := s.SpentBy(k)
+	if s.budget == nil || sp.DayTokens == 0 || sp.Tokens >= sp.DayTokens || sp.Tokens*100 < sp.DayTokens*warnAt {
+		return
+	}
+	if s.budget.Warn(k.ID) {
+		s.tell(notify.Budget, k, "is close to its day's tokens", fmt.Sprintf("%d of %d (%d%%). Raise its daily limit in Settings → Limits if it needs more today.", sp.Tokens, sp.DayTokens, sp.Tokens*100/sp.DayTokens), "")
 	}
 }
 
@@ -55,9 +70,9 @@ func (s *Service) overTokens(k *kitty.Kitty) error {
 	}
 	if s.budget.Tell(k.ID) {
 		s.note(k, agenda.KindBlocked, "", "", fmt.Sprintf("spent its day's tokens (%d); stopped until tomorrow", sp.DayTokens))
-		s.tell(notify.Budget, k, "spent its day's tokens", fmt.Sprintf("%d of %d. It rests until tomorrow, or raise its daily limit.", sp.Tokens, sp.DayTokens), "")
+		s.tell(notify.Budget, k, "spent its day's tokens", fmt.Sprintf("%d of %d. It rests until tomorrow; raise its daily limit in Settings → Limits (or set 0 for no limit) and it continues right away.", sp.Tokens, sp.DayTokens), "")
 	}
-	return fmt.Errorf("the daily token budget (%d) is spent; it resumes tomorrow", sp.DayTokens)
+	return fmt.Errorf("the daily token budget (%d) is spent; it resumes tomorrow, or raise it in Settings → Limits", sp.DayTokens)
 }
 
 // overActions reports whether the kitty has used its day's actions.

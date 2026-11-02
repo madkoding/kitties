@@ -104,3 +104,31 @@ func TestDayTokensStopATaskInTheBackground(t *testing.T) {
 		t.Errorf("task: %+v", got.Turns[1])
 	}
 }
+
+func TestCachedTokensWeighLessAndThePersonIsWarnedOnce(t *testing.T) {
+	s, _, _, b, _ := gated(t)
+	st, _ := budget.Open(filepath.Join(t.TempDir(), "budget.json"))
+	s.SetBudget(st)
+	ana, _ := s.fleet.Get("ana")
+	ana.Limits = kitty.Limits{DayTokens: 1000}
+	// 5010 tokens sent, 4000 of them read from the cache: 1000 + 400 + 10 count.
+	s.spendTokens(ana, provider.Usage{Input: 5000, Output: 10, CacheRead: 4000})
+	if got := s.SpentBy(ana).Tokens; got != 1410 {
+		t.Fatalf("counted %d, want 1410", got)
+	}
+	s2, _, _, b2, _ := gated(t)
+	st2, _ := budget.Open(filepath.Join(t.TempDir(), "budget.json"))
+	s2.SetBudget(st2)
+	bob, _ := s2.fleet.Get("ana")
+	bob.Limits = kitty.Limits{DayTokens: 1000}
+	s2.spendTokens(bob, provider.Usage{Input: 700})
+	if b2.events() != "" {
+		t.Errorf("told at 70%%: %q", b2.events())
+	}
+	s2.spendTokens(bob, provider.Usage{Input: 150}) // 85%
+	s2.spendTokens(bob, provider.Usage{Input: 50})  // 90%: not told again
+	if b2.events() != "budget" {
+		t.Errorf("warned %q, want once", b2.events())
+	}
+	_ = b
+}

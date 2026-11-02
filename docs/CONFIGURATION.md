@@ -90,7 +90,15 @@ pays off for kitties that are asked something every few minutes to an hour).
 
 Each reply's usage carries `cache_read` and `cache_write` (tokens served from, or written to,
 the cache) next to `input` and `output`; `input` always includes them, so the daily token
-budget counts the whole prompt either way.
+budget counts the whole prompt either way, but the part read from the cache weighs a tenth
+(`input - cache_read * 0.9 + output`): a long tool loop re-sends the same start every round, and
+it should not burn the day's tokens at full price. The same weight applies to `max_tokens` per
+task.
+
+**Daily token budget.** `limits.day_tokens` (Settings → the kitty → Limits; `0` or empty means no
+limit, which is the default). At 80% the person is notified once a day; at 100% the kitty stops
+until tomorrow, says so in the chat with where to raise it, and notifies once. Raising the limit
+makes it continue right away. Today's use shows in the kitty's panel (amber from 80%, red when spent).
 
 ### Signing in instead of pasting keys
 

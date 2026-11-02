@@ -422,7 +422,7 @@ export function LimitsForm({
       <div class="section-title !mx-0 mt-5">{t("Limits & backup")}</div>
       <p class="text-xs text-[var(--t4)]">
         {t(
-          "How much one task may spend before {name} stops and says so, and how much it may spend in a day. Leave a box empty for the default.",
+          "How much one task may spend before {name} stops and says so, and how much it may spend in a day. Leave a box empty for the default. Tokens read from the cache count a tenth; you are warned at 80% of the day, and raising the daily limit lets {name} continue right away.",
           { name: kitty.name },
         )}
       </p>
