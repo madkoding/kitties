@@ -236,7 +236,7 @@ func summarise(s string) string {
 	if len(s) > 60 {
 		s = s[:60] + "…"
 	}
-	return "it depends on what you need from \"" + s + "\""
+	return "it depends on what you need from “" + strings.ReplaceAll(s, "\"", "'") + "”"
 }
 
 // Desktop is a container runtime that keeps everything in memory and draws its screenshots.
