@@ -872,6 +872,14 @@ export const api = {
 export const oauthStart = (name: string) =>
   request<{ url: string }>("POST", `/v1/oauth/${name}/start`).then((r) => r.url);
 
+// oauthRedirect asks the gateway for the exact redirect address a sign-in sends (what to register
+// in the service's dashboard); provider answers for a connection not saved yet.
+export const oauthRedirect = (name: string, provider?: string) =>
+  request<{ redirect: string }>(
+    "GET",
+    `/v1/oauth/${encodeURIComponent(name)}/redirect${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`,
+  ).then((r) => r.redirect);
+
 // openExternal opens a URL in the person's browser: through Wails when inside it.
 export function openExternal(url: string): void {
   const android = androidBridge();

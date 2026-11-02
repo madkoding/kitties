@@ -340,3 +340,20 @@ func TestFinishInTheFlow(t *testing.T) {
 		t.Error("an unknown state fails")
 	}
 }
+
+func TestSpotifyRedirectUsesTheLoopbackIP(t *testing.T) {
+	cases := map[string]string{
+		"http://localhost:7488/v1/oauth/callback":       "http://127.0.0.1:7488/v1/oauth/callback",
+		"http://LOCALHOST/v1/oauth/callback":            "http://127.0.0.1/v1/oauth/callback",
+		"http://127.0.0.1:7488/v1/oauth/callback":       "http://127.0.0.1:7488/v1/oauth/callback",
+		"https://kitties.example.com/v1/oauth/callback": "https://kitties.example.com/v1/oauth/callback",
+	}
+	for in, want := range cases {
+		if got := RedirectFor("spotify", in); got != want {
+			t.Errorf("spotify %q = %q, want %q", in, got, want)
+		}
+	}
+	if got := RedirectFor("google", "http://localhost:7488/v1/oauth/callback"); got != "http://localhost:7488/v1/oauth/callback" {
+		t.Errorf("other services keep the address: %q", got)
+	}
+}

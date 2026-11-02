@@ -332,6 +332,30 @@ func TestOAuthRedirectOnAServer(t *testing.T) {
 	}
 }
 
+func TestOAuthRedirectEndpoint(t *testing.T) {
+	get := func(path string) string {
+		rec := do(newServer("tok"), "GET", path, "", func(r *http.Request) {
+			r.Header.Set("Authorization", "Bearer tok")
+			r.Host = "localhost:7488"
+		})
+		if rec.Code != 200 {
+			t.Fatalf("%s = %d %s", path, rec.Code, rec.Body)
+		}
+		var out struct{ Redirect string }
+		_ = jsonDecode(rec.Body, &out)
+		return out.Redirect
+	}
+	if got := get("/v1/oauth/g/redirect"); got != "http://localhost:7488/v1/oauth/callback" {
+		t.Errorf("google keeps the host typed: %q", got)
+	}
+	if got := get("/v1/oauth/new/redirect?provider=spotify"); got != "http://127.0.0.1:7488/v1/oauth/callback" {
+		t.Errorf("spotify gets the loopback IP: %q", got)
+	}
+	if rec := do(newServer("tok"), "GET", "/v1/oauth/g/redirect", "", nil); rec.Code != 401 {
+		t.Errorf("the redirect needs the token: %d", rec.Code)
+	}
+}
+
 // slowFS hands out files that cannot seek.
 type slowFS struct{ fs.FS }
 type slowFile struct{ fs.File }

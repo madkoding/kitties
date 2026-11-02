@@ -52,6 +52,9 @@ type Provider struct {
 	// Defaults fill the {url} or {subdomain} of the addresses when the settings leave them
 	// empty (GitLab's own site).
 	Defaults map[string]string `json:"-"`
+	// LoopbackIP makes the redirect address use 127.0.0.1 where it says "localhost": Spotify
+	// refuses "localhost" in a redirect address, and matches the registered one to the letter.
+	LoopbackIP bool `json:"-"`
 	// SelfClient takes the gateway's own address as the app (Home Assistant's IndieAuth): no app
 	// to register anywhere.
 	SelfClient bool `json:"-"`
@@ -241,6 +244,37 @@ func (m *Manager) client(ctx context.Context, connector string, p Provider, app 
 	return id, secret, nil
 }
 
+// RedirectFor is the address the service gets as the sign-in's redirect_uri for a gateway
+// reached at redirect: the same one, with "localhost" turned into 127.0.0.1 where the service
+// wants an IP. Settings shows this one, so what is registered in the service's dashboard is
+// what Start sends.
+func RedirectFor(provider, redirect string) string {
+	p, ok := Providers[provider]
+	if !ok || !p.LoopbackIP {
+		return redirect
+	}
+	u, err := url.Parse(redirect)
+	if err != nil || !strings.EqualFold(u.Hostname(), "localhost") {
+		return redirect
+	}
+	if port := u.Port(); port != "" {
+		u.Host = "127.0.0.1:" + port
+	} else {
+		u.Host = "127.0.0.1"
+	}
+	return u.String()
+}
+
+// Redirect is the redirect address a connector's sign-in sends for a gateway reached at
+// redirect, or redirect itself when the connector has no sign-in.
+func (m *Manager) Redirect(connector, redirect string) string {
+	app, err := m.store.OAuthApp(connector)
+	if err != nil {
+		return redirect
+	}
+	return RedirectFor(app.Provider, redirect)
+}
+
 // Start begins a sign-in for the connector and returns the consent URL to open.
 func (m *Manager) Start(connector, redirect string) (string, error) {
 	app, err := m.store.OAuthApp(connector)
@@ -251,6 +285,7 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%q has no OAuth flow", app.Provider)
 	}
+	redirect = RedirectFor(app.Provider, redirect)
 	authURL, err := p.address(p.AuthURL, app.Settings)
 	if err != nil {
 		return "", err

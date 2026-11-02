@@ -247,6 +247,7 @@ func (s *Server) routes() {
 	s.exposureRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
+	s.mux.Handle("GET /v1/oauth/{name}/redirect", api(s.handleOAuthRedirect))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
 	s.mux.Handle("GET /v1/skills", api(s.handleSkills))
 	s.mux.Handle("GET /v1/skills/{name}", api(s.handleSkill))
@@ -305,8 +306,9 @@ func (s *Server) handleEvents(w http.ResponseWriter, r *http.Request) {
 
 var heartbeat = 20 * time.Second
 
-// handleOAuthStart begins a connector's sign-in and returns the consent URL for the page to open.
-func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
+// oauthRedirect is the redirect_uri a connector's sign-in sends: this gateway's callback as the
+// person reaches it (the public address when there is one), adjusted to what the service accepts.
+func (s *Server) oauthRedirect(r *http.Request, name string) string {
 	redirect := s.publicURL + "/v1/oauth/callback"
 	if s.publicURL == "" {
 		scheme := "http"
@@ -315,6 +317,22 @@ func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
 		}
 		redirect = scheme + "://" + s.requestHost(r) + "/v1/oauth/callback"
 	}
+	return s.fleet.OAuth().Redirect(name, redirect)
+}
+
+// handleOAuthRedirect tells the page the exact address to register in the service's dashboard.
+// ?provider= answers for a service whose connection is not saved yet.
+func (s *Server) handleOAuthRedirect(w http.ResponseWriter, r *http.Request) {
+	redirect := s.oauthRedirect(r, r.PathValue("name"))
+	if p := r.URL.Query().Get("provider"); p != "" {
+		redirect = oauth.RedirectFor(p, s.oauthRedirect(r, ""))
+	}
+	reply(w, http.StatusOK, map[string]any{"redirect": redirect})
+}
+
+// handleOAuthStart begins a connector's sign-in and returns the consent URL for the page to open.
+func (s *Server) handleOAuthStart(w http.ResponseWriter, r *http.Request) {
+	redirect := s.oauthRedirect(r, r.PathValue("name"))
 	link, err := s.fleet.OAuth().Start(r.PathValue("name"), redirect)
 	if err != nil {
 		fail(w, codeFor(err), err)
