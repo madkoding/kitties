@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -223,6 +224,25 @@ func TestAnthropicPairsToolTurns(t *testing.T) {
 		}
 		if len(open) > 0 {
 			t.Errorf("%s: last assistant turn has unanswered tool_use: %v", name, open)
+		}
+	}
+}
+
+// The other families need the same pairing: an orphan result becomes text, never a tool message.
+func TestOtherFamiliesDropOrphanToolResults(t *testing.T) {
+	convo := []Message{
+		{Role: "tool", ToolCallID: "gone", ToolName: "click", Content: "stale"},
+		{Role: "user", Content: "go"},
+	}
+	for _, kind := range []string{"openai", "gemini"} {
+		c, r := client(t, kind, func(int) (int, string) {
+			return 200, `{"choices":[{"message":{"content":"ok"}}],"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}`
+		})
+		if _, err := c.CompleteTools(context.Background(), convo, tools); err != nil {
+			t.Fatalf("%s: %v", kind, err)
+		}
+		if b, _ := json.Marshal(r.calls[0]); strings.Contains(string(b), `"tool_call_id"`) || strings.Contains(string(b), "functionResponse") {
+			t.Errorf("%s kept an orphan result: %s", kind, b)
 		}
 	}
 }

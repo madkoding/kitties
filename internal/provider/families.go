@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"strings"
 )
 
@@ -44,6 +45,7 @@ type chatResponse struct {
 }
 
 func (c *HTTPClient) callChat(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
+	messages = pairToolTurns(c.kind.Name, messages)
 	body := map[string]any{
 		"model":       c.opts.Model,
 		"messages":    chatMessages(messages),
@@ -225,6 +227,7 @@ func (u responsesUsage) usage() Usage {
 
 func (c *HTTPClient) callResponses(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
+	rest = pairToolTurns(c.kind.Name, rest)
 	input := make([]map[string]any, 0, len(rest))
 	for _, m := range rest {
 		if m.Role == "tool" {
@@ -436,13 +439,19 @@ func anthropicToolID(id string) string {
 	return string(b)
 }
 
-// pairAnthropicTools makes the tool turns of a history something Anthropic accepts: every
+// pairToolTurns makes the tool turns of a history something the providers accept: every
 // tool_result must answer a tool_use of the assistant turn right before it, and every tool_use
 // must be answered. Histories break that after truncation, compaction, a change of provider or
 // calls saved without an id. It gives each call a unique id (empty or repeated ones become
 // call_<n>, by position), pairs each result with a pending call (by id, else by tool name, else
 // by order), turns results that answer nothing into plain text and answers calls left open.
-func pairAnthropicTools(rest []Message) []Message {
+func pairToolTurns(provider string, rest []Message) []Message {
+	repairs := 0
+	defer func() {
+		if repairs > 0 {
+			log.Printf("provider %s: repaired %d broken tool turn(s) in the history before sending it", provider, repairs)
+		}
+	}()
 	out := make([]Message, 0, len(rest))
 	used := map[string]bool{}
 	var pending []int // indexes in out of the calls of the last assistant turn not yet answered
@@ -450,6 +459,7 @@ func pairAnthropicTools(rest []Message) []Message {
 	var orig []string // the ids the calls had in the history, which their results still carry
 	flush := func() {
 		for _, i := range pending {
+			repairs++
 			out = append(out, Message{Role: "tool", ToolCallID: calls[i].ID, ToolName: calls[i].Name, Content: "(no result)"})
 		}
 		pending = nil
@@ -464,6 +474,9 @@ func pairAnthropicTools(rest []Message) []Message {
 			for i := range m.ToolCalls {
 				orig = append(orig, m.ToolCalls[i].ID)
 				id := anthropicToolID(m.ToolCalls[i].ID)
+				if m.ToolCalls[i].ID == "" || used[id] {
+					repairs++
+				}
 				for n := 0; m.ToolCalls[i].ID == "" || used[id]; n++ {
 					id = fmt.Sprintf("call_%d", len(used)+n)
 					if !used[id] {
@@ -495,6 +508,7 @@ func pairAnthropicTools(rest []Message) []Message {
 				}
 			}
 			if at < 0 {
+				repairs++
 				text := m.Content
 				if text == "" {
 					text = "done"
@@ -519,7 +533,7 @@ func pairAnthropicTools(rest []Message) []Message {
 
 func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
-	rest = pairAnthropicTools(rest)
+	rest = pairToolTurns("anthropic", rest)
 	conversation := make([]map[string]any, 0, len(rest))
 	// stable is the last entry of the conversation that is not volatile: the cache ends there.
 	stable := -1
@@ -686,6 +700,7 @@ type geminiResponse struct {
 
 func (c *HTTPClient) callGemini(ctx context.Context, t target, messages []Message, tools []Tool) (Reply, error) {
 	system, rest := splitSystem(messages)
+	rest = pairToolTurns(c.kind.Name, rest)
 	contents := make([]map[string]any, 0, len(rest))
 	for _, m := range rest {
 		role := "user"
