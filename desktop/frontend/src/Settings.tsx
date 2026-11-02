@@ -10,7 +10,15 @@ import type {
   ProviderView,
   SettingsView,
 } from "./api";
-import { api, errText, inWails, oauthRedirect, oauthStart, openExternal, savedConnection } from "./api";
+import {
+  api,
+  errText,
+  inWails,
+  oauthRedirect,
+  oauthStart,
+  openExternal,
+  savedConnection,
+} from "./api";
 import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,

@@ -144,6 +144,9 @@ function StepRow({
 const hasSteps = (turn: Turn) => (turn.steps?.length ?? 0) > 0;
 const lastShotIndex = (turn: Turn) => (turn.steps || []).map((s) => !!s.shot).lastIndexOf(true);
 
+// How many steps of a task the desktop column lists before folding the earlier ones.
+const STEPS_SHOWN = 5;
+
 // Desk is the second column when a kitty works on its desktop: the steps of one task and the
 // latest screenshot, big and fixed; the earlier ones stay folded so the column is not all pictures.
 function Desk({
@@ -187,6 +190,10 @@ function Desk({
     }
   }, [steps.length, turn.working, index]);
   const [listOpen, setListOpen] = useState(false);
+  // Only the latest steps of a long task are listed; the earlier ones open on demand.
+  const [allSteps, setAllSteps] = useState(false);
+  useEffect(() => setAllSteps(false), [index]);
+  const hidden = allSteps ? 0 : Math.max(0, steps.length - STEPS_SHOWN);
   const who = (i: number) =>
     (turns[i].kitty && kitties.get(turns[i].kitty!)?.name) || turns[i].from;
   // A task is named by what the person asked (the turn before it), not by the kitty, which is
@@ -309,16 +316,29 @@ function Desk({
         </div>
       )}
       <div class="trail" aria-label={t("steps")}>
-        {steps.map((s, i) => (
-          <StepRow
-            key={i}
-            step={s}
-            chat={chat}
-            onOpen={onOpen}
-            folded={i !== shot}
-            hero={i === shot}
-          />
-        ))}
+        {hidden > 0 && (
+          <button
+            class="plain trail-more"
+            data-testid="trail-more"
+            aria-expanded={allSteps}
+            onClick={() => setAllSteps(!allSteps)}
+          >
+            {allSteps ? t("Hide earlier steps") : t("{n} earlier steps", { n: hidden })}
+          </button>
+        )}
+        {steps.map(
+          (s, i) =>
+            i >= hidden && (
+              <StepRow
+                key={i}
+                step={s}
+                chat={chat}
+                onOpen={onOpen}
+                folded={i !== shot}
+                hero={i === shot}
+              />
+            ),
+        )}
       </div>
       {!turn.working && steps.filter((s) => s.shot).length > 1 && (
         <ReplayButtons chat={chat} index={index} onOpen={onOpen} />

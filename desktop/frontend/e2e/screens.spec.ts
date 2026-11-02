@@ -9,6 +9,7 @@ const ids = JSON.parse(fs.readFileSync(STATE, "utf8")) as {
   single: string;
   group: string;
   desktop: string;
+  tasks: string;
   post: string;
   tom: string;
   mimi: string;
@@ -1730,4 +1731,22 @@ test("a kitty's machine is turned on and off and has its own idle time", async (
   await expect(page.getByTestId("machine-power").getByTestId("machine-state")).toContainText("On", {
     timeout: 30_000,
   });
+});
+
+test("many desktop tasks fold into one bar: the latest shows, the rest open on demand", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.tasks}`);
+  const bar = page.getByTestId("desk-tasks");
+  await expect(bar).toBeVisible();
+  // Only the latest task is on the bar; there is no row of chips.
+  await expect(bar).toContainText("2/2");
+  await expect(bar.getByRole("tab")).toHaveCount(0);
+  await bar.getByRole("button", { name: "Previous task" }).click();
+  await expect(bar).toContainText("1/2");
+  await page.getByTestId("desk-tasks-toggle").click();
+  await expect(bar.getByRole("tab")).toHaveCount(2);
+  await bar.getByRole("tab").nth(1).click();
+  await expect(bar).toContainText("2/2");
+  await expect(bar.getByRole("tab")).toHaveCount(0);
 });

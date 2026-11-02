@@ -1580,6 +1580,13 @@ html.mac-inset aside .titlebar {
   color: var(--t1);
   border-color: var(--color-accent);
 }
+.trail-more {
+  font-size: 0.7rem;
+  color: var(--t3);
+  text-decoration: underline dotted;
+  text-align: left;
+  padding: 0.125rem 0;
+}
 .desk-hero {
   position: sticky;
   top: 0;
