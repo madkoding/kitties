@@ -1172,7 +1172,7 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(limits.MaxSeconds)*time.Second)
 		defer cancel()
 	}
-	st := &taskState{messages: p.messages, actions: p.actions, reply: p.reply, replyText: p.text, pre: p.pre, tokens: p.reply.Usage.Input + p.reply.Usage.Output}
+	st := &taskState{messages: p.messages, actions: p.actions, reply: p.reply, replyText: p.text, pre: p.pre, tokens: p.reply.Usage.Counted()}
 	fail, retryable := "", false
 	for attempt := 0; ; attempt++ {
 		fail, retryable = s.attempt(ctx, id, index, k, p, st, limits)
@@ -1350,7 +1350,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		}
 		s.spendTokens(k, answer.Usage)
 		s.addUsage(id, index, answer.Usage)
-		st.tokens += answer.Usage.Input + answer.Usage.Output
+		st.tokens += answer.Usage.Counted()
 		if limits.MaxTokens > 0 && st.tokens > limits.MaxTokens {
 			return fmt.Sprintf("stopped: the token budget (%d) is spent", limits.MaxTokens), false
 		}

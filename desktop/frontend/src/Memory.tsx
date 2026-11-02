@@ -112,7 +112,15 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
             ).map(([name, used, max]) => (
               <div key={name} class="flex items-center gap-2">
                 <span class="flex-1">{t(name)}</span>
-                <span class={max > 0 && used >= max ? "text-[var(--c-red)]" : "text-[var(--t3)]"}>
+                <span
+                  class={
+                    max > 0 && used >= max
+                      ? "text-[var(--c-red)]"
+                      : max > 0 && used * 100 >= max * 80
+                        ? "text-[var(--c-amber)]"
+                        : "text-[var(--t3)]"
+                  }
+                >
                   {used.toLocaleString("en-US")}
                   {max > 0
                     ? " " + t("of {max}", { max: max.toLocaleString("en-US") })

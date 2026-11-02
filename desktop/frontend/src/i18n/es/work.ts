@@ -120,8 +120,8 @@ const dict: Dictionary = {
 
   // Limits & backup
   "Limits & backup": "Límites y respaldo",
-  "How much one task may spend before {name} stops and says so, and how much it may spend in a day. Leave a box empty for the default.":
-    "Cuánto puede gastar una tarea antes de que {name} se detenga y te avise, y cuánto puede gastar en un día. Deja una casilla vacía para usar el valor predeterminado.",
+  "How much one task may spend before {name} stops and says so, and how much it may spend in a day. Leave a box empty for the default. Tokens read from the cache count a tenth; you are warned at 80% of the day, and raising the daily limit lets {name} continue right away.":
+    "Cuánto puede gastar una tarea antes de que {name} se detenga y te avise, y cuánto puede gastar en un día. Deja una casilla vacía para usar el valor predeterminado. Los tokens leídos del caché cuentan una décima parte; se te avisa al llegar al 80% del día y, si subes el límite diario, {name} continúa de inmediato.",
   "Tokens per task": "Tokens por tarea",
   "Seconds per task": "Segundos por tarea",
   "Rounds per task": "Rondas por tarea",

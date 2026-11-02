@@ -207,6 +207,17 @@ type Usage struct {
 	CacheWrite int `json:"cache_write,omitempty"`
 }
 
+// CacheReadWeight is the share of a cached token that counts against a budget: reading a
+// prompt from the cache costs a tenth of sending it, so it weighs a tenth.
+const CacheReadWeight = 10
+
+// Counted is what a reply weighs against the token budgets: the prompt with the part served
+// from the cache at a tenth, plus the output. `Input` includes the cached tokens.
+func (u Usage) Counted() int {
+	read := min(max(u.CacheRead, 0), u.Input)
+	return u.Input - read + read/CacheReadWeight + u.Output
+}
+
 // Add sums two usages.
 func (u Usage) Add(o Usage) Usage {
 	return Usage{u.Input + o.Input, u.Output + o.Output, u.CacheRead + o.CacheRead, u.CacheWrite + o.CacheWrite}

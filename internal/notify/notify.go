@@ -24,7 +24,7 @@ const (
 	GoalDone    Event = "goal_done"    // a goal's run finished
 	GoalBlocked Event = "goal_blocked" // a goal's run could not finish
 	Recovered   Event = "recovered"    // a container was brought back
-	Budget      Event = "budget"       // a kitty spent its day's tokens
+	Budget      Event = "budget"       // a kitty is near or at its day's tokens
 	Updated     Event = "updated"      // a desktop or Kitties itself was updated, or a new version waits
 	// Digest is the daily summary. It is not one of Events: the person turns it on by giving
 	// Config.Digest a time of day.

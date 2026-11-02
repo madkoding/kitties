@@ -20,6 +20,8 @@ type Day struct {
 	Actions int `json:"actions"`
 	// Told is set once the person was told the token budget ran out, so it happens once a day.
 	Told bool `json:"told,omitempty"`
+	// Warned is set once the person was told the budget is nearly spent, so it happens once a day.
+	Warned bool `json:"warned,omitempty"`
 }
 
 // keep is how many days are remembered.
@@ -137,6 +139,19 @@ func (s *Store) Tell(kitty string) bool {
 		return false
 	}
 	d.Told = true
+	_ = s.save()
+	return true
+}
+
+// Warn marks today's "nearly spent" warning as given and reports whether it was not given before.
+func (s *Store) Warn(kitty string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	d := s.day(kitty)
+	if d.Warned || d.Told {
+		return false
+	}
+	d.Warned = true
 	_ = s.save()
 	return true
 }
