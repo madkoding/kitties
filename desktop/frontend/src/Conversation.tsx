@@ -208,7 +208,8 @@ function Desk({
   // Only the latest steps of a long task are listed; the earlier ones open on demand.
   const [allSteps, setAllSteps] = useState(false);
   useEffect(() => setAllSteps(false), [index]);
-  const hidden = allSteps ? 0 : Math.max(0, steps.length - STEPS_SHOWN);
+  const earlier = Math.max(0, steps.length - STEPS_SHOWN);
+  const hidden = allSteps ? 0 : earlier;
   const who = (i: number) =>
     (turns[i].kitty && kitties.get(turns[i].kitty!)?.name) || turns[i].from;
   // A task is named by what the person asked (the turn before it), not by the kitty, which is
@@ -335,14 +336,14 @@ function Desk({
         </div>
       )}
       <div class="trail" aria-label={t("steps")}>
-        {hidden > 0 && (
+        {earlier > 0 && (
           <button
             class="plain trail-more"
             data-testid="trail-more"
             aria-expanded={allSteps}
             onClick={() => setAllSteps(!allSteps)}
           >
-            {allSteps ? t("Hide earlier steps") : t("{n} earlier steps", { n: hidden })}
+            {allSteps ? t("Hide earlier steps") : t("{n} earlier steps", { n: earlier })}
           </button>
         )}
         {steps.map(

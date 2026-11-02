@@ -65,6 +65,7 @@ test("a desktop task: the steps and their screenshots", async ({ page }) => {
   // A long task lists its latest steps; the earlier ones open behind a button.
   await expect(trail.getByText("Opened example.com", { exact: true })).toBeHidden();
   await page.getByTestId("trail-more").click();
+  await expect(page.getByTestId("trail-more")).toContainText("Hide earlier steps");
   // Each step reads as a sentence; the coordinates and the tokens are only on hover.
   await expect(trail.getByText("Opened example.com", { exact: true })).toBeVisible();
   await expect(trail.getByText("Clicked on the screen", { exact: true })).toBeVisible();
@@ -1112,6 +1113,9 @@ test("the page speaks Spanish: the system's language, or the one picked", async 
   await expect(page.locator("aside").getByRole("button", { name: "Nuevo chat" })).toBeVisible();
   await expect(page.locator("textarea")).toHaveAttribute("placeholder", "Escribe algo…");
   const trail = page.locator(".trail").first();
+  // The earlier steps of a long task wait behind a button that speaks Spanish too.
+  await page.getByTestId("trail-more").click();
+  await expect(page.getByTestId("trail-more")).toHaveText("Ocultar pasos anteriores");
   await expect(trail.getByText("Abrió example.com", { exact: true })).toBeVisible();
   await expect(trail.getByText("Terminó", { exact: true })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "es");
