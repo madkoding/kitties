@@ -20,7 +20,7 @@ kitties:
     soul_file: souls/tom.yaml
     replicas: 3
 
-containers: { runtime: auto, image: ghcr.io/madkoding/kitty-desktop:latest, memory_mb: 2048, cpus: 2 }
+containers: { runtime: auto, image: ghcr.io/madkoding/kitty-desktop:latest, memory_mb: 2048, cpus: 2, auto_off_minutes: 15 }
 gateway:    { listen: 127.0.0.1:7488, token: "" }
 motita:     { url: http://127.0.0.1:7477 }
 
@@ -28,6 +28,11 @@ connectors:
   team-slack: { kind: slack, url: https://hooks.slack.com/services/XXX }
   coder:      { kind: motita, description: runs a coding task in motita }
 ```
+
+`containers.auto_off_minutes` is how many minutes a kitty's machine stays on without use before it
+turns itself off (15 by default, `0` never, at most a week). Each kitty can have a value of its own
+(its window, Desktop, "Turn off after", or `PATCH /v1/kitties/{ref}`). See
+[the machine's power](DESKTOP.md#turning-the-machine-on-and-off).
 
 ### The connector catalogue
 

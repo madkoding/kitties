@@ -20,6 +20,7 @@ const (
 	KindDelegated = "delegated" // it handed work to another kitty
 	KindRecovered = "recovered" // its container was brought back
 	KindUpdated   = "updated"   // its desktop was moved to a newer image
+	KindPowerOff  = "off"       // its machine turned itself off after a time without use
 	KindSkipped   = "skipped"   // a run was skipped (still busy)
 	KindEvent     = "event"     // something arrived from a service
 	KindApproval  = "approval"  // an action waited for a yes, or went ahead on trust

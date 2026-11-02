@@ -477,6 +477,39 @@ const dict: Dictionary = {
     "A {name} se le acabó el presupuesto de esta tarea; puede seguir desde donde quedó.",
   Continue: "Continuar",
   "Continue where you left off.": "Continúa desde donde quedaste.",
+
+  // The machine
+  "Turn off anyway": "Apagar igualmente",
+  "Turned its machine off": "Apagó su máquina",
+  "Checked its machine": "Revisó su máquina",
+  "Turned its machine on": "Encendió su máquina",
+  Never: "Nunca",
+  "1 hour": "1 hora",
+  "{n} hours": "{n} horas",
+  "{n} minutes": "{n} minutos",
+  "working on a task": "trabajando en una tarea",
+  "you have taken control": "tienes el control",
+  "you are watching its desktop": "estás viendo su escritorio",
+  "running a command": "ejecutando un comando",
+  "in use": "en uso",
+  "Starting…": "Iniciando…",
+  "Failed to start: {error}": "No pudo iniciar: {error}",
+  "Failed to start": "No pudo iniciar",
+  "Off: it turned itself off after a time without use":
+    "Apagada: se apagó sola tras un tiempo sin uso",
+  "Off: the kitty turned it off": "Apagada: el kitty la apagó",
+  Off: "Apagada",
+  "On, in use: {what}": "Encendida, en uso: {what}",
+  "On. It never turns itself off.": "Encendida. Nunca se apaga sola.",
+  "On. It turns itself off in about {n} min if it is not used.":
+    "Encendida. Se apaga sola en unos {n} min si no se usa.",
+  On: "Encendida",
+  "Turn off after": "Apagar tras",
+  Default: "Predeterminado",
+  "Default ({time})": "Predeterminado ({time})",
+  "{name}'s machine turns itself off after this time without use, never in the middle of a task or while you watch its desktop. {name} knows whether it is on, and turns it on by itself when it needs it.":
+    "La máquina de {name} se apaga sola tras este tiempo sin uso, nunca en medio de una tarea ni mientras ves su escritorio. {name} sabe si está encendida y la enciende sola cuando la necesita.",
+  off: "apagada",
 };
 
 export default dict;

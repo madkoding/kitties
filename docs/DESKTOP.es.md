@@ -130,6 +130,41 @@ cada imagen con solo lo que cambió), servido en `/v1/chats/{id}/turns/{n}/repla
 
 <img src="screenshots/49-live-desktop-control.png" alt="Tomando el control del escritorio de un kitty: un comando escrito en su terminal" width="100%">
 
+## Encender y apagar la máquina
+
+El escritorio de un kitty corre en su **máquina** (su contenedor), y la máquina puede estar apagada. Se
+enciende y apaga desde la ventana del kitty (botón **Iniciar** / **Detener**), desde la API
+(`POST /v1/kitties/{ref}/power` `{"on": true|false}`; `GET` dice su estado) y por el propio kitty; y
+**se apaga sola tras 15 minutos sin uso** (`containers.auto_off_minutes`; cada kitty puede tener su
+tiempo en su ventana, Escritorio, «Apagar tras», de 5 minutos a 8 horas, o **nunca**). Apagarla conserva
+la carpeta de trabajo y respalda las sesiones del navegador, como cualquier detención; encenderla
+devuelve el escritorio (el primer arranque descarga la imagen).
+
+<img src="screenshots/56-machine-power.png" alt="La ventana de un kitty: el estado de su máquina y el tiempo tras el cual se apaga sola" width="100%">
+
+**Qué cuenta como uso.** El tiempo sin uso se cuenta desde lo último de esto, y la máquina no se apaga
+nunca (sola, ni con una detención no forzada) mientras ocurra alguna de estas cosas:
+
+- el kitty está en medio de una tarea (de escritorio, o una que te espera con `ask_help`);
+- tienes el control del escritorio o lo estás viendo en vivo (su ventana abierta en el escritorio);
+- hay un comando corriendo en la máquina;
+- el kitty actuó en la pantalla, o tú la miraste o hiciste clic hace un momento: la cuenta vuelve a 0.
+
+Detenerla mientras está en uso responde **409** con lo que la usa, y la ventana pregunta antes de
+apagarla igualmente (`"force": true`). Un gateway recién iniciado solo empieza a contar; no apaga una
+máquina que estaba en uso antes.
+
+**El kitty conoce su máquina.** Cada petición al modelo termina con un mensaje corto que dice si la
+máquina está encendida, iniciando o apagada (y por qué: se apagó sola, la apagaste tú, la apagó el
+kitty) y cuánto falta para que se apague sola. Ese mensaje va marcado como *volátil*: la caché de prompt
+del proveedor termina antes de él, así que el prompt del sistema, las herramientas y la conversación
+siguen en caché sea cual sea el estado (ver `provider.Message.Volatile`). El kitty tiene además la
+herramienta **`machine`** (`@tool machine {"action": "status|on|off"}`): `status` dice el estado, `on`
+la enciende y espera a que esté lista, `off` la apaga cuando termina con la pantalla por un buen rato
+(se rechaza mientras tú la ves o la controlas). Y una herramienta de escritorio usada con la máquina
+apagada **la enciende primero**, espera (hasta 3 minutos) y lo muestra como un paso del turno; si no
+puede, al kitty se le dice claramente que su máquina está apagada y por qué, y la herramienta no se ejecuta.
+
 ## Actualizar un escritorio sin perder lo que sabe
 
 Un escritorio se hace a partir de una imagen, y puede salir una más nueva. Un contenedor conserva la
@@ -173,6 +208,8 @@ un kitty eliminado se borra con él.
 | Las acciones que el modelo puede pedir, revisadas y convertidas en comandos | [`internal/desktop/desktop.go`](../internal/desktop/desktop.go) |
 | El ciclo: captura, modelo, acciones, otra vez | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Contenedores: arrancar, `exec`, captura, stream en vivo | [`internal/container/`](../internal/container) |
+| La energía de la máquina: uso, apagado por inactividad, encender y apagar | [`internal/orchestrator/power.go`](../internal/orchestrator/power.go) |
+| Lo que el kitty sabe de su máquina, la herramienta `machine`, el encendido automático | [`internal/chat/machine.go`](../internal/chat/machine.go) |
 | Tomar el control: retenciones, entrada de la persona, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
 | Los respaldos cifrados de las sesiones de un kitty, y la actualización de un escritorio | [`internal/keep`](../internal/keep), [`internal/orchestrator/sessions.go`](../internal/orchestrator/sessions.go) |
 | Los secretos guardados que un kitty puede escribir, cifrados | [`internal/vault`](../internal/vault) |

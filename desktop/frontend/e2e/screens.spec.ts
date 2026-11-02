@@ -1690,3 +1690,44 @@ test("the composer keeps focus and text when a kitty starts working", async ({ p
   await expect(box).toBeFocused();
   await expect(box).toHaveValue("still typing");
 });
+
+// A kitty's machine can be turned off and on, and set to turn itself off after a time without
+// use, down to never.
+test("a kitty's machine is turned on and off and has its own idle time", async ({ page }) => {
+  await open(page, `#kitty/${ids.tom}`);
+  const power = page.getByTestId("machine-power");
+  await expect(power).toBeVisible();
+  await expect(power.getByTestId("machine-state")).toContainText("On");
+  await shot(page, "56-machine-power");
+  // The gateway's default is 15 minutes; this kitty can have a time of its own, or never.
+  const headers = { Authorization: "Bearer e2e-token" };
+  const idle = async () =>
+    (await (await page.request.get(`${GATEWAY}/v1/kitties/tom/power`, { headers })).json()).power;
+  await expect(power.getByTestId("auto-off")).toHaveValue("default");
+  expect(await idle()).toMatchObject({ auto_off_minutes: 15, auto_off_custom: false });
+  await power.getByTestId("auto-off").selectOption("0");
+  await expect.poll(async () => (await idle()).auto_off_minutes).toBe(0);
+  expect(await idle()).toMatchObject({ auto_off_custom: true });
+  await power.getByTestId("auto-off").selectOption("30");
+  await expect.poll(async () => (await idle()).auto_off_minutes).toBe(30);
+  await power.getByTestId("auto-off").selectOption("default");
+  await expect.poll(async () => (await idle()).auto_off_custom).toBe(false);
+  // Off (forced: the drawer may be showing its desktop live, which counts as use).
+  const off = await page.request.post(`${GATEWAY}/v1/kitties/tom/power`, {
+    headers,
+    data: { on: false, force: true },
+  });
+  expect(off.ok()).toBeTruthy();
+  expect((await off.json()).power).toMatchObject({ state: "off", off_reason: "manual" });
+  await open(page, `#kitty/${ids.tom}`);
+  await expect(page.getByTestId("machine-power").getByTestId("machine-state")).toContainText("Off");
+  // On again: it comes up in the background.
+  const on = await page.request.post(`${GATEWAY}/v1/kitties/tom/power`, {
+    headers,
+    data: { on: true },
+  });
+  expect(on.status()).toBe(202);
+  await expect(page.getByTestId("machine-power").getByTestId("machine-state")).toContainText("On", {
+    timeout: 30_000,
+  });
+});

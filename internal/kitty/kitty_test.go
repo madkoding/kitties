@@ -1,6 +1,9 @@
 package kitty
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestContainerName(t *testing.T) {
 	if ContainerName("mimi") != "kitty-mimi" {
@@ -67,5 +70,22 @@ func TestValidTheme(t *testing.T) {
 		if ValidTheme(bad) {
 			t.Errorf("%q is not a theme", bad)
 		}
+	}
+}
+
+func TestValidAutoOff(t *testing.T) {
+	for _, ok := range []int{0, 1, 15, MaxAutoOffMinutes} {
+		if err := ValidAutoOff(ok); err != nil {
+			t.Errorf("%d = %v", ok, err)
+		}
+	}
+	for _, bad := range []int{-1, MaxAutoOffMinutes + 1} {
+		if err := ValidAutoOff(bad); err == nil {
+			t.Errorf("%d accepted", bad)
+		}
+	}
+	e := &InUseError{Kitty: "ana", By: UseWatch}
+	if !strings.Contains(e.Error(), "ana") || !strings.Contains(e.Error(), "watching") {
+		t.Errorf("error = %q", e)
 	}
 }

@@ -468,13 +468,20 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	a.notifier.SetLog(logf)
 	go a.agenda.Run(ctx)
 	go a.digest.Run(ctx, logf)
+	// What is in the middle of a task is neither updated nor turned off: set before the watchdog
+	// starts, which looks at it. A machine that turns itself off after a time without use is
+	// noted in the kitty's journal and told to the person.
+	a.fleet.SetBusy(a.chats.KittyBusy)
+	a.fleet.SetOnPowerOff(func(k *kitty.Kitty, idle time.Duration) {
+		text := fmt.Sprintf("its machine turned itself off after %d minutes without use", int(idle.Minutes()))
+		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindPowerOff, Text: text})
+	})
 	go a.fleet.Watch(ctx, watchEvery, func(k *kitty.Kitty, what string) {
 		logf("watchdog: %s is back (%s)", k.Name, what)
 		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindRecovered, Text: what})
 		a.notifier.Notify(notify.Notification{Event: notify.Recovered, Kitty: k.Name, Title: "is back", Body: what})
 	}, logf)
 	// A newer desktop image is downloaded and put on the idle desktops, their sessions kept.
-	a.fleet.SetBusy(a.chats.KittyBusy)
 	go a.fleet.WatchUpdates(ctx, updateFirstCheck, time.Duration(a.cfg.Containers.UpdateCheckHours)*time.Hour, func(k *kitty.Kitty) {
 		logf("update: the desktop of %s is on the newest image", k.Name)
 		_ = a.agenda.Note(agenda.Entry{Kitty: k.ID, Kind: agenda.KindUpdated, Text: "its desktop was updated to the newest image; its sessions were kept"})

@@ -71,6 +71,10 @@ type Manager struct {
 	holds  map[string]time.Time
 	// holdStarted is when the person last took each display, kept after they give it back.
 	holdStarted map[string]time.Time
+	// use is when each machine was last used and what is using it (power.go); onPowerOff hears
+	// about a machine that turned itself off.
+	use        useTracker
+	onPowerOff func(k *kitty.Kitty, idle time.Duration)
 
 	mu      sync.RWMutex
 	kitties map[string]*kitty.Kitty
@@ -631,6 +635,8 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 		m.restoreSessions(ctx, k)
 	}
 	m.applyTheme(ctx, k, false)
+	// A machine just turned on has not been idle yet.
+	m.use.touch(k.ID, m.now())
 	return m.setStatus(k.ID, kitty.StatusRunning, "")
 }
 
@@ -722,6 +728,7 @@ func (m *Manager) Remove(ctx context.Context, ref string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	delete(m.kitties, k.ID)
+	m.use.forget(k.ID)
 	return m.saveLocked()
 }
 
@@ -791,6 +798,9 @@ func (m *Manager) setStatus(id, status, msg string) error {
 		return ErrNotFound
 	}
 	k.Status, k.Error = status, msg
+	if status == kitty.StatusRunning || status == kitty.StatusStarting {
+		k.OffReason = ""
+	}
 	return m.saveLocked()
 }
 
@@ -854,6 +864,10 @@ type Update struct {
 	Approvals *string `json:"approvals,omitempty"`
 	// Theme is the look of its desktop (kitty.Themes; empty is the image's own).
 	Theme *string `json:"theme,omitempty"`
+	// AutoOff is the minutes its machine stays on without use: 0 is never. AutoOffDefault, when
+	// true, goes back to the gateway's default instead.
+	AutoOff        *int  `json:"auto_off_minutes,omitempty"`
+	AutoOffDefault *bool `json:"auto_off_default,omitempty"`
 }
 
 // Edit applies an update to a kitty and saves it. A new theme reaches a running desktop at once.
@@ -922,6 +936,17 @@ func (m *Manager) edit(ref string, u Update) (*kitty.Kitty, error) {
 			return nil, fmt.Errorf("theme %q is not one of %s", *u.Theme, strings.Join(kitty.Themes, ", "))
 		}
 		k.Theme = *u.Theme
+	}
+	if u.AutoOff != nil {
+		if err := kitty.ValidAutoOff(*u.AutoOff); err != nil {
+			return nil, err
+		}
+		minutes := *u.AutoOff
+		k.AutoOff = &minutes
+		m.use.touch(k.ID, m.now())
+	}
+	if u.AutoOffDefault != nil && *u.AutoOffDefault {
+		k.AutoOff = nil
 	}
 	if u.Backup != nil {
 		backup := strings.TrimSpace(*u.Backup)
@@ -1004,6 +1029,8 @@ func (m *Manager) Check(ctx context.Context, recovered func(k *kitty.Kitty, what
 				continue
 			}
 			recovered(k, "it was in error: "+k.Error)
+		case k.Status == kitty.StatusRunning:
+			m.idleCheck(ctx, k, warn)
 		}
 	}
 }
@@ -1034,6 +1061,7 @@ func (m *Manager) Exec(ctx context.Context, ref string, argv ...string) (string,
 	if !k.Desktop {
 		return "", fmt.Errorf("%s has no container", k.Name)
 	}
+	defer m.use.enter(k.ID, m.now)()
 	return m.ctr().Exec(ctx, k.Container, argv...)
 }
 
@@ -1046,6 +1074,7 @@ func (m *Manager) ExecInput(ctx context.Context, ref, stdin string, argv ...stri
 	if !k.Desktop {
 		return "", fmt.Errorf("%s has no container", k.Name)
 	}
+	defer m.use.enter(k.ID, m.now)()
 	return m.ctr().ExecInput(ctx, k.Container, stdin, argv...)
 }
 
@@ -1058,6 +1087,7 @@ func (m *Manager) Screenshot(ctx context.Context, ref string) ([]byte, error) {
 	if !k.Desktop {
 		return nil, fmt.Errorf("%s has no container", k.Name)
 	}
+	m.use.touch(k.ID, m.now())
 	return m.ctr().Screenshot(ctx, k.Container)
 }
 

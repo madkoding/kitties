@@ -115,6 +115,12 @@ export function stepSentence(action: string, args?: Record<string, unknown>): st
       return t("Looked at the screen");
     case "run":
       return t("Ran a program");
+    case "machine":
+      return a.action === "off"
+        ? t("Turned its machine off")
+        : a.action === "status"
+          ? t("Checked its machine")
+          : t("Turned its machine on");
     case "done":
       return t("Finished");
   }

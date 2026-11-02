@@ -61,6 +61,7 @@ var Tools = []struct{ Name, Args, Help string }{
 	{"wait", `{"seconds": 2}`, "wait for something to load (at most 10 seconds)"},
 	{"type_secret", `{"name": "shop password", "enter": false}`, "type a secret the person saved for you (a password, a code) where the focus is, by its name; it goes from the vault to the keyboard and you never read it; \"enter\": true presses Enter after"},
 	{"ask_help", `{"reason": "..."}`, "ask the person to take control of your desktop for what you cannot do alone (a password, a captcha, a code they receive); you wait until they give it back, then continue"},
+	{"machine", `{"action": "status|on|off"}`, "your machine is the computer your desktop runs on and can be off (the person turned it off, you did, or it turned itself off after a time without use): status tells its state, on turns it on and waits, off turns it off when you are done with the display for a good while; a desktop tool used while it is off turns it on by itself"},
 	{"done", `{"summary": "..."}`, "finish the task and report what you achieved"},
 }
 

@@ -143,6 +143,9 @@ type Containers struct {
 	AutoUpdate bool `yaml:"auto_update"`
 	// UpdateCheckHours is how often the gateway looks for a newer image (6 by default).
 	UpdateCheckHours int `yaml:"update_check_hours"`
+	// AutoOffMinutes is how long a kitty's machine stays on without use before it turns itself
+	// off (15 by default; 0 is never). Each kitty can have a value of its own.
+	AutoOffMinutes int `yaml:"auto_off_minutes"`
 }
 
 // Gateway is the HTTP API block. On a server it is also the web interface: the same address
@@ -322,7 +325,7 @@ func Defaults() Config {
 		Providers: map[string]Provider{},
 		Containers: Containers{
 			Runtime: "auto", Image: "ghcr.io/madkoding/kitty-desktop:latest",
-			MemoryMB: 2048, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6,
+			MemoryMB: 2048, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6, AutoOffMinutes: kitty.DefaultAutoOffMinutes,
 		},
 		Gateway:    Gateway{Listen: "127.0.0.1:7488"},
 		Updates:    Updates{Gateway: UpdateNotify, CheckHours: 12, Repo: "madkoding/kitties", API: "https://api.github.com"},
@@ -445,6 +448,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Containers.UpdateCheckHours < 1 || c.Containers.UpdateCheckHours > 24*30 {
 		return errors.New("containers.update_check_hours is between 1 and 720")
+	}
+	if err := kitty.ValidAutoOff(c.Containers.AutoOffMinutes); err != nil {
+		return fmt.Errorf("containers.%w", err)
 	}
 	if c.Containers.MemoryMB < 0 || c.Containers.CPUs < 0 {
 		return errors.New("containers: memory_mb and cpus cannot be negative")

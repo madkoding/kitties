@@ -120,6 +120,42 @@ picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.
 
 <img src="screenshots/49-live-desktop-control.png" alt="Taking control of a kitty's desktop: a command typed in its terminal" width="100%">
 
+## Turning the machine on and off
+
+A kitty's desktop runs on its **machine** (its container), and the machine can be off. It is turned
+on and off from the kitty's window (the **Start** / **Stop** button), from the API
+(`POST /v1/kitties/{ref}/power` `{"on": true|false}`; `GET` tells its state), and by the kitty itself;
+and it **turns itself off after 15 minutes without use** (`containers.auto_off_minutes`; each kitty
+can have its own in its window, Desktop, "Turn off after", from 5 minutes to 8 hours, or **never**).
+Turning it off keeps the work folder and backs up the browser's sessions, like any stop; turning it on
+again brings the desktop back (the first start downloads the image).
+
+<img src="screenshots/56-machine-power.png" alt="A kitty's window: the state of its machine and the time after which it turns itself off" width="100%">
+
+**What counts as use.** The time without use counts from the last of these, and the machine is never
+turned off (by itself, or by a stop that is not forced) while one of them is going on:
+
+- the kitty is in the middle of a task (a desktop task, or one that waits for you with `ask_help`);
+- you have taken control of the desktop, or are watching it live (its window open on the desktop);
+- a command is running in the machine;
+- the kitty acted on the display, or you looked at or clicked on it, a moment ago: the count starts
+  again at 0 minutes.
+
+A stop while the machine is in use answers **409** with what is using it, and the window asks
+before turning it off anyway (`"force": true`). A gateway that has just started only begins to
+count; it does not turn off a machine that was in use before.
+
+**The kitty knows its machine.** Every request to the model ends with a short message that says whether
+the machine is on, starting or off (and why it is off: it turned itself off, you turned it off, the
+kitty did), and how long is left before it turns itself off. That message is marked *volatile*: the
+provider's prompt cache ends before it, so the system prompt, the tools and the conversation stay cached
+whatever the state (see `provider.Message.Volatile`). The kitty also has the **`machine`** tool
+(`@tool machine {"action": "status|on|off"}`): `status` tells the state, `on` turns it on and waits
+until it is up, `off` turns it off when it is done with the display for a good while (refused while you
+watch or control it). And a desktop tool used while the machine is off **turns it on first**, waits
+for it (up to 3 minutes) and shows that as a step of the turn; if it cannot, the kitty is told
+plainly that its machine is off and why, and the tool does not run.
+
 ## Updating a desktop without losing what it knows
 
 A desktop is made from an image, and a newer one can come. A container keeps the image it was made
@@ -161,6 +197,8 @@ profile is newer than any backup). A removed kitty's backup is deleted with it.
 | The actions the model may take, checked and turned into commands | [`internal/desktop/desktop.go`](../internal/desktop/desktop.go) |
 | The loop: screenshot, model, actions, again | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Containers: start, `exec`, screenshot, live stream | [`internal/container/`](../internal/container) |
+| The machine's power: use, idle shut-off, on and off | [`internal/orchestrator/power.go`](../internal/orchestrator/power.go) |
+| What the kitty knows of its machine, the `machine` tool, the auto turn-on | [`internal/chat/machine.go`](../internal/chat/machine.go) |
 | Taking over: holds, the person's input, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
 | The sealed backups of a kitty's sessions, and the update of a desktop | [`internal/keep`](../internal/keep), [`internal/orchestrator/sessions.go`](../internal/orchestrator/sessions.go) |
 | The saved secrets a kitty may type, sealed | [`internal/vault`](../internal/vault) |
