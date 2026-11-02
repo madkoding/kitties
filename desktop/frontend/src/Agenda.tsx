@@ -382,6 +382,8 @@ export function JournalPanel({
   );
 }
 
+type NumLimit = Exclude<keyof Limits, "attended">;
+
 export function LimitsForm({
   kitty,
   kitties,
@@ -405,7 +407,7 @@ export function LimitsForm({
   const [approvals, setApprovals] = useState(kitty.approvals === "ask" ? "ask" : "");
   const [err, setErr] = useState("");
   const [saved, setSaved] = useState(false);
-  const set = (k: keyof Limits, v: string) =>
+  const set = (k: NumLimit, v: string) =>
     setLimits({ ...limits, [k]: Math.max(0, parseInt(v || "0", 10) || 0) });
   const save = async () => {
     setErr("");
@@ -437,7 +439,7 @@ export function LimitsForm({
             ["retries", t("Retries (another way)")],
             ["day_tokens", t("Tokens per day")],
             ["day_actions", t("Actions per day")],
-          ] as [keyof Limits, string][]
+          ] as [NumLimit, string][]
         ).map(([k, label]) => (
           <div key={k}>
             <label class={LABEL} for={"limit-" + k}>
