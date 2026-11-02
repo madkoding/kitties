@@ -120,3 +120,32 @@ func TestGeminiTools(t *testing.T) {
 		t.Error("args helpers")
 	}
 }
+
+func TestAnthropicToolID(t *testing.T) {
+	for in, want := range map[string]string{"toolu_01-A": "toolu_01-A", "click#0": "click_0", "a b.c/ñ": "a_b_c___", "": "call"} {
+		if got := anthropicToolID(in); got != want {
+			t.Errorf("anthropicToolID(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// A history saved while talking to Gemini ("name#0" ids) must still be accepted by Anthropic.
+func TestAnthropicSanitizesHistoryIDs(t *testing.T) {
+	c, r := client(t, "anthropic", func(int) (int, string) { return 200, `{"content":[{"type":"text","text":"ok"}]}` })
+	convo := []Message{
+		{Role: "user", Content: "go"},
+		{Role: "assistant", ToolCalls: []ToolCall{{ID: "click#0", Name: "click"}, {ID: "type#1", Name: "type"}}},
+		{Role: "tool", ToolCallID: "click#0", Content: "ok"},
+		{Role: "tool", ToolCallID: "type#1", Content: "ok"},
+	}
+	if _, err := c.CompleteTools(context.Background(), convo, tools); err != nil {
+		t.Fatal(err)
+	}
+	msgs := r.calls[0]["messages"].([]any)
+	block := func(i, j int) map[string]any {
+		return msgs[i].(map[string]any)["content"].([]any)[j].(map[string]any)
+	}
+	if block(1, 1)["id"] != "type_1" || block(2, 0)["tool_use_id"] != "click_0" || block(2, 1)["tool_use_id"] != "type_1" {
+		t.Errorf("ids not sanitized consistently: %v", msgs)
+	}
+}
