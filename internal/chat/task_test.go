@@ -68,6 +68,7 @@ func deskService(t *testing.T, replies ...string) (*Service, *deskFleet, *script
 	f, sa, _, _ := fleet(t)
 	d := &deskFleet{fakeFleet: f}
 	s := service(t, d)
+	s.UnattendedWindows = 1 // the tests count rounds; unattended windows have their own test
 	sa.replies = replies
 	return s, d, sa
 }
@@ -471,5 +472,47 @@ func TestAnyBusy(t *testing.T) {
 	s.mu.Unlock()
 	if !s.AnyBusy() {
 		t.Error("a working turn is busy")
+	}
+}
+
+func TestUnattendedTaskGoesOnPastItsWindow(t *testing.T) {
+	// Three rounds of clicks, then done: a window of 2 rounds does not stop an unattended kitty.
+	s, _, sa := deskService(t, "@tool click {\"x\": 1, \"y\": 1}", "@tool click {\"x\": 2, \"y\": 2}", "@tool click {\"x\": 3, \"y\": 3}", "@tool done {\"summary\": \"all groups\"}")
+	s.MaxSteps, s.UnattendedWindows = 2, 4
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "check every group"); err != nil {
+		t.Fatal(err)
+	}
+	turn := waitDone(t, s, sess.ID).Turns[1]
+	if turn.Resumable || !strings.Contains(turn.Text, "all groups") {
+		t.Errorf("turn = %+v", turn)
+	}
+	var cont, nudged bool
+	for _, st := range turn.Steps {
+		cont = cont || st.Action == "continue"
+	}
+	for _, ms := range sa.seen {
+		for _, m := range ms {
+			nudged = nudged || strings.Contains(m.Content, "Checkpoint:")
+		}
+	}
+	if !cont || !nudged {
+		t.Errorf("a window ends with a checkpoint: step %v, nudge %v", cont, nudged)
+	}
+	// The safety cap still stops it, resumable.
+	s, _, _ = deskService(t, "@tool click {\"x\": 1, \"y\": 1}")
+	s.MaxSteps, s.UnattendedWindows = 2, 2
+	sess, _ = s.Create("", []string{"ana"})
+	_, _ = s.Send(context.Background(), sess.ID, "forever")
+	turn = waitDone(t, s, sess.ID).Turns[1]
+	if !turn.Resumable || !strings.Contains(turn.Detail, "stopped after 4 rounds") {
+		t.Errorf("cap: %+v", turn)
+	}
+}
+
+func TestUnattendedTaskHasNoTokenLimitByDefault(t *testing.T) {
+	s, _, _ := deskService(t, "@tool click {\"x\": 1, \"y\": 1}", "@tool done {\"summary\": \"ok\"}")
+	if s.DefaultLimits.MaxTokens != 0 || s.DefaultLimits.MaxSeconds < 3600 {
+		t.Errorf("unattended defaults: %+v", s.DefaultLimits)
 	}
 }

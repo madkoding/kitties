@@ -118,6 +118,8 @@ export interface Limits {
   // The day's ceiling over all its work: tokens, and actions that reach other people.
   day_tokens?: number;
   day_actions?: number;
+  // true: stops at the end of its rounds and waits; false (default): works on its own to the end.
+  attended?: boolean;
 }
 
 // Goal is something a kitty pursues on its own: on a schedule (every, a cron expression),

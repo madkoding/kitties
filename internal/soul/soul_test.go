@@ -63,3 +63,26 @@ func TestLoadParseMerge(t *testing.T) {
 		t.Errorf("an empty override keeps the base: %+v", keep)
 	}
 }
+
+func TestUnattendedPromptTellsToFinish(t *testing.T) {
+	s := Soul{Name: "Mimi"}
+	if p := s.SystemPrompt(Context{}); strings.Contains(p, "Work on your own until the whole task is done") {
+		t.Error("an attended kitty is not told to persist")
+	}
+	p := s.SystemPrompt(Context{Unattended: true})
+	for _, want := range []string{"every item", "Never stop at a halfway point", "truly blocked"} {
+		if !strings.Contains(p, want) {
+			t.Errorf("unattended prompt lacks %q", want)
+		}
+	}
+}
+
+func TestUnattendedPromptKeepsTheListInTheWorkspace(t *testing.T) {
+	s := Soul{Name: "Mimi"}
+	if p := s.SystemPrompt(Context{Unattended: true}); strings.Contains(p, "TODO.md") {
+		t.Error("no workspace, no file")
+	}
+	if p := s.SystemPrompt(Context{Unattended: true, Workspace: "/work"}); !strings.Contains(p, "TODO.md") {
+		t.Error("the list lives in the workspace")
+	}
+}

@@ -107,7 +107,20 @@ type Context struct {
 	User string
 	// Peers lists the other kitties this one may hand a subtask to.
 	Peers []string
+	// Unattended is true when the kitty works on its own: it is told to see a task through.
+	Unattended bool
 }
+
+// persistWords is what an unattended kitty is told about finishing what it was asked. It is
+// static text, so it sits in the cacheable start of the prompt.
+const persistWords = "Work on your own until the whole task is done. Before you start, list in your reply every " +
+	"item the task covers (every group, page, file, account, ticket) and keep that list as you go, ticking items " +
+	"off; when a request names a set (\"all\", \"each\", a number) you do every one, not a sample. Never stop at a " +
+	"halfway point to ask \"should I continue?\": the person already asked you to finish. Ask only when you are truly " +
+	"blocked (a login, a code only they get, a choice that changes the goal or cannot be undone), say exactly what " +
+	"you need, and carry on with the rest meanwhile. If an item fails, note it, move to the next and report it at the " +
+	"end. If you are told you were cut off, read your list and continue from the first item not done. " +
+	"Finish with a short report of every item: done, failed, or left.\n"
 
 // plainWords is how every kitty speaks unless its own instructions say otherwise: to someone
 // who is not technical. The machinery (connectors, JSON, containers) is for the kitty, not for
@@ -182,6 +195,13 @@ func (s Soul) SystemPrompt(c Context) string {
 		fmt.Fprintf(&b, "Other kitties you can hand a subtask to: %s. Write @delegate <name> {\"task\": \"...\"} on its own line "+
 			"with everything they need to know; their answer comes back to you and you go on. Use it for work another "+
 			"kitty is better placed for, never for the whole task.\n", strings.Join(c.Peers, ", "))
+	}
+	if c.Unattended {
+		b.WriteString(persistWords)
+		if c.Workspace != "" {
+			b.WriteString("For a long task keep that list in a file called TODO.md in your working folder and update it as you " +
+				"go; if you start with no memory of the task, read TODO.md first and continue from it.\n")
+		}
 	}
 	if s.Instructions != "" {
 		b.WriteString("\n" + strings.TrimSpace(s.Instructions) + "\n")

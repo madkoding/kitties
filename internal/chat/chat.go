@@ -182,6 +182,12 @@ type Service struct {
 	newID func() string
 	// MaxRounds bounds how many times a kitty may call connectors in one answer.
 	MaxRounds int
+	// UnattendedRounds is how many rounds of connector calls an unattended kitty may take in one
+	// answer (MaxRounds is for an attended one).
+	UnattendedRounds int
+	// UnattendedWindows is how many windows of a task's rounds an unattended kitty goes through by
+	// itself on the desktop before it stops at the safety cap and waits to be told to go on.
+	UnattendedWindows int
 	// MaxTurns is how much of the thread a kitty is shown.
 	MaxTurns int
 	// MaxSteps bounds how many desktop rounds a task may take in one turn.
@@ -281,8 +287,8 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 // New creates the service, loading the sessions kept in dir.
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
-		now: time.Now, newID: randomID, MaxRounds: 4, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
-		DefaultLimits: kitty.Limits{MaxTokens: 400000, MaxSeconds: 1800, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
+		now: time.Now, newID: randomID, MaxRounds: 4, UnattendedRounds: 40, UnattendedWindows: 8, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
+		DefaultLimits: kitty.Limits{MaxTokens: 0, MaxSeconds: 14400, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -939,7 +945,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	}
 	system := k.Soul.SystemPrompt(soul.Context{
 		KittyName: k.Name, Desktop: k.Desktop, Workspace: workspaceOf(k), Group: group, Connectors: allowed, User: s.user,
-		Peers: s.peers(k, id),
+		Peers: s.peers(k, id), Unattended: !k.Limits.Or(s.DefaultLimits).Attended,
 	})
 	if k.Desktop {
 		system += "\n" + desktop.Catalogue()
@@ -972,7 +978,12 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	}
 	turn := Turn{From: k.Name, Kitty: k.ID}
 	var parts []string
-	for round := 0; round < s.MaxRounds; round++ {
+	rounds, capped := s.MaxRounds, false
+	if !k.Limits.Or(s.DefaultLimits).Attended {
+		rounds = max(s.MaxRounds, s.UnattendedRounds)
+	}
+	for round := 0; round < rounds; round++ {
+		capped = round == rounds-1
 		if err := s.overTokens(k); err != nil {
 			return Turn{}, nil, err
 		}
@@ -1006,6 +1017,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		}
 		actions = kept
 		if len(actions) == 0 {
+			capped = false
 			break
 		}
 		if hasDesktopAction(actions) {
@@ -1024,6 +1036,10 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		}
 		outs := s.runNonDesktop(ctx, id, actions, k, allowed, &turn)
 		messages = append(messages, feedback(native, reply, reply.Content, outs, nil)...)
+	}
+	if capped {
+		// The rounds ran out with work still asked for: say so rather than end as if it were done.
+		parts = append(parts, fmt.Sprintf("(%s paused after %d rounds with work left: say \"continue\" and it goes on)", k.Name, rounds))
 	}
 	turn.At = s.now()
 	turn.Text = strings.TrimSpace(strings.Join(parts, "\n\n"))
@@ -1167,6 +1183,16 @@ type taskState struct {
 // left with the person.
 func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Kitty, p *pendingTask) {
 	limits := k.Limits.Or(s.DefaultLimits)
+	if limits.Attended {
+		// The old cautious defaults, for a kitty that asked for them: unattended work has no
+		// per-task token limit unless one is set (the day's tokens still cap it).
+		if k.Limits.MaxTokens == 0 {
+			limits.MaxTokens = attendedTokens
+		}
+		if k.Limits.MaxSeconds == 0 {
+			limits.MaxSeconds = attendedSeconds
+		}
+	}
 	if limits.MaxSeconds > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(limits.MaxSeconds)*time.Second)
@@ -1210,6 +1236,12 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 	}
 }
 
+// attendedTokens and attendedSeconds are the per-task limits of an attended kitty that sets none.
+const (
+	attendedTokens  = 400000
+	attendedSeconds = 1800
+)
+
 // recapSteps is how many of its last steps a kitty is reminded of when it goes on with a task.
 const recapSteps = 30
 
@@ -1240,9 +1272,15 @@ func recap(t Turn) string {
 // gives: it returns why, and whether another attempt makes sense.
 func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Kitty, p *pendingTask, st *taskState, limits kitty.Limits) (fail string, retryable bool) {
 	runner := s.runner()
-	maxRounds := limits.MaxRounds
-	if maxRounds == 0 {
-		maxRounds = s.MaxSteps
+	window := limits.MaxRounds
+	if window == 0 {
+		window = s.MaxSteps
+	}
+	// Unattended, a task goes through several windows of rounds by itself; the cap is the safety
+	// net next to the token and time budgets.
+	maxRounds := window
+	if !limits.Attended && s.UnattendedWindows > 1 {
+		maxRounds = window * s.UnattendedWindows
 	}
 	for ; ; st.rounds++ {
 		if runner == nil {
@@ -1343,6 +1381,11 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 					extra = s.screenMessage(id, index, png, err)
 				}
 			}
+			if !limits.Attended && st.rounds > 0 && (st.rounds+1)%window == 0 && st.rounds+1 < maxRounds {
+				// A window ends: no stop, a checkpoint. The kitty restates what is left and goes on.
+				s.appendStep(id, index, Step{At: s.now(), Action: "continue", Result: fmt.Sprintf("round %d of at most %d: going on by itself", st.rounds+1, maxRounds)})
+				extra.Content = checkpointNudge + "\n" + extra.Content
+			}
 			st.messages = append(st.messages, feedback(p.native, st.reply, st.replyText, outs, &extra)...)
 		}
 		st.messages = trimHistory(st.messages, s.MaxTurns*2)
@@ -1398,6 +1441,11 @@ func (s *Service) screenMessageWith(id string, index int, png []byte, err error,
 	}
 	return m
 }
+
+// checkpointNudge is said to an unattended kitty at the end of each window of rounds: the
+// history may be trimmed, so it writes down where it is instead of stopping.
+const checkpointNudge = "Checkpoint: nobody is waiting for you to ask, keep going. In your next reply, write the list of items " +
+	"the task covers with what is done and what is left, then continue with the first one left."
 
 // endsTask reports whether a batch calls done: that batch runs even past the round limit.
 func endsTask(actions []action) bool {

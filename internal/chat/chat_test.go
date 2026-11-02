@@ -286,10 +286,11 @@ func TestConnectorRoundsAreBounded(t *testing.T) {
 	f, sa, _, e := fleet(t)
 	s := service(t, f)
 	s.MaxRounds = 2
+	s.DefaultLimits.Attended = true
 	sess, _ := s.Create("", []string{"ana"})
 	sa.replies = []string{"@connector echo go"}
 	replies, _ := s.Send(context.Background(), sess.ID, "loop")
-	if len(e.calls) != 2 || len(replies[0].Calls) != 2 || replies[0].Text != "(ana had nothing to add)" {
+	if len(e.calls) != 2 || len(replies[0].Calls) != 2 || !strings.Contains(replies[0].Text, "paused after 2 rounds") {
 		t.Errorf("rounds = %d, reply = %+v", len(e.calls), replies[0])
 	}
 	// With no connectors configured, the calls are ignored.
@@ -310,5 +311,17 @@ func TestConnectorRoundsAreBounded(t *testing.T) {
 	_ = os.WriteFile(s.dir, nil, 0o600)
 	if _, err := s.Send(context.Background(), bo.ID, "z"); err == nil {
 		t.Error("a save failure is reported")
+	}
+}
+
+func TestUnattendedConnectorRoundsGoFurther(t *testing.T) {
+	f, sa, _, e := fleet(t)
+	s := service(t, f)
+	s.MaxRounds, s.UnattendedRounds = 2, 7
+	sess, _ := s.Create("", []string{"ana"})
+	sa.replies = []string{"@connector echo go"}
+	replies, _ := s.Send(context.Background(), sess.ID, "check all the groups")
+	if len(e.calls) != 7 || !strings.Contains(replies[0].Text, "paused after 7 rounds") {
+		t.Errorf("unattended rounds = %d, reply = %+v", len(e.calls), replies[0])
 	}
 }

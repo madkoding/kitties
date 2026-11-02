@@ -126,6 +126,8 @@ const dict: Dictionary = {
   "Seconds per task": "Segundos por tarea",
   "Rounds per task": "Rondas por tarea",
   "Retries (another way)": "Reintentos (de otra forma)",
+  "Work on its own until the task is done": "Trabajar solo hasta terminar la tarea",
+  "On: {name} goes on by itself past its rounds and only stops at the token, time and rounds ceilings above, saying so. Off: it stops at the end of its rounds and waits for you.": "Activado: {name} sigue por su cuenta más allá de sus rondas y solo se detiene en los topes de tokens, tiempo y rondas de arriba, avisando. Desactivado: se detiene al terminar sus rondas y espera por ti.",
   "Tokens per day": "Tokens por día",
   "Actions per day": "Acciones por día",
   "no limit": "sin límite",

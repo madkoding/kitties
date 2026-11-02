@@ -82,6 +82,11 @@ type Limits struct {
 	// DayActions is how many actions that reach other people (posts, replies, mail, refunds) it
 	// may take in a day; past it each one waits for the person even when the kitty acts alone.
 	DayActions int `json:"day_actions,omitempty" yaml:"day_actions"`
+	// Attended brings back the cautious way: a kitty stops at the end of its rounds and waits to
+	// be told to go on. Left false (the default) the kitty works unattended: it goes on by itself
+	// through many windows of rounds, until the task is done or a safety cap (tokens, seconds, the
+	// windows) is reached, and only asks when something truly blocks it.
+	Attended bool `json:"attended,omitempty" yaml:"attended"`
 }
 
 // Validate refuses a negative limit.
@@ -115,6 +120,7 @@ func (l Limits) Or(d Limits) Limits {
 	if l.DayActions == 0 {
 		l.DayActions = d.DayActions
 	}
+	l.Attended = l.Attended || d.Attended
 	return l
 }
 
