@@ -99,3 +99,22 @@ func TestForgetAndBadFiles(t *testing.T) {
 		t.Fatal("the count must survive a failed save")
 	}
 }
+
+func TestWarnOncePerDayAndNeverAfterTheLimitWasTold(t *testing.T) {
+	s, err := Open(filepath.Join(t.TempDir(), "budget.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	clock := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return clock }
+	if !s.Warn("a") || s.Warn("a") {
+		t.Error("the warning goes out once a day")
+	}
+	clock = clock.Add(24 * time.Hour)
+	if !s.Warn("a") {
+		t.Error("a new day warns again")
+	}
+	if !s.Tell("b") || s.Warn("b") {
+		t.Error("no warning after the limit was told")
+	}
+}
