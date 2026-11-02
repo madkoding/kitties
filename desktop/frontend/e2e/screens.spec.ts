@@ -62,6 +62,9 @@ test("a group chat shows every member", async ({ page }) => {
 test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await open(page, `#chat/${ids.desktop}`);
   const trail = page.locator(".trail").first();
+  // A long task lists its latest steps; the earlier ones open behind a button.
+  await expect(trail.getByText("Opened example.com", { exact: true })).toBeHidden();
+  await page.getByTestId("trail-more").click();
   // Each step reads as a sentence; the coordinates and the tokens are only on hover.
   await expect(trail.getByText("Opened example.com", { exact: true })).toBeVisible();
   await expect(trail.getByText("Clicked on the screen", { exact: true })).toBeVisible();
@@ -70,6 +73,10 @@ test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await expect(page.locator(".msg .meta").first()).not.toContainText("tokens");
   await expect(page.locator(".desk-hero .shot-thumb img")).toBeVisible();
   await expect(page.getByTestId("step-detail")).toHaveCount(0);
+  // The picture for the docs is a chat with two tasks, so the folded task bar shows in it.
+  await page.goto(`/${Q}#chat/${ids.tasks}`);
+  await expect(page.getByTestId("desk-tasks")).toBeVisible();
+  await expect(page.locator(".desk-hero .shot-thumb img")).toBeVisible();
   await shot(page, "04-desktop-task");
   await page.goto(`/?theme=light&motion=off#chat/${ids.desktop}`);
   await expect(trail.getByText("Finished", { exact: true })).toBeVisible();
@@ -1746,6 +1753,7 @@ test("many desktop tasks fold into one bar: the latest shows, the rest open on d
   await expect(bar).toContainText("1/2");
   await page.getByTestId("desk-tasks-toggle").click();
   await expect(bar.getByRole("tab")).toHaveCount(2);
+  await expect(bar.locator(".desk-taskthumb")).toHaveCount(2);
   await bar.getByRole("tab").nth(1).click();
   await expect(bar).toContainText("2/2");
   await expect(bar.getByRole("tab")).toHaveCount(0);

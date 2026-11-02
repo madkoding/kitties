@@ -79,6 +79,21 @@ export function Shot({
   );
 }
 
+// ShotMini is a small picture with no button around it, for a row that is a button itself.
+function ShotMini({ path }: { path: string }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    let alive = true;
+    shotData(path)
+      .then((s) => alive && setSrc(s))
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [path]);
+  return src ? <img class="desk-taskthumb" src={src} alt="" /> : <span class="desk-taskthumb" />;
+}
+
 function StepRow({
   step,
   chat,
@@ -198,6 +213,7 @@ function Desk({
     (turns[i].kitty && kitties.get(turns[i].kitty!)?.name) || turns[i].from;
   // A task is named by what the person asked (the turn before it), not by the kitty, which is
   // the same on every row; the position goes first on the bar.
+  const lastShot = (i: number) => (turns[i].steps || []).filter((st) => st.shot).pop()?.shot;
   const taskLabel = (i: number, position = true) => {
     const ask = turns
       .slice(0, i)
@@ -275,7 +291,10 @@ function Desk({
                     setListOpen(false);
                   }}
                 >
-                  {n + 1} · {taskLabel(i, false)}
+                  {lastShot(i) && <ShotMini path={`/v1/chats/${chat}/shots/${lastShot(i)}`} />}
+                  <span class="desk-tasktext">
+                    {n + 1} · {taskLabel(i, false)}
+                  </span>
                 </button>
               ))}
             </div>

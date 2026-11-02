@@ -133,7 +133,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await say(desktop, "Tom, open https://example.com and tell me what the page says.");
   // A desktop chat with several tasks: the desktop column folds them into one bar.
   const tasks = await newChat(["tom"], "Tom on many tasks");
-  await say(tasks, "Tom, open https://example.com and tell me what the page says.");
+  await say(tasks, "Tom, browse https://example.net and tell me what the page says.");
   await say(tasks, "Tom, now visit https://example.org and tell me what it says.");
   // Nothing is limited by default: the person asked mimi to show posts to the team first.
   await api("POST", "/v1/approvals/rules", {
