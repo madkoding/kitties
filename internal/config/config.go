@@ -62,6 +62,11 @@ type Provider struct {
 	Headers     map[string]string `yaml:"headers" json:"headers,omitempty"`
 	// Tools is native (the provider's own calls, the default) or text (lines in the prompt).
 	Tools string `yaml:"tools" json:"tools,omitempty"`
+	// PromptCache is true by default: kitties asks the provider to cache the stable start of the
+	// prompt (system, tools, earlier turns). Set it to false to turn that off.
+	PromptCache *bool `yaml:"prompt_cache" json:"prompt_cache,omitempty"`
+	// CacheTTL is how long Anthropic keeps a cached prompt: 5m (default) or 1h.
+	CacheTTL string `yaml:"cache_ttl" json:"cache_ttl,omitempty"`
 	// Auth is empty for a key, or login for an account signed in from Settings (a ChatGPT plan
 	// for codex, GitHub Copilot, a Google login for gemini).
 	Auth string `yaml:"auth" json:"auth,omitempty"`
@@ -76,6 +81,7 @@ func (p Provider) Options() provider.Options {
 	return provider.Options{
 		Kind: p.Kind, Model: p.Model, APIKey: key, BaseURL: p.BaseURL, MaxTokens: p.MaxTokens,
 		Temperature: p.Temperature, Timeout: p.Timeout, MaxAttempts: p.MaxAttempts, Headers: p.Headers, Tools: p.Tools, Auth: p.Auth,
+		PromptCache: p.PromptCache, CacheTTL: p.CacheTTL,
 	}
 }
 

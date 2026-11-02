@@ -119,6 +119,12 @@ type Options struct {
 	// or "text" (described in the prompt, called with @tool lines; for a server that has no
 	// tool support).
 	Tools string
+	// PromptCache turns the provider's prompt caching on (nil, the default) or off. Where the
+	// provider caches by itself (OpenAI, Gemini, DeepSeek...) it only decides what kitties
+	// adds on top: the cache_control marks for Anthropic, the cache key for OpenAI.
+	PromptCache *bool
+	// CacheTTL is how long Anthropic keeps a cached prompt: "5m" (the default) or "1h".
+	CacheTTL string
 	// Auth is "" (a key) or AuthLogin (an account signed in from Settings).
 	Auth string
 	// Login gives the signed-in account's credentials for one request; the registry sets it
@@ -191,9 +197,19 @@ func (i Image) dataURL() string {
 }
 
 // Usage counts the tokens of one reply, when the provider reported them.
+//
+// Input is every prompt token, cached or not; CacheRead and CacheWrite say how many of them were
+// served from, or written to, the provider's prompt cache (both zero when it has none).
 type Usage struct {
-	Input  int `json:"input"`
-	Output int `json:"output"`
+	Input      int `json:"input"`
+	Output     int `json:"output"`
+	CacheRead  int `json:"cache_read,omitempty"`
+	CacheWrite int `json:"cache_write,omitempty"`
+}
+
+// Add sums two usages.
+func (u Usage) Add(o Usage) Usage {
+	return Usage{u.Input + o.Input, u.Output + o.Output, u.CacheRead + o.CacheRead, u.CacheWrite + o.CacheWrite}
 }
 
 // Reply is a provider's answer.
@@ -422,6 +438,18 @@ func argsJSON(args map[string]any) string {
 
 // emptyReply reports a reply with neither text nor calls.
 func emptyReply(r Reply) bool { return r.Content == "" && len(r.Calls) == 0 }
+
+// cacheOn reports whether prompt caching is wanted.
+func (c *HTTPClient) cacheOn() bool { return c.opts.PromptCache == nil || *c.opts.PromptCache }
+
+// cacheControl is the mark that ends a cacheable prefix in an Anthropic request.
+func (c *HTTPClient) cacheControl() map[string]any {
+	cc := map[string]any{"type": "ephemeral"}
+	if c.opts.CacheTTL == "1h" {
+		cc["ttl"] = "1h"
+	}
+	return cc
+}
 
 // post sends a JSON body to t and returns the answer's bytes.
 func (c *HTTPClient) post(ctx context.Context, t target, path string, body any) ([]byte, error) {

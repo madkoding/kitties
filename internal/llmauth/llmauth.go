@@ -436,6 +436,8 @@ func (m *Manager) track(f Flow, paste chan string, run func(ctx context.Context)
 	fl := &flow{Flow: f, started: m.now(), cancel: cancel, paste: paste}
 	m.mu.Lock()
 	m.flows[f.ID] = fl
+	// The answer is a copy taken before the goroutine below may change the flow.
+	snapshot := fl.Flow
 	m.mu.Unlock()
 	go func() {
 		defer cancel()
@@ -457,7 +459,7 @@ func (m *Manager) track(f Flow, paste chan string, run func(ctx context.Context)
 		}
 		fl.Status, fl.Who = Connected, c.Who
 	}()
-	return fl.Flow
+	return snapshot
 }
 
 // --- HTTP ----------------------------------------------------------------------------------

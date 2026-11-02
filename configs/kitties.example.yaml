@@ -13,6 +13,8 @@ providers:
     kind: anthropic              # openai | codex | anthropic | claude-code | gemini | ollama | groq
     model: claude-sonnet-5-5     # | ollama-cloud | openrouter | deepseek | qwen | mistral | copilot | custom
     max_tokens: 4096
+    prompt_cache: true         # default: cache the stable start of the prompt (set false to turn off)
+    cache_ttl: 5m              # Anthropic only: 5m (default) or 1h
   fast:
     kind: openai
     model: gpt-5.5

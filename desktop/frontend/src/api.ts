@@ -179,7 +179,7 @@ export interface Turn {
   detail?: string;
   // limits are the limits the kitty set on itself in this turn (an empty mode lifted one).
   limits?: { connector: string; action: string; mode: string; previous?: string }[];
-  usage?: { input: number; output: number };
+  usage?: { input: number; output: number; cache_read?: number; cache_write?: number };
 }
 
 export interface Session {
