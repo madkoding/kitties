@@ -1345,9 +1345,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			}
 			st.messages = append(st.messages, feedback(p.native, st.reply, st.replyText, outs, &extra)...)
 		}
-		if len(st.messages) > s.MaxTurns*2 {
-			st.messages = append(st.messages[:1], st.messages[len(st.messages)-s.MaxTurns*2:]...)
-		}
+		st.messages = trimHistory(st.messages, s.MaxTurns*2)
 		if err := s.overTokens(k); err != nil {
 			return "stopped: " + err.Error(), false
 		}
@@ -1548,4 +1546,18 @@ func (s *Service) transcript(system string, turns []Turn, k *kitty.Kitty) []prov
 		messages = append(messages, provider.Message{Role: "user", Content: "(continue)"})
 	}
 	return messages
+}
+
+// trimHistory keeps the first message and the last keep ones, and never starts the kept tail in
+// the middle of a tool exchange: a tool result whose call was cut away is rejected by the
+// providers, so the tail moves forward to the next message that is not a tool result.
+func trimHistory(messages []provider.Message, keep int) []provider.Message {
+	if keep <= 0 || len(messages) <= keep {
+		return messages
+	}
+	start := len(messages) - keep
+	for start < len(messages) && messages[start].Role == "tool" {
+		start++
+	}
+	return append(messages[:1:1], messages[start:]...)
 }

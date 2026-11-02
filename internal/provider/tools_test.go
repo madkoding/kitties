@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -81,17 +82,21 @@ func TestAnthropicTools(t *testing.T) {
 		t.Errorf("tools = %v", defs)
 	}
 	msgs := call["messages"].([]any)
-	if len(msgs) != 4 {
+	// The fixture answers c1 twice: the second answer has no call left and becomes plain text.
+	if len(msgs) != 5 {
 		t.Fatalf("messages = %d: %v", len(msgs), msgs)
 	}
 	blocks := func(i int) []any { return msgs[i].(map[string]any)["content"].([]any) }
 	if use := blocks(1); use[0].(map[string]any)["type"] != "tool_use" || use[0].(map[string]any)["id"] != "c1" {
 		t.Errorf("tool_use = %v", use)
 	}
-	if results := blocks(2); len(results) != 2 || results[0].(map[string]any)["type"] != "tool_result" || results[1].(map[string]any)["content"] != "done" {
+	if results := blocks(2); len(results) != 1 || results[0].(map[string]any)["type"] != "tool_result" {
 		t.Errorf("tool results share a turn: %v", results)
 	}
-	if last := blocks(3); len(last) != 2 || last[1].(map[string]any)["type"] != "image" {
+	if orphan := blocks(3); orphan[0].(map[string]any)["type"] != "text" {
+		t.Errorf("orphan result = %v", orphan)
+	}
+	if last := blocks(4); len(last) != 2 || last[1].(map[string]any)["type"] != "image" {
 		t.Errorf("user with image = %v", last)
 	}
 }
@@ -147,5 +152,97 @@ func TestAnthropicSanitizesHistoryIDs(t *testing.T) {
 	}
 	if block(1, 1)["id"] != "type_1" || block(2, 0)["tool_use_id"] != "click_0" || block(2, 1)["tool_use_id"] != "type_1" {
 		t.Errorf("ids not sanitized consistently: %v", msgs)
+	}
+}
+
+// Every tool_result must answer a tool_use of the turn right before it, whatever the history
+// looks like (empty ids, truncated start, results with no call, calls with no result).
+func TestAnthropicPairsToolTurns(t *testing.T) {
+	cases := map[string][]Message{
+		"empty ids": {
+			{Role: "user", Content: "go"},
+			{Role: "assistant", ToolCalls: []ToolCall{{Name: "click"}, {Name: "type"}}},
+			{Role: "tool", ToolName: "type", Content: "a"},
+			{Role: "tool", ToolName: "click", Content: "b"},
+		},
+		"repeated ids": {
+			{Role: "user", Content: "go"},
+			{Role: "assistant", ToolCalls: []ToolCall{{ID: "x", Name: "click"}}},
+			{Role: "tool", ToolCallID: "x", Content: "a"},
+			{Role: "assistant", ToolCalls: []ToolCall{{ID: "x", Name: "click"}}},
+			{Role: "tool", ToolCallID: "x", Content: "b"},
+		},
+		"orphan result after truncation": {
+			{Role: "tool", ToolCallID: "gone", Content: "stale"},
+			{Role: "assistant", Content: "hi"},
+			{Role: "tool", Content: "stale too"},
+			{Role: "user", Content: "go"},
+		},
+		"result with an unknown id": {
+			{Role: "user", Content: "go"},
+			{Role: "assistant", ToolCalls: []ToolCall{{ID: "a", Name: "click"}}},
+			{Role: "tool", ToolCallID: "other", Content: "x"},
+		},
+		"call without result": {
+			{Role: "user", Content: "go"},
+			{Role: "assistant", ToolCalls: []ToolCall{{ID: "a", Name: "click"}, {ID: "b", Name: "type"}}},
+			{Role: "tool", ToolCallID: "a", Content: "x"},
+			{Role: "user", Content: "again"},
+		},
+	}
+	for name, convo := range cases {
+		c, r := client(t, "anthropic", func(int) (int, string) { return 200, `{"content":[{"type":"text","text":"ok"}]}` })
+		if _, err := c.CompleteTools(context.Background(), convo, tools); err != nil {
+			t.Fatalf("%s: %v", name, err)
+		}
+		msgs := r.calls[0]["messages"].([]any)
+		var open map[string]bool
+		for i, m := range msgs {
+			mm := m.(map[string]any)
+			next := map[string]bool{}
+			for _, b := range mm["content"].([]any) {
+				b := b.(map[string]any)
+				switch b["type"] {
+				case "tool_result":
+					id, _ := b["tool_use_id"].(string)
+					if !open[id] {
+						t.Errorf("%s: message %d: tool_result %q has no tool_use right before it: %v", name, i, id, msgs)
+					}
+					delete(open, id)
+				case "tool_use":
+					id, _ := b["id"].(string)
+					if next[id] {
+						t.Errorf("%s: duplicate tool_use id %q", name, id)
+					}
+					next[id] = true
+				}
+			}
+			if len(open) > 0 {
+				t.Errorf("%s: message %d: tool_use left unanswered: %v", name, i, open)
+			}
+			open = next
+		}
+		if len(open) > 0 {
+			t.Errorf("%s: last assistant turn has unanswered tool_use: %v", name, open)
+		}
+	}
+}
+
+// The other families need the same pairing: an orphan result becomes text, never a tool message.
+func TestOtherFamiliesDropOrphanToolResults(t *testing.T) {
+	convo := []Message{
+		{Role: "tool", ToolCallID: "gone", ToolName: "click", Content: "stale"},
+		{Role: "user", Content: "go"},
+	}
+	for _, kind := range []string{"openai", "gemini"} {
+		c, r := client(t, kind, func(int) (int, string) {
+			return 200, `{"choices":[{"message":{"content":"ok"}}],"candidates":[{"content":{"parts":[{"text":"ok"}]}}]}`
+		})
+		if _, err := c.CompleteTools(context.Background(), convo, tools); err != nil {
+			t.Fatalf("%s: %v", kind, err)
+		}
+		if b, _ := json.Marshal(r.calls[0]); strings.Contains(string(b), `"tool_call_id"`) || strings.Contains(string(b), "functionResponse") {
+			t.Errorf("%s kept an orphan result: %s", kind, b)
+		}
 	}
 }
