@@ -186,8 +186,21 @@ function Desk({
       list.current.scrollTop = list.current.scrollHeight;
     }
   }, [steps.length, turn.working, index]);
+  const [listOpen, setListOpen] = useState(false);
   const who = (i: number) =>
     (turns[i].kitty && kitties.get(turns[i].kitty!)?.name) || turns[i].from;
+  // A task is named by what the person asked (the turn before it), not by the kitty, which is
+  // the same on every row; the position goes first on the bar.
+  const taskLabel = (i: number, position = true) => {
+    const ask = turns
+      .slice(0, i)
+      .reverse()
+      .find((x) => x.from === "user")
+      ?.text.replace(/\s+/g, " ")
+      .trim();
+    const name = ask ? (ask.length > 48 ? `${ask.slice(0, 47)}…` : ask) : who(i);
+    return position ? `${tasks.indexOf(i) + 1}/${tasks.length} · ${name}` : name;
+  };
   return (
     <aside
       class="conv-desk"
@@ -212,18 +225,54 @@ function Desk({
         {turn.working && <span class="spinner" aria-label={t("working on its computer…")} />}
       </header>
       {tasks.length > 1 && (
-        <div class="desk-tasks" role="tablist" aria-label={t("Tasks")}>
-          {tasks.map((i, n) => (
+        <div class="desk-tasks" data-testid="desk-tasks">
+          <div class="desk-taskbar">
             <button
-              key={i}
-              role="tab"
-              aria-selected={i === index}
-              class={`plain desk-task ${i === index ? "on" : ""}`}
-              onClick={() => onPick(i)}
+              class="plain"
+              aria-label={t("Previous task")}
+              disabled={tasks.indexOf(index) === 0}
+              onClick={() => onPick(tasks[tasks.indexOf(index) - 1])}
             >
-              {n + 1} · {who(i)}
+              ‹
             </button>
-          ))}
+            <span class="desk-tasklabel" title={taskLabel(index)}>
+              {taskLabel(index)}
+            </span>
+            <button
+              class="plain"
+              aria-label={t("Next task")}
+              disabled={tasks.indexOf(index) === tasks.length - 1}
+              onClick={() => onPick(tasks[tasks.indexOf(index) + 1])}
+            >
+              ›
+            </button>
+            <button
+              class="plain desk-taskcount"
+              aria-expanded={listOpen}
+              data-testid="desk-tasks-toggle"
+              onClick={() => setListOpen(!listOpen)}
+            >
+              {t("{n} tasks", { n: tasks.length })}
+            </button>
+          </div>
+          {listOpen && (
+            <div class="desk-tasklist" role="tablist" aria-label={t("Tasks")}>
+              {tasks.map((i, n) => (
+                <button
+                  key={i}
+                  role="tab"
+                  aria-selected={i === index}
+                  class={`plain desk-task ${i === index ? "on" : ""}`}
+                  onClick={() => {
+                    onPick(i);
+                    setListOpen(false);
+                  }}
+                >
+                  {n + 1} · {taskLabel(i, false)}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       )}
       {shot >= 0 && (

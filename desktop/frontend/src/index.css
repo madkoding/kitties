@@ -1533,6 +1533,42 @@ html.mac-inset aside .titlebar {
   flex-wrap: wrap;
   gap: 0.375rem;
 }
+.desk-taskbar {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--t3);
+}
+.desk-taskbar button:disabled {
+  opacity: 0.35;
+}
+.desk-tasklabel {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.desk-taskcount {
+  color: var(--t3);
+  font-size: 0.7rem;
+  text-decoration: underline dotted;
+}
+.desk-tasklist {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  max-height: 11rem;
+  overflow-y: auto;
+  margin-top: 0.375rem;
+}
+.desk-tasklist .desk-task {
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .desk-task {
   padding: 0.125rem 0.5rem;
   font-size: 0.75rem;
