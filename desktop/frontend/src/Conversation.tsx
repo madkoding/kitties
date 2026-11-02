@@ -594,6 +594,19 @@ function TurnCard({
               {t("{input}→{output} tokens", { input: turn.usage.input, output: turn.usage.output })}
             </span>
           ) : null}
+          {tech && turn.usage?.cache_read ? (
+            <span
+              data-testid="cache-hit"
+              title={t("{read} read from cache, {write} written", {
+                read: turn.usage.cache_read,
+                write: turn.usage.cache_write ?? 0,
+              })}
+            >
+              {t("{pct}% cached", {
+                pct: Math.round((100 * turn.usage.cache_read) / Math.max(1, turn.usage.input)),
+              })}
+            </span>
+          ) : null}
           {turn.approvals?.map((a) => (
             <a key={a.id} class="tag tag-amber tag-logo" href="#new-approvals" title={a.summary}>
               <IconShield size={11} />{" "}

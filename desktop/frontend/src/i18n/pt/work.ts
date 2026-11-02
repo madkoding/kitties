@@ -16,6 +16,8 @@ const dict: Dictionary = {
   "working on its computer…": "trabalhando no computador dele…",
   "{input} → {output} tokens": "{input} → {output} tokens",
   "{input}→{output} tokens": "{input}→{output} tokens",
+  "{pct}% cached": "{pct}% em cache",
+  "{read} read from cache, {write} written": "{read} lidos do cache, {write} gravados",
   "waiting for your yes: {action} ({connector})": "esperando o seu sim: {action} ({connector})",
   "skill · {name}": "habilidade · {name}",
   "No chat open": "Nenhum chat aberto",
