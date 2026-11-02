@@ -976,7 +976,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		if err := s.overTokens(k); err != nil {
 			return Turn{}, nil, err
 		}
-		reply, err := ask(ctx, brain, native, messages, tools)
+		reply, err := ask(ctx, brain, native, s.withMachine(messages, k), tools)
 		if err != nil {
 			return Turn{}, nil, err
 		}
@@ -996,7 +996,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		// call is too: both are dropped rather than answered.
 		kept := actions[:0]
 		for _, a := range actions {
-			if (a.kind == "tool" && !k.Desktop) || (a.kind == "connector" && len(allowed) == 0) {
+			if ((a.kind == "tool" || a.kind == "machine") && !k.Desktop) || (a.kind == "connector" && len(allowed) == 0) {
 				continue
 			}
 			if a.kind == "delegate" && !s.canDelegate(k) {
@@ -1275,6 +1275,9 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 					t.Delegations = append(t.Delegations, turn.Delegations...)
 				})
 				outs = append(outs, o...)
+				if a.kind == "machine" {
+					looked = true
+				}
 				continue
 			}
 			da := desktop.Action{Name: a.name, Args: a.args, Raw: a.raw}
@@ -1283,6 +1286,13 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 				s.appendStep(id, index, Step{At: s.now(), Action: a.name, Args: a.args, Result: summary})
 				outs = append(outs, outcome{action: a, text: "finished"})
 				break
+			}
+			if err := s.ensureMachine(ctx, id, index, k); err != nil {
+				outs = append(outs, outcome{action: a, err: err.Error()})
+				if ctx.Err() != nil {
+					break
+				}
+				continue
 			}
 			if da.Name == "ask_help" {
 				looked = true

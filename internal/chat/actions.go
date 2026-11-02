@@ -33,6 +33,9 @@ const (
 	prefixArtifact  = "artifact_"
 )
 
+// machineHelp is what the machine tool says about itself.
+const machineHelp = "Your machine is the computer your desktop runs on. It can be off: the person turned it off, you did, or it turned itself off after a time without use. status tells whether it is on; on turns it on and waits until it is up; off turns it off when you are done with the display for a good while (it is refused while the person is watching or controlling it). A desktop tool used while it is off turns it on by itself."
+
 // toolSet is the tools a kitty is offered natively.
 func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.Tool {
 	var tools []provider.Tool
@@ -70,6 +73,7 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 			provider.Tool{Name: "ask_help", Description: "Ask the person to take control of your desktop for what you cannot do alone (a password, a CAPTCHA, a code they receive, a payment); you wait until they give it back, then continue.", Parameters: obj(map[string]any{"reason": str("what you need them to do")}, "reason")},
 			provider.Tool{Name: "done", Description: "Finish the desktop task and report what you achieved.", Parameters: obj(map[string]any{"summary": str("what you did and found")}, "summary")},
 		)
+		tools = append(tools, provider.Tool{Name: "machine", Description: machineHelp, Parameters: obj(map[string]any{"action": str("status (the default), on or off")})})
 	}
 	for _, name := range sortedKeys(allowed) {
 		tools = append(tools, provider.Tool{Name: prefixConnector + name, Description: allowed[name],
@@ -140,6 +144,8 @@ func fromCalls(calls []provider.ToolCall) []action {
 			a.kind, a.name = "memory", strings.TrimPrefix(c.Name, "memory_")
 		case c.Name == "limit":
 			a.kind, a.name = "limit", "set"
+		case c.Name == "machine":
+			a.kind, a.name = "machine", "machine"
 		case c.Name == "delegate":
 			a.kind = "delegate"
 			a.name, _ = a.args["kitty"].(string)
@@ -156,7 +162,11 @@ func fromText(text string) ([]action, string) {
 	var out []action
 	tools, rest := desktop.Parse(text)
 	for _, t := range tools {
-		out = append(out, action{kind: "tool", name: t.Name, args: t.Args, raw: t.Raw})
+		kind := "tool"
+		if t.Name == "machine" {
+			kind = "machine"
+		}
+		out = append(out, action{kind: kind, name: t.Name, args: t.Args, raw: t.Raw})
 	}
 	directives, rest := parseDirectives(rest)
 	for _, d := range directives {
@@ -214,6 +224,8 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 			out = append(out, s.runMemory(id, a, k))
 		case "limit":
 			out = append(out, s.runLimit(id, a, k, allowed, turn))
+		case "machine":
+			out = append(out, s.runMachine(ctx, a, k))
 		case "connector":
 			if len(allowed) == 0 {
 				out = append(out, outcome{action: a, err: "this kitty has no connectors"})

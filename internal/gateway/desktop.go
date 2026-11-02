@@ -31,6 +31,86 @@ func (s *Server) desktopRoutes() {
 	s.mux.Handle("GET /v1/kitties/{ref}/desktop", api(s.handleDesktopInfo))
 	s.mux.Handle("POST /v1/kitties/{ref}/backup", api(s.handleBackup))
 	s.mux.Handle("POST /v1/kitties/{ref}/update", api(s.handleUpdate))
+	s.mux.Handle("GET /v1/kitties/{ref}/power", api(s.handlePower))
+	s.mux.Handle("POST /v1/kitties/{ref}/power", api(s.handleSetPower))
+}
+
+// Powerer is the machine of a kitty: whether it is on, and turning it on and off.
+type Powerer interface {
+	Power(ref string) (kitty.Power, error)
+	PowerOn(ref string) (*kitty.Kitty, error)
+	PowerOff(ctx context.Context, ref string, o kitty.OffOptions) error
+}
+
+func (s *Server) powerer(w http.ResponseWriter) Powerer {
+	p, ok := s.fleet.(Powerer)
+	if !ok {
+		fail(w, http.StatusNotFound, errors.New("this gateway cannot turn machines on and off"))
+	}
+	return p
+}
+
+// powerCode is the status of a failed power call: a machine in use is a conflict, a kitty
+// without a machine a bad request.
+func powerCode(err error) int {
+	var busy *kitty.InUseError
+	switch {
+	case errors.As(err, &busy):
+		return http.StatusConflict
+	case errors.Is(err, kitty.ErrNoMachine):
+		return http.StatusBadRequest
+	}
+	return codeFor(err)
+}
+
+// handlePower tells whether a kitty's machine is on, what keeps it on and when it turns itself off.
+func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
+	p := s.powerer(w)
+	if p == nil {
+		return
+	}
+	power, err := p.Power(r.PathValue("ref"))
+	if err != nil {
+		fail(w, powerCode(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"power": power})
+}
+
+// handleSetPower turns a kitty's machine on ({"on": true}, 202: it comes up in the background) or
+// off ({"on": false}; 409 when it is in use, unless "force" is true).
+func (s *Server) handleSetPower(w http.ResponseWriter, r *http.Request) {
+	p := s.powerer(w)
+	if p == nil {
+		return
+	}
+	var body struct {
+		On    *bool `json:"on"`
+		Force bool  `json:"force"`
+	}
+	if err := decode(r, &body); err != nil || body.On == nil {
+		fail(w, http.StatusBadRequest, errors.New(`send {"on": true} or {"on": false}`))
+		return
+	}
+	ref := r.PathValue("ref")
+	status := http.StatusOK
+	if *body.On {
+		if _, err := p.PowerOn(ref); err != nil {
+			fail(w, powerCode(err), err)
+			return
+		}
+		status = http.StatusAccepted
+	} else if err := p.PowerOff(r.Context(), ref, kitty.OffOptions{Reason: kitty.OffManual, Force: body.Force}); err != nil {
+		fail(w, powerCode(err), err)
+		return
+	}
+	power, err := p.Power(ref)
+	if err != nil {
+		fail(w, powerCode(err), err)
+		return
+	}
+	k, _ := s.fleet.Get(ref)
+	reply(w, status, map[string]any{"power": power, "kitty": k})
 }
 
 func (s *Server) handleDesktopInfo(w http.ResponseWriter, r *http.Request) {

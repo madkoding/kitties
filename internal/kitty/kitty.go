@@ -37,9 +37,15 @@ type Kitty struct {
 	// Theme is the look of its desktop, one of Themes; empty is the image's own (Numix, dark).
 	Theme string `json:"theme,omitempty"`
 	// Container is the container name, empty without a desktop.
-	Container string    `json:"container,omitempty"`
-	Status    string    `json:"status"`
-	Error     string    `json:"error,omitempty"`
+	Container string `json:"container,omitempty"`
+	Status    string `json:"status"`
+	Error     string `json:"error,omitempty"`
+	// AutoOff is the minutes its machine may stay on without use before it turns itself off: nil
+	// takes the gateway's default (containers.auto_off_minutes, 15), 0 is never.
+	AutoOff *int `json:"auto_off_minutes,omitempty"`
+	// OffReason is why the machine is off (OffIdle, OffManual, OffKitty), empty when it is on or
+	// the reason is not known.
+	OffReason string    `json:"off_reason,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	// Workspace is the host folder mounted into the container.
 	Workspace string `json:"workspace,omitempty"`

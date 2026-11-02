@@ -161,6 +161,10 @@ type Message struct {
 	ToolCallID string `json:"tool_call_id,omitempty"`
 	// ToolName is the name of the call a tool turn answers (Gemini matches by name).
 	ToolName string `json:"tool_name,omitempty"`
+	// Volatile marks a message that changes from request to request (the state of the kitty's
+	// machine): the cache breakpoint goes before it, so what changes never spoils the cached
+	// prefix. It is sent like any other message.
+	Volatile bool `json:"-"`
 }
 
 // Tool is one function the model may call natively.

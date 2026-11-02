@@ -328,6 +328,7 @@ const KIND_TAG: Record<string, string> = {
   delegated: "tag-magenta",
   recovered: "tag-green",
   updated: "tag-green",
+  off: "tag-amber",
 };
 
 export function JournalPanel({

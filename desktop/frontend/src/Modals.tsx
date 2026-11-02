@@ -1,6 +1,7 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo } from "./api";
 import {
+  ApiError,
   api,
   errText,
   gatewayAddress,
@@ -17,6 +18,7 @@ import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly
 import { ProviderLogo } from "./ConnectorLogo";
 import { IconPlay, IconStop, IconTrash } from "./icons";
 import DesktopCare from "./DesktopCare";
+import MachinePower from "./MachinePower";
 import LiveDesktop from "./LiveDesktop";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import { MemoryPanel } from "./Memory";
@@ -615,6 +617,21 @@ export function KittyDrawer({
       setErr((e as Error).message);
     }
   };
+  // A kitty with a machine is turned on and off through its power: a machine in use asks first.
+  const power = (on: boolean) =>
+    act(async () => {
+      try {
+        await api.setPower(kitty.id, on);
+      } catch (e) {
+        if (!on && e instanceof ApiError && e.status === 409) {
+          if (await ask(e.message, t("Turn off anyway"))) {
+            await api.setPower(kitty.id, false, true);
+          }
+          return;
+        }
+        throw e;
+      }
+    });
   const soul = kitty.soul || {};
   const running = kitty.status === "running";
   const model = models.find((m) => m.name === kitty.provider);
@@ -660,14 +677,14 @@ export function KittyDrawer({
           {running ? (
             <button
               class="btn-ghost px-3 py-2 text-sm flex items-center gap-2"
-              onClick={() => act(() => api.stopKitty(kitty.id))}
+              onClick={() => (kitty.desktop ? power(false) : act(() => api.stopKitty(kitty.id)))}
             >
               <IconStop size={14} /> {t("Stop")}
             </button>
           ) : (
             <button
               class="btn-ghost px-3 py-2 text-sm flex items-center gap-2"
-              onClick={() => act(() => api.startKitty(kitty.id))}
+              onClick={() => (kitty.desktop ? power(true) : act(() => api.startKitty(kitty.id)))}
             >
               <IconPlay size={14} /> {t("Start")}
             </button>
@@ -679,6 +696,7 @@ export function KittyDrawer({
       {kitty.desktop && (
         <div class="min-w-0">
           <div class="section-title !mx-0 mt-5">{t("Desktop")}</div>
+          <MachinePower kitty={kitty} onChanged={onChanged} />
           {running ? (
             <LiveDesktop kitty={kitty} inline onClose={() => undefined} />
           ) : (

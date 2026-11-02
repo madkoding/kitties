@@ -6,6 +6,8 @@
 | `GET /v1/providers` · `GET /v1/connectors`| what the kitties can think with and reach      |
 | `GET /v1/kitties` · `POST /v1/kitties`    | the fleet; create `{name, provider, soul, connectors, desktop, start}` |
 | `POST /v1/kitties/{ref}/start` · `/stop` · `DELETE /v1/kitties/{ref}` | lifecycle, by id or name |
+| `GET /v1/kitties/{ref}/power` · `POST /v1/kitties/{ref}/power` `{on, force}` | its machine: `{state: on\|starting\|off\|error, off_reason, auto_off_minutes, in_use, in_use_by, off_in_seconds…}`; turn it on (202, it comes up in the background) or off (409 when something uses it, unless `force`) |
+| `PATCH /v1/kitties/{ref}` `{auto_off_minutes}` | minutes without use before its machine turns itself off (`0` never; `auto_off_default: true` goes back to the gateway's default) |
 | `POST /v1/kitties/{ref}/exec` `{argv}`    | run a command in its container                 |
 | `GET /v1/kitties/{ref}/screenshot`        | a PNG of its display                           |
 | `POST /v1/kitties/{ref}/control` `{hold}` | take its display over, or give it back         |

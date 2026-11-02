@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,5 +91,93 @@ func TestDesktopRoutes(t *testing.T) {
 				t.Errorf("%s %s with %q = %d, want %d", c[0], c[1], err, code, want)
 			}
 		}
+	}
+}
+
+// powerFleet is a fleet whose kitties have a machine.
+type powerFleet struct {
+	*fakeFleet
+	power  kitty.Power
+	inUse  bool
+	ons    []string
+	offs   []kitty.OffOptions
+	offErr error
+}
+
+func (p *powerFleet) Power(ref string) (kitty.Power, error) {
+	if _, err := p.Get(ref); err != nil {
+		return kitty.Power{}, err
+	}
+	if ref == "bo" {
+		return kitty.Power{}, kitty.ErrNoMachine
+	}
+	return p.power, nil
+}
+func (p *powerFleet) PowerOn(ref string) (*kitty.Kitty, error) {
+	if ref == "bo" {
+		return nil, kitty.ErrNoMachine
+	}
+	p.ons = append(p.ons, ref)
+	p.power.State = kitty.PowerStarting
+	return p.Get(ref)
+}
+func (p *powerFleet) PowerOff(_ context.Context, ref string, o kitty.OffOptions) error {
+	if p.inUse && !o.Force {
+		return &kitty.InUseError{Kitty: "ana", By: kitty.UseTask}
+	}
+	p.offs = append(p.offs, o)
+	p.power.State = kitty.PowerOff
+	return p.offErr
+}
+
+func TestPowerRoutes(t *testing.T) {
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{
+		"a1": {ID: "a1", Name: "ana", Desktop: true, Status: kitty.StatusRunning},
+		"b1": {ID: "b1", Name: "bo"},
+	}}
+	chats := &fakeChats{sessions: map[string]*chat.Session{}}
+	// A fleet that cannot turn machines on and off.
+	plain := httptest.NewServer(New(f, chats, "tok", "test"))
+	defer plain.Close()
+	if code, _, _ := call(t, plain, "GET", "/v1/kitties/ana/power", "tok", nil); code != 404 {
+		t.Errorf("without power = %d", code)
+	}
+	p := &powerFleet{fakeFleet: f, power: kitty.Power{State: kitty.PowerOn, AutoOffMinutes: 15}}
+	srv := httptest.NewServer(New(p, chats, "tok", "test"))
+	defer srv.Close()
+	if code, _, _ := call(t, srv, "GET", "/v1/kitties/ana/power", "", nil); code != 401 {
+		t.Errorf("without a token = %d", code)
+	}
+	code, got, _ := call(t, srv, "GET", "/v1/kitties/ana/power", "tok", nil)
+	pw, _ := got["power"].(map[string]any)
+	if code != 200 || pw["state"] != "on" || pw["auto_off_minutes"] != 15.0 {
+		t.Errorf("power = %d %v", code, got)
+	}
+	if code, _, _ := call(t, srv, "GET", "/v1/kitties/zz/power", "tok", nil); code != 404 {
+		t.Errorf("unknown = %d", code)
+	}
+	if code, _, _ := call(t, srv, "GET", "/v1/kitties/bo/power", "tok", nil); code != 400 {
+		t.Errorf("no machine = %d", code)
+	}
+	// Off, then on (in the background: 202), and the body is checked.
+	if code, got, _ := call(t, srv, "POST", "/v1/kitties/ana/power", "tok", `{"on": false}`); code != 200 || len(p.offs) != 1 || p.offs[0].Reason != kitty.OffManual || p.offs[0].Force || got["power"].(map[string]any)["state"] != "off" {
+		t.Errorf("off = %d %v %+v", code, got, p.offs)
+	}
+	if code, got, _ := call(t, srv, "POST", "/v1/kitties/ana/power", "tok", `{"on": true}`); code != http.StatusAccepted || len(p.ons) != 1 || got["power"].(map[string]any)["state"] != "starting" {
+		t.Errorf("on = %d %v", code, got)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/ana/power", "tok", `{}`); code != 400 {
+		t.Errorf("no choice = %d", code)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/bo/power", "tok", `{"on": true}`); code != 400 {
+		t.Errorf("on without a machine = %d", code)
+	}
+	// In use: 409 unless forced.
+	p.inUse = true
+	if code, got, _ := call(t, srv, "POST", "/v1/kitties/ana/power", "tok", `{"on": false}`); code != 409 || !strings.Contains(got["error"].(string), "working on a task") {
+		t.Errorf("off in use = %d %v", code, got)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/kitties/ana/power", "tok", `{"on": false, "force": true}`); code != 200 || !p.offs[len(p.offs)-1].Force {
+		t.Errorf("forced off = %d", code)
 	}
 }

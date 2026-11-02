@@ -24,6 +24,24 @@ export interface Kitty {
   approvals?: "ask" | "auto" | "";
   // theme is the look of its desktop (a Lumen (Openbox) theme); empty is the image's own, Numix (dark).
   theme?: string;
+  // auto_off_minutes is how long its machine stays on without use (0 is never); absent is the
+  // gateway's default. off_reason is why the machine is off (idle, manual or kitty).
+  auto_off_minutes?: number;
+  off_reason?: "idle" | "manual" | "kitty" | "";
+}
+
+// Power is the state of a kitty's machine (its desktop): on, starting, off or error, what keeps it
+// on and when it turns itself off.
+export interface Power {
+  state: "on" | "starting" | "off" | "error";
+  error?: string;
+  off_reason?: "idle" | "manual" | "kitty" | "";
+  auto_off_minutes: number;
+  auto_off_custom: boolean;
+  in_use: boolean;
+  in_use_by?: "task" | "control" | "watch" | "command";
+  idle_seconds: number;
+  off_in_seconds?: number;
 }
 
 // THEMES are the looks a kitty's desktop can wear, as the gateway knows them.
@@ -134,6 +152,7 @@ export interface JournalEntry {
     | "delegated"
     | "recovered"
     | "skipped"
+    | "off"
     | "event";
   text: string;
   goal?: string;
@@ -668,8 +687,18 @@ export const api = {
       backup?: string;
       approvals?: string;
       theme?: string;
+      auto_off_minutes?: number;
+      auto_off_default?: boolean;
     },
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
+  // power is the state of a kitty's machine; setPower turns it on (it comes up in the background)
+  // or off (a 409 says what is using it; force turns it off anyway).
+  power: (ref: string) =>
+    request<{ power: Power }>("GET", `/v1/kitties/${ref}/power`).then((r) => r.power),
+  setPower: (ref: string, on: boolean, force = false) =>
+    request<{ power: Power }>("POST", `/v1/kitties/${ref}/power`, { on, force }).then(
+      (r) => r.power,
+    ),
   startKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/start`),
   // controlKitty takes a kitty's display over (hold) or gives it back; inputKitty is a click,
   // keys or text of the person on it.

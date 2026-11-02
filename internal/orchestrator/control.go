@@ -29,6 +29,7 @@ func (m *Manager) Hold(ref string, on bool) (bool, error) {
 	if on && !k.Desktop {
 		return false, fmt.Errorf("%s has no desktop", k.Name)
 	}
+	m.use.touch(k.ID, m.now())
 	m.holdMu.Lock()
 	defer m.holdMu.Unlock()
 	if m.holds == nil {
@@ -114,7 +115,12 @@ func (m *Manager) Stream(ctx context.Context, ref string, fps, quality int) (io.
 	if !k.Desktop {
 		return nil, fmt.Errorf("%s has no desktop", k.Name)
 	}
-	return m.ctr().Stream(ctx, k.Container, fps, quality)
+	rc, err := m.ctr().Stream(ctx, k.Container, fps, quality)
+	if err != nil {
+		return nil, err
+	}
+	// A live view open is the person watching: the machine stays on while it is.
+	return watchedStream{ReadCloser: rc, done: m.use.watch(k.ID, m.now)}, nil
 }
 
 // MaxClipboard is the most text the clipboard of a display takes from the person at once.

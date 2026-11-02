@@ -352,3 +352,23 @@ func TestUpdatesPublicKey(t *testing.T) {
 		}
 	}
 }
+
+func TestAutoOffMinutes(t *testing.T) {
+	base := "providers:\n  p:\n    kind: ollama\n    model: m\ndefault_provider: p\n"
+	cfg, err := Parse([]byte(base))
+	if err != nil || cfg.Containers.AutoOffMinutes != 15 {
+		t.Fatalf("default = %d, %v", cfg.Containers.AutoOffMinutes, err)
+	}
+	never, err := Parse([]byte(base + "containers:\n  auto_off_minutes: 0\n"))
+	if err != nil || never.Containers.AutoOffMinutes != 0 {
+		t.Errorf("never = %d, %v", never.Containers.AutoOffMinutes, err)
+	}
+	if long, err := Parse([]byte(base + "containers:\n  auto_off_minutes: 90\n")); err != nil || long.Containers.AutoOffMinutes != 90 {
+		t.Errorf("90 = %d, %v", long.Containers.AutoOffMinutes, err)
+	}
+	for _, bad := range []string{"-5", "99999"} {
+		if _, err := Parse([]byte(base + "containers:\n  auto_off_minutes: " + bad + "\n")); err == nil || !strings.Contains(err.Error(), "auto_off_minutes") {
+			t.Errorf("auto_off_minutes %s = %v", bad, err)
+		}
+	}
+}

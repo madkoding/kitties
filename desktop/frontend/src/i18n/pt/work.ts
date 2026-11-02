@@ -472,6 +472,39 @@ const dict: Dictionary = {
     "{name} ficou sem orçamento para esta tarefa; pode continuar de onde parou.",
   Continue: "Continuar",
   "Continue where you left off.": "Continue de onde parou.",
+
+  // The machine
+  "Turn off anyway": "Desligar mesmo assim",
+  "Turned its machine off": "Desligou sua máquina",
+  "Checked its machine": "Verificou sua máquina",
+  "Turned its machine on": "Ligou sua máquina",
+  Never: "Nunca",
+  "1 hour": "1 hora",
+  "{n} hours": "{n} horas",
+  "{n} minutes": "{n} minutos",
+  "working on a task": "trabalhando em uma tarefa",
+  "you have taken control": "você assumiu o controle",
+  "you are watching its desktop": "você está vendo a área de trabalho dele",
+  "running a command": "executando um comando",
+  "in use": "em uso",
+  "Starting…": "Iniciando…",
+  "Failed to start: {error}": "Não conseguiu iniciar: {error}",
+  "Failed to start": "Não conseguiu iniciar",
+  "Off: it turned itself off after a time without use":
+    "Desligada: desligou sozinha após um tempo sem uso",
+  "Off: the kitty turned it off": "Desligada: o kitty a desligou",
+  Off: "Desligada",
+  "On, in use: {what}": "Ligada, em uso: {what}",
+  "On. It never turns itself off.": "Ligada. Nunca se desliga sozinha.",
+  "On. It turns itself off in about {n} min if it is not used.":
+    "Ligada. Desliga sozinha em cerca de {n} min se não for usada.",
+  On: "Ligada",
+  "Turn off after": "Desligar após",
+  Default: "Padrão",
+  "Default ({time})": "Padrão ({time})",
+  "{name}'s machine turns itself off after this time without use, never in the middle of a task or while you watch its desktop. {name} knows whether it is on, and turns it on by itself when it needs it.":
+    "A máquina de {name} se desliga sozinha após esse tempo sem uso, nunca no meio de uma tarefa nem enquanto você vê a área de trabalho dela. {name} sabe se ela está ligada e a liga sozinha quando precisa.",
+  off: "desligada",
 };
 
 export default dict;

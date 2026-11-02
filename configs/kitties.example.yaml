@@ -81,6 +81,7 @@ containers:
   workspace: ""                  # host folder with one subfolder per kitty; empty is data_dir/work
   auto_update: true              # new desktop image: download it and make idle desktops anew (sessions kept)
   update_check_hours: 6          # how often to look for one
+  auto_off_minutes: 15           # a kitty's machine turns itself off after this long without use (0 = never); per kitty in its window
 
 updates:
   window: ""                     # e.g. 02:00-06:00: automatic updates (desktops, Kitties itself) only then
