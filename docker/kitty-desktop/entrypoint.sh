@@ -5,7 +5,7 @@ set -eu
 : "${DISPLAY:=:99}"
 : "${SCREEN:=1280x800x24}"
 # -noreset: without it the display forgets the resources (xrdb) when its last client leaves.
-Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp -ac -noreset +extension RANDR >/tmp/xvfb.log 2>&1 &
+Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp -ac -noreset -shmem +extension RANDR >/tmp/xvfb.log 2>&1 &
 XVFB=$!
 # Wait until the display answers, then hand the process over so signals stop the container.
 for _ in $(seq 1 50); do
@@ -14,6 +14,23 @@ for _ in $(seq 1 50); do
     fi
     sleep 0.1
 done
+# The live view: voxl (the display as H.264 over a WebSocket), on the container's own loopback with
+# a password made up for this start; the gateway reaches it with `docker exec ... socat` and
+# signs in for the person (no port is published). A desktop of an older image has no voxl and is
+# followed as pictures. It starts again if it ends. Nothing but the viewer: no files, no audio.
+if command -v voxl >/dev/null 2>&1; then
+    (
+        umask 077
+        head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n' >/tmp/voxl.pw
+    )
+    (
+        while :; do
+            VOXL_PASSWORD="$(cat /tmp/voxl.pw)" voxl --addr=127.0.0.1 --port=6901 --audio-enabled=false \
+                --file-transfers=none --title="Kitty desktop" >>/tmp/voxl.log 2>&1
+            sleep 1
+        done
+    ) &
+fi
 # The desktop: Lumen with the shelf (the pinned apps, the open windows and the clock) in the dark
 # Numix theme, and the terminal in Kitties' colours. Its autostart brings up PCManFM, which
 # draws the wallpaper and the icons on it.

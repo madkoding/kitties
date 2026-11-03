@@ -57,12 +57,31 @@ RUN mkdir -p /tmp/lucide \
     && /tmp/lucide-map/build-theme.py /tmp/lucide/package/icons /out/icons/Lucide \
     && cp /tmp/lucide/package/LICENSE /out/doc/LUCIDE-LICENSE
 
-# kitty-grab, the live view's capture: C, XShm and libjpeg (see kitty-grab.c).
+# kitty-grab, the fallback live view's capture: C, XShm and libjpeg (see kitty-grab.c).
 FROM debian:trixie-slim AS grab
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libc6-dev libx11-dev libxext-dev libjpeg-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY kitty-grab.c /tmp/kitty-grab.c
 RUN gcc -O2 -Wall -Werror -o /kitty-grab /tmp/kitty-grab.c -lX11 -lXext -ljpeg && strip /kitty-grab
+
+# voxl (tembo/voxl, MIT, linking x264 which is GPL-2.0+; this image is GPL then, like Kitties):
+# the live view, the display as H.264 over a WebSocket. Built at a fixed commit, with the web
+# client it embeds (esbuild, at a fixed version).
+FROM rust:1-trixie AS voxl
+ARG VOXL_COMMIT=f5d6ec93dd2745a680054071eae31aec45049a49
+ARG ESBUILD_VERSION=0.25.10
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential clang \
+        pkg-config libx264-dev libyuv-dev libopus-dev libpulse-dev nodejs npm \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g "esbuild@${ESBUILD_VERSION}"
+# Debian's libyuv ships no pkg-config file, which voxl's build asks for.
+RUN mkdir -p /usr/local/lib/pkgconfig \
+    && printf 'Name: libyuv\nDescription: libyuv\nVersion: 0\nLibs: -lyuv\nCflags:\n' > /usr/local/lib/pkgconfig/libyuv.pc
+RUN curl -fsSL -o /tmp/voxl.tar.gz "https://github.com/tembo/voxl/archive/${VOXL_COMMIT}.tar.gz" \
+    && mkdir /tmp/voxl && tar xzf /tmp/voxl.tar.gz -C /tmp/voxl --strip-components=1 \
+    && cd /tmp/voxl && cargo build --release --locked \
+    && strip target/release/voxl && install -D target/release/voxl /out/usr/local/bin/voxl \
+    && install -D LICENSE /out/usr/share/doc/voxl/LICENSE
 
 FROM debian:trixie-slim
 
@@ -85,6 +104,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         inkscape imagemagick mtpaint mousepad \
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
         libx11-6 libxext6 libjpeg62-turbo \
+        libx264-164 libyuv0 libopus0 libpulse0 socat \
         tini procps tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
@@ -93,6 +113,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && chmod 440 /etc/sudoers.d/kitty
 
 COPY --from=lumen /out/ /
+COPY --from=voxl /out/ /
 RUN ldconfig
 COPY --from=extras /out/themes/ /usr/share/themes/
 COPY --from=extras /out/doc/numix/ /usr/share/doc/numix-gtk-theme/
