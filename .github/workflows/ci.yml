@@ -220,7 +220,7 @@ jobs:
           # display (a PNG of it), and reachable through the tunnel the gateway uses.
           docker exec kitty-ci sh -c 'command -v voxl && command -v socat && test -s /tmp/voxl.pw && ls -l /tmp/voxl.pw | grep -q "^-rw-------"'
           for _ in $(seq 1 20); do docker exec kitty-ci curl -sf http://127.0.0.1:6901/healthz && break; sleep 1; done
-          docker exec kitty-ci sh -c 'curl -sf -u ":$(cat /tmp/voxl.pw)" http://127.0.0.1:6901/screenshot | head -c 8 | grep -q PNG'
+          docker exec kitty-ci python3 -c 'import urllib.request as u; pw = open("/tmp/voxl.pw").read().strip(); r = u.Request("http://127.0.0.1:6901/screenshot", headers={"Authorization": "Bearer " + pw}); assert u.urlopen(r).read(8)[1:4] == b"PNG"'
           printf 'GET /healthz HTTP/1.0\r\nHost: 127.0.0.1:6901\r\n\r\n' | docker exec -i kitty-ci socat - TCP:127.0.0.1:6901 | grep -q '^ok'
           docker rm -f kitty-ci
       - name: the desktop's logs, when a check above failed
