@@ -21,6 +21,16 @@ const svg = (p: P, children: JSX.Element | JSX.Element[]) => (
 export const IconPlus = (p: P) => svg(p, [<path d="M12 5v14" />, <path d="M5 12h14" />]);
 export const IconSend = (p: P) =>
   svg(p, [<path d="M22 2 11 13" />, <path d="M22 2 15 22l-4-9-9-4 20-7z" />]);
+export const IconPaperclip = (p: P) =>
+  svg(p, [
+    <path d="M21.4 11.1 12.2 20.3a6 6 0 0 1-8.5-8.5l9.2-9.2a4 4 0 0 1 5.7 5.7l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" />,
+  ]);
+export const IconFile = (p: P) =>
+  svg(p, [
+    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />,
+    <path d="M14 2v6h6" />,
+    <path d="M8 13h8M8 17h5" />,
+  ]);
 export const IconMonitor = (p: P) =>
   svg(p, [<rect x="2" y="3" width="20" height="14" rx="1" />, <path d="M8 21h8M12 17v4" />]);
 export const IconBrain = (p: P) =>

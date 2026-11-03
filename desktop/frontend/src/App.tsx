@@ -304,15 +304,16 @@ export default function App() {
     setModal("login");
   };
 
-  const send = async (text: string) => {
+  const send = async (text: string, files: File[] = []) => {
     if (!session) {
       return;
     }
     setPendingFrom((session.turns || []).length);
-    setPending(text);
+    // A message of files alone shows their names until the chat has it.
+    setPending(text || files.map((f) => f.name).join(", "));
     setError("");
     try {
-      await api.send(session.id, text);
+      await api.send(session.id, text, files);
     } catch (e) {
       setError((e as Error).message);
     }
