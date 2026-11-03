@@ -82,3 +82,15 @@ func TestWhatEachProviderReads(t *testing.T) {
 		t.Error("default capabilities")
 	}
 }
+
+func TestVisionIsThePersonsWordForACompatibleServer(t *testing.T) {
+	yes, no := true, false
+	local, _ := New(Options{Kind: "ollama", Model: "llava", Vision: &yes})
+	if !SeesImages(local) {
+		t.Error("vision: true shows a local model the pictures")
+	}
+	hosted, _ := New(Options{Kind: "openai", APIKey: "k", Model: "gpt-text", Vision: &no})
+	if SeesImages(hosted) {
+		t.Error("vision: false keeps them from a model that cannot see")
+	}
+}

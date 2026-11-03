@@ -67,6 +67,9 @@ type Provider struct {
 	PromptCache *bool `yaml:"prompt_cache" json:"prompt_cache,omitempty"`
 	// CacheTTL is how long Anthropic keeps a cached prompt: 5m (default) or 1h.
 	CacheTTL string `yaml:"cache_ttl" json:"cache_ttl,omitempty"`
+	// Vision says whether the model takes pictures, for a model of a compatible server (Ollama, a
+	// custom address): true shows it the pictures attached to a message. Unset leaves it to the provider.
+	Vision *bool `yaml:"vision" json:"vision,omitempty"`
 	// Auth is empty for a key, or login for an account signed in from Settings (a ChatGPT plan
 	// for codex, GitHub Copilot, a Google login for gemini).
 	Auth string `yaml:"auth" json:"auth,omitempty"`
@@ -81,7 +84,7 @@ func (p Provider) Options() provider.Options {
 	return provider.Options{
 		Kind: p.Kind, Model: p.Model, APIKey: key, BaseURL: p.BaseURL, MaxTokens: p.MaxTokens,
 		Temperature: p.Temperature, Timeout: p.Timeout, MaxAttempts: p.MaxAttempts, Headers: p.Headers, Tools: p.Tools, Auth: p.Auth,
-		PromptCache: p.PromptCache, CacheTTL: p.CacheTTL,
+		PromptCache: p.PromptCache, CacheTTL: p.CacheTTL, Vision: p.Vision,
 	}
 }
 

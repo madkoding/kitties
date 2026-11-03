@@ -185,3 +185,20 @@ already pay for:
 
 The tokens are kept in `data_dir/accounts` (one file per account, readable by you only) and
 renewed before they expire.
+
+## Pictures and files in the chat
+
+Pictures attached to a message are shown to models that see them: Anthropic, Gemini, OpenAI, Codex,
+Claude Code, Copilot and OpenRouter. A model behind a compatible server (Ollama, a custom address)
+is taken as blind unless the profile says otherwise:
+
+```yaml
+providers:
+  local:
+    kind: ollama
+    model: llava
+    vision: true      # false hides pictures from a model that cannot see them
+```
+
+PDFs go as native documents to Anthropic, Gemini and OpenAI; every other model gets their text.
+Limits (6 files, 20 MB a message) are in [ARCHITECTURE.md](ARCHITECTURE.md#attachments).

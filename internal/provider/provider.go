@@ -125,6 +125,9 @@ type Options struct {
 	PromptCache *bool
 	// CacheTTL is how long Anthropic keeps a cached prompt: "5m" (the default) or "1h".
 	CacheTTL string
+	// Vision says whether the model takes pictures: nil leaves it to the provider (the ones whose
+	// models all do), true or false is the person's word for a model of a compatible server.
+	Vision *bool
 	// Auth is "" (a key) or AuthLogin (an account signed in from Settings).
 	Auth string
 	// Login gives the signed-in account's credentials for one request; the registry sets it
@@ -234,6 +237,9 @@ func ReadsPDF(c Client) bool {
 // SeesImages is true for the providers whose models take pictures; a compatible server (a local
 // Ollama, a custom address) may serve a model that does not, so it is taken as not.
 func (c *HTTPClient) SeesImages() bool {
+	if c.opts.Vision != nil {
+		return *c.opts.Vision
+	}
 	switch c.kind.Family {
 	case FamilyAnthropic, FamilyGemini, FamilyResponses:
 		return true

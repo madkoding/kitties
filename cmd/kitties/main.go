@@ -20,6 +20,7 @@ import (
 	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
+	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/budget"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/config"
@@ -710,12 +711,13 @@ func (a *app) cmdChat(ctx context.Context, args []string) error {
 	if err != nil {
 		return err
 	}
-	fmt.Fprintf(a.out, "chat %s with %s. Type a message; /quit ends it.\n", sess.ID, sess.Title)
+	fmt.Fprintf(a.out, "chat %s with %s. Type a message; /attach <file>... adds files to the next one; /quit ends it.\n", sess.ID, sess.Title)
 	if sess.Group() {
 		fmt.Fprintln(a.out, "(@name sends the message to one kitty; otherwise every kitty answers in turn)")
 	}
 	scanner := bufio.NewScanner(a.in)
 	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	var files []attach.Upload
 	for {
 		fmt.Fprint(a.out, "> ")
 		if !scanner.Scan() {
@@ -723,13 +725,27 @@ func (a *app) cmdChat(ctx context.Context, args []string) error {
 			return scanner.Err()
 		}
 		line := strings.TrimSpace(scanner.Text())
-		switch line {
-		case "":
+		switch {
+		case line == "":
 			continue
-		case "/quit", "/exit":
+		case line == "/quit" || line == "/exit":
 			return nil
+		case line == "/attach" || strings.HasPrefix(line, "/attach "):
+			// The files wait for the next message; the person's own paths, read as the person.
+			for _, path := range strings.Fields(strings.TrimPrefix(line, "/attach")) {
+				up, err := readUpload(path)
+				if err != nil {
+					fmt.Fprintf(a.err, "kitties: %v\n", err)
+					continue
+				}
+				files = append(files, up)
+				fmt.Fprintf(a.out, "attached %s (%d KB); it goes with your next message\n", up.Name, (len(up.Data)+1023)/1024)
+			}
+			continue
 		}
-		turns, err := a.chats.Send(ctx, sess.ID, line)
+		// The files go once: a message that was refused with them is sent again without a bad one.
+		turns, err := a.chats.SendFiles(ctx, sess.ID, line, files)
+		files = nil
 		if err != nil {
 			fmt.Fprintf(a.err, "kitties: %v\n", err)
 			if ctx.Err() != nil {
@@ -826,4 +842,24 @@ func firstLine(s string) string {
 		s = s[:100] + "…"
 	}
 	return s
+}
+
+// readUpload reads a file named on the command line, refusing one over the size limit before it
+// is read into memory.
+func readUpload(path string) (attach.Upload, error) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return attach.Upload{}, err
+	}
+	if !info.Mode().IsRegular() {
+		return attach.Upload{}, fmt.Errorf("%s is not a file", path)
+	}
+	if info.Size() > attach.MaxOther {
+		return attach.Upload{}, fmt.Errorf("%s is too big to attach", path)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return attach.Upload{}, err
+	}
+	return attach.Upload{Name: filepath.Base(path), Data: data}, nil
 }

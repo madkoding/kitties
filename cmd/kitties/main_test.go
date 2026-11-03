@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/selfupdate"
@@ -271,6 +272,30 @@ func TestFleetCommands(t *testing.T) {
 	}
 	if code, _, _ := exec(t, "", "-config", cfg, "chat", "nobody"); code != 1 {
 		t.Error("chat unknown kitty")
+	}
+	// Files go with the next message; a refused one is reported and the message still goes.
+	dir := t.TempDir()
+	note := filepath.Join(dir, "note.txt")
+	prog := filepath.Join(dir, "tool.bin")
+	_ = os.WriteFile(note, []byte("remember the milk"), 0o600)
+	_ = os.WriteFile(prog, []byte("\x7fELF1234"), 0o600)
+	in = "/attach " + note + " " + prog + " " + dir + " " + filepath.Join(dir, "none") + "\nhi\n/exit\n"
+	code, out, errOut = exec(t, in, "-config", cfg, "chat", "brain")
+	if code != 0 || !strings.Contains(out, "attached note.txt") || !strings.Contains(errOut, "is not a file") ||
+		!strings.Contains(errOut, "no such file") || !strings.Contains(errOut, "is a program") {
+		t.Errorf("attach: %d %s %s", code, out, errOut)
+	}
+	// Without the program the message goes, and the files do not stay for the one after.
+	in = "/attach " + note + "\nhi\nagain\n/exit\n"
+	if code, out, _ = exec(t, in, "-config", cfg, "chat", "brain"); code != 0 || strings.Count(out, "brain: hello there") != 2 {
+		t.Errorf("attach then send: %s", out)
+	}
+	big := filepath.Join(dir, "big.bin")
+	f, _ := os.Create(big)
+	_ = f.Truncate(attach.MaxOther + 1)
+	_ = f.Close()
+	if _, err := readUpload(big); err == nil || !strings.Contains(err.Error(), "too big") {
+		t.Errorf("a file over the limit is not read: %v", err)
 	}
 	// A brain that fails is reported and the chat goes on.
 	bad := writeConfig(t, "http://127.0.0.1:1")

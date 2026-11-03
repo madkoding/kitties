@@ -26,7 +26,7 @@ const (
 	KindImage = "image" // png, jpeg, gif, webp: shown to the model as a picture
 	KindPDF   = "pdf"   // a PDF: sent as a document where the provider reads them
 	KindText  = "text"  // text and code: put in the message
-	KindDoc   = "doc"   // a Word document: its text is put in the message
+	KindDoc   = "doc"   // a Word, Excel or PowerPoint file: its text is put in the message
 	KindFile  = "file"  // anything else: saved, and told about
 )
 
@@ -138,8 +138,8 @@ func Sniff(name string, data []byte) (string, string) {
 		return "", ""
 	}
 	if bytes.HasPrefix(data, []byte("PK\x03\x04")) {
-		if isDocx(data) {
-			return "application/vnd.openxmlformats-officedocument.wordprocessingml.document", KindDoc
+		if m := officeMIME(data); m != "" {
+			return m, KindDoc
 		}
 		return http.DetectContentType(data), KindFile
 	}
@@ -188,18 +188,25 @@ func textMIME(name string) string {
 	return "text/plain"
 }
 
-// isDocx is true for a zip that has the main part of a Word document.
-func isDocx(data []byte) bool {
+// officeMIME names an Office Open XML file (Word, Excel, PowerPoint) by the part that gives it away;
+// empty for any other zip.
+func officeMIME(data []byte) string {
 	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {
-		return false
+		return ""
 	}
+	const base = "application/vnd.openxmlformats-officedocument."
 	for _, f := range zr.File {
-		if f.Name == "word/document.xml" {
-			return true
+		switch f.Name {
+		case "word/document.xml":
+			return base + "wordprocessingml.document"
+		case "xl/workbook.xml":
+			return base + "spreadsheetml.sheet"
+		case "ppt/presentation.xml":
+			return base + "presentationml.presentation"
 		}
 	}
-	return false
+	return ""
 }
 
 // CleanName turns whatever name came with a file into a plain one: the last part of the path

@@ -152,3 +152,42 @@ func TestText(t *testing.T) {
 		t.Fatalf("%q", got)
 	}
 }
+
+func office(t *testing.T, parts map[string]string) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, body := range parts {
+		w, _ := zw.Create(name)
+		_, _ = w.Write([]byte(body))
+	}
+	_ = zw.Close()
+	return buf.Bytes()
+}
+
+func TestSpreadsheetsAndSlidesAreRead(t *testing.T) {
+	xlsx := office(t, map[string]string{
+		"xl/workbook.xml":      "<workbook/>",
+		"xl/sharedStrings.xml": `<sst><si><t>Name</t></si><si><t>Ana</t></si><si><r><t>Bo</t></r><r><t>b</t></r></si></sst>`,
+	})
+	mime, kind := Sniff("book.xlsx", xlsx)
+	if kind != KindDoc || !strings.Contains(mime, "spreadsheetml") {
+		t.Fatalf("%s %s", mime, kind)
+	}
+	if txt, _ := Text(Attachment{Kind: KindDoc}, xlsx, 0); txt != "Name\nAna\nBob" {
+		t.Fatalf("%q", txt)
+	}
+	slide := func(s string) string { return `<p:sld><a:p><a:r><a:t>` + s + `</a:t></a:r></a:p></p:sld>` }
+	pptx := office(t, map[string]string{
+		"ppt/presentation.xml": "<p/>", "ppt/slides/slide10.xml": slide("ten"),
+		"ppt/slides/slide2.xml": slide("two"), "ppt/slides/slide1.xml": slide("one"),
+	})
+	mime, kind = Sniff("deck.pptx", pptx)
+	if kind != KindDoc || !strings.Contains(mime, "presentationml") {
+		t.Fatalf("%s %s", mime, kind)
+	}
+	txt, _ := Text(Attachment{Kind: KindDoc}, pptx, 0)
+	if i, j, k := strings.Index(txt, "one"), strings.Index(txt, "two"), strings.Index(txt, "ten"); !(i < j && j < k) || !strings.Contains(txt, "--- slide 3 ---") {
+		t.Fatalf("slides out of order: %q", txt)
+	}
+}

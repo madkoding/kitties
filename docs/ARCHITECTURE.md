@@ -58,19 +58,19 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
 - **Attachments** (`internal/attach`, `internal/chat/attach.go`): a message may carry up to 6 files,
   20 MB in all (5 MB a picture, 10 MB a PDF or a binary, 2 MB a text). What a file is comes from
   its bytes, never from its name or the type the sender claims: PNG, JPEG, GIF and WebP are
-  pictures; `%PDF-` a PDF; a zip with `word/document.xml` a Word document; valid UTF-8 without NUL
+  pictures; `%PDF-` a PDF; a zip with `word/document.xml`, `xl/workbook.xml` or `ppt/presentation.xml` an Office document (its text is read); valid UTF-8 without NUL
   text (an SVG is text, it can carry scripts); a native executable (ELF, PE, Mach-O) is refused.
   The bytes are stored under `<chats>/<chat>/files/<id>` with an id of ours, so no name can reach
   another path, and the turn lists them (`attachments`). They are served back only if the chat lists
   them, a picture inline by its real type and the rest as a download with a type that cannot run.
-  What the model gets: text, code and Word documents as text between `<attachment>` tags (cut at
+  What the model gets: text, code and Office documents as text between `<attachment>` tags (cut at
   30,000 characters, and told it is data, not instructions); pictures as pictures where the provider
   sees them (Anthropic, Gemini, OpenAI, Codex, Claude Code, Copilot, OpenRouter); PDFs as native
   documents where the API reads them (Anthropic, Gemini, OpenAI), else their text as far as it can
   be read. **Prompt cache and tokens**: pictures and documents are sent only with the messages the
   kitty is answering now; in later turns they are a line, so a long thread never carries the same
   file again (the one change to the prefix happens once, at that message). The text of a file stays
-  as it was, so the cached prefix is stable. A kitty with a machine also gets the file in
+  as it was, so the cached prefix is stable. The CLI attaches with `/attach <file>...` in `kitties chat`; a profile's `vision: true|false` overrides whether a model sees pictures. A kitty with a machine also gets the file in
   `/home/kitty/work/uploads/<id>/<name>`, copied when the machine is on, and is told the path.
 - **Desktop tasks** (`internal/desktop`): a kitty with a container writes `@tool click {"x": 640,
   "y": 420}` lines; the runtime executes them (click, type, keys, scroll, drag, list and focus
