@@ -3,7 +3,9 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -94,6 +96,11 @@ func (f *fakeContainers) ExecInput(_ context.Context, n, stdin string, argv ...s
 }
 func (f *fakeContainers) Stream(context.Context, string, int, int) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("FRAME 3\npng")), nil
+}
+func (f *fakeContainers) Tunnel(_ context.Context, n string, port int) (net.Conn, error) {
+	f.calls = append(f.calls, fmt.Sprintf("tunnel %s %d", n, port))
+	c, _ := net.Pipe()
+	return c, f.op("tunnel")
 }
 func (f *fakeContainers) Screenshot(context.Context, string) ([]byte, error) {
 	return []byte("png"), f.op("shot")

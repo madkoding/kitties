@@ -7,12 +7,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
 	"image/png"
 	"io"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -393,6 +395,12 @@ func (d *Desktop) Stream(ctx context.Context, name string, _, _ int) (io.ReadClo
 		}
 	}()
 	return r, nil
+}
+
+// Tunnel implements orchestrator.Containers: the demo has no voxl, so the live view falls back
+// to its pictures.
+func (d *Desktop) Tunnel(context.Context, string, int) (net.Conn, error) {
+	return nil, errors.New("the demo desktop has no live stream")
 }
 
 // Render draws a 1280x800 desktop with a browser window showing url (nothing when empty).

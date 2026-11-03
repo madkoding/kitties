@@ -10,6 +10,7 @@ import (
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/selfupdate"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -45,6 +46,9 @@ func (f *fakeContainers) ImageStale(context.Context, string, string) (bool, erro
 }
 func (f *fakeContainers) ExecInput(_ context.Context, n, stdin string, argv ...string) (string, error) {
 	return "ran " + strings.Join(argv, " ") + "\n", nil
+}
+func (f *fakeContainers) Tunnel(context.Context, string, int) (net.Conn, error) {
+	return nil, errors.New("no tunnel")
 }
 func (f *fakeContainers) Stream(context.Context, string, int, int) (io.ReadCloser, error) {
 	return io.NopCloser(strings.NewReader("FRAME 3\npng")), nil

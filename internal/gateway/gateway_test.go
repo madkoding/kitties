@@ -43,6 +43,8 @@ type fakeFleet struct {
 	accounts *llmauth.Manager
 	// stream is what a display stream carries (a default when empty); clip is its clipboard.
 	stream, clip string
+	// voxl dials the fake live view (none when nil).
+	voxl func(context.Context) (net.Conn, error)
 }
 
 func (f *fakeFleet) List() []*kitty.Kitty {
@@ -128,6 +130,15 @@ func (f *fakeFleet) Exec(_ context.Context, ref string, argv ...string) (string,
 		return "partial", f.fail
 	}
 	return strings.Join(argv, " "), nil
+}
+func (f *fakeFleet) Voxl(_ context.Context, ref string) (orchestrator.Voxl, error) {
+	if _, err := f.Get(ref); err != nil {
+		return orchestrator.Voxl{}, err
+	}
+	if f.voxl == nil {
+		return orchestrator.Voxl{}, errors.New("no voxl")
+	}
+	return orchestrator.Voxl{Password: "vpw", Dial: f.voxl}, nil
 }
 func (f *fakeFleet) Stream(_ context.Context, ref string, fps, quality int) (io.ReadCloser, error) {
 	if _, err := f.Get(ref); err != nil {

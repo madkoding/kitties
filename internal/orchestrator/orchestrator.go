@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
 	"sort"
@@ -44,6 +45,8 @@ type Containers interface {
 	Screenshot(ctx context.Context, name string) ([]byte, error)
 	// Stream follows the display: pictures to read with container.ReadFrame, until closed.
 	Stream(ctx context.Context, name string, fps, quality int) (io.ReadCloser, error)
+	// Tunnel is a TCP connection to a port on the container's own loopback.
+	Tunnel(ctx context.Context, name string, port int) (net.Conn, error)
 	List(ctx context.Context) ([]container.Info, error)
 }
 
