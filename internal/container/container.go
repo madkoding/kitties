@@ -180,6 +180,8 @@ type Spec struct {
 	// Workspace is the host folder mounted at Workdir.
 	Workspace string
 	Env       map[string]string
+	// Seccomp is the path of the seccomp profile to run with (see seccomp.go); empty keeps the runtime's default.
+	Seccomp string
 }
 
 // Validate refuses a spec that would build a wrong or dangerous command line.
@@ -216,6 +218,9 @@ func (s Spec) Args() []string {
 	}
 	if s.Network != "" {
 		args = append(args, "--network", s.Network)
+	}
+	if s.Seccomp != "" {
+		args = append(args, "--security-opt", "seccomp="+s.Seccomp)
 	}
 	if s.Workspace != "" {
 		args = append(args, "-v", s.Workspace+":"+Workdir)
@@ -283,6 +288,11 @@ func (m *Manager) Runtime() string { return m.rt.Bin }
 func (m *Manager) Up(ctx context.Context, s Spec) (string, error) {
 	if err := s.Validate(); err != nil {
 		return "", err
+	}
+	// Chromium's sandbox needs user namespaces, which Docker's default seccomp profile forbids.
+	// Without the profile the desktop still works (its chromium wrapper drops the sandbox, loudly).
+	if p, err := writeSeccomp(); err == nil {
+		s.Seccomp = p
 	}
 	out, err := runCmd(ctx, m.rt.Bin, s.Args()...)
 	if err != nil {
