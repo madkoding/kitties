@@ -176,13 +176,16 @@ func chatMessages(messages []Message) []map[string]any {
 			out = append(out, map[string]any{"role": "assistant", "content": m.Content, "tool_calls": calls})
 			continue
 		}
-		if len(m.Images) == 0 {
+		if len(m.Images) == 0 && len(m.Files) == 0 {
 			out = append(out, map[string]any{"role": m.Role, "content": m.Content})
 			continue
 		}
 		parts := []map[string]any{{"type": "text", "text": m.Content}}
 		for _, img := range m.Images {
 			parts = append(parts, map[string]any{"type": "image_url", "image_url": map[string]any{"url": img.dataURL()}})
+		}
+		for _, f := range m.Files {
+			parts = append(parts, map[string]any{"type": "file", "file": map[string]any{"filename": f.Name, "file_data": f.dataURL()}})
 		}
 		out = append(out, map[string]any{"role": m.Role, "content": parts})
 	}
@@ -246,6 +249,9 @@ func (c *HTTPClient) callResponses(ctx context.Context, t target, messages []Mes
 		item := responsesText(m.Role, m.Content)
 		for _, img := range m.Images {
 			item["content"] = append(item["content"].([]map[string]any), map[string]any{"type": "input_image", "image_url": img.dataURL()})
+		}
+		for _, f := range m.Files {
+			item["content"] = append(item["content"].([]map[string]any), map[string]any{"type": "input_file", "filename": f.Name, "file_data": f.dataURL()})
 		}
 		input = append(input, item)
 	}
@@ -570,6 +576,10 @@ func (c *HTTPClient) callAnthropic(ctx context.Context, t target, messages []Mes
 			blocks = append(blocks, map[string]any{"type": "image", "source": map[string]any{
 				"type": "base64", "media_type": img.MIME, "data": base64.StdEncoding.EncodeToString(img.Data)}})
 		}
+		for _, f := range m.Files {
+			blocks = append(blocks, map[string]any{"type": "document", "title": f.Name, "source": map[string]any{
+				"type": "base64", "media_type": f.MIME, "data": base64.StdEncoding.EncodeToString(f.Data)}})
+		}
 		// Consecutive tool results share one user turn, which the API requires.
 		if n := len(conversation); m.Role == "tool" && n > 0 && conversation[n-1]["role"] == "user" {
 			if prev, ok := conversation[n-1]["content"].([]map[string]any); ok && len(prev) > 0 && prev[0]["type"] == "tool_result" {
@@ -730,6 +740,10 @@ func (c *HTTPClient) callGemini(ctx context.Context, t target, messages []Messag
 		for _, img := range m.Images {
 			parts = append(parts, map[string]any{"inlineData": map[string]any{
 				"mimeType": img.MIME, "data": base64.StdEncoding.EncodeToString(img.Data)}})
+		}
+		for _, f := range m.Files {
+			parts = append(parts, map[string]any{"inlineData": map[string]any{
+				"mimeType": f.MIME, "data": base64.StdEncoding.EncodeToString(f.Data)}})
 		}
 		contents = append(contents, map[string]any{"role": role, "parts": parts})
 	}
