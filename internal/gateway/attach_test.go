@@ -138,3 +138,14 @@ func TestServeAttachedFiles(t *testing.T) {
 		t.Errorf("files need the token: %d", code)
 	}
 }
+
+func TestAKittyCannotReadASoulFileThroughTheAPI(t *testing.T) {
+	srv, f, _ := setup(t)
+	code, m, _ := call(t, srv, "POST", "/v1/kitties", "tok", map[string]any{"name": "zed", "soul_file": "/etc/passwd"})
+	if code != http.StatusBadRequest || !strings.Contains(m["error"].(string), "soul_file") {
+		t.Fatalf("%d %v", code, m)
+	}
+	if _, err := f.Get("zed"); err == nil {
+		t.Error("the kitty was made")
+	}
+}

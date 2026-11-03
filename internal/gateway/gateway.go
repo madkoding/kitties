@@ -628,6 +628,13 @@ func (s *Server) handleCreateKitty(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
+	// A soul file is a path on the gateway's own disk: the configuration and the CLI may name one,
+	// a request may not, or it could make the gateway read any file it can open.
+	if spec.SoulFile != "" {
+		fail(w, http.StatusBadRequest, errors.New("soul_file cannot be set through the API; send the soul inline"))
+		return
+	}
+	spec.SoulFile = ""
 	k, err := s.fleet.Create(r.Context(), spec.Spec)
 	if err != nil {
 		fail(w, codeFor(err), err)
