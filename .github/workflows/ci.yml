@@ -403,12 +403,22 @@ jobs:
           retention-days: 7
 
   # The kitty-desktop image, published to GitHub's registry on tags (latest and the version).
+  # Each architecture is built on a runner of its own: under QEMU the Rust build of voxl alone
+  # took the single multi-arch job past its time limit (v0.36.0), and the release never ran.
   publish-image:
-    name: publish kitty-desktop image
+    name: publish kitty-desktop image · ${{ matrix.arch }}
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [image]
-    runs-on: ubuntu-24.04
-    timeout-minutes: 40
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            os: ubuntu-24.04
+          - arch: arm64
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
@@ -424,10 +434,36 @@ jobs:
         with:
           context: docker/kitty-desktop
           push: true
-          platforms: linux/amd64,linux/arm64
-          tags: |
-            ghcr.io/${{ github.repository_owner }}/kitty-desktop:latest
-            ghcr.io/${{ github.repository_owner }}/kitty-desktop:${{ github.ref_name }}
+          platforms: linux/${{ matrix.arch }}
+          cache-from: type=gha,scope=kitty-desktop-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=kitty-desktop-${{ matrix.arch }}
+          tags: ghcr.io/${{ github.repository_owner }}/kitty-desktop:${{ github.ref_name }}-${{ matrix.arch }}
+
+  # One tag for both architectures: latest and the version point at the two images above.
+  publish-image-manifest:
+    name: publish kitty-desktop manifest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [publish-image]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: join the two architectures
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/kitty-desktop
+          VERSION: ${{ github.ref_name }}
+        run: |
+          for tag in "$VERSION" latest; do
+            docker buildx imagetools create -t "$IMAGE:$tag" "$IMAGE:$VERSION-amd64" "$IMAGE:$VERSION-arm64"
+          done
 
   # The gateway image, published next to the kitty-desktop one on tags.
   publish-gateway-image:
@@ -463,7 +499,7 @@ jobs:
   release:
     name: release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [check, build, wails, android, selfupdate, publish-image, publish-gateway-image]
+    needs: [check, build, wails, android, selfupdate, publish-image-manifest, publish-gateway-image]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
