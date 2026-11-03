@@ -312,14 +312,20 @@ export default function App() {
     // A message of files alone shows their names until the chat has it.
     setPending(text || files.map((f) => f.name).join(", "));
     setError("");
+    let failed = "";
     try {
       await api.send(session.id, text, files);
     } catch (e) {
-      setError((e as Error).message);
+      failed = (e as Error).message;
     }
     setPending(null);
     await loadSession(session.id);
-    refresh();
+    // A refresh clears the page's error when it reaches the gateway, so the refusal of a message
+    // (a file the gateway will not take) is shown after it, and stays.
+    await refresh();
+    if (failed) {
+      setError(failed);
+    }
   };
 
   const cancel = async () => {
