@@ -24,6 +24,7 @@ import (
 	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
+	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/budget"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/desktop"
@@ -53,6 +54,8 @@ type Turn struct {
 	Artifacts []string `json:"artifacts,omitempty"`
 	// Skills names the skills it read or proposed in this turn.
 	Skills []string `json:"skills,omitempty"`
+	// Attachments are the files the person attached to this message (attach.go).
+	Attachments []attach.Attachment `json:"attachments,omitempty"`
 	// Working is true while the kitty is still acting on its desktop for this turn.
 	Working bool `json:"working,omitempty"`
 	// NeedsHelp is true when the kitty gave up on this turn and asked the person.
@@ -704,12 +707,27 @@ func (s *Service) Send(ctx context.Context, id, text string) ([]Turn, error) {
 	return s.send(ctx, id, "user", "", text)
 }
 
+// SendFiles is Send with files attached.
+func (s *Service) SendFiles(ctx context.Context, id, text string, files []attach.Upload) ([]Turn, error) {
+	return s.sendWith(ctx, id, "user", "", text, files)
+}
+
 // send posts a message from someone (the person, the scheduler, or a kitty delegating) and has
 // the kitties answer it.
 func (s *Service) send(ctx context.Context, id, from, fromID, text string) ([]Turn, error) {
+	return s.sendWith(ctx, id, from, fromID, text, nil)
+}
+
+// sendWith is send with the files the person attached.
+func (s *Service) sendWith(ctx context.Context, id, from, fromID, text string, files []attach.Upload) ([]Turn, error) {
 	text = strings.TrimSpace(text)
-	if text == "" {
+	if text == "" && len(files) == 0 {
 		return nil, errors.New("the message is empty")
+	}
+	// What a file is, and whether it may come in, is settled before anything is stored.
+	metas, err := inspectAll(files)
+	if err != nil {
+		return nil, err
 	}
 	lock := s.lockFor(id)
 	lock.Lock()
@@ -725,11 +743,15 @@ func (s *Service) send(ctx context.Context, id, from, fromID, text string) ([]Tu
 		s.mu.Unlock()
 		return nil, ErrBusy
 	}
-	sess.Turns = append(sess.Turns, Turn{At: s.now(), From: from, Kitty: fromID, Text: text})
+	if err := s.storeFiles(id, metas, files); err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	sess.Turns = append(sess.Turns, Turn{At: s.now(), From: from, Kitty: fromID, Text: text, Attachments: metas})
 	sess.UpdatedAt = s.now()
 	members := append([]string(nil), sess.Members...)
 	goal := sess.Goal
-	err := s.save(sess)
+	err = s.save(sess)
 	s.emitLocked(Event{Type: "turn", Session: id, Index: len(sess.Turns) - 1, Turn: &sess.Turns[len(sess.Turns)-1]})
 	s.mu.Unlock()
 	if err != nil {
@@ -968,7 +990,8 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	if sess.Summary != "" {
 		system += fmt.Sprintf("\nEarlier in this conversation (a summary of its first %d messages, which you no longer see one by one):\n%s\n", sess.SummaryUpTo, sess.Summary)
 	}
-	messages := s.transcript(system, sess.Turns[min(sess.SummaryUpTo, len(sess.Turns)):], k)
+	window := sess.Turns[min(sess.SummaryUpTo, len(sess.Turns)):]
+	messages := s.transcriptFor(id, brain, s.deliver(ctx, id, k, window), system, window, k)
 
 	native := false
 	var tools []provider.Tool
@@ -1559,18 +1582,35 @@ func workspaceOf(k *kitty.Kitty) string {
 // transcript renders the thread as the kitty sees it: its own turns as the assistant, everyone
 // else's as the user, labelled by name in a group.
 func (s *Service) transcript(system string, turns []Turn, k *kitty.Kitty) []provider.Message {
+	return s.transcriptFor("", nil, nil, system, turns, k)
+}
+
+// transcriptFor is transcript with the files of the thread: id is the chat they are stored under,
+// brain says what the model can be shown, and paths where each file is on the kitty's machine.
+func (s *Service) transcriptFor(id string, brain provider.Client, paths map[string]string, system string, turns []Turn, k *kitty.Kitty) []provider.Message {
 	if len(turns) > s.MaxTurns {
 		turns = turns[len(turns)-s.MaxTurns:]
 	}
-	messages := []provider.Message{{Role: "system", Content: system}}
-	var pending []string
-	flush := func() {
-		if len(pending) > 0 {
-			messages = append(messages, provider.Message{Role: "user", Content: strings.Join(pending, "\n\n")})
-			pending = nil
+	// The files shown to the model as they are (pictures, documents) are those of the messages
+	// this answer is for, the ones after the kitty's last turn. Earlier ones stay as a line, so a
+	// long thread never carries the same picture again and again.
+	fresh := 0
+	for i, t := range turns {
+		if t.Kitty == k.ID {
+			fresh = i + 1
 		}
 	}
-	for _, t := range turns {
+	messages := []provider.Message{{Role: "system", Content: system}}
+	var pending []string
+	var images []provider.Image
+	var docs []provider.File
+	flush := func() {
+		if len(pending) > 0 {
+			messages = append(messages, provider.Message{Role: "user", Content: strings.Join(pending, "\n\n"), Images: images, Files: docs})
+			pending, images, docs = nil, nil, nil
+		}
+	}
+	for i, t := range turns {
 		if t.Kitty == k.ID {
 			flush()
 			content := t.Text
@@ -1587,7 +1627,13 @@ func (s *Service) transcript(system string, turns []Turn, k *kitty.Kitty) []prov
 				label = "User"
 			}
 		}
-		pending = append(pending, "["+label+"]: "+t.Text)
+		entry := "[" + label + "]: " + t.Text
+		if len(t.Attachments) > 0 {
+			block, imgs, fs := s.describeFiles(id, brain, paths, k, t.Attachments, i >= fresh)
+			entry += block
+			images, docs = append(images, imgs...), append(docs, fs...)
+		}
+		pending = append(pending, entry)
 	}
 	flush()
 	if last := messages[len(messages)-1]; last.Role != "user" {

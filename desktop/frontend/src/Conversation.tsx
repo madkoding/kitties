@@ -11,6 +11,7 @@ import ConnectorLogo from "./ConnectorLogo";
 import { IconCamera, IconHand, IconMonitor, IconShield, IconThumbDown, IconThumbUp } from "./icons";
 import { RULE_LABEL, ruleTarget } from "./Approvals";
 import HelpModal from "./Help";
+import { Sent } from "./Attachments";
 import LiveDesktop from "./LiveDesktop";
 
 function Text({ text }: { text: string }) {
@@ -559,6 +560,7 @@ function TurnCard({
   kitty,
   latest,
   onDesk,
+  onOpen,
   onHelp,
   onContinue,
 }: {
@@ -570,6 +572,8 @@ function TurnCard({
   latest: boolean;
   // onDesk shows the steps of this turn in the desktop column.
   onDesk: (index: number) => void;
+  // onOpen shows a picture of the message big.
+  onOpen: (src: string) => void;
   // onHelp opens the kitty's desktop with the controls, when it asked for help.
   onHelp?: () => void;
   // onContinue has a task that stopped on its budget go on from where it was.
@@ -603,6 +607,9 @@ function TurnCard({
         </div>
       )}
       {turn.text && <Text text={mine ? turn.text : gatewayText(turn.text)} />}
+      {turn.attachments && turn.attachments.length > 0 && (
+        <Sent chat={chat} files={turn.attachments} onOpen={onOpen} />
+      )}
       {turn.kitty &&
         turn.limits?.map((l, i) => <LimitNote key={i} kitty={turn.kitty!} limit={l} />)}
       {tech && turn.detail && (
@@ -889,6 +896,7 @@ export default function Conversation({ session, kitties, user, pending, waiting,
               kitty={turn.kitty ? byId.get(turn.kitty) : undefined}
               latest={i >= all.length - session.members.length}
               onDesk={showDesk}
+              onOpen={setZoom}
               onHelp={() => {
                 const k = turn.kitty ? byId.get(turn.kitty) : undefined;
                 if (k) {

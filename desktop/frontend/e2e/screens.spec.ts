@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
+import zlib from "node:zlib";
 import { GATEWAY, HOOK_LOG, SHOTS, STATE } from "./playwright.config";
 
 // Every screen of the desktop app, checked and photographed. The pictures go to
@@ -1761,4 +1762,164 @@ test("many desktop tasks fold into one bar: the latest shows, the rest open on d
   await bar.getByRole("tab").nth(1).click();
   await expect(bar).toContainText("2/2");
   await expect(bar.getByRole("tab")).toHaveCount(0);
+});
+
+// pngOf draws a small picture (a cat's face on a gradient) as PNG bytes, to attach.
+function pngOf(w = 320, h = 200): Buffer {
+  const raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) {
+    const row = y * (w * 3 + 1);
+    for (let x = 0; x < w; x++) {
+      const dx = x - w / 2;
+      const dy = y - h / 2;
+      const face = dx * dx + dy * dy < 70 * 70;
+      const ear = (Math.abs(dx) - 45) ** 2 + (dy + 62) ** 2 < 22 * 22;
+      const eye = (Math.abs(dx) - 26) ** 2 + (dy + 8) ** 2 < 8 * 8;
+      const px = eye
+        ? [20, 20, 30]
+        : face || ear
+          ? [255, 176, 32]
+          : [30 + (x * 60) / w, 40, 90 + (y * 90) / h];
+      raw.set(px, row + 1 + x * 3);
+    }
+  }
+  const chunk = (type: string, data: Buffer) => {
+    const len = Buffer.alloc(4);
+    len.writeUInt32BE(data.length);
+    const body = Buffer.concat([Buffer.from(type), data]);
+    const crc = Buffer.alloc(4);
+    crc.writeUInt32BE(zlib.crc32(body));
+    return Buffer.concat([len, body, crc]);
+  };
+  const head = Buffer.alloc(13);
+  head.writeUInt32BE(w, 0);
+  head.writeUInt32BE(h, 4);
+  head.set([8, 2, 0, 0, 0], 8);
+  return Buffer.concat([
+    Buffer.from("\x89PNG\r\n\x1a\n", "latin1"),
+    chunk("IHDR", head),
+    chunk("IDAT", zlib.deflateSync(raw)),
+    chunk("IEND", Buffer.alloc(0)),
+  ]);
+}
+
+test("files attach by button, paste and drop, and the kitty reads them", async ({ page }) => {
+  const made = await fetch(GATEWAY + "/v1/chats", {
+    method: "POST",
+    headers: { Authorization: "Bearer e2e-token", "Content-Type": "application/json" },
+    body: JSON.stringify({ members: ["mimi"], title: "Files" }),
+  });
+  const chat = ((await made.json()) as { chat: { id: string } }).chat.id;
+  await open(page, `#chat/${chat}`);
+  const composer = page.getByTestId("composer");
+  await expect(composer).toBeVisible();
+
+  // The button: a picture and a note become chips, with a thumbnail for the picture.
+  await page.getByTestId("file-input").setInputFiles([
+    { name: "cat.png", mimeType: "image/png", buffer: pngOf() },
+    {
+      name: "brief.md",
+      mimeType: "text/markdown",
+      buffer: Buffer.from("# Brief\n\nLaunch on Friday."),
+    },
+  ]);
+  await expect(page.getByTestId("picked-file")).toHaveCount(2);
+  await expect(page.getByTestId("picked-file").first().locator("img")).toBeVisible();
+  // A chip can be taken back.
+  await page.getByRole("button", { name: "Remove brief.md" }).click();
+  await expect(page.getByTestId("picked-file")).toHaveCount(1);
+
+  // Paste: a picture on the clipboard joins the message, and the text stays as typed.
+  const textarea = composer.locator("textarea");
+  await textarea.click();
+  await page.evaluate((b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    const dt = new DataTransfer();
+    dt.items.add(new File([bytes], "pasted.png", { type: "image/png" }));
+    document
+      .querySelector("textarea")!
+      .dispatchEvent(
+        new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }),
+      );
+  }, pngOf(320, 200).toString("base64"));
+  await expect(page.getByTestId("picked-file")).toHaveCount(2);
+
+  // Drop: a file dropped anywhere on the page.
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(["a,b\n1,2\n"], "numbers.csv", { type: "text/csv" }));
+    for (const type of ["dragenter", "drop"]) {
+      window.dispatchEvent(
+        new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }),
+      );
+    }
+  });
+  await expect(page.getByTestId("picked-file")).toHaveCount(3);
+
+  await textarea.fill("Here is the photo and the numbers");
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("Got it, I have")).toBeVisible();
+  await expect(page.getByText("**numbers.csv**")).toHaveCount(0);
+
+  // The message shows its files: thumbnails that load, and a chip that downloads.
+  const sent = page.getByTestId("sent-files").first();
+  await expect(sent.locator(".attach-thumb img").first()).toBeVisible();
+  const loaded = await sent
+    .locator(".attach-thumb img")
+    .first()
+    .evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth === 320);
+  expect(loaded).toBe(true);
+  const link = sent.getByRole("link", { name: /numbers\.csv/ });
+  const res = await page.request.get((await link.getAttribute("href"))!);
+  expect(res.status()).toBe(200);
+  expect(res.headers()["content-disposition"]).toContain("attachment");
+  expect(res.headers()["content-type"]).toBe("application/octet-stream");
+
+  // A thumbnail opens big.
+  await sent.locator(".attach-thumb").first().click();
+  await expect(page.getByTestId("zoom")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  const clearChips = async () => {
+    while ((await page.getByTestId("picked-file").count()) > 0) {
+      await page
+        .getByRole("button", { name: /^Remove / })
+        .first()
+        .click();
+    }
+  };
+  // What the page can tell at once: too many files, a picture over the limit.
+  await page.getByTestId("file-input").setInputFiles(
+    Array.from({ length: 7 }, (_, i) => ({
+      name: `f${i}.txt`,
+      mimeType: "text/plain",
+      buffer: Buffer.from("x"),
+    })),
+  );
+  await expect(page.getByTestId("attach-error")).toContainText("at most 6 files");
+  await clearChips();
+  await page.getByTestId("file-input").setInputFiles({
+    name: "huge.png",
+    mimeType: "image/png",
+    buffer: Buffer.alloc(5.5 * 1024 * 1024),
+  });
+  await expect(page.getByTestId("attach-error")).toContainText("huge.png is 5.5 MB");
+
+  // What only the gateway can tell: a program in a text file's clothes is refused, in words.
+  await clearChips();
+  await page.getByTestId("file-input").setInputFiles({
+    name: "notes.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("MZ\x90\x00program"),
+  });
+  await page.getByRole("button", { name: "Send" }).click();
+  await expect(page.getByText("is a program, not a document")).toBeVisible();
+
+  // The shot: the thread with its files, and the next one waiting in the composer.
+  await page.getByTestId("file-input").setInputFiles({
+    name: "contract.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from("%PDF-1.4\n"),
+  });
+  await shot(page, "57-attachments");
 });

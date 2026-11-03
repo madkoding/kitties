@@ -22,6 +22,17 @@ const dict: Dictionary = {
     "Escreva algo para a equipe; @nome escolhe quem responde",
   "Say something…": "Escreva algo…",
   Stop: "Parar",
+  // Attachments
+  "A message takes at most {n} files.": "Uma mensagem aceita no máximo {n} arquivos.",
+  "{name} is empty.": "{name} está vazio.",
+  "{name} is {size}; the most for this kind of file is {max}.":
+    "{name} tem {size}; o máximo para este tipo de arquivo é {max}.",
+  "The files add up to more than {max}.": "Os arquivos somam mais de {max}.",
+  "Remove {name}": "Remover {name}",
+  "Download {name}": "Baixar {name}",
+  "Open {name}": "Abrir {name}",
+  "Drop the files to attach them": "Solte os arquivos para anexá-los",
+  "Attach files": "Anexar arquivos",
   Send: "Enviar",
 
   // Welcome

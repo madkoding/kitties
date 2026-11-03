@@ -6,6 +6,7 @@ package gateway
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -13,6 +14,7 @@ import (
 	"html"
 	"io"
 	"io/fs"
+	"mime"
 	"net"
 	"net/http"
 	"strconv"
@@ -20,6 +22,7 @@ import (
 	"time"
 
 	"github.com/madkoding/kitties/internal/artifacts"
+	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/connector"
@@ -33,6 +36,7 @@ import (
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/skills"
+	"github.com/madkoding/kitties/internal/soul"
 )
 
 // Fleet is what the gateway needs from the orchestrator.
@@ -93,6 +97,9 @@ type Chats interface {
 	AddMembers(id string, members []string) (*chat.Session, error)
 	RemoveMember(id, ref string) (*chat.Session, error)
 	Send(ctx context.Context, id, text string) ([]chat.Turn, error)
+	// SendFiles is Send with files attached; File returns one a chat holds.
+	SendFiles(ctx context.Context, id, text string, files []attach.Upload) ([]chat.Turn, error)
+	File(id, fileID string) (attach.Attachment, []byte, error)
 	Cancel(id string) bool
 	Shot(id, name string) ([]byte, error)
 	// Replay is the film of a turn's desktop task, an animated GIF of its screenshots.
@@ -224,6 +231,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/chats/{id}/messages", api(s.handleSend))
 	s.mux.Handle("POST /v1/chats/{id}/cancel", api(s.handleCancel))
 	s.mux.Handle("GET /v1/chats/{id}/shots/{name}", api(s.handleShot))
+	s.mux.Handle("GET /v1/chats/{id}/files/{file}", api(s.handleFile))
 	s.mux.Handle("GET /v1/chats/{id}/turns/{turn}/replay.gif", api(s.handleReplay))
 	s.mux.Handle("POST /v1/chats/{id}/turns/{turn}/help", api(s.handleHelp))
 	s.mux.Handle("GET /v1/settings", api(s.handleSettings))
@@ -526,6 +534,12 @@ func fail(w http.ResponseWriter, code int, err error) {
 func codeFor(err error) int {
 	msg := err.Error()
 	switch {
+	case errors.Is(err, errTooBig):
+		return http.StatusRequestEntityTooLarge
+	case errors.Is(err, attach.ErrRefused):
+		return http.StatusBadRequest
+	case errors.Is(err, chat.ErrNoFile):
+		return http.StatusNotFound
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
 	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"), strings.Contains(msg, "already has an answer"), strings.Contains(msg, "has the desktop"), strings.Contains(msg, "is already approved"), strings.Contains(msg, "is already rejected"):
@@ -553,10 +567,19 @@ func codeFor(err error) int {
 	}
 }
 
-func decode(r *http.Request, v any) error {
-	data, err := io.ReadAll(io.LimitReader(r.Body, 1<<20))
+func decode(r *http.Request, v any) error { return decodeMax(r, v, 1<<20) }
+
+// errTooBig is a request body over its limit.
+var errTooBig = errors.New("the request is too big")
+
+// decodeMax is decode with the biggest body it takes.
+func decodeMax(r *http.Request, v any, max int64) error {
+	data, err := io.ReadAll(io.LimitReader(r.Body, max+1))
 	if err != nil {
 		return err
+	}
+	if int64(len(data)) > max {
+		return errTooBig
 	}
 	if len(strings.TrimSpace(string(data))) == 0 {
 		return nil
@@ -598,14 +621,38 @@ func (s *Server) handleListKitties(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleCreateKitty(w http.ResponseWriter, r *http.Request) {
-	var spec struct {
-		orchestrator.Spec
-		Start *bool `json:"start"`
+	// The body has the fields of orchestrator.Spec except what a request may not set, and the Spec
+	// is built from them one by one: nothing of the body reaches the soul file path.
+	var body struct {
+		Name       string       `json:"name"`
+		Provider   string       `json:"provider"`
+		Soul       soul.Soul    `json:"soul"`
+		SoulFile   string       `json:"soul_file"`
+		Connectors []string     `json:"connectors"`
+		Desktop    *bool        `json:"desktop"`
+		Avatar     kitty.Avatar `json:"avatar"`
+		Limits     kitty.Limits `json:"limits"`
+		Backup     string       `json:"backup"`
+		Approvals  string       `json:"approvals"`
+		Start      *bool        `json:"start"`
 	}
-	if err := decode(r, &spec); err != nil {
+	if err := decode(r, &body); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
+	// A soul file is a path on the gateway's own disk: the configuration and the CLI may name one,
+	// a request may not, or it could make the gateway read any file it can open.
+	if body.SoulFile != "" {
+		fail(w, http.StatusBadRequest, errors.New("soul_file cannot be set through the API; send the soul inline"))
+		return
+	}
+	spec := struct {
+		orchestrator.Spec
+		Start *bool
+	}{orchestrator.Spec{
+		Name: body.Name, Provider: body.Provider, Soul: body.Soul, Connectors: body.Connectors, Desktop: body.Desktop,
+		Avatar: body.Avatar, Limits: body.Limits, Backup: body.Backup, Approvals: body.Approvals,
+	}, body.Start}
 	k, err := s.fleet.Create(r.Context(), spec.Spec)
 	if err != nil {
 		fail(w, codeFor(err), err)
@@ -838,13 +885,29 @@ func (s *Server) handleRemoveMember(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleSend(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		Text string `json:"text"`
+		Text  string `json:"text"`
+		Files []struct {
+			Name string `json:"name"`
+			MIME string `json:"mime"`
+			// Data is the file in base64.
+			Data string `json:"data"`
+		} `json:"files"`
 	}
-	if err := decode(r, &body); err != nil {
-		fail(w, http.StatusBadRequest, err)
+	// A message with files may be as big as the files allow; the checks on what they are come after.
+	if err := decodeMax(r, &body, attach.MaxBody); err != nil {
+		fail(w, codeFor(err), err)
 		return
 	}
-	turns, err := s.chats.Send(r.Context(), r.PathValue("id"), body.Text)
+	var files []attach.Upload
+	for _, f := range body.Files {
+		data, err := base64.StdEncoding.DecodeString(f.Data)
+		if err != nil {
+			fail(w, http.StatusBadRequest, fmt.Errorf("%s is not valid base64", attach.CleanName(f.Name)))
+			return
+		}
+		files = append(files, attach.Upload{Name: f.Name, MIME: f.MIME, Data: data})
+	}
+	turns, err := s.chats.SendFiles(r.Context(), r.PathValue("id"), body.Text, files)
 	if err != nil {
 		fail(w, codeFor(err), err)
 		return
@@ -976,6 +1039,28 @@ func (s *Server) handleRemoveConnector(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleCancel(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, map[string]any{"cancelled": s.chats.Cancel(r.PathValue("id"))})
+}
+
+// handleFile serves a file attached to a chat. A picture is shown inline by its real type; anything
+// else is only ever a download, with a type that cannot run, so a page someone attached cannot
+// act as part of this one.
+func (s *Server) handleFile(w http.ResponseWriter, r *http.Request) {
+	a, data, err := s.chats.File(r.PathValue("id"), r.PathValue("file"))
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; sandbox")
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	if a.Kind == attach.KindImage {
+		w.Header().Set("Content-Type", a.MIME)
+		w.Header().Set("Content-Disposition", "inline")
+	} else {
+		w.Header().Set("Content-Type", "application/octet-stream")
+		w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": attach.DiskName(a)}))
+	}
+	_, _ = w.Write(data)
 }
 
 func (s *Server) handleShot(w http.ResponseWriter, r *http.Request) {

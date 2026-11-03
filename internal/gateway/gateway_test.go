@@ -278,6 +278,7 @@ type fakeChats struct {
 	sessions map[string]*chat.Session
 	fail     error
 	helped   []string
+	files    map[string]stored
 }
 
 func (c *fakeChats) Create(title string, members []string) (*chat.Session, error) {

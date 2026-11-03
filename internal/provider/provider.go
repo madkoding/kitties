@@ -125,6 +125,9 @@ type Options struct {
 	PromptCache *bool
 	// CacheTTL is how long Anthropic keeps a cached prompt: "5m" (the default) or "1h".
 	CacheTTL string
+	// Vision says whether the model takes pictures: nil leaves it to the provider (the ones whose
+	// models all do), true or false is the person's word for a model of a compatible server.
+	Vision *bool
 	// Auth is "" (a key) or AuthLogin (an account signed in from Settings).
 	Auth string
 	// Login gives the signed-in account's credentials for one request; the registry sets it
@@ -155,6 +158,8 @@ type Message struct {
 	Content string `json:"content"`
 	// Images are pictures a user turn shows the model (a screenshot of the kitty's display).
 	Images []Image `json:"images,omitempty"`
+	// Files are documents (PDF) a user turn gives the model, for a provider that reads them.
+	Files []File `json:"files,omitempty"`
 	// ToolCalls are the calls an assistant turn made, when the model called tools natively.
 	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 	// ToolCallID names the call a tool turn answers.
@@ -193,6 +198,70 @@ type ToolClient interface {
 type Image struct {
 	MIME string `json:"mime"` // image/png, image/jpeg
 	Data []byte `json:"data"`
+}
+
+// File is one document attached to a turn.
+type File struct {
+	Name string `json:"name"`
+	MIME string `json:"mime"` // application/pdf
+	Data []byte `json:"data"`
+}
+
+func (f File) dataURL() string {
+	return "data:" + f.MIME + ";base64," + base64.StdEncoding.EncodeToString(f.Data)
+}
+
+// Reader says what a client can be shown besides text. A client that does not say is taken to
+// see pictures and not to read documents.
+type Reader interface {
+	// SeesImages is true when the model takes pictures.
+	SeesImages() bool
+	// ReadsPDF is true when the model takes a PDF as a document.
+	ReadsPDF() bool
+}
+
+// SeesImages reports whether the client takes pictures.
+func SeesImages(c Client) bool {
+	if r, ok := c.(Reader); ok {
+		return r.SeesImages()
+	}
+	return true
+}
+
+// ReadsPDF reports whether the client takes a PDF as a document.
+func ReadsPDF(c Client) bool {
+	r, ok := c.(Reader)
+	return ok && r.ReadsPDF()
+}
+
+// SeesImages is true for the providers whose models take pictures; a compatible server (a local
+// Ollama, a custom address) may serve a model that does not, so it is taken as not.
+func (c *HTTPClient) SeesImages() bool {
+	if c.opts.Vision != nil {
+		return *c.opts.Vision
+	}
+	switch c.kind.Family {
+	case FamilyAnthropic, FamilyGemini, FamilyResponses:
+		return true
+	}
+	switch c.kind.Name {
+	case "openai", "openrouter", "copilot":
+		return true
+	}
+	return false
+}
+
+// ReadsPDF is true where the API takes a PDF as a document: Anthropic, Gemini and OpenAI itself.
+// A sign-in with a ChatGPT plan does not.
+func (c *HTTPClient) ReadsPDF() bool {
+	if c.opts.Auth == AuthLogin && c.kind.Family == FamilyResponses {
+		return false
+	}
+	switch c.kind.Family {
+	case FamilyAnthropic, FamilyGemini:
+		return true
+	}
+	return c.kind.Name == "openai" || c.kind.Name == "codex"
 }
 
 // dataURL renders the image as a data: URL.

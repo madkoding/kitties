@@ -18,7 +18,8 @@
 | `POST /v1/scale/{name}` `{replicas}`      | run n replicas of a configured kitty           |
 | `GET/POST /v1/chats`                      | threads; create `{title, members: [names]}`    |
 | `POST /v1/chats/{id}/members` · `DELETE /v1/chats/{id}/members/{ref}` | who is in the group |
-| `POST /v1/chats/{id}/messages` `{text}`   | send a message; returns the kitties' turns (a desktop task goes on in the background: poll the chat) |
+| `POST /v1/chats/{id}/messages` `{text, files: [{name, mime, data}]}` | send a message; returns the kitties' turns (a desktop task goes on in the background: poll the chat). `files` is optional, `data` is base64; up to 6 files and 20 MB in all, checked by their real type (a program is refused with 400, a body over the limit with 413). The turn lists them in `attachments` |
+| `GET /v1/chats/{id}/files/{file}`         | a file of the chat: a picture inline, anything else as a download |
 | `POST /v1/chats/{id}/cancel` · `GET /v1/chats/{id}/shots/{name}` | stop a task; a step's screenshot |
 | `GET /v1/settings` · `PUT/DELETE /v1/settings/providers/{name}` · `POST …/test` · `PUT/DELETE /v1/settings/connectors/{name}` | the models and the connectors (a connector that signs in needs its sign-in or a key; `?sign_in=1` saves it just before its sign-in); `POST …/connectors/{name}/test` checks its account with a request that only reads |
 | `GET /v1/local-token`                     | the token, handed only to a client on the same machine |

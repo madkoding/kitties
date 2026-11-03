@@ -180,6 +180,22 @@ export interface Step {
   shot?: string;
 }
 
+// Attachment is a file the person attached to a message; the gateway keeps its bytes.
+export interface Attachment {
+  id: string;
+  name: string;
+  mime: string;
+  // kind is what the file really is: image, pdf, text, doc or file.
+  kind: "image" | "pdf" | "text" | "doc" | "file";
+  size: number;
+}
+
+// The most a message may carry; the gateway checks the same limits by the file's real type.
+export const ATTACH_MAX_FILES = 6;
+export const ATTACH_MAX_TOTAL = 20 << 20;
+export const ATTACH_MAX_IMAGE = 5 << 20;
+export const ATTACH_MAX_FILE = 10 << 20;
+
 export interface Turn {
   at: string;
   from: string;
@@ -189,6 +205,7 @@ export interface Turn {
   steps?: Step[];
   artifacts?: string[];
   skills?: string[];
+  attachments?: Attachment[];
   // resumable: the task stopped on its budget and can go on from where it was.
   resumable?: boolean;
   working?: boolean;
@@ -659,6 +676,18 @@ export async function shotData(path: string, mime = "image/png"): Promise<string
   return `data:${mime};base64,` + parsed.base64;
 }
 
+// fileBase64 reads a file as base64, the way the gateway takes it inside a message.
+export function fileBase64(file: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",", 2)[1] || "");
+    reader.onerror = () => reject(reader.error || new Error("could not read the file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+export const attachmentPath = (chat: string, id: string) => `/v1/chats/${chat}/files/${id}`;
+
 export const api = {
   health: () =>
     request<{
@@ -765,10 +794,16 @@ export const api = {
   deleteChat: (id: string) => request("DELETE", `/v1/chats/${id}`),
   addMembers: (id: string, members: string[]) =>
     request<{ chat: Session }>("POST", `/v1/chats/${id}/members`, { members }).then((r) => r.chat),
-  send: (id: string, text: string) =>
-    request<{ turns: Turn[] }>("POST", `/v1/chats/${id}/messages`, { text }).then(
-      (r) => r.turns || [],
-    ),
+  send: async (id: string, text: string, files: File[] = []) => {
+    const encoded = await Promise.all(
+      files.map(async (f) => ({ name: f.name, mime: f.type, data: await fileBase64(f) })),
+    );
+    return request<{ turns: Turn[] }>(
+      "POST",
+      `/v1/chats/${id}/messages`,
+      encoded.length ? { text, files: encoded } : { text },
+    ).then((r) => r.turns || []);
+  },
   cancel: (id: string) => request("POST", `/v1/chats/${id}/cancel`),
   settings: () => request<SettingsView>("GET", "/v1/settings"),
   setProvider: (name: string, p: Record<string, unknown>) =>

@@ -206,3 +206,16 @@ func TestDesktopStreamAndClipboard(t *testing.T) {
 		t.Errorf("theme = %q", out)
 	}
 }
+
+func TestDemoBrainNamesTheAttachedFiles(t *testing.T) {
+	r, err := NewBrain().Complete(context.Background(), []provider.Message{
+		{Role: "system", Content: "You are Mimi, a kitty"},
+		{Role: "user", Content: "[User]: look\n\n[Attached file: plan.pdf (pdf, 2 KB)]\n\n[Attached file: cat.png (image, 1 KB)]"}})
+	if err != nil || !strings.Contains(r.Content, "**plan.pdf** and **cat.png**") || !strings.Contains(r.Content, "them") {
+		t.Fatalf("%q %v", r.Content, err)
+	}
+	r, _ = NewBrain().Complete(context.Background(), []provider.Message{{Role: "user", Content: "[Attached file: a.md (text, 1 KB)]"}})
+	if !strings.Contains(r.Content, "**a.md**") || !strings.Contains(r.Content, "read through it") {
+		t.Fatalf("%q", r.Content)
+	}
+}

@@ -1763,3 +1763,85 @@ html.mac-inset aside .titlebar {
     background: rgb(var(--bg-rgb) / 0.94);
   }
 }
+
+/* Files attached to a message: chips in the composer and in the thread, thumbnails for pictures. */
+.attach-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+  padding: 0.25rem 0.5rem;
+  background: rgb(var(--ov-rgb) / 0.06);
+  border: 1px solid rgb(var(--ov-rgb) / 0.12);
+  border-radius: var(--radius-cut);
+  color: var(--t1);
+  font-size: 0.75rem;
+  text-decoration: none;
+}
+a.attach-chip:hover {
+  border-color: rgb(var(--accent-rgb) / 0.5);
+}
+.attach-chip img {
+  width: 1.75rem;
+  height: 1.75rem;
+  object-fit: cover;
+  border-radius: 0.25rem;
+}
+.attach-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 14rem;
+}
+.attach-size {
+  color: var(--t3, var(--t2));
+  font-size: 0.6875rem;
+  white-space: nowrap;
+}
+.attach-x {
+  display: inline-flex;
+  padding: 0.125rem;
+  color: var(--t2);
+  cursor: pointer;
+}
+.attach-x:hover {
+  color: var(--c-red);
+}
+.attach-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.attach-thumb {
+  display: block;
+  width: 7.5rem;
+  height: 5.5rem;
+  padding: 0;
+  overflow: hidden;
+  background: #000;
+  border: 1px solid rgb(var(--ov-rgb) / 0.15);
+  border-radius: var(--radius-cut);
+  cursor: zoom-in;
+}
+.attach-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.composer-drop {
+  outline: 2px dashed rgb(var(--accent-rgb) / 0.8);
+  outline-offset: -4px;
+}
+.drop-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgb(var(--accent-rgb) / 0.14);
+  color: var(--color-accent);
+  font-size: 0.875rem;
+  pointer-events: none;
+}

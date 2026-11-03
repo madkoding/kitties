@@ -96,6 +96,8 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 			return provider.Reply{Content: fmt.Sprintf("Something arrived for **%s**. I read it: it needs a short reply, which I drafted and left in the thread. Nothing else is pending.", title), Usage: usage}, nil
 		}
 		return provider.Reply{Content: fmt.Sprintf("Checked **%s**: nothing new since last time. Next check as scheduled; nothing is blocked.", title), Usage: usage}, nil
+	case strings.Contains(last, "[Attached file: "):
+		return provider.Reply{Content: attachedReply(last), Usage: usage}, nil
 	case peerAsked(system, lower) != "":
 		name := peerAsked(system, lower)
 		task := strings.TrimSpace(last[strings.Index(lower, name)+len(name):])
@@ -226,6 +228,18 @@ func (b *Brain) nextRound(results string) string {
 		_ = results
 		return "@tool done {\"summary\": \"Opened the site, followed the first link and read the page. It is a placeholder domain with one paragraph and a link to the IANA page about reserved domains.\"}"
 	}
+}
+
+// attachedReply is the demo kitty's answer to a message with files: it names what it received.
+func attachedReply(last string) string {
+	var names []string
+	for _, part := range strings.Split(last, "[Attached file: ")[1:] {
+		if i := strings.Index(part, " ("); i > 0 {
+			names = append(names, "**"+part[:i]+"**")
+		}
+	}
+	return fmt.Sprintf("Got it, I have %s. I read through %s and I can work from here: tell me what you want done with it.",
+		strings.Join(names, " and "), map[bool]string{true: "it", false: "them"}[len(names) == 1])
 }
 
 func summarise(s string) string {
