@@ -86,15 +86,25 @@ uses `ask_help` (every model has it, whether it calls tools natively or in text)
 goes out, and a window opens over the chat with what the kitty sees and a box for what it needs:
 write a code or an answer and **tell it**, or tick *it is a secret* and the text is **typed on
 its desktop** without the kitty being shown it. Or **take control**: you see its desktop live
-(only the rectangles that changed, like VNC, about a quarter of a second behind), your clicks, drags, wheel
+(H.264, a few milliseconds behind), your clicks, drags, wheel
 and keys go to its display, and the clipboard works both ways. The kitty waits; when you answer
-or give the desktop back, it goes on by itself. The view is drawn from rectangles (`/v1/kitties/{ref}/rects`:
-the whole picture once, then only the tiles that differ, merged); the desktop app reads the same stream
-and hands it to its page, a gateway without it is followed as whole pictures (`/stream`, motion
-JPEG), and screenshots one after another are the last resort. The pictures come from
-`kitty-grab`, a small C program in the image that stays connected to the display, reads it
-through shared memory and compresses only what changed (about a third of the CPU of the
-`scrot` loop it replaces, which stays as the fallback, and up to 30 pictures a second).
+or give the desktop back, it goes on by itself.
+
+The view is [voxl](https://github.com/tembo/voxl) (MIT; it links x264, so the image is GPL, like
+Kitties): the display as H.264 over a WebSocket, decoded in the page with WebCodecs. It runs inside
+each desktop on the container's own loopback, with a password made up at each start, and the
+container still publishes no port: the gateway is its reverse proxy
+(`/v1/kitties/{ref}/voxl/t/{ticket}/`, a ticket asked for with `POST /v1/kitties/{ref}/voxl/ticket`
+after signing in, so no token goes in the frame's links), and every connection to it is a
+`docker exec ... socat` into the container. Only the viewer goes through (its page, scripts and
+WebSocket), not voxl's own file transfer, recordings or screenshots. Where the browser has no
+WebCodecs (they need HTTPS or localhost), in the desktop app and the Android app on a gateway that
+is not HTTPS, or on a desktop of an older image, the page falls back by itself: rectangles
+(`/v1/kitties/{ref}/rects`: the whole picture once, then only the tiles that differ, merged), whole
+pictures (`/stream`, motion JPEG) and, as the last resort, screenshots one after another. Those
+pictures come from `kitty-grab`, a small C program in the image that stays connected to the
+display, reads it through shared memory and compresses only what changed (about a third of the CPU
+of the `scrot` loop it replaces, which stays as the fallback, and up to 30 pictures a second).
 
 <img src="screenshots/50-help-modal.png" alt="A kitty asks for help: what it sees and a box for what it needs" width="100%">
 
@@ -202,5 +212,6 @@ profile is newer than any backup). A removed kitty's backup is deleted with it.
 | Taking over: holds, the person's input, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
 | The sealed backups of a kitty's sessions, and the update of a desktop | [`internal/keep`](../internal/keep), [`internal/orchestrator/sessions.go`](../internal/orchestrator/sessions.go) |
 | The saved secrets a kitty may type, sealed | [`internal/vault`](../internal/vault) |
+| The live view's proxy (voxl) and its tunnel into the container | [`internal/gateway/voxl.go`](../internal/gateway/voxl.go), [`internal/container/tunnel.go`](../internal/container/tunnel.go) |
 | What changed on the display, as rectangles to draw over the last picture | [`internal/rects`](../internal/rects) |
 | The live view in the app | [`desktop/frontend/src/LiveDesktop.tsx`](../desktop/frontend/src/LiveDesktop.tsx) |

@@ -95,16 +95,26 @@ teléfono. Entonces usa `ask_help` (todos los modelos lo tienen, llamen a las he
 nativa o en texto), te llega una notificación y se abre una ventana sobre el chat con lo que el
 kitty ve y un campo para lo que necesita: escribe un código o una respuesta y **díselo**, o marca
 *es un secreto* y el texto se **escribe en su escritorio** sin que el kitty lo vea. O **toma el
-control**: ves su escritorio en vivo (solo los rectángulos que cambiaron, como VNC, con un cuarto
-de segundo de retraso), tus clics, arrastres, rueda y teclas van a su pantalla, y el portapapeles funciona en
-ambos sentidos. El kitty espera; cuando respondes o le devuelves el escritorio, sigue solo. La vista
-se dibuja con rectángulos (`/v1/kitties/{ref}/rects`: la imagen entera una vez y luego solo los
-mosaicos que cambian, unidos); la app de escritorio lee el mismo flujo y se lo pasa a su
-página, un gateway que no lo tenga se sigue como imágenes enteras (`/stream`, motion JPEG), y las
-capturas una tras otra son el último recurso. Las imágenes las saca `kitty-grab`, un programa en C
-de la imagen que se queda conectado a la pantalla, la lee por memoria compartida y comprime solo lo
-que cambió (cerca de un tercio de la CPU del bucle de `scrot` que reemplaza, y que queda de
-respaldo, y hasta 30 imágenes por segundo).
+control**: ves su escritorio en vivo (H.264, con unos milisegundos de retraso), tus clics, arrastres, rueda y teclas van a su
+pantalla, y el portapapeles funciona en ambos sentidos. El kitty espera; cuando respondes o le
+devuelves el escritorio, sigue solo.
+
+La vista es [voxl](https://github.com/tembo/voxl) (MIT; enlaza x264, así que la imagen es GPL, como
+Kitties): la pantalla como H.264 por un WebSocket, decodificada en la página con WebCodecs. Corre
+dentro de cada escritorio en el loopback del contenedor, con una contraseña hecha en cada arranque, y
+el contenedor sigue sin publicar puertos: el gateway es su proxy inverso
+(`/v1/kitties/{ref}/voxl/t/{ticket}/`, con un ticket que se pide con
+`POST /v1/kitties/{ref}/voxl/ticket` tras iniciar sesión, así que ningún token va en los enlaces del
+marco), y cada conexión es un `docker exec ... socat` hacia el contenedor. Solo pasa el visor (su
+página, scripts y WebSocket), no la transferencia de archivos, las grabaciones ni las capturas de
+voxl. Donde el navegador no tiene WebCodecs (piden HTTPS o localhost), en la app de escritorio y la
+de Android con un gateway que no es HTTPS, o con un escritorio de una imagen antigua, la página
+retrocede sola: rectángulos (`/v1/kitties/{ref}/rects`: la imagen entera una vez y luego solo los
+mosaicos que cambian, unidos), imágenes enteras (`/stream`, motion JPEG) y, como último recurso,
+capturas una tras otra. Esas imágenes las saca `kitty-grab`, un programa en C de la imagen que se
+queda conectado a la pantalla, la lee por memoria compartida y comprime solo lo que cambió (cerca de
+un tercio de la CPU del bucle de `scrot` que reemplaza, y que queda de respaldo, y hasta 30
+imágenes por segundo).
 
 <img src="screenshots/50-help-modal.png" alt="Un kitty pide ayuda: lo que ve y un campo para lo que necesita" width="100%">
 
@@ -213,5 +223,6 @@ un kitty eliminado se borra con él.
 | Tomar el control: retenciones, entrada de la persona, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
 | Los respaldos cifrados de las sesiones de un kitty, y la actualización de un escritorio | [`internal/keep`](../internal/keep), [`internal/orchestrator/sessions.go`](../internal/orchestrator/sessions.go) |
 | Los secretos guardados que un kitty puede escribir, cifrados | [`internal/vault`](../internal/vault) |
+| El proxy del visor en vivo (voxl) y su túnel al contenedor | [`internal/gateway/voxl.go`](../internal/gateway/voxl.go), [`internal/container/tunnel.go`](../internal/container/tunnel.go) |
 | Lo que cambió en la pantalla, como rectángulos sobre la última imagen | [`internal/rects`](../internal/rects) |
 | La vista en vivo en la app | [`desktop/frontend/src/LiveDesktop.tsx`](../desktop/frontend/src/LiveDesktop.tsx) |

@@ -120,6 +120,7 @@ What the kitty's desktop is made of:
 + **Window Theme**: [Numix](https://github.com/numixproject/numix-gtk-theme) by The Numix Project (GPL-3.0+), with [Greybird-dark](https://github.com/shimmerproject/Greybird) by the Shimmer Project (GPL-2.0+ or CC-BY-SA-3.0+) as the alternative; only their Openbox themes are kept, with their licences
 + **Icon Theme**: [Lucide](https://lucide.dev) by the Lucide contributors (ISC), drawn as gradient squares by app group
 + **Fonts**: [Sansation](https://www.dafont.com/sansation.font) by Bernd Montag (freeware) and [JetBrains Mono](https://www.jetbrains.com/lp/mono/) patched with [Nerd Fonts](https://www.nerdfonts.com/) by Ryan L McIntyre
++ **Live view**: [voxl](https://github.com/tembo/voxl) by Tembo (MIT; it links x264, GPL-2.0+), the desktop as H.264 over a WebSocket
 + **Other**: [Lumen Window Manager](https://github.com/madkoding/lumen-wm), a fork of [Openbox](http://openbox.org) (GPL-2.0+) with the shelf (dock, player, weather and clock), and [Mousepad](https://docs.xfce.org/apps/mousepad/start), PCManFM, [Chromium](https://www.chromium.org/), [LibreOffice](https://www.libreoffice.org/) and [Inkscape](https://inkscape.org/) from Debian
 
 Free software under [GPL-3.0-or-later](LICENSE) · © 2026 madkoding

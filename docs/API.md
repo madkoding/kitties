@@ -12,6 +12,7 @@
 | `GET /v1/kitties/{ref}/screenshot`        | a PNG of its display                           |
 | `POST /v1/kitties/{ref}/control` `{hold}` | take its display over, or give it back         |
 | `POST /v1/kitties/{ref}/input` `{action, args}` | a click, drag, scroll, key or text of the person on it |
+| `POST /v1/kitties/{ref}/voxl/ticket`      | a ticket for the H.264 live view (voxl): `{path}` to frame, `/v1/kitties/{ref}/voxl/t/{ticket}/` (404 when its desktop has no voxl) |
 | `GET /v1/kitties/{ref}/stream`            | its display live, as motion JPEG (`?fps=1-30`) |
 | `GET /v1/kitties/{ref}/rects`             | its display live as what changed on it, like VNC (`?fps=1-30`; `SCREEN`, `UPDATE`, `RECT` lines with JPEG bodies) |
 | `GET/PUT /v1/kitties/{ref}/clipboard` `{text}` | its clipboard, both ways                  |
