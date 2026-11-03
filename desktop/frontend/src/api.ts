@@ -1358,7 +1358,13 @@ export async function artifactText(name: string): Promise<string> {
 // localhost), and a desktop whose image has no voxl. The caller then follows the display as
 // rectangles.
 export async function voxlSource(ref: string): Promise<string | null> {
-  if (inWails() || !window.isSecureContext || typeof VideoDecoder === "undefined") {
+  // A kitty's id is letters, digits, dashes and underscores: nothing else goes into an address.
+  if (
+    !/^[\w-]+$/.test(ref) ||
+    inWails() ||
+    !window.isSecureContext ||
+    typeof VideoDecoder === "undefined"
+  ) {
     return null;
   }
   let conn = savedConnection();
@@ -1375,7 +1381,7 @@ export async function voxlSource(ref: string): Promise<string | null> {
   }
   // A ticket opens the live view for a while: the frame's own requests cannot carry the token.
   try {
-    const res = await fetch(`${base}/v1/kitties/${encodeURIComponent(ref)}/voxl/ticket`, {
+    const res = await fetch(`${base}/v1/kitties/${ref}/voxl/ticket`, {
       method: "POST",
       headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
     });
@@ -1383,7 +1389,7 @@ export async function voxlSource(ref: string): Promise<string | null> {
       return null;
     }
     const { path } = (await res.json()) as { path?: string };
-    return path?.startsWith("/v1/kitties/") ? base + path : null;
+    return path && /^\/v1\/kitties\/[\w-]+\/voxl\/t\/[0-9a-f]+\/$/.test(path) ? base + path : null;
   } catch {
     return null;
   }
