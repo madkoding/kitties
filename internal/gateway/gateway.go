@@ -36,6 +36,7 @@ import (
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/skills"
+	"github.com/madkoding/kitties/internal/soul"
 )
 
 // Fleet is what the gateway needs from the orchestrator.
@@ -620,21 +621,38 @@ func (s *Server) handleListKitties(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleCreateKitty(w http.ResponseWriter, r *http.Request) {
-	var spec struct {
-		orchestrator.Spec
-		Start *bool `json:"start"`
+	// The body has the fields of orchestrator.Spec except what a request may not set, and the Spec
+	// is built from them one by one: nothing of the body reaches the soul file path.
+	var body struct {
+		Name       string       `json:"name"`
+		Provider   string       `json:"provider"`
+		Soul       soul.Soul    `json:"soul"`
+		SoulFile   string       `json:"soul_file"`
+		Connectors []string     `json:"connectors"`
+		Desktop    *bool        `json:"desktop"`
+		Avatar     kitty.Avatar `json:"avatar"`
+		Limits     kitty.Limits `json:"limits"`
+		Backup     string       `json:"backup"`
+		Approvals  string       `json:"approvals"`
+		Start      *bool        `json:"start"`
 	}
-	if err := decode(r, &spec); err != nil {
+	if err := decode(r, &body); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
 	// A soul file is a path on the gateway's own disk: the configuration and the CLI may name one,
 	// a request may not, or it could make the gateway read any file it can open.
-	if spec.SoulFile != "" {
+	if body.SoulFile != "" {
 		fail(w, http.StatusBadRequest, errors.New("soul_file cannot be set through the API; send the soul inline"))
 		return
 	}
-	spec.SoulFile = ""
+	spec := struct {
+		orchestrator.Spec
+		Start *bool
+	}{orchestrator.Spec{
+		Name: body.Name, Provider: body.Provider, Soul: body.Soul, Connectors: body.Connectors, Desktop: body.Desktop,
+		Avatar: body.Avatar, Limits: body.Limits, Backup: body.Backup, Approvals: body.Approvals,
+	}, body.Start}
 	k, err := s.fleet.Create(r.Context(), spec.Spec)
 	if err != nil {
 		fail(w, codeFor(err), err)
