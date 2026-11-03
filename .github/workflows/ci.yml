@@ -216,10 +216,17 @@ jobs:
           head -c 5 grab.bin | grep -q FRAME
           sleep 1
           ! docker exec kitty-ci pgrep kitty-grab
+          # voxl, the live view: up on the container's loopback with its own password, streaming the
+          # display (a PNG of it), and reachable through the tunnel the gateway uses.
+          docker exec kitty-ci sh -c 'command -v voxl && command -v socat && test -s /tmp/voxl.pw && ls -l /tmp/voxl.pw | grep -q "^-rw-------"'
+          for _ in $(seq 1 20); do docker exec kitty-ci curl -sf http://127.0.0.1:6901/healthz && break; sleep 1; done
+          docker exec kitty-ci python3 -c 'import urllib.request as u; pw = open("/tmp/voxl.pw").read().strip(); r = u.Request("http://127.0.0.1:6901/screenshot", headers={"Authorization": "Bearer " + pw}); assert u.urlopen(r).read(8)[1:4] == b"PNG"'
+          # (the request's end of the input stays open a moment: voxl closes a connection whose client has)
+          (printf 'GET /healthz HTTP/1.1\r\nHost: 127.0.0.1:6901\r\nConnection: close\r\n\r\n'; sleep 2) | docker exec -i kitty-ci socat - TCP:127.0.0.1:6901 | grep -q '^ok'
           docker rm -f kitty-ci
       - name: the desktop's logs, when a check above failed
         if: failure()
-        run: docker exec kitty-ci sh -c 'ps aux; tail -n 40 /tmp/xvfb.log /tmp/lumen.log /tmp/pcmanfm.log' || true
+        run: docker exec kitty-ci sh -c 'ps aux; tail -n 40 /tmp/xvfb.log /tmp/lumen.log /tmp/pcmanfm.log /tmp/voxl.log' || true
 
   # The gateway as a server image: the web page and the binary inside. Built on every push, it
   # proves the Dockerfile and that the container answers its health check.

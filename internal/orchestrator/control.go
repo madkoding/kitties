@@ -2,10 +2,16 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"net"
+	"regexp"
+	"strings"
+	"sync"
 	"time"
 
+	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
 )
@@ -156,4 +162,44 @@ func (m *Manager) applyTheme(ctx context.Context, k *kitty.Kitty, reset bool) {
 		return
 	}
 	_, _ = m.ctr().Exec(ctx, k.Container, "kitty-theme", name)
+}
+
+// VoxlPasswordFile is where the desktop's entrypoint leaves the password of its voxl.
+const VoxlPasswordFile = "/tmp/voxl.pw"
+
+// voxlPassword is what the entrypoint writes: random hexadecimal.
+var voxlPassword = regexp.MustCompile(`^[0-9a-f]{32,}$`)
+
+// Voxl is how to reach a kitty's voxl, the H.264 live view that runs inside its container.
+type Voxl struct {
+	// Dial opens a connection to it (through the container engine: no port is published).
+	Dial func(ctx context.Context) (net.Conn, error)
+	// Password signs in to it.
+	Password string
+}
+
+// Voxl returns the way to the kitty's voxl, or an error when its image has none (an older
+// image, a demo desktop): the caller then follows the display as rectangles.
+func (m *Manager) Voxl(ctx context.Context, ref string) (Voxl, error) {
+	k, err := m.Get(ref)
+	if err != nil {
+		return Voxl{}, err
+	}
+	if !k.Desktop {
+		return Voxl{}, fmt.Errorf("%s has no desktop", k.Name)
+	}
+	ctr := m.ctr()
+	pw, err := ctr.Exec(ctx, k.Container, "cat", VoxlPasswordFile)
+	pw = strings.TrimSpace(pw)
+	if err != nil || !voxlPassword.MatchString(pw) {
+		return Voxl{}, errors.New("this desktop has no voxl live view")
+	}
+	return Voxl{Password: pw, Dial: func(ctx context.Context) (net.Conn, error) {
+		c, err := ctr.Tunnel(ctx, k.Container, container.VoxlPort)
+		if err != nil {
+			return nil, err
+		}
+		// A live view open is the person watching: the machine stays on while it is.
+		return watchedConn{Conn: c, done: m.use.watch(k.ID, m.now), once: new(sync.Once)}, nil
+	}}, nil
 }

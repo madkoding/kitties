@@ -156,3 +156,55 @@ func TestAnyHeld(t *testing.T) {
 		t.Error("an idle hold counts")
 	}
 }
+
+func TestVoxl(t *testing.T) {
+	ctx := context.Background()
+	f := newFake()
+	m, err := New(testConfig(t), WithContainers(f, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, _ := m.Create(ctx, Spec{Name: "mimi"})
+	no := false
+	_, _ = m.Create(ctx, Spec{Name: "brain", Desktop: &no})
+	// A desktop of an older image has no password file: no live view of this kind.
+	for _, out := range []string{"", "(demo) cat /tmp/voxl.pw\n", "cat: /tmp/voxl.pw: No such file"} {
+		f.outputs = map[string]string{"cat": out}
+		if _, err := m.Voxl(ctx, "mimi"); err == nil {
+			t.Errorf("%q: a desktop without voxl has no live view", out)
+		}
+	}
+	f.outputs = map[string]string{"cat": "0123456789abcdef0123456789abcdef0123456789abcdef\n"}
+	v, err := m.Voxl(ctx, "mimi")
+	if err != nil || v.Password != "0123456789abcdef0123456789abcdef0123456789abcdef" {
+		t.Fatalf("voxl = %+v %v", v, err)
+	}
+	if f.execs[len(f.execs)-1] != k.Container+":cat "+VoxlPasswordFile {
+		t.Errorf("the password is read with %v", f.execs)
+	}
+	// The connection goes to voxl's port in this kitty's container, and the machine counts as in
+	// use while it is open.
+	c, err := v.Dial(ctx)
+	if err != nil || !strings.Contains(strings.Join(f.calls, ","), "tunnel "+k.Container+" 6901") {
+		t.Fatalf("dial = %v %v", err, f.calls)
+	}
+	if !watching(m, k.ID) {
+		t.Error("an open live view is a person watching")
+	}
+	_ = c.Close()
+	_ = c.Close()
+	if watching(m, k.ID) {
+		t.Error("a closed live view is not")
+	}
+	for _, ref := range []string{"brain", "nobody"} {
+		if _, err := m.Voxl(ctx, ref); err == nil {
+			t.Errorf("%s has no desktop to show", ref)
+		}
+	}
+}
+
+// watching tells whether a person has a live view of the kitty open.
+func watching(m *Manager, id string) bool {
+	_, streams := m.use.running(id)
+	return streams > 0
+}

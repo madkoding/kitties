@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import { api, type Kitty, rectsDesktop, shotData, streamDesktop } from "./api";
+import { api, type Kitty, rectsDesktop, shotData, streamDesktop, voxlSource } from "./api";
 import { plainError } from "./friendly";
 import { t } from "./i18n";
 import { IconExpand, IconReduce, IconX } from "./icons";
@@ -145,9 +145,12 @@ export default function LiveDesktop({
   const [control, setControl] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  // mode is how the pictures come: rectangles of what changed, whole pictures of a stream, or
-  // screenshots when each one before fails.
-  const [mode, setMode] = useState<"rects" | "stream" | "poll">("rects");
+  // mode is how the pictures come: H.264 from voxl (framed from the gateway; where the browser
+  // cannot decode it, or the desktop has none, it gives way to the next), rectangles of what
+  // changed, whole pictures of a stream, or screenshots when each one before fails.
+  const [mode, setMode] = useState<"voxl" | "rects" | "stream" | "poll">("voxl");
+  const [voxlUrl, setVoxlUrl] = useState("");
+  const voxlFrame = useRef<HTMLIFrameElement>(null);
   const [loaded, setLoaded] = useState(false);
   const [clip, setClip] = useState("");
   const [clipNote, setClipNote] = useState("");
@@ -206,6 +209,31 @@ export default function LiveDesktop({
     watch.observe(el);
     return () => watch.disconnect();
   }, [view]);
+
+  // voxl: the display as H.264, in a frame of the gateway's own page. Where it cannot be had
+  // (no WebCodecs, another origin, Wails, a desktop without voxl) the rectangles take over.
+  useEffect(() => {
+    if (mode !== "voxl") {
+      return;
+    }
+    let alive = true;
+    voxlSource(kitty.id)
+      .then((src) => {
+        if (!alive) {
+          return;
+        }
+        if (!src) {
+          setMode("rects");
+          return;
+        }
+        setVoxlUrl(src);
+        setDims({ w: 1280, h: 800 });
+      })
+      .catch(() => alive && setMode("rects"));
+    return () => {
+      alive = false;
+    };
+  }, [kitty.id, mode]);
 
   // The rectangles: the whole display first, then only the parts that changed, drawn over it. One
   // that fails, or shows nothing in a few seconds, gives way to the stream of whole pictures.
@@ -380,7 +408,10 @@ export default function LiveDesktop({
     try {
       setControl(await api.controlKitty(kitty.id, on));
       if (on) {
-        setTimeout(() => surface.current?.focus(), 0);
+        setTimeout(
+          () => (mode === "voxl" ? voxlFrame.current?.contentWindow : surface.current)?.focus(),
+          0,
+        );
       }
     } catch (e) {
       setErr(plainError((e as Error).message));
@@ -443,6 +474,10 @@ export default function LiveDesktop({
   };
 
   const onMouseDown = (e: MouseEvent) => {
+    // voxl takes the person's input itself, inside its frame.
+    if (mode === "voxl") {
+      return;
+    }
     if (!control) {
       return;
     }
@@ -507,6 +542,10 @@ export default function LiveDesktop({
   };
 
   const onWheel = (e: WheelEvent) => {
+    // voxl takes the person's input itself, inside its frame.
+    if (mode === "voxl") {
+      return;
+    }
     if (!control) {
       return;
     }
@@ -522,6 +561,10 @@ export default function LiveDesktop({
   };
 
   const onKeyDown = (e: KeyboardEvent) => {
+    // voxl takes the person's input itself, inside its frame.
+    if (mode === "voxl") {
+      return;
+    }
     if (!control) {
       return;
     }
@@ -546,6 +589,10 @@ export default function LiveDesktop({
   };
 
   const onPaste = (e: ClipboardEvent) => {
+    // voxl takes the person's input itself, inside its frame.
+    if (mode === "voxl") {
+      return;
+    }
     const text = e.clipboardData?.getData("text") || "";
     if (control && text) {
       e.preventDefault();
@@ -691,6 +738,29 @@ export default function LiveDesktop({
             }
           }}
         >
+          {mode === "voxl" && voxlUrl && (
+            // Taking control lets the frame have the pointer and the keys; until then the stage
+            // under it takes the click.
+            <iframe
+              ref={voxlFrame}
+              src={voxlUrl}
+              title={t("{name}'s desktop", { name: kitty.name })}
+              class="live-voxl"
+              style={{
+                width: "100%",
+                height: "100%",
+                border: 0,
+                pointerEvents: control ? "auto" : "none",
+              }}
+              allow="clipboard-read; clipboard-write; autoplay"
+              onLoad={() => {
+                setLoaded(true);
+                seen();
+              }}
+              data-testid="live-frame"
+              data-mode="voxl"
+            />
+          )}
           {mode === "rects" && (
             <canvas
               ref={canvas}

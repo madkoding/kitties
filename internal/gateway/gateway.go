@@ -59,6 +59,8 @@ type Fleet interface {
 	Input(ctx context.Context, ref string, a desktop.Action) error
 	// Stream follows a kitty's display (pictures for container.ReadFrame) until closed.
 	Stream(ctx context.Context, ref string, fps, quality int) (io.ReadCloser, error)
+	// Voxl is the way to a kitty's H.264 live view (an error when its desktop has none).
+	Voxl(ctx context.Context, ref string) (orchestrator.Voxl, error)
 	// Clipboard and SetClipboard are the text on a kitty's clipboard, both ways.
 	Clipboard(ctx context.Context, ref string) (string, error)
 	SetClipboard(ctx context.Context, ref, text string) error
@@ -112,6 +114,7 @@ type Chats interface {
 // Server is the HTTP API.
 type Server struct {
 	fleet   Fleet
+	voxl    voxlCache
 	chats   Chats
 	token   string
 	version string
@@ -246,6 +249,7 @@ func (s *Server) routes() {
 	s.mux.HandleFunc("GET /v1/local-token", s.handleLocalToken)
 	s.agendaRoutes()
 	s.liveRoutes()
+	s.voxlRoutes()
 	s.accountRoutes()
 	s.approvalRoutes()
 	s.memoryRoutes()

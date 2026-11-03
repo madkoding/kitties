@@ -5,6 +5,10 @@ Debian, a headless X display (Xvfb, 1280×800) and a small desktop of its own. H
 it (screenshots, actions, taking control) is in [DESKTOP.md](DESKTOP.md); this page is about the
 desktop itself.
 
+The live view is [voxl](https://github.com/tembo/voxl) (MIT, built into the image at a fixed commit
+with x264, which makes the image GPL): it starts with the display, on the container's own loopback,
+and the gateway reaches it with `docker exec ... socat` (see [DESKTOP.md](DESKTOP.md)).
+
 <p align="center">
 <img src="screenshots/desktop-menu.png" alt="The kitty's desktop on Lumen: the apps menu open and the shelf at the bottom" width="100%">
 </p>

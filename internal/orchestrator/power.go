@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"sync"
 	"time"
 
@@ -289,4 +290,17 @@ func (m *Manager) idleCheck(ctx context.Context, k *kitty.Kitty, warn func(forma
 	if m.onPowerOff != nil {
 		m.onPowerOff(k, idle)
 	}
+}
+
+// watchedConn is a live view's connection that tells the manager when it is closed.
+type watchedConn struct {
+	net.Conn
+	done func()
+	once *sync.Once
+}
+
+func (w watchedConn) Close() error {
+	err := w.Conn.Close()
+	w.once.Do(w.done)
+	return err
 }

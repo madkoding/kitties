@@ -79,14 +79,14 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
   picture lands in the thread; the chat can be cancelled. How it works, with diagrams:
   [DESKTOP.md](DESKTOP.md) ([en español](DESKTOP.es.md)).
 - **Taking the desktop over**: the **Desktop** button of a chat (or *Live and take control* in a
-  kitty's drawer) shows its display live, streamed as motion JPEG (a picture whenever it
-  changes, about a quarter of a second behind). **Take control** sends your clicks, drags, wheel
+  kitty's drawer) shows its display live as H.264 ([voxl](https://github.com/tembo/voxl), proxied by the
+  gateway; rectangles, motion JPEG and screenshots are the fallbacks). **Take control** sends your clicks, drags, wheel
   and keys to it, like a remote screen, for what the kitty cannot do alone (a password, a
   captcha); the clipboard goes both ways. The kitty's own actions wait until you give it back,
   and a hold left idle for five minutes ends by itself. A kitty that needs you says so with
   `ask_help`: the chat shows a **Take control** button and a notification goes out, and it goes
-  on when you give the desktop back. Frames and input go through the gateway's API: no VNC port
-  is opened.
+  on when you give the desktop back. The stream and the input go through the gateway (a `docker exec` tunnel): no VNC
+  port is opened.
 - **Settings** (`internal/orchestrator/settings.go`): models and connectors edited from the app
   are kept in `settings.json` on top of the YAML, keys included and never shown again.
 - **Demo** (`internal/demo`): a scripted brain and a drawn desktop, for `kitties -demo`.

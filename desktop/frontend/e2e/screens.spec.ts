@@ -1395,6 +1395,59 @@ test("in a kitty's drawer the desktop is there, live, and one click on it takes 
   await expect(drawer).toHaveCount(0);
 });
 
+test("a desktop with voxl is shown as H.264 in a frame: a click takes the controls, which then go to the frame", async ({
+  page,
+}) => {
+  // The demo desktop has no voxl: a stand-in answers where the gateway would proxy it. The real
+  // stream (gateway, tunnel, voxl, WebCodecs) is checked by desktop/frontend/scripts/voxl-check.mjs.
+  await page.route("**/v1/kitties/*/voxl/ticket", (route) =>
+    route.fulfill({
+      contentType: "application/json",
+      body: '{"path":"/v1/kitties/tom/voxl/t/abc/"}',
+    }),
+  );
+  await page.route("**/v1/kitties/*/voxl/t/abc/", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: "<!doctype html><body style='margin:0;background:#345'><button id=b onclick=\"document.title='clicked'\" style='width:100%;height:100%'>voxl</button>",
+    }),
+  );
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("open-desktop").first().click();
+  const live = page.getByTestId("live-desktop");
+  const frame = live.getByTestId("live-frame");
+  await expect(frame).toHaveAttribute("data-mode", "voxl");
+  await expect(frame).toHaveAttribute("src", /\/v1\/kitties\/[^/]+\/voxl\//);
+  await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  // Watching: the frame does not take the pointer, so a click on the picture takes the controls.
+  await expect(frame).toHaveCSS("pointer-events", "none");
+  await live.getByTestId("live-frame").click({ position: { x: 40, y: 30 }, force: true });
+  await expect(live.getByTestId("live-state")).toContainText("You have the controls");
+  // With the controls the frame has the pointer: voxl, not the gateway's /input, takes the clicks.
+  await expect(frame).toHaveCSS("pointer-events", "auto");
+  const inputs: string[] = [];
+  page.on("request", (r) => r.url().includes("/input") && inputs.push(r.url()));
+  await page.frameLocator('[data-testid="live-desktop"] iframe').locator("#b").click();
+  await expect(
+    page.frameLocator('[data-testid="live-desktop"] iframe').locator("body"),
+  ).toBeVisible();
+  expect(inputs).toEqual([]);
+  await live.getByTestId("give-back").first().click();
+  await expect(frame).toHaveCSS("pointer-events", "none");
+});
+
+test("a desktop whose voxl does not answer is followed as rectangles", async ({ page }) => {
+  await page.route("**/v1/kitties/*/voxl/ticket", (route) =>
+    route.fulfill({ status: 404, body: "no" }),
+  );
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("open-desktop").first().click();
+  await expect(page.getByTestId("live-desktop").getByTestId("live-frame")).toHaveAttribute(
+    "data-mode",
+    "rects",
+  );
+});
+
 test("a desktop that cannot give rectangles is followed as a stream of whole pictures", async ({
   page,
 }) => {
