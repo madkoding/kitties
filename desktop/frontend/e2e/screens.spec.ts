@@ -1449,6 +1449,51 @@ test("the live desktop window fills the whole screen, on a laptop and on a phone
   }
 });
 
+test("the live desktop's chat box and buttons never overlap, at any size", async ({ page }) => {
+  for (const size of [
+    { width: 1440, height: 900 },
+    { width: 1024, height: 700 },
+    { width: 768, height: 700 },
+    { width: 390, height: 800 },
+    { width: 360, height: 640 },
+  ]) {
+    await page.setViewportSize(size);
+    await page.goto(`/${Q}#chat/${ids.desktop}`);
+    await page.getByTestId("open-desktop").first().click();
+    const chat = page.getByTestId("live-desktop").getByTestId("live-chat");
+    await expect(chat).toBeVisible();
+    if (size.width < 768) {
+      await chat.getByTestId("live-chat-toggle").click();
+    }
+    const form = chat.getByTestId("composer");
+    await expect(form).toBeVisible();
+    const boxes = [];
+    for (const el of [
+      form.getByTestId("attach"),
+      form.locator(".well"),
+      form.locator("button[type=submit], .btn-danger"),
+    ]) {
+      boxes.push((await el.boundingBox())!);
+    }
+    // Side by side, none over another, and the box has room to write in.
+    for (let i = 0; i < boxes.length - 1; i++) {
+      expect(boxes[i].x + boxes[i].width).toBeLessThanOrEqual(boxes[i + 1].x + 1);
+    }
+    expect(boxes[1].width).toBeGreaterThanOrEqual(size.width >= 1024 ? 200 : 160);
+    const outer = (await chat.boundingBox())!;
+    const last = boxes[2];
+    expect(last.x + last.width).toBeLessThanOrEqual(outer.x + outer.width + 1);
+    if (size.width === 1440) {
+      expect(outer.width).toBeGreaterThanOrEqual(384);
+    }
+    // The box of the chat is wholly on the screen.
+    expect(outer.x).toBeGreaterThanOrEqual(0);
+    expect(outer.x + outer.width).toBeLessThanOrEqual(size.width + 1);
+    expect(outer.y + outer.height).toBeLessThanOrEqual(size.height + 1);
+    await page.keyboard.press("Escape");
+  }
+});
+
 test("in a kitty's drawer the desktop is there, live, and one click on it takes the controls", async ({
   page,
 }) => {

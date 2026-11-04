@@ -1881,17 +1881,17 @@ a.attach-chip:hover {
 .live-chat.is-folded {
   flex: none;
 }
-@media (max-width: 767px) {
-  /* A phone stacks the chat under the picture, short, so the picture keeps the room. */
+@media (max-width: 1023px) {
+  /* A phone or a narrow window stacks the chat under the picture, short, so the picture keeps the room. */
   .live-chat {
     flex: none;
-    height: 14rem;
+    height: 16rem;
   }
   .live-chat.is-folded {
     height: auto;
   }
 }
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .live-body {
     flex-direction: row;
   }
@@ -1905,7 +1905,7 @@ a.attach-chip:hover {
   }
   .live-chat {
     flex: none;
-    width: 22rem;
+    width: clamp(26rem, 30vw, 36rem);
   }
   .live-chat.is-folded {
     width: 2.75rem;
@@ -1951,8 +1951,30 @@ html.mac-inset .live-head {
 .live-window .live-chat {
   min-height: 0;
 }
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .live-window .live-chat {
     align-self: stretch;
   }
+}
+
+/* The composer in the sidebar is tighter, so the box keeps its room and no button sits over it. */
+.live-chat form.frosted {
+  align-items: flex-end;
+  gap: 0.375rem;
+  padding: 0.5rem;
+}
+.live-chat form.frosted > .well {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+.live-chat form.frosted > button {
+  flex: none;
+}
+.live-chat form.frosted .btn-accent {
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+}
+.live-chat form.frosted .btn-danger {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
 }
