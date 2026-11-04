@@ -1943,13 +1943,13 @@ test("files attach by button, paste and drop, and the kitty reads them", async (
   };
   // What the page can tell at once: too many files, a picture over the limit.
   await page.getByTestId("file-input").setInputFiles(
-    Array.from({ length: 7 }, (_, i) => ({
+    Array.from({ length: 21 }, (_, i) => ({
       name: `f${i}.txt`,
       mimeType: "text/plain",
       buffer: Buffer.from("x"),
     })),
   );
-  await expect(page.getByTestId("attach-error")).toContainText("at most 6 files");
+  await expect(page.getByTestId("attach-error")).toContainText("at most 20 files");
   await clearChips();
   await page.getByTestId("file-input").setInputFiles({
     name: "huge.png",
