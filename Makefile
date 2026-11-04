@@ -25,7 +25,7 @@ PLATFORMS := linux/amd64 linux/arm64 linux/arm android/arm64 \
              windows/amd64 windows/arm64 darwin/amd64 darwin/arm64
 
 .DEFAULT_GOAL := help
-.PHONY: help build dist test vet fmt fmt-check check cover image run clean frontend web desktop desktop-check e2e demo android
+.PHONY: help build dist test test-cover vet fmt fmt-check check cover image run clean frontend web desktop desktop-check e2e demo android
 
 help: ## Show this list of commands
 	@printf '\nkitties: what you can run here\n\n'
@@ -59,6 +59,17 @@ fmt-check: ## Fail if any Go file is unformatted
 	@out="$$(gofmt -l .)"; if [ -n "$$out" ]; then echo "unformatted:"; echo "$$out"; exit 1; fi
 
 check: fmt-check vet test ## Everything CI checks, in one go
+
+test-cover: ## Tests with the race detector and the coverage gate, in one run (what CI runs)
+	@$(GO) test -count=1 -race -cover $(PKGS) > coverage.out 2>&1; rc=$$?; cat coverage.out; \
+	[ "$$rc" = 0 ] || exit "$$rc"; \
+	fail=0; for pkg in $$($(GO) list $(PKGS)); do \
+		pct=$$(awk -v p="$$pkg" '$$2 == p' coverage.out | sed -n 's/.*coverage: \([0-9.]*\)%.*/\1/p'); \
+		[ -z "$$pct" ] && pct=0; \
+		ok=$$(awk -v p="$$pct" -v m="$(COVER_MIN)" 'BEGIN{print (p+0 >= m+0) ? "ok" : "LOW"}'); \
+		printf '  %-6s %6s%%  %s\n' "$$ok" "$$pct" "$$pkg"; \
+		[ "$$ok" = "LOW" ] && fail=1; \
+	done; [ "$$fail" = 0 ] || { echo "a package is under $(COVER_MIN)%"; exit 1; }
 
 cover: ## Coverage per package, against COVER_MIN
 	@fail=0; for pkg in $$($(GO) list $(PKGS)); do \
