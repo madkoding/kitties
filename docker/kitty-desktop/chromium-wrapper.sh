@@ -3,8 +3,8 @@
 # container can make user namespaces, and writes what it did to ~/.cache/chromium-launch.log, so a
 # browser that does not open leaves something to read:   cat ~/.cache/chromium-launch.log
 #
-# - --disable-gpu: the display is Xvfb, with no GPU and no compositor; Chromium paints in software
-#   (a compositor like picom adds nothing to that: it only costs CPU on every frame voxl sends).
+# - --disable-gpu: the display is Xvfb, with no GPU; Chromium paints in software (picom, the
+#   desktop's light xrender compositor, only composes the result).
 # - --disable-dev-shm-usage: Chromium keeps its shared memory in /tmp instead of /dev/shm, which a
 #   container may have small.
 # - The sandbox needs user namespaces, which the container gets from the seccomp profile kitties

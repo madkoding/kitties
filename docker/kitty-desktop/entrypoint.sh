@@ -45,6 +45,17 @@ if command -v voxl >/dev/null 2>&1; then
         done
     ) &
 fi
+# The compositor, for the transparencies (menus, translucent windows). Light on purpose: xrender,
+# no shadows, fading or blur (see picom.conf), so voxl's frames cost no more than before. A kitty
+# whose CPU matters more than its transparencies starts with KITTY_COMPOSITOR=0.
+if [ "${KITTY_COMPOSITOR:-1}" != 0 ] && command -v picom >/dev/null 2>&1; then
+    (
+        while :; do
+            picom --config "$HOME/.config/picom/picom.conf" >>/tmp/picom.log 2>&1
+            sleep 1
+        done
+    ) &
+fi
 # The desktop: Lumen with the shelf (the pinned apps, the open windows and the clock) in the dark
 # Numix theme, and the terminal in Kitties' colours. Its autostart brings up PCManFM, which
 # draws the wallpaper and the icons on it.

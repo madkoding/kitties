@@ -1,6 +1,6 @@
 # kitty-desktop: the body of a kitty.
 #
-# A desktop on a headless X display (Xvfb) with the Lumen window manager (madkoding/lumen-wm,
+# A desktop on a headless X display (Xvfb, with picom compositing its transparencies) with the Lumen window manager (madkoding/lumen-wm,
 # with its shelf: a dock of pinned and open apps and a clock) in the dark Numix theme and
 # Kitties' fonts: windows to move, focus and close, and PCManFM for the desktop's wallpaper and
 # icons and as the file manager. The
@@ -107,7 +107,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     SAL_USE_VCLPLUGIN=gtk3
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip \
+        xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip picom \
         xterm sudo playerctl dbus-x11 pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
         libglib2.0-0 libxml2 libpango-1.0-0 libpangocairo-1.0-0 libpangoxft-1.0-0 libcairo2 libxft2 libxrandr2 libxinerama1 \
         libxcursor1 libxi6 libsm6 librsvg2-2 libimlib2 libxkbcommon0 libxau6 \
@@ -169,6 +169,8 @@ COPY --chown=kitty:kitty home/ /home/kitty/
 # An empty desktop: PCManFM draws only the wallpaper, no icons (the shelf has the apps).
 RUN mkdir -p /home/kitty/Desktop && chown kitty:kitty /home/kitty/Desktop
 COPY --chown=kitty:kitty Xresources /home/kitty/.Xresources
+# The compositor (picom, xrender, no shadows or blur) for the windows' and menus' transparencies.
+COPY --chown=kitty:kitty picom.conf /home/kitty/.config/picom/picom.conf
 # Sound: PulseAudio with one virtual output ("output", started by the entrypoint); every program
 # finds it through this socket, and voxl streams its monitor as Opus.
 RUN printf 'default-server = unix:/tmp/kitty-pulse/native\nautospawn = no\n' >> /etc/pulse/client.conf
