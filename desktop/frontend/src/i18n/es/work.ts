@@ -399,7 +399,6 @@ const dict: Dictionary = {
   "Sent: waiting for the screen to change…": "Enviado: esperando a que la pantalla cambie…",
   "Ready: click, drag, scroll or type on the picture":
     "Listo: haz clic, arrastra, desplaza o escribe sobre la imagen",
-  "Open the fast view in the browser": "Abrir la vista rápida en el navegador",
   "Click the picture to take control": "Haz clic en la imagen para tomar el control",
   Enlarge: "Ampliar",
   Reduce: "Reducir",
