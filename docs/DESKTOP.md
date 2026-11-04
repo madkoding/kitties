@@ -98,8 +98,8 @@ container publishes it only on the host's loopback (the gateway dials that port,
 after signing in, so no token goes in the frame's links), and every connection to it is a
 `docker exec ... socat` into the container. Only the viewer goes through (its page, scripts and
 WebSocket), not voxl's own file transfer, recordings or screenshots. Where the browser has no
-WebCodecs (they need HTTPS or localhost), in the desktop app and the Android app on a gateway that
-is not HTTPS, or on a desktop of an older image, the page falls back by itself: rectangles
+WebCodecs (they need HTTPS or localhost), in the Android app on a gateway that
+is not HTTPS, in a webview without WebCodecs (the desktop app frames the gateway it started, getting its ticket through the app's bridge), or on a desktop of an older image, the page falls back by itself: rectangles
 (`/v1/kitties/{ref}/rects`: the whole picture once, then only the tiles that differ, merged), whole
 pictures (`/stream`, motion JPEG) and, as the last resort, screenshots one after another. Those
 pictures come from `kitty-grab`, a small C program in the image that stays connected to the
