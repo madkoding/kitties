@@ -1,12 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import {
-  api,
-  type Kitty,
-  rectsDesktop,
-  shotData,
-  streamDesktop,
-  voxlSource,
-} from "./api";
+import { api, type Kitty, rectsDesktop, shotData, streamDesktop, voxlSource } from "./api";
 import { plainError } from "./friendly";
 import { t } from "./i18n";
 import { IconExpand, IconReduce, IconX } from "./icons";
@@ -636,6 +629,9 @@ export default function LiveDesktop({
   }
 
   const name = t("{name}'s desktop", { name: kitty.name });
+  // Sound only comes with the H.264 view, and the browser starts it from a click inside it.
+  const soundHint =
+    mode !== "voxl" ? t("No sound in this view") : control ? "" : t("Take control to hear sound");
   const content = (
     <>
       {windowed ? (
@@ -649,6 +645,11 @@ export default function LiveDesktop({
               ? t("You have the controls: {name} waits", { name: kitty.name })
               : t("Watching live")}
           </span>
+          {soundHint && (
+            <span class="text-xs text-[var(--t3)]" data-testid="live-sound-hint">
+              {soundHint}
+            </span>
+          )}
           {control ? (
             <button
               class="btn-accent px-3 py-1.5 text-sm flex items-center gap-2"
@@ -688,6 +689,11 @@ export default function LiveDesktop({
               ? t("You have the controls: {name} waits", { name: kitty.name })
               : t("Watching live")}
           </span>
+          {soundHint && (
+            <span class="text-xs text-[var(--t3)]" data-testid="live-sound-hint">
+              {soundHint}
+            </span>
+          )}
           <span class="flex-1" />
           {control ? (
             <button

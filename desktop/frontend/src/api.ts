@@ -1351,21 +1351,26 @@ export async function artifactText(name: string): Promise<string> {
 }
 
 // voxlSource is the address of a kitty's H.264 live view (voxl, which the gateway proxies at
-// /v1/kitties/{ref}/voxl/) for the page to frame, or null where it cannot be had: inside Wails
-// (the page cannot frame the gateway), Android with a gateway that is not HTTPS (the app's page
-// is HTTPS and the browser would not show a frame of plain HTTP), a gateway on another origin
-// (it only lets its own page and the Android app's frame it), a page where the browser has no WebCodecs (it needs HTTPS or
-// localhost), and a desktop whose image has no voxl. The caller then follows the display as
-// rectangles.
+// /v1/kitties/{ref}/voxl/) for the page to frame, or null where it cannot be had: Android with a
+// gateway that is not HTTPS (the app's page is HTTPS and the browser would not show a frame of
+// plain HTTP), a gateway on another origin (it only lets its own page and the apps' frame it), a
+// page where the browser has no WebCodecs (it needs HTTPS or localhost), and a desktop whose image
+// has no voxl. The caller then follows the display as rectangles, without sound. The desktop app
+// (Wails) frames the gateway it started on this machine; its ticket comes through the app's bridge.
 export async function voxlSource(ref: string): Promise<string | null> {
   // A kitty's id is letters, digits, dashes and underscores: nothing else goes into an address.
-  if (
-    !/^[\w-]+$/.test(ref) ||
-    inWails() ||
-    !window.isSecureContext ||
-    typeof VideoDecoder === "undefined"
-  ) {
+  if (!/^[\w-]+$/.test(ref) || !window.isSecureContext || typeof VideoDecoder === "undefined") {
     return null;
+  }
+  if (inWails()) {
+    try {
+      const { path } = await request<{ path?: string }>("POST", `/v1/kitties/${ref}/voxl/ticket`);
+      return path && /^\/v1\/kitties\/[\w-]+\/voxl\/t\/[0-9a-f]+\/$/.test(path)
+        ? (safeGatewayBase(savedConnection().url) || "http://127.0.0.1:7488") + path
+        : null;
+    } catch {
+      return null;
+    }
   }
   let conn = savedConnection();
   if (!conn.token) {

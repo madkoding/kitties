@@ -174,6 +174,10 @@ func New(fleet Fleet, chats Chats, token, version string) *Server {
 // The app talks to the API from there with the token; no cookie ever crosses.
 const AppOrigin = "https://appassets.androidplatform.net"
 
+// WailsOrigins are where the desktop app's page comes from (Windows, and macOS and Linux). It
+// frames the live view from there; the API goes through the app's own bridge.
+const WailsOrigins = "http://wails.localhost wails://wails"
+
 // ServeHTTP implements http.Handler.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.secure(w, r)

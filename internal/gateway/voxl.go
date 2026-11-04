@@ -188,11 +188,11 @@ func (s *Server) handleVoxl(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusNotFound, errors.New("this desktop has no H.264 live view"))
 		return
 	}
-	// The interface frames it: only itself (and the Android app's page) may. Every response
+	// The interface frames it: only itself (and the Android and desktop apps' pages) may. Every response
 	// carries X-Frame-Options: DENY; frame-ancestors says who may instead, and replaces it.
 	h := w.Header()
 	h.Del("X-Frame-Options")
-	h.Set("Content-Security-Policy", "frame-ancestors 'self' "+AppOrigin)
+	h.Set("Content-Security-Policy", "frame-ancestors 'self' "+AppOrigin+" "+WailsOrigins)
 	h.Set("Cache-Control", "no-store")
 	proxy.ServeHTTP(w, r)
 }

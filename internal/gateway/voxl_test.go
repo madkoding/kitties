@@ -61,7 +61,7 @@ func TestVoxlProxy(t *testing.T) {
 	if res.StatusCode != 200 || string(body) != "<html>voxl</html>" {
 		t.Fatalf("page = %d %q", res.StatusCode, body)
 	}
-	if res.Header.Get("X-Frame-Options") != "" || res.Header.Get("Content-Security-Policy") != "frame-ancestors 'self' "+AppOrigin {
+	if res.Header.Get("X-Frame-Options") != "" || res.Header.Get("Content-Security-Policy") != "frame-ancestors 'self' "+AppOrigin+" "+WailsOrigins {
 		t.Errorf("framing headers = %v", res.Header)
 	}
 	// voxl gets its own password and address, never the gateway's token, and no cookie.
