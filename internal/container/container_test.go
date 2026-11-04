@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -339,5 +340,23 @@ func TestPullAndImageStale(t *testing.T) {
 		if _, err := m.ImageStale(ctx, c[0], c[1]); err == nil {
 			t.Errorf("ImageStale(%q, %q) was accepted", c[0], c[1])
 		}
+	}
+}
+
+func TestSeccompProfile(t *testing.T) {
+	if !strings.Contains(string(seccompProfile), `"unshare"`) || !json.Valid(seccompProfile) {
+		t.Fatal("embedded seccomp profile is not valid JSON or lacks the user namespace rule")
+	}
+	t.Setenv("XDG_CACHE_HOME", t.TempDir())
+	p, err := writeSeccomp()
+	if err != nil {
+		t.Fatal(err)
+	}
+	args := strings.Join(Spec{Name: "a", Image: "i", Seccomp: p}.Args(), " ")
+	if !strings.Contains(args, "--security-opt seccomp="+p) {
+		t.Errorf("args lack the profile: %s", args)
+	}
+	if strings.Contains(strings.Join(Spec{Name: "a", Image: "i"}.Args(), " "), "seccomp") {
+		t.Error("no profile unless set")
 	}
 }

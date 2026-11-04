@@ -74,3 +74,13 @@ published on the host: the orchestrator reaches a kitty with `docker exec`.
 - The look is files: `lumen/rc.xml` (the shelf, fonts, theme and menus), `lumen/menu.xml`,
   `lumen/menu-style.themerc`, `lucide/*.map` and `wallpaper/`. `make image` rebuilds the image.
 - Credits for everything in it: [README](../README.md#credits).
+
+## Chromium and its sandbox
+
+Chromium builds its sandbox from user namespaces, which Docker's default seccomp profile forbids;
+that is why `chromium` used to need `--no-sandbox`. Kitties now creates the container with
+[`seccomp-kitty.json`](../internal/container/seccomp-kitty.json): Docker's default profile plus
+`clone`/`unshare` without `CAP_SYS_ADMIN` (no privileged mode, no extra capability, and the user is
+the unprivileged `kitty`). `chromium` in the image is a wrapper that keeps the sandbox on and, only
+in a container made before this profile, falls back to `--no-sandbox` with a warning; recreate the
+kitty to get the sandbox back. Refresh the profile with `scripts/update-seccomp.sh`.
