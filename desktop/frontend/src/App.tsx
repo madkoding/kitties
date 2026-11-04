@@ -472,6 +472,12 @@ export default function App() {
                   }
                 : undefined
             }
+            onStartChat={async () => {
+              const s = await api.createChat("", [live.id]);
+              setLive(null);
+              refresh();
+              openChat(s.id);
+            }}
           />
         )}
         {current ? (

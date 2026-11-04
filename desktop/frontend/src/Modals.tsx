@@ -698,7 +698,7 @@ export function KittyDrawer({
           <div class="section-title !mx-0 mt-5">{t("Desktop")}</div>
           <MachinePower kitty={kitty} onChanged={onChanged} />
           {running ? (
-            <LiveDesktop kitty={kitty} inline onClose={() => undefined} />
+            <LiveDesktop kitty={kitty} inline onClose={() => undefined} onStartChat={onChat} />
           ) : (
             <p class="text-sm text-[var(--t3)]" data-testid="desktop-off">
               {t("Start {name} to see its desktop live and take control of it.", {

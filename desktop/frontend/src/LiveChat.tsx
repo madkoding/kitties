@@ -1,4 +1,4 @@
-import { useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { Kitty, Session } from "./api";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
@@ -44,6 +44,19 @@ export default function LiveChat(p: LiveChatProps & { kitty: Kitty }) {
       /* kept for this visit only */
     }
   };
+  // What the kitty said while the chat was folded shows as a dot on the bar until it is opened.
+  const seen = useRef(p.session.turns?.length ?? 0);
+  const count = p.session.turns?.length ?? 0;
+  const [unread, setUnread] = useState(false);
+  useEffect(() => {
+    if (folded && count > seen.current) {
+      setUnread(true);
+    }
+    if (!folded) {
+      setUnread(false);
+    }
+    seen.current = count;
+  }, [count, folded]);
   return (
     <aside
       class={`live-chat ${folded ? "is-folded" : ""}`}
@@ -59,6 +72,14 @@ export default function LiveChat(p: LiveChatProps & { kitty: Kitty }) {
       >
         <IconChat size={14} />
         <span class="flex-1 text-left truncate">{t("Chat")}</span>
+        {unread && (
+          <span
+            class="live-dot"
+            role="status"
+            aria-label={t("New message")}
+            data-testid="live-chat-unread"
+          />
+        )}
         <span aria-hidden="true">{folded ? "‹" : "›"}</span>
       </button>
       {!folded && (

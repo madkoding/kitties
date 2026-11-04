@@ -1373,6 +1373,29 @@ test("the live desktop has the kitty's chat beside it: write to it, follow its s
   await expect(chat.getByRole("textbox")).toBeVisible();
 });
 
+test("Escape in the live desktop's chat box does not close the window", async ({ page }) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("open-desktop").first().click();
+  const live = page.getByTestId("live-desktop");
+  await live.getByTestId("live-chat").getByRole("textbox").press("Escape");
+  await expect(live).toBeVisible();
+  await live.getByRole("dialog").click({ position: { x: 5, y: 5 } });
+  await page.keyboard.press("Escape");
+  await expect(live).toHaveCount(0);
+});
+
+test("from a kitty's drawer, the enlarged desktop offers the chat with it", async ({ page }) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await kittyRow(page, "tom").click();
+  const drawer = page.locator("[data-modal]");
+  await drawer.getByTestId("live-enlarge").click();
+  const start = page.getByTestId("live-chat-start");
+  await expect(start).toBeVisible();
+  await start.getByRole("button", { name: "Chat with tom" }).click();
+  await expect(page).toHaveURL(/#chat\//);
+  await expect(page.getByTestId("live-desktop")).toHaveCount(0);
+});
+
 test("on a phone the live desktop's chat is stacked under the picture, folded until asked for", async ({
   page,
 }) => {

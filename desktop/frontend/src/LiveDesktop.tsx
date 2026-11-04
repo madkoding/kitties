@@ -134,11 +134,14 @@ export default function LiveDesktop({
   autoControl,
   inline,
   chat,
+  onStartChat,
 }: {
   kitty: Kitty;
   // chat puts the kitty's chat beside the desktop window: write to it from here and follow what it
   // does on the display. Without it (no chat with this kitty open) the window is only the desktop.
   chat?: LiveChatProps;
+  // onStartChat is offered, in place of the chat, when none with this kitty is open.
+  onStartChat?: () => void;
   onClose: () => void;
   // autoControl takes the controls at once (the kitty asked for help).
   autoControl?: boolean;
@@ -374,7 +377,11 @@ export default function LiveDesktop({
       return;
     }
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape" && !controlRef.current) {
+      // Escape in the chat's own box is for the box (it leaves it), not a way out of the window.
+      const typing = (e.target as HTMLElement | null)?.closest?.(
+        ".live-chat textarea, .live-chat input",
+      );
+      if (e.key === "Escape" && !controlRef.current && !typing) {
         e.preventDefault();
         leave();
       }
@@ -951,10 +958,18 @@ export default function LiveDesktop({
         role="dialog"
         aria-label={name}
       >
-        {chat ? (
+        {chat || onStartChat ? (
           <div class="live-body">
             <div class="live-main">{content}</div>
-            <LiveChat {...chat} kitty={kitty} />
+            {chat ? (
+              <LiveChat {...chat} kitty={kitty} />
+            ) : (
+              <aside class="live-chat live-chat-start" data-testid="live-chat-start">
+                <button class="btn-accent m-3 px-3 py-2 text-sm" onClick={onStartChat}>
+                  {t("Chat with {name}", { name: kitty.name })}
+                </button>
+              </aside>
+            )}
           </div>
         ) : (
           content
