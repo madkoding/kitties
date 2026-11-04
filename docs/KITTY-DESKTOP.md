@@ -27,7 +27,7 @@ while nobody listens. A desktop of an older image just has no sound. The tunnel'
 
 The window manager is [Lumen Window Manager](https://github.com/madkoding/lumen-wm), a fork of [Openbox](http://openbox.org) (GPL-2.0+) that adds a **shelf**
 (off by default upstream; Kitties turns it on in `docker/kitty-desktop/lumen/rc.xml`). The image
-builds the fork at a fixed commit (`LUMEN_COMMIT` in the Dockerfile): bump that commit to update it.
+always builds the fork's `main`: CI resolves its commit and passes it as `LUMEN_COMMIT` (which is also the cache key, so a new commit rebuilds it). The commit used is in the build log, in `/usr/share/doc/lumen-wm/COMMIT` and in the image's `lumen-wm.commit` label. Local build: `docker build --no-cache-filter lumen docker/kitty-desktop`.
 
 <img src="screenshots/desktop-shelf.png" alt="The shelf: the dock with the pinned apps, the player, the weather and the clock with status glyphs" width="100%">
 

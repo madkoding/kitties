@@ -13,15 +13,28 @@
 #
 #   docker build -t ghcr.io/madkoding/kitty-desktop:latest docker/kitty-desktop
 
-# Lumen (the Openbox fork) with the shelf, at a fixed commit (a commit is its own checksum).
+# Lumen (the Openbox fork) with the shelf, always from lumen-wm's `main`. CI resolves main's
+# commit and passes it as LUMEN_COMMIT: it is both what gets built and the cache key, so a new
+# commit on main rebuilds this stage and an unchanged one reuses the layer. Without it
+# (a local build) the stage asks GitHub for main's current commit; docker's cache cannot see
+# that, so add `--no-cache-filter lumen` to be sure of a fresh one. The commit used is printed in
+# the build log, kept in /usr/share/doc/lumen-wm/COMMIT and set as the image's `lumen-wm.commit` label.
 FROM debian:trixie-slim AS lumen
-ARG LUMEN_COMMIT=91d71aa172c65dd427c752dcfb70860024a5b242
+ARG LUMEN_REF=main
+ARG LUMEN_COMMIT=
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf \
         automake libtool pkg-config gettext autopoint libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev \
         libx11-dev libxft-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev \
         libimlib2-dev \
     && rm -rf /var/lib/apt/lists/*
-RUN curl -fsSL -o /tmp/lumen.tar.gz "https://github.com/madkoding/lumen-wm/archive/${LUMEN_COMMIT}.tar.gz" \
+RUN set -e; \
+    commit="${LUMEN_COMMIT}"; \
+    if [ -z "$commit" ]; then \
+        commit="$(curl -fsSL -H 'Accept: application/vnd.github.sha' "https://api.github.com/repos/madkoding/lumen-wm/commits/${LUMEN_REF}")"; \
+    fi; \
+    echo "lumen-wm commit: ${commit} (${LUMEN_REF})"; \
+    mkdir -p /out/usr/share/doc/lumen-wm; echo "$commit" > /out/usr/share/doc/lumen-wm/COMMIT; \
+    curl -fsSL -o /tmp/lumen.tar.gz "https://github.com/madkoding/lumen-wm/archive/${commit}.tar.gz" \
     && mkdir /tmp/lumen && tar xzf /tmp/lumen.tar.gz -C /tmp/lumen --strip-components=1 \
     && cd /tmp/lumen && ./bootstrap && ./configure --prefix=/usr --sysconfdir=/etc --disable-nls \
     && make -j"$(nproc)" && make DESTDIR=/out install
@@ -158,6 +171,10 @@ COPY --chown=kitty:kitty Xresources /home/kitty/.Xresources
 # Sound: PulseAudio with one virtual output ("output", started by the entrypoint); every program
 # finds it through this socket, and voxl streams its monitor as Opus.
 RUN printf 'default-server = unix:/tmp/kitty-pulse/native\nautospawn = no\n' >> /etc/pulse/client.conf
+
+# The lumen-wm commit inside (empty on a local build that did not pass it: see the file).
+ARG LUMEN_COMMIT=
+LABEL lumen-wm.commit="${LUMEN_COMMIT}"
 
 USER kitty
 WORKDIR /home/kitty/work
