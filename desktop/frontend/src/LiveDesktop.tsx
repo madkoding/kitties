@@ -1,13 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import {
   api,
-  inWails,
   type Kitty,
-  openExternal,
   rectsDesktop,
   shotData,
   streamDesktop,
-  voxlBrowserUrl,
   voxlSource,
 } from "./api";
 import { plainError } from "./friendly";
@@ -838,19 +835,6 @@ export default function LiveDesktop({
             </span>
           ))}
         </div>
-        {mode !== "voxl" && inWails() && loaded && (
-          // The app's window cannot frame the H.264 view: the browser can (with hover and sound).
-          <button
-            class="btn-accent px-3 py-1.5 text-sm absolute top-2 right-2"
-            onClick={(e) => {
-              e.stopPropagation();
-              void voxlBrowserUrl(kitty.id).then((u) => u && openExternal(u));
-            }}
-            data-testid="open-h264"
-          >
-            {t("Open the fast view in the browser")}
-          </button>
-        )}
         {!control && loaded && (
           <span class="live-hint" aria-hidden="true">
             {busy ? <span class="spinner" /> : null}

@@ -946,26 +946,6 @@ export const oauthRedirect = (name: string, provider?: string) =>
     `/v1/oauth/${encodeURIComponent(name)}/redirect${provider ? `?provider=${encodeURIComponent(provider)}` : ""}`,
   ).then((r) => r.redirect);
 
-// voxlBrowserUrl is the address of a kitty's H.264 live view to open in the person's own browser,
-// for the desktop app (Wails), whose window cannot frame it: the browser has WebCodecs, hover and
-// sound, and the ticket in the address is all the sign-in it needs. null where it cannot be had.
-export async function voxlBrowserUrl(ref: string): Promise<string | null> {
-  const app = window.go?.main?.App;
-  if (!app || !/^[\w-]+$/.test(ref)) {
-    return null;
-  }
-  try {
-    const base = safeGatewayBase((await app.Gateway()).url);
-    if (!base) {
-      return null;
-    }
-    const { path } = await request<{ path?: string }>("POST", `/v1/kitties/${ref}/voxl/ticket`);
-    return path && /^\/v1\/kitties\/[\w-]+\/voxl\/t\/[0-9a-f]+\/$/.test(path) ? base + path : null;
-  } catch {
-    return null;
-  }
-}
-
 // openExternal opens a URL in the person's browser: through Wails when inside it.
 export function openExternal(url: string): void {
   const android = androidBridge();

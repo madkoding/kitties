@@ -87,9 +87,14 @@ Chromium builds its sandbox from user namespaces, which Docker's default seccomp
 that is why `chromium` used to need `--no-sandbox`. Kitties now creates the container with
 [`seccomp-kitty.json`](../internal/container/seccomp-kitty.json): Docker's default profile plus
 `clone`/`unshare` without `CAP_SYS_ADMIN` (no privileged mode, no extra capability, and the user is
-the unprivileged `kitty`). `chromium` in the image is a wrapper that keeps the sandbox on and, only
-in a container made before this profile, falls back to `--no-sandbox` with a warning; recreate the
-kitty to get the sandbox back. Refresh the profile with `scripts/update-seccomp.sh`.
+the unprivileged `kitty`). `chromium` in the image is a wrapper: it adds `--disable-gpu` and
+`--disable-dev-shm-usage` (Xvfb has no GPU; no compositor such as picom is needed or wanted, it
+would only cost CPU on every frame the live view sends), and on its first run it tries a headless
+launch with the sandbox. If that fails it runs without it (`--no-sandbox`), with a warning; recreate
+the kitty to get the sandbox back. Everything it did, and what Chromium said when it failed, is in
+`~/.cache/chromium-launch.log` (`kitty-open` adds the browser's own log there, and as a last resort
+opens a temporary profile in `/tmp` when the workspace cannot hold one). Refresh the profile with
+`scripts/update-seccomp.sh`.
 
 Root has no password. The `kitty` user has passwordless `sudo` (`sudoers.d/kitty`), so it can install
 and configure anything in its own computer (`sudo apt install …`, or `kitty-install <package>`). From
