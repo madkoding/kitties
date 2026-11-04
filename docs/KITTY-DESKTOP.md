@@ -12,7 +12,9 @@ and the gateway reaches it with `docker exec ... socat` (see [DESKTOP.md](DESKTO
 **Sound.** The image runs PulseAudio with a virtual output; voxl encodes its monitor as Opus (10 ms
 frames) and sends it over the same WebSocket as the video. Browsers only play sound after a click,
 so the viewer starts muted and plays from the person's first click on it; voxl captures nothing
-while nobody listens. A desktop of an older image just has no sound. The tunnel's `socat` has
+while nobody listens. To keep the sound smooth the stream is light: 30 fps, x264 CRF 30 with the bitrate
+adapting between 0.5 and 4 Mbps, and Opus at 48 kbps. Environment variables of the kitty change them:
+`VOXL_FPS`, `VOXL_CRF` (higher is blurrier), `VOXL_MIN_KBPS`, `VOXL_MAX_KBPS` and `VOXL_AUDIO_BPS`. A desktop of an older image just has no sound. The tunnel's `socat` has
 `nodelay`, so small input events leave at once.
 
 <p align="center">
