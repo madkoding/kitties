@@ -20,13 +20,14 @@
 # that, so add `--no-cache-filter lumen` to be sure of a fresh one. The commit used is printed in
 # the build log, kept in /usr/share/doc/lumen-wm/COMMIT and set as the image's `lumen-wm.commit` label.
 FROM debian:trixie-slim AS lumen
-ARG LUMEN_REF=main
-ARG LUMEN_COMMIT=
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential meson ninja-build \
         pkg-config gettext libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev \
         libx11-dev libxft-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev \
         libimlib2-dev libxkbcommon-dev libxext-dev libxau-dev \
     && rm -rf /var/lib/apt/lists/*
+# The arguments come after the toolchain layer on purpose: a new commit must only rebuild what follows.
+ARG LUMEN_REF=main
+ARG LUMEN_COMMIT=
 RUN set -e; \
     commit="${LUMEN_COMMIT}"; \
     if [ -z "$commit" ]; then \
