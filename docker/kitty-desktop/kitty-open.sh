@@ -47,6 +47,14 @@ if start "$@"; then
     echo "opened $* on $DISPLAY (profile $KITTY_PROFILE)"
     exit 0
 fi
+# Maybe the sandbox: it can look available (user namespaces) and still not come up. Try once
+# without it (the wrapper logs that it did), keeping the profile.
+pkill -x chromium 2>/dev/null || true
+export KITTY_NO_SANDBOX=1
+if start "$@"; then
+    echo "opened $* on $DISPLAY WITHOUT the browser's sandbox (profile $KITTY_PROFILE); see ~/.cache/chromium-launch.log" >&2
+    exit 0
+fi
 # A profile the browser cannot open (made by a newer version, or damaged) keeps it from starting:
 # put it aside (nothing is deleted) and start again with a new one.
 if [ -z "$(ls -A "$KITTY_PROFILE" 2>/dev/null)" ]; then

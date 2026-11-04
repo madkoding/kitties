@@ -89,9 +89,10 @@ that is why `chromium` used to need `--no-sandbox`. Kitties now creates the cont
 `clone`/`unshare` without `CAP_SYS_ADMIN` (no privileged mode, no extra capability, and the user is
 the unprivileged `kitty`). `chromium` in the image is a wrapper: it adds `--disable-gpu` and
 `--disable-dev-shm-usage` (Xvfb has no GPU; no compositor such as picom is needed or wanted, it
-would only cost CPU on every frame the live view sends), and on its first run it tries a headless
-launch with the sandbox. If that fails it runs without it (`--no-sandbox`), with a warning; recreate
-the kitty to get the sandbox back. Everything it did, and what Chromium said when it failed, is in
+would only cost CPU on every frame the live view sends). It keeps the sandbox when the container
+can make user namespaces and otherwise runs without it (`--no-sandbox`), with a warning; recreate
+the kitty to get the sandbox back. `kitty-open` also retries without the sandbox when the sandboxed
+browser does not come up. Everything it did, and what Chromium said when it failed, is in
 `~/.cache/chromium-launch.log` (`kitty-open` adds the browser's own log there, and as a last resort
 opens a temporary profile in `/tmp` when the workspace cannot hold one). Refresh the profile with
 `scripts/update-seccomp.sh`.
