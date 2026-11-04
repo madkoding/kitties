@@ -177,7 +177,7 @@ func TestClaude(t *testing.T) {
 		t.Errorf("stdin = %s", f.stdin)
 	}
 	env := strings.Join(f.env, "\n")
-	if strings.Contains(env, "ANTHROPIC_API_KEY") || !strings.Contains(env, "PATH=/opt/claude/bin") || !strings.Contains(env, "CLAUDE_CODE_MAX_OUTPUT_TOKENS=4096") {
+	if strings.Contains(env, "ANTHROPIC_API_KEY") || !strings.Contains(env, "PATH=/opt/claude/bin") || !strings.Contains(env, "CLAUDE_CODE_MAX_OUTPUT_TOKENS=16384") {
 		t.Errorf("env = %s", env)
 	}
 

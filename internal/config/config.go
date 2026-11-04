@@ -50,16 +50,19 @@ type Config struct {
 
 // Provider is one AI profile.
 type Provider struct {
-	Kind        string            `yaml:"kind" json:"kind"` // one of provider.Kinds()
-	Model       string            `yaml:"model" json:"model"`
-	APIKey      string            `yaml:"api_key" json:"api_key,omitempty"`
-	APIKeyEnv   string            `yaml:"api_key_env" json:"api_key_env,omitempty"` // variable that holds the key, when not the provider's own
-	BaseURL     string            `yaml:"base_url" json:"base_url,omitempty"`
-	MaxTokens   int               `yaml:"max_tokens" json:"max_tokens,omitempty"`
-	Temperature *float64          `yaml:"temperature" json:"temperature,omitempty"`
-	Timeout     time.Duration     `yaml:"timeout" json:"timeout,omitempty"`
-	MaxAttempts int               `yaml:"max_attempts" json:"max_attempts,omitempty"`
-	Headers     map[string]string `yaml:"headers" json:"headers,omitempty"`
+	Kind      string `yaml:"kind" json:"kind"` // one of provider.Kinds()
+	Model     string `yaml:"model" json:"model"`
+	APIKey    string `yaml:"api_key" json:"api_key,omitempty"`
+	APIKeyEnv string `yaml:"api_key_env" json:"api_key_env,omitempty"` // variable that holds the key, when not the provider's own
+	BaseURL   string `yaml:"base_url" json:"base_url,omitempty"`
+	MaxTokens int    `yaml:"max_tokens" json:"max_tokens,omitempty"` // answer size; 0 takes 16384
+	// ContextTokens is the model's context window (0 takes 200000); long files and threads are
+	// fitted to it instead of cut at a fixed size.
+	ContextTokens int               `yaml:"context_tokens" json:"context_tokens,omitempty"`
+	Temperature   *float64          `yaml:"temperature" json:"temperature,omitempty"`
+	Timeout       time.Duration     `yaml:"timeout" json:"timeout,omitempty"`
+	MaxAttempts   int               `yaml:"max_attempts" json:"max_attempts,omitempty"`
+	Headers       map[string]string `yaml:"headers" json:"headers,omitempty"`
 	// Tools is native (the provider's own calls, the default) or text (lines in the prompt).
 	Tools string `yaml:"tools" json:"tools,omitempty"`
 	// PromptCache is true by default: kitties asks the provider to cache the stable start of the
@@ -82,7 +85,7 @@ func (p Provider) Options() provider.Options {
 		key = os.Getenv(p.APIKeyEnv)
 	}
 	return provider.Options{
-		Kind: p.Kind, Model: p.Model, APIKey: key, BaseURL: p.BaseURL, MaxTokens: p.MaxTokens,
+		Kind: p.Kind, Model: p.Model, APIKey: key, BaseURL: p.BaseURL, MaxTokens: p.MaxTokens, ContextTokens: p.ContextTokens,
 		Temperature: p.Temperature, Timeout: p.Timeout, MaxAttempts: p.MaxAttempts, Headers: p.Headers, Tools: p.Tools, Auth: p.Auth,
 		PromptCache: p.PromptCache, CacheTTL: p.CacheTTL, Vision: p.Vision,
 	}

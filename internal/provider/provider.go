@@ -54,6 +54,8 @@ type Kind struct {
 	// PublicList is true when the provider lists its models without a key (Ollama Cloud, OpenRouter), so
 	// the list can be shown before the key is pasted.
 	PublicList bool
+	// ContextTokens is the context window of the kind's usual models; zero takes DefaultContextTokens.
+	ContextTokens int
 	// DefaultModel is the model used when the profile names none.
 	DefaultModel string
 	// Login names the account a profile of this kind can sign in with instead of a key
@@ -67,14 +69,14 @@ var kinds = map[string]Kind{
 	"codex":        {Name: "codex", Family: FamilyResponses, BaseURL: "https://api.openai.com/v1", KeyEnv: "OPENAI_API_KEY", DefaultModel: "gpt-5.5-codex", Login: "chatgpt"},
 	"anthropic":    {Name: "anthropic", Family: FamilyAnthropic, BaseURL: "https://api.anthropic.com", KeyEnv: "ANTHROPIC_API_KEY", DefaultModel: "claude-sonnet-5-5"},
 	"claude-code":  {Name: "claude-code", Family: FamilyCLI, NoKey: true, DefaultModel: "sonnet", Login: "claude"},
-	"gemini":       {Name: "gemini", Family: FamilyGemini, BaseURL: "https://generativelanguage.googleapis.com", KeyEnv: "GEMINI_API_KEY", DefaultModel: "gemini-2.5-flash", Login: "google"},
-	"ollama":       {Name: "ollama", Family: FamilyChat, BaseURL: "http://127.0.0.1:11434/v1", KeyEnv: "OLLAMA_API_KEY", NoKey: true, DefaultModel: "qwen3:8b"},
-	"ollama-cloud": {Name: "ollama-cloud", Family: FamilyChat, BaseURL: "https://ollama.com/v1", KeyEnv: "OLLAMA_API_KEY", PublicList: true, DefaultModel: "gpt-oss:120b"},
-	"groq":         {Name: "groq", Family: FamilyChat, BaseURL: "https://api.groq.com/openai/v1", KeyEnv: "GROQ_API_KEY", DefaultModel: "llama-3.3-70b-versatile"},
+	"gemini":       {Name: "gemini", Family: FamilyGemini, BaseURL: "https://generativelanguage.googleapis.com", KeyEnv: "GEMINI_API_KEY", ContextTokens: 1000000, DefaultModel: "gemini-2.5-flash", Login: "google"},
+	"ollama":       {Name: "ollama", Family: FamilyChat, BaseURL: "http://127.0.0.1:11434/v1", KeyEnv: "OLLAMA_API_KEY", NoKey: true, ContextTokens: 32768, DefaultModel: "qwen3:8b"},
+	"ollama-cloud": {Name: "ollama-cloud", Family: FamilyChat, BaseURL: "https://ollama.com/v1", KeyEnv: "OLLAMA_API_KEY", PublicList: true, ContextTokens: 128000, DefaultModel: "gpt-oss:120b"},
+	"groq":         {Name: "groq", Family: FamilyChat, BaseURL: "https://api.groq.com/openai/v1", KeyEnv: "GROQ_API_KEY", ContextTokens: 128000, DefaultModel: "llama-3.3-70b-versatile"},
 	"openrouter":   {Name: "openrouter", Family: FamilyChat, BaseURL: "https://openrouter.ai/api/v1", KeyEnv: "OPENROUTER_API_KEY", PublicList: true, DefaultModel: "openai/gpt-5.5"},
-	"deepseek":     {Name: "deepseek", Family: FamilyChat, BaseURL: "https://api.deepseek.com/v1", KeyEnv: "DEEPSEEK_API_KEY", DefaultModel: "deepseek-chat"},
-	"qwen":         {Name: "qwen", Family: FamilyChat, BaseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", KeyEnv: "DASHSCOPE_API_KEY", DefaultModel: "qwen-plus", Login: "qwen"},
-	"mistral":      {Name: "mistral", Family: FamilyChat, BaseURL: "https://api.mistral.ai/v1", KeyEnv: "MISTRAL_API_KEY", DefaultModel: "mistral-large-latest"},
+	"deepseek":     {Name: "deepseek", Family: FamilyChat, BaseURL: "https://api.deepseek.com/v1", KeyEnv: "DEEPSEEK_API_KEY", ContextTokens: 128000, DefaultModel: "deepseek-chat"},
+	"qwen":         {Name: "qwen", Family: FamilyChat, BaseURL: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", KeyEnv: "DASHSCOPE_API_KEY", ContextTokens: 128000, DefaultModel: "qwen-plus", Login: "qwen"},
+	"mistral":      {Name: "mistral", Family: FamilyChat, BaseURL: "https://api.mistral.ai/v1", KeyEnv: "MISTRAL_API_KEY", ContextTokens: 128000, DefaultModel: "mistral-large-latest"},
 	"copilot":      {Name: "copilot", Family: FamilyChat, BaseURL: "https://api.githubcopilot.com", KeyEnv: "COPILOT_API_KEY", DefaultModel: "gpt-4.1", Login: "github"},
 	"custom":       {Name: "custom", Family: FamilyChat, KeyEnv: "LLM_API_KEY", NoKey: true},
 }
@@ -104,15 +106,20 @@ func Lookup(name string) (Kind, bool) {
 
 // Options configures one client.
 type Options struct {
-	Kind        string
-	Model       string
-	APIKey      string
-	BaseURL     string
-	MaxTokens   int
-	Temperature *float64
-	Timeout     time.Duration
-	MaxAttempts int
-	Backoff     time.Duration
+	Kind    string
+	Model   string
+	APIKey  string
+	BaseURL string
+	// MaxTokens is the most a model may write in one answer. APIs such as Anthropic's require
+	// a value, so zero takes DefaultMaxTokens; a model that allows less needs it lowered.
+	MaxTokens int
+	// ContextTokens is the size of the model's context window, used to fit what is sent (a long
+	// document, a long thread) instead of failing. Zero takes DefaultContextTokens.
+	ContextTokens int
+	Temperature   *float64
+	Timeout       time.Duration
+	MaxAttempts   int
+	Backoff       time.Duration
 	// Headers are extra headers sent with every request (a gateway's own token, say).
 	Headers map[string]string
 	// Tools is how the model is given tools: "native" (the provider's own calls, the default)
@@ -219,6 +226,29 @@ type Reader interface {
 	// ReadsPDF is true when the model takes a PDF as a document.
 	ReadsPDF() bool
 }
+
+// DefaultMaxTokens is the answer size asked for when a profile sets none: room for a long report
+// or a whole file, and below what current models of every provider accept.
+const DefaultMaxTokens = 16384
+
+// DefaultContextTokens is the context window assumed when a profile does not say.
+const DefaultContextTokens = 200000
+
+// ContextWindow is the tokens the client's model takes in one request.
+func ContextWindow(c Client) int {
+	if w, ok := c.(interface{ ContextWindow() int }); ok {
+		if n := w.ContextWindow(); n > 0 {
+			return n
+		}
+	}
+	return DefaultContextTokens
+}
+
+// ContextWindow is the context window of the profile.
+func (c *HTTPClient) ContextWindow() int { return c.opts.ContextTokens }
+
+// ContextWindow is the context window of the profile.
+func (c *ClaudeClient) ContextWindow() int { return c.opts.ContextTokens }
 
 // SeesImages reports whether the client takes pictures.
 func SeesImages(c Client) bool {
@@ -373,7 +403,10 @@ func New(opts Options) (*HTTPClient, error) {
 		return nil, fmt.Errorf("provider %s needs a model", kind.Name)
 	}
 	if opts.MaxTokens <= 0 {
-		opts.MaxTokens = 4096
+		opts.MaxTokens = DefaultMaxTokens
+	}
+	if opts.ContextTokens <= 0 {
+		opts.ContextTokens = kind.ContextTokens
 	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = 120 * time.Second

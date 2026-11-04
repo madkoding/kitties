@@ -32,12 +32,12 @@ const (
 
 // Limits bound what one message may carry.
 const (
-	MaxFiles     = 6
-	MaxTotal     = 20 << 20 // all the files of a message
-	MaxImage     = 5 << 20  // the most a provider takes as a picture
-	MaxPDF       = 10 << 20
-	MaxText      = 2 << 20
-	MaxOther     = 10 << 20
+	MaxFiles     = 20
+	MaxTotal     = 100 << 20 // all the files of a message
+	MaxImage     = 5 << 20   // the most a provider takes as a picture (the providers' own limit)
+	MaxPDF       = 32 << 20  // the most Anthropic takes as a document
+	MaxText      = 25 << 20
+	MaxOther     = 50 << 20
 	MaxNameRunes = 100
 	// MaxBody is the largest request body for a message with files: the files in base64 plus the
 	// text and the JSON around them.

@@ -78,7 +78,7 @@ func TestNewDefaultsAndErrors(t *testing.T) {
 		t.Error("custom needs a model")
 	}
 	c, err = New(Options{Kind: "custom", BaseURL: "http://x/", Model: "m"})
-	if err != nil || c.opts.BaseURL != "http://x" || c.opts.MaxTokens != 4096 || c.opts.MaxAttempts != 3 {
+	if err != nil || c.opts.BaseURL != "http://x" || c.opts.MaxTokens != DefaultMaxTokens || c.opts.MaxAttempts != 3 {
 		t.Errorf("defaults: %v %+v", err, c.opts)
 	}
 	if len(Kinds()) != len(kinds) || Kinds()[0] != "anthropic" {
@@ -292,5 +292,21 @@ func TestRegistry(t *testing.T) {
 	reg.Remove("nope")
 	if names := reg.Names(); len(names) != 1 || names[0] != "local" {
 		t.Errorf("Remove: %v", names)
+	}
+}
+
+// The window of a profile is its own, else its kind's, else the default.
+func TestContextWindow(t *testing.T) {
+	g, err := New(Options{Kind: "gemini", APIKey: "k"})
+	if err != nil || ContextWindow(g) != 1000000 {
+		t.Errorf("gemini window = %d, %v", ContextWindow(g), err)
+	}
+	o, _ := New(Options{Kind: "openai", APIKey: "k", ContextTokens: 400000})
+	if ContextWindow(o) != 400000 {
+		t.Errorf("profile window = %d", ContextWindow(o))
+	}
+	a, _ := New(Options{Kind: "anthropic", APIKey: "k"})
+	if ContextWindow(a) != DefaultContextTokens || ContextWindow(nil) != DefaultContextTokens {
+		t.Errorf("default window = %d", ContextWindow(a))
 	}
 }

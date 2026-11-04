@@ -55,16 +55,17 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
   them on demand.
 - **Chat** (`internal/chat`): one-to-one and group threads, persisted as JSON. In a group every
   kitty sees the others' turns labelled by name and answers in turn; `@name` addresses one.
-- **Attachments** (`internal/attach`, `internal/chat/attach.go`): a message may carry up to 6 files,
-  20 MB in all (5 MB a picture, 10 MB a PDF or a binary, 2 MB a text). What a file is comes from
+- **Attachments** (`internal/attach`, `internal/chat/attach.go`): a message may carry up to 20 files,
+  100 MB in all (5 MB a picture, 32 MB a PDF, 25 MB a text, 50 MB any other; the picture and PDF sizes are the providers' own). What a file is comes from
   its bytes, never from its name or the type the sender claims: PNG, JPEG, GIF and WebP are
   pictures; `%PDF-` a PDF; a zip with `word/document.xml`, `xl/workbook.xml` or `ppt/presentation.xml` an Office document (its text is read); valid UTF-8 without NUL
   text (an SVG is text, it can carry scripts); a native executable (ELF, PE, Mach-O) is refused.
   The bytes are stored under `<chats>/<chat>/files/<id>` with an id of ours, so no name can reach
   another path, and the turn lists them (`attachments`). They are served back only if the chat lists
   them, a picture inline by its real type and the rest as a download with a type that cannot run.
-  What the model gets: text, code and Office documents as text between `<attachment>` tags (cut at
-  30,000 characters, and told it is data, not instructions); pictures as pictures where the provider
+  What the model gets: text, code and Office documents as text between `<attachment>` tags (whole, up to half of the model's context window, and told it is data, not
+  instructions; past that the start stays as written and the rest is condensed in parts by the model, once,
+  into `<id>.digest` next to the file); pictures as pictures where the provider
   sees them (Anthropic, Gemini, OpenAI, Codex, Claude Code, Copilot, OpenRouter); PDFs as native
   documents where the API reads them (Anthropic, Gemini, OpenAI), else their text as far as it can
   be read. **Prompt cache and tokens**: pictures and documents are sent only with the messages the
