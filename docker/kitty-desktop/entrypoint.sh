@@ -28,6 +28,8 @@ if command -v pulseaudio >/dev/null 2>&1; then
         --load="module-null-sink sink_name=output sink_properties=device.description=Kitty" \
         >/dev/null 2>&1; then
         audio=true
+        # the shelf's volume (pactl @DEFAULT_SINK@) and every program use this output
+        PULSE_SERVER=unix:/tmp/kitty-pulse/native pactl set-default-sink output >/dev/null 2>&1 || true
     fi
 fi
 if command -v voxl >/dev/null 2>&1; then

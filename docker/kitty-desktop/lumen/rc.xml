@@ -251,6 +251,18 @@
     <command>kitty-shelf-weather</command>
     <interval>900</interval>
   </weather>
+  <!-- Wifi and volume levels under their icons. The image has PulseAudio (not PipeWire) and no
+       NetworkManager, so Lumen's wpctl/nmcli defaults would show nothing: pactl drives the virtual
+       output, and the network island reports the container's own link as connected. -->
+  <network>
+    <list>kitty-shelf-net</list>
+  </network>
+  <volume>
+    <level>pactl get-sink-volume @DEFAULT_SINK@ | grep -o '[0-9]*%' | head -n1 | tr -d %</level>
+    <up>pactl set-sink-volume @DEFAULT_SINK@ +5%</up>
+    <down>pactl set-sink-volume @DEFAULT_SINK@ -5%</down>
+    <toggle>pactl set-sink-mute @DEFAULT_SINK@ toggle</toggle>
+  </volume>
 </shelf>
 
 <dock>
