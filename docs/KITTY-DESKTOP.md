@@ -9,6 +9,12 @@ The live view is [voxl](https://github.com/tembo/voxl) (MIT, built into the imag
 with x264, which makes the image GPL): it starts with the display, on the container's own loopback,
 and the gateway reaches it with `docker exec ... socat` (see [DESKTOP.md](DESKTOP.md)).
 
+**Sound.** The image runs PulseAudio with a virtual output; voxl encodes its monitor as Opus (10 ms
+frames) and sends it over the same WebSocket as the video. Browsers only play sound after a click,
+so the viewer starts muted and plays from the person's first click on it; voxl captures nothing
+while nobody listens. A desktop of an older image just has no sound. The tunnel's `socat` has
+`nodelay`, so small input events leave at once.
+
 <p align="center">
 <img src="screenshots/desktop-menu.png" alt="The kitty's desktop on Lumen: the apps menu open and the shelf at the bottom" width="100%">
 </p>

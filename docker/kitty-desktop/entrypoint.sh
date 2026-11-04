@@ -17,7 +17,19 @@ done
 # The live view: voxl (the display as H.264 over a WebSocket), on the container's own loopback with
 # a password made up for this start; the gateway reaches it with `docker exec ... socat` and
 # signs in for the person (no port is published). A desktop of an older image has no voxl and is
-# followed as pictures. It starts again if it ends. Nothing but the viewer: no files, no audio.
+# followed as pictures. It starts again if it ends. The viewer, and the sound when the image has
+# PulseAudio: a virtual output whose monitor voxl sends as Opus over the same WebSocket (the page
+# only plays it after the person's first click, so it starts muted). No files.
+audio=false
+if command -v pulseaudio >/dev/null 2>&1; then
+    mkdir -p /tmp/kitty-pulse
+    if pulseaudio -n --daemonize=yes --exit-idle-time=-1 --disallow-exit --log-target=file:/tmp/pulse.log \
+        --load="module-native-protocol-unix socket=/tmp/kitty-pulse/native auth-anonymous=1" \
+        --load="module-null-sink sink_name=output sink_properties=device.description=Kitty" \
+        >/dev/null 2>&1; then
+        audio=true
+    fi
+fi
 if command -v voxl >/dev/null 2>&1; then
     (
         umask 077
@@ -25,7 +37,7 @@ if command -v voxl >/dev/null 2>&1; then
     )
     (
         while :; do
-            VOXL_PASSWORD="$(cat /tmp/voxl.pw)" voxl --addr=127.0.0.1 --port=6901 --audio-enabled=false \
+            VOXL_PASSWORD="$(cat /tmp/voxl.pw)" voxl --addr=127.0.0.1 --port=6901 --audio-enabled="$audio" \
                 --file-transfers=none --title="Kitty desktop" >>/tmp/voxl.log 2>&1
             sleep 1
         done

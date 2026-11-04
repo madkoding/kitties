@@ -25,7 +25,7 @@ func TestTunnel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "docker exec -i kitty-ana socat - TCP:127.0.0.1:6901"; strings.Join(got, " ") != want {
+	if want := "docker exec -i kitty-ana socat - TCP:127.0.0.1:6901,nodelay"; strings.Join(got, " ") != want {
 		t.Errorf("command = %q, want %q", strings.Join(got, " "), want)
 	}
 	go func() { _, _ = c.Write([]byte("hello")) }()

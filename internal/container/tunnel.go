@@ -16,7 +16,9 @@ import (
 // The desktop's live view is voxl (https://github.com/tembo/voxl): an H.264 stream over a
 // WebSocket that the image runs on the container's own loopback. The container publishes no port,
 // so the gateway reaches it the way it reaches everything else: `docker exec -i <name> socat`,
-// whose standard input and output are one TCP connection to 127.0.0.1:<port> inside.
+// whose standard input and output are one TCP connection to 127.0.0.1:<port> inside. The
+// connection has TCP_NODELAY (socat's `nodelay`): input events are a few bytes each and must not
+// wait to be joined to the next ones.
 
 // VoxlPort is where the image runs voxl, on the container's loopback.
 const VoxlPort = 6901
@@ -50,7 +52,7 @@ func (m *Manager) Tunnel(ctx context.Context, name string, port int) (net.Conn, 
 	}
 	// The command outlives the dial's context (the connection is the caller's); Close ends it.
 	runCtx, cancel := context.WithCancel(context.WithoutCancel(ctx))
-	in, out, wait, err := startTunnel(runCtx, m.rt.Bin, "exec", "-i", name, "socat", "-", "TCP:127.0.0.1:"+strconv.Itoa(port))
+	in, out, wait, err := startTunnel(runCtx, m.rt.Bin, "exec", "-i", name, "socat", "-", "TCP:127.0.0.1:"+strconv.Itoa(port)+",nodelay")
 	if err != nil {
 		cancel()
 		return nil, err
