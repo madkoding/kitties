@@ -198,11 +198,11 @@ func (s *Service) delegationChat(from, to *kitty.Kitty, depth int) (string, erro
 // background work it may start, within its time limit.
 func (s *Service) askKitty(ctx context.Context, did string, from, to *kitty.Kitty, task string) (string, error) {
 	limit := to.Limits.Or(s.DefaultLimits).MaxSeconds
-	if limit <= 0 {
-		limit = 600
+	if limit > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, time.Duration(limit)*time.Second)
+		defer cancel()
 	}
-	ctx, cancel := context.WithTimeout(ctx, time.Duration(limit)*time.Second)
-	defer cancel()
 	replies, err := s.send(ctx, did, from.Name, from.ID, task)
 	if err != nil {
 		if errors.Is(err, ErrBusy) {

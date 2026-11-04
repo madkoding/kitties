@@ -187,21 +187,28 @@ func TestOldFilesAreNotShownAgain(t *testing.T) {
 	}
 }
 
-// A long document goes whole: the only bound is the model's context window.
-// Past half of the model's window the rest stays in the file, and the message says so.
-func TestTextPastTheWindowIsCutAndSaysSo(t *testing.T) {
+// Past half of the model's window the rest is read in parts and condensed, once: the digest is
+// kept, and the message says so.
+func TestTextPastTheWindowIsCondensedOnce(t *testing.T) {
 	f, _, sb, _ := fleet(t)
 	s := service(t, f)
 	sess, _ := s.Create("", []string{"bo"})
 	limit := attach.InlineChars(provider.DefaultContextTokens)
 	long := strings.Repeat("q", limit+5000)
 	_, _ = s.SendFiles(context.Background(), sess.ID, "", []attach.Upload{up("huge.txt", []byte(long))})
-	m := sb.seen[0][len(sb.seen[0])-1].Content
-	if strings.Count(m, "q") != limit || !strings.Contains(m, "only its first part") {
-		t.Errorf("the text is not fitted (%d x of %d)", strings.Count(m, "q"), limit)
+	calls := len(sb.seen)
+	m := sb.seen[calls-1][len(sb.seen[calls-1])-1].Content
+	if strings.Count(m, "q") != limit/2 || !strings.Contains(m, "condensed") || calls < 3 {
+		t.Errorf("the text is not condensed (%d q of %d, %d calls)", strings.Count(m, "q"), limit/2, calls)
+	}
+	// A second message reads the kept digest: one more call, the answer, and no condensing.
+	_, _ = s.Send(context.Background(), sess.ID, "again")
+	if len(sb.seen) != calls+1 {
+		t.Errorf("the file was condensed again (%d calls after %d)", len(sb.seen), calls)
 	}
 }
 
+// A long document goes whole: the only bound is the model's context window.
 func TestLongTextGoesWholeAndCannotCloseItsTag(t *testing.T) {
 	f, _, sb, _ := fleet(t)
 	s := service(t, f)

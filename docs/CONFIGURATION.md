@@ -108,10 +108,10 @@ makes it continue right away.
 **What is limited and what is not.** Kitties sets no token limit of its own by default: `max_tokens`
 and `day_tokens` in a kitty's limits are `0` (none), a document goes into the message whole, and the
 thread is not cut at a fixed number of turns. What remains comes from the model: its context window
-(`context_tokens` of the profile, 200000 by default; set it to your model's, e.g. 1000000 for Gemini)
+(`context_tokens` of the profile; the provider's usual one by default, 1000000 for Gemini)
 and the size of one answer (`max_tokens` of the profile, 16384 by default). When a thread or a file
 would not fit the window, the oldest turns are let go (the early ones are summarised) or the end of
-the file stays in the file, instead of the request failing. See [LIMITS.md](LIMITS.md)
+the file is read in parts and condensed, instead of the request failing. See [LIMITS.md](LIMITS.md)
 ([en español](LIMITS.es.md)). Today's use shows in the kitty's panel (amber from 80%, red when spent).
 
 ### Signing in instead of pasting keys

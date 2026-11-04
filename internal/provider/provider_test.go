@@ -294,3 +294,19 @@ func TestRegistry(t *testing.T) {
 		t.Errorf("Remove: %v", names)
 	}
 }
+
+// The window of a profile is its own, else its kind's, else the default.
+func TestContextWindow(t *testing.T) {
+	g, err := New(Options{Kind: "gemini", APIKey: "k"})
+	if err != nil || ContextWindow(g) != 1000000 {
+		t.Errorf("gemini window = %d, %v", ContextWindow(g), err)
+	}
+	o, _ := New(Options{Kind: "openai", APIKey: "k", ContextTokens: 400000})
+	if ContextWindow(o) != 400000 {
+		t.Errorf("profile window = %d", ContextWindow(o))
+	}
+	a, _ := New(Options{Kind: "anthropic", APIKey: "k"})
+	if ContextWindow(a) != DefaultContextTokens || ContextWindow(nil) != DefaultContextTokens {
+		t.Errorf("default window = %d", ContextWindow(a))
+	}
+}

@@ -64,7 +64,8 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
   another path, and the turn lists them (`attachments`). They are served back only if the chat lists
   them, a picture inline by its real type and the rest as a download with a type that cannot run.
   What the model gets: text, code and Office documents as text between `<attachment>` tags (whole, up to half of the model's context window, and told it is data, not
-  instructions; past that the rest stays in the file and the message says so); pictures as pictures where the provider
+  instructions; past that the start stays as written and the rest is condensed in parts by the model, once,
+  into `<id>.digest` next to the file); pictures as pictures where the provider
   sees them (Anthropic, Gemini, OpenAI, Codex, Claude Code, Copilot, OpenRouter); PDFs as native
   documents where the API reads them (Anthropic, Gemini, OpenAI), else their text as far as it can
   be read. **Prompt cache and tokens**: pictures and documents are sent only with the messages the

@@ -52,3 +52,19 @@ func TestFitContextDropsTheOldestFirst(t *testing.T) {
 		t.Errorf("the last message must stay: %+v", got)
 	}
 }
+
+// Pictures and documents weigh in the fit, not only text.
+func TestFitContextCountsPicturesAndFiles(t *testing.T) {
+	msgs := []provider.Message{
+		{Role: "system", Content: "task"},
+		{Role: "user", Content: "old", Images: []provider.Image{{Data: []byte("x")}, {Data: []byte("x")}}},
+		{Role: "user", Content: "last"},
+	}
+	if got := fitContext(msgs, 3000); len(got) != 2 { // two pictures are ~3,200 tokens, more than the 2,400 that fit
+		t.Errorf("pictures did not count: %d messages", len(got))
+	}
+	msgs[1] = provider.Message{Role: "user", Content: "old", Files: []provider.File{{Data: make([]byte, 400000)}}}
+	if got := fitContext(msgs, 3000); len(got) != 2 {
+		t.Errorf("a document did not count: %d messages", len(got))
+	}
+}

@@ -292,7 +292,7 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
 		now: time.Now, newID: randomID, MaxRounds: 4, UnattendedRounds: 40, UnattendedWindows: 8, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
-		DefaultLimits: kitty.Limits{MaxTokens: 0, MaxSeconds: 14400, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
+		DefaultLimits: kitty.Limits{MaxTokens: 0, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -1647,10 +1647,20 @@ func (s *Service) transcriptFor(id string, brain provider.Client, paths map[stri
 // messages go (after the first, the system prompt), instead of sending what the provider would
 // refuse. A fifth of the window is left for the answer. Nothing is dropped while it fits, and the
 // last message is always kept.
+// What pictures and documents weigh in fitContext, in characters: a picture is about 1,600 tokens;
+// a document's bytes count a fiftieth of a token each.
+const (
+	imageChars       = 1600 * attach.CharsPerToken
+	fileBytesPerChar = 50 / attach.CharsPerToken
+)
+
 func fitContext(messages []provider.Message, window int) []provider.Message {
 	budget := window / 5 * 4 * attach.CharsPerToken
 	size := func(m provider.Message) int {
-		n := len(m.Content)
+		n := len(m.Content) + len(m.Images)*imageChars
+		for _, f := range m.Files {
+			n += len(f.Data) / fileBytesPerChar
+		}
 		for _, c := range m.ToolCalls {
 			n += len(c.Name) + 16*len(c.Args)
 		}
