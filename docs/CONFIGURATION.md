@@ -103,7 +103,16 @@ task.
 **Daily token budget.** `limits.day_tokens` (Settings → the kitty → Limits; `0` or empty means no
 limit, which is the default). At 80% the person is notified once a day; at 100% the kitty stops
 until tomorrow, says so in the chat with where to raise it, and notifies once. Raising the limit
-makes it continue right away. Today's use shows in the kitty's panel (amber from 80%, red when spent).
+makes it continue right away.
+
+**What is limited and what is not.** Kitties sets no token limit of its own by default: `max_tokens`
+and `day_tokens` in a kitty's limits are `0` (none), a document goes into the message whole, and the
+thread is not cut at a fixed number of turns. What remains comes from the model: its context window
+(`context_tokens` of the profile, 200000 by default; set it to your model's, e.g. 1000000 for Gemini)
+and the size of one answer (`max_tokens` of the profile, 16384 by default). When a thread or a file
+would not fit the window, the oldest turns are let go (the early ones are summarised) or the end of
+the file stays in the file, instead of the request failing. See [LIMITS.md](LIMITS.md)
+([en español](LIMITS.es.md)). Today's use shows in the kitty's panel (amber from 80%, red when spent).
 
 ### Signing in instead of pasting keys
 
@@ -201,4 +210,4 @@ providers:
 ```
 
 PDFs go as native documents to Anthropic, Gemini and OpenAI; every other model gets their text.
-Limits (6 files, 20 MB a message) are in [ARCHITECTURE.md](ARCHITECTURE.md#attachments).
+Limits (20 files, 100 MB a message) are in [ARCHITECTURE.md](ARCHITECTURE.md#attachments).

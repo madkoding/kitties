@@ -42,7 +42,7 @@ func NewClaude(opts Options) (*ClaudeClient, error) {
 		opts.Model = kinds["claude-code"].DefaultModel
 	}
 	if opts.MaxTokens <= 0 {
-		opts.MaxTokens = 4096
+		opts.MaxTokens = DefaultMaxTokens
 	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = 5 * time.Minute

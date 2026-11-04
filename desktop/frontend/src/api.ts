@@ -191,10 +191,10 @@ export interface Attachment {
 }
 
 // The most a message may carry; the gateway checks the same limits by the file's real type.
-export const ATTACH_MAX_FILES = 6;
-export const ATTACH_MAX_TOTAL = 20 << 20;
+export const ATTACH_MAX_FILES = 20;
+export const ATTACH_MAX_TOTAL = 100 << 20;
 export const ATTACH_MAX_IMAGE = 5 << 20;
-export const ATTACH_MAX_FILE = 10 << 20;
+export const ATTACH_MAX_FILE = 50 << 20;
 
 export interface Turn {
   at: string;

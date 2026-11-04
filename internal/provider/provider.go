@@ -104,15 +104,20 @@ func Lookup(name string) (Kind, bool) {
 
 // Options configures one client.
 type Options struct {
-	Kind        string
-	Model       string
-	APIKey      string
-	BaseURL     string
-	MaxTokens   int
-	Temperature *float64
-	Timeout     time.Duration
-	MaxAttempts int
-	Backoff     time.Duration
+	Kind    string
+	Model   string
+	APIKey  string
+	BaseURL string
+	// MaxTokens is the most a model may write in one answer. APIs such as Anthropic's require
+	// a value, so zero takes DefaultMaxTokens; a model that allows less needs it lowered.
+	MaxTokens int
+	// ContextTokens is the size of the model's context window, used to fit what is sent (a long
+	// document, a long thread) instead of failing. Zero takes DefaultContextTokens.
+	ContextTokens int
+	Temperature   *float64
+	Timeout       time.Duration
+	MaxAttempts   int
+	Backoff       time.Duration
 	// Headers are extra headers sent with every request (a gateway's own token, say).
 	Headers map[string]string
 	// Tools is how the model is given tools: "native" (the provider's own calls, the default)
@@ -219,6 +224,29 @@ type Reader interface {
 	// ReadsPDF is true when the model takes a PDF as a document.
 	ReadsPDF() bool
 }
+
+// DefaultMaxTokens is the answer size asked for when a profile sets none: room for a long report
+// or a whole file, and below what current models of every provider accept.
+const DefaultMaxTokens = 16384
+
+// DefaultContextTokens is the context window assumed when a profile does not say.
+const DefaultContextTokens = 200000
+
+// ContextWindow is the tokens the client's model takes in one request.
+func ContextWindow(c Client) int {
+	if w, ok := c.(interface{ ContextWindow() int }); ok {
+		if n := w.ContextWindow(); n > 0 {
+			return n
+		}
+	}
+	return DefaultContextTokens
+}
+
+// ContextWindow is the context window of the profile.
+func (c *HTTPClient) ContextWindow() int { return c.opts.ContextTokens }
+
+// ContextWindow is the context window of the profile.
+func (c *ClaudeClient) ContextWindow() int { return c.opts.ContextTokens }
 
 // SeesImages reports whether the client takes pictures.
 func SeesImages(c Client) bool {
@@ -373,7 +401,7 @@ func New(opts Options) (*HTTPClient, error) {
 		return nil, fmt.Errorf("provider %s needs a model", kind.Name)
 	}
 	if opts.MaxTokens <= 0 {
-		opts.MaxTokens = 4096
+		opts.MaxTokens = DefaultMaxTokens
 	}
 	if opts.Timeout <= 0 {
 		opts.Timeout = 120 * time.Second

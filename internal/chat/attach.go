@@ -23,7 +23,7 @@ import (
 // the chat's JSON under the chat's own folder, each under an id of ours (a name never reaches a
 // path), and listed in the turn. What the model gets of them:
 //
-//   - text, code and Word documents: their text in the message, cut at attach.MaxInline characters;
+//   - text, code and Word documents: their text in the message, whole, up to half of the model's context window;
 //   - pictures: shown as pictures, when the model sees them;
 //   - PDFs: sent as documents to the providers that read them, else their text as far as it can be
 //     read;
@@ -161,7 +161,7 @@ func (s *Service) describeFiles(id string, brain provider.Client, paths map[stri
 	list []attach.Attachment, fresh bool) (string, []provider.Image, []provider.File) {
 	sees := brain == nil || provider.SeesImages(brain)
 	reads := brain != nil && provider.ReadsPDF(brain)
-	remain := 2 * attach.MaxInline
+	remain := attach.InlineChars(provider.ContextWindow(brain))
 	var sb strings.Builder
 	var images []provider.Image
 	var docs []provider.File
@@ -194,8 +194,11 @@ func (s *Service) describeFiles(id string, brain provider.Client, paths map[stri
 		case a.Kind == attach.KindFile:
 			sb.WriteString("\n(a file that is not text; it is not shown)")
 		default:
-			limit := min(attach.MaxInline, remain)
-			text, cut := attach.Text(a, data, limit)
+			if remain <= 0 {
+				sb.WriteString("\n(not shown: the files of this message already fill the model's context window; the rest stays in the file)")
+				continue
+			}
+			text, cut := attach.Text(a, data, remain)
 			if text == "" {
 				sb.WriteString("\n(no text could be read from it)")
 				continue

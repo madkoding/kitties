@@ -78,7 +78,7 @@ func TestNewDefaultsAndErrors(t *testing.T) {
 		t.Error("custom needs a model")
 	}
 	c, err = New(Options{Kind: "custom", BaseURL: "http://x/", Model: "m"})
-	if err != nil || c.opts.BaseURL != "http://x" || c.opts.MaxTokens != 4096 || c.opts.MaxAttempts != 3 {
+	if err != nil || c.opts.BaseURL != "http://x" || c.opts.MaxTokens != DefaultMaxTokens || c.opts.MaxAttempts != 3 {
 		t.Errorf("defaults: %v %+v", err, c.opts)
 	}
 	if len(Kinds()) != len(kinds) || Kinds()[0] != "anthropic" {

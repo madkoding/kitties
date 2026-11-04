@@ -14,9 +14,14 @@ import (
 	"unicode/utf8"
 )
 
-// MaxInline is how many characters of a file's text go into a message: the rest stays in the file.
-// It bounds what an attachment adds to the prompt (about 8k tokens).
-const MaxInline = 30000
+// CharsPerToken is the characters a token is taken to hold when fitting text to a context window.
+// It is low on purpose (English is about 4, code and other languages fewer), so a fit is safe.
+const CharsPerToken = 3
+
+// InlineChars is how many characters of files' text may go into one message for a model with a
+// context window of contextTokens: half of it, the rest is for the thread, the system prompt and
+// the answer. A file within it goes whole; past it the rest stays in the file.
+func InlineChars(contextTokens int) int { return contextTokens / 2 * CharsPerToken }
 
 // Text is the text of a file for the model: the file itself when it is text, the words of a Word
 // document, the best-effort text of a PDF. The second result is true when it was cut at max

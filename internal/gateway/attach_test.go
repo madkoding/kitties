@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -61,6 +62,14 @@ func file(name string, data []byte) map[string]any {
 	return map[string]any{"name": name, "data": base64.StdEncoding.EncodeToString(data)}
 }
 
+func manyFiles() []any {
+	var files []any
+	for i := 0; i <= attach.MaxFiles; i++ {
+		files = append(files, file(fmt.Sprint(i), []byte("1")))
+	}
+	return files
+}
+
 func TestSendWithFiles(t *testing.T) {
 	srv, _, c := setup(t)
 	c.sessions["c1"] = &chat.Session{ID: "c1"}
@@ -77,7 +86,7 @@ func TestSendWithFiles(t *testing.T) {
 		"not base64": {"files": []any{map[string]any{"name": "a", "data": "***"}}},
 		"program":    {"files": []any{file("a.txt", []byte("MZ\x90\x00"))}},
 		"empty":      {"files": []any{file("a.txt", nil)}},
-		"too many":   {"files": []any{file("1", []byte("1")), file("2", []byte("1")), file("3", []byte("1")), file("4", []byte("1")), file("5", []byte("1")), file("6", []byte("1")), file("7", []byte("1"))}},
+		"too many":   {"files": manyFiles()},
 	}
 	for name, body := range bad {
 		if code, m, _ := call(t, srv, "POST", "/v1/chats/c1/messages", "tok", body); code != 400 {

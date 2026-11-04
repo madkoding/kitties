@@ -191,7 +191,8 @@ type Service struct {
 	// UnattendedWindows is how many windows of a task's rounds an unattended kitty goes through by
 	// itself on the desktop before it stops at the safety cap and waits to be told to go on.
 	UnattendedWindows int
-	// MaxTurns is how much of the thread a kitty is shown.
+	// MaxTurns is how many turns of the thread a kitty is shown; zero (the default) shows all of
+	// it, fitted to the model's context window.
 	MaxTurns int
 	// MaxSteps bounds how many desktop rounds a task may take in one turn.
 	MaxSteps int
@@ -290,7 +291,7 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 // New creates the service, loading the sessions kept in dir.
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
-		now: time.Now, newID: randomID, MaxRounds: 4, UnattendedRounds: 40, UnattendedWindows: 8, MaxTurns: 60, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
+		now: time.Now, newID: randomID, MaxRounds: 4, UnattendedRounds: 40, UnattendedWindows: 8, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
 		DefaultLimits: kitty.Limits{MaxTokens: 0, MaxSeconds: 14400, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
 	if err := s.load(); err != nil {
@@ -1411,7 +1412,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			}
 			st.messages = append(st.messages, feedback(p.native, st.reply, st.replyText, outs, &extra)...)
 		}
-		st.messages = trimHistory(st.messages, s.MaxTurns*2)
+		st.messages = fitContext(trimHistory(st.messages, s.MaxTurns*2), provider.ContextWindow(p.brain))
 		if err := s.overTokens(k); err != nil {
 			return "stopped: " + err.Error(), false
 		}
@@ -1588,7 +1589,7 @@ func (s *Service) transcript(system string, turns []Turn, k *kitty.Kitty) []prov
 // transcriptFor is transcript with the files of the thread: id is the chat they are stored under,
 // brain says what the model can be shown, and paths where each file is on the kitty's machine.
 func (s *Service) transcriptFor(id string, brain provider.Client, paths map[string]string, system string, turns []Turn, k *kitty.Kitty) []provider.Message {
-	if len(turns) > s.MaxTurns {
+	if s.MaxTurns > 0 && len(turns) > s.MaxTurns {
 		turns = turns[len(turns)-s.MaxTurns:]
 	}
 	// The files shown to the model as they are (pictures, documents) are those of the messages
@@ -1639,7 +1640,38 @@ func (s *Service) transcriptFor(id string, brain provider.Client, paths map[stri
 	if last := messages[len(messages)-1]; last.Role != "user" {
 		messages = append(messages, provider.Message{Role: "user", Content: "(continue)"})
 	}
-	return messages
+	return fitContext(messages, provider.ContextWindow(brain))
+}
+
+// fitContext keeps a conversation inside the model's context window by letting its oldest
+// messages go (after the first, the system prompt), instead of sending what the provider would
+// refuse. A fifth of the window is left for the answer. Nothing is dropped while it fits, and the
+// last message is always kept.
+func fitContext(messages []provider.Message, window int) []provider.Message {
+	budget := window / 5 * 4 * attach.CharsPerToken
+	size := func(m provider.Message) int {
+		n := len(m.Content)
+		for _, c := range m.ToolCalls {
+			n += len(c.Name) + 16*len(c.Args)
+		}
+		return n
+	}
+	total := 0
+	for _, m := range messages {
+		total += size(m)
+	}
+	start := 1
+	for total > budget && start < len(messages)-1 {
+		total -= size(messages[start])
+		start++
+	}
+	for start < len(messages)-1 && messages[start].Role == "tool" {
+		start++
+	}
+	if start <= 1 {
+		return messages
+	}
+	return append(messages[:1:1], messages[start:]...)
 }
 
 // trimHistory keeps the first message and the last keep ones, and never starts the kept tail in

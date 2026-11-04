@@ -12,7 +12,8 @@ providers:
   strong:
     kind: anthropic              # openai | codex | anthropic | claude-code | gemini | ollama | groq
     model: claude-sonnet-5-5     # | ollama-cloud | openrouter | deepseek | qwen | mistral | copilot | custom
-    max_tokens: 4096
+    max_tokens: 16384          # size of one answer (0 takes 16384); lower it only for a model that allows less
+    context_tokens: 200000     # the model's window (0 takes 200000): long files and threads are fitted to it
     prompt_cache: true         # default: cache the stable start of the prompt (set false to turn off)
     cache_ttl: 5m              # Anthropic only: 5m (default) or 1h
   fast:
@@ -50,12 +51,12 @@ kitties:
     backup: tom                  # takes over a task mimi gives up on (empty: mimi asks you)
     approvals: ask               # ask: posting, replying, sending, refunding... wait for a yes | auto: never ask
     limits:                      # what one task may spend; 0 takes the default
-      max_tokens: 200000         # 0 (default): no limit per task when unattended
+      max_tokens: 0              # 0 (default): no limit per task (set one only to cap a task)
       max_seconds: 900           # default 4 hours when unattended
       max_rounds: 25             # a window of rounds; unattended, up to 8 windows by themselves
       attended: false            # true: stop at the end of the rounds and wait to be told to go on
       retries: 2                 # failed attempts tried another way
-      day_tokens: 2000000        # all its work in a day; spent, it rests until tomorrow (0: no limit)
+      day_tokens: 0              # 0 (default): no limit; set one to cap a day, spent it rests until tomorrow
       day_actions: 20            # posts, replies, mail, refunds in a day; past it each one waits for a yes
     goals:                       # standing tasks, worked in a thread of their own
       - title: Inbox check

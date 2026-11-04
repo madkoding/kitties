@@ -19,7 +19,7 @@ A kitty is not only something you talk to. Each one has an agenda:
   connector calls per answer). `limits.attended: true` (Settings → Limits → *Work on its own*
   off) brings back the old way (and its 400k tokens and 30 minutes per task): stop at the end of the rounds and wait for a "continue".
 - **Limits.** Per kitty: tokens, seconds and rounds per task, and how many times a failed
-  attempt is tried another way. Unattended, there is no per-task token limit by default and a task may run four hours; set `max_tokens`/`max_seconds` to cap one, and `day_tokens` caps the whole day. They are the safety net of unattended work: a task that hits
+  attempt is tried another way. Unattended, there is no per-task token limit by default (nor a daily one) and a task may run four hours; set `max_tokens`/`max_seconds` to cap one, and `day_tokens` caps the whole day. They are the safety net of unattended work: a task that hits
   one stops, says so (and can be resumed) instead of running on. A **daily budget** caps what a kitty spends around the clock: out of tokens it rests until
   tomorrow (and tells you once); past its actions for the day, every post, reply or refund waits
   for your yes even if it normally acts alone.
