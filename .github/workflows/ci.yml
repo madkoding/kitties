@@ -10,13 +10,49 @@ on:
 permissions:
   contents: read
 
+# One run per pull request (or branch): a new push cancels the one still going. The group used to end
+# in the commit's SHA, so every push had a group of its own and nothing was ever cancelled.
 concurrency:
-  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}-${{ github.sha }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref_name }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # What a pull request touches. A pull request that changes only docs or the landing skips the heavy
+  # jobs, and one that changes only the kitty-desktop image skips the app's. Skipped jobs count as
+  # passed for the required checks, and keep their (static) names. Pushes, tags, schedules and manual
+  # runs always run everything. Matrix jobs with a templated name must not be skipped at the job level
+  # (their required name would never be reported): they decide in a step instead.
+  changes:
+    name: what changed
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.scope.outputs.app }}
+      desktop_image: ${{ steps.scope.outputs.desktop_image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then
+            echo "app=true" >> "$GITHUB_OUTPUT"; echo "desktop_image=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # HEAD is the merge of the pull request into its base: its first parent is the base.
+          files="$(git diff --name-only HEAD^1 HEAD)"
+          echo "$files"
+          # The app side: anything but docs, the landing and the kitty-desktop image's own folder.
+          if printf '%s\n' "$files" | grep -qvE '^(docs/|site/|docker/kitty-desktop/)|\.md$|^LICENSE$'; then app=true; else app=false; fi
+          # The image: its folder, the fonts it shares with the page, and the workflows that build and scan it.
+          if printf '%s\n' "$files" | grep -qE '^(docker/kitty-desktop/|desktop/frontend/public/|\.github/workflows/(ci|security)\.yml$)'; then img=true; else img=false; fi
+          echo "app=$app" >> "$GITHUB_OUTPUT"; echo "desktop_image=$img" >> "$GITHUB_OUTPUT"
+
   check:
     name: fmt · vet · test · coverage
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -24,6 +60,8 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
+          # The root module has no go.sum, so the Go build cache (stdlib, race runtime) was never kept.
+          cache-dependency-path: go.mod
       - name: gofmt
         run: make fmt-check
       - name: go vet
@@ -39,17 +77,20 @@ jobs:
     name: cross-platform build
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    needs: check
+    # Independent of `check` (it used to wait for it): both run at once. The make target does not
+    # build the page (WEB is not set), so Node is not needed here either.
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: desktop/frontend/package-lock.json
+          # Its own cache key (the Makefile lists the platforms): the seven GOOS/GOARCH builds of the
+          # standard library are what took most of this job.
+          cache-dependency-path: |
+            go.mod
+            Makefile
       - name: build every platform
         run: make dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -60,6 +101,8 @@ jobs:
 
   desktop:
     name: desktop app · page · wails module
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -72,8 +115,15 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
       - name: build the page
         run: cd desktop/frontend && npm ci && npm run typecheck && npm run build
+      # The built page is built once, here, and the Android and end to end jobs take it from this artifact.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: page
+          path: desktop/frontend/dist/
+          retention-days: 1
       - name: vet and test the Wails module
         run: cd desktop && go vet ./... && go test -count=1 -cover ./...
 
@@ -81,6 +131,8 @@ jobs:
   # restarted into in place, a bad signature is refused, and a version that does not hold is gone back from.
   selfupdate:
     name: updating itself
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -103,17 +155,19 @@ jobs:
     needs: desktop
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-          cache-dependency-path: desktop/frontend/package-lock.json
       - uses: actions/setup-java@b843ebf9b913146b38da2eaa7aeddf76074ae1ad # v6.1.0
         with:
           distribution: temurin
           java-version: 21
-      - name: build the page
-        run: cd desktop/frontend && npm ci && npm run build
+          cache: gradle
+          cache-dependency-path: |
+            android/**/*.gradle*
+            android/gradle/wrapper/gradle-wrapper.properties
+      # The page the `desktop` job built (the APK packs desktop/frontend/dist), not another npm ci + build.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: page
+          path: desktop/frontend/dist
       - name: build the APK
         env:
           KITTIES_VERSION: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || '' }}
@@ -151,8 +205,13 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-      - name: build the page
-        run: cd desktop/frontend && npm ci && npm run build
+          cache: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: page
+          path: desktop/frontend/dist
+      - name: install the test dependencies
+        run: cd desktop/frontend && npm ci
       - name: install the browser
         run: cd desktop/frontend && npx playwright install --with-deps chromium
       - name: run the screens
@@ -176,6 +235,8 @@ jobs:
 
   image:
     name: kitty-desktop image
+    needs: changes
+    if: needs.changes.outputs.desktop_image == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -193,8 +254,21 @@ jobs:
           test -n "$sha"
           echo "lumen-wm main is $sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      # BuildKit with the GitHub cache: every stage is its own layer (voxl's Rust build, the themes and
+      # icons, kitty-grab, lumen-wm), so a new lumen-wm commit rebuilds only the lumen stage and its
+      # dependants and the rest comes from the cache. Only main and tags write it (a pull request
+      # reads it), so the 10 GB cache is not churned by every push. The scope is the one the
+      # release build uses, and the security scan reads it too.
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: build the image
-        run: docker build --build-arg LUMEN_COMMIT=${{ steps.lumen.outputs.sha }} -t kitty-desktop:ci docker/kitty-desktop
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: docker/kitty-desktop
+          load: true
+          tags: kitty-desktop:ci
+          build-args: LUMEN_COMMIT=${{ steps.lumen.outputs.sha }}
+          cache-from: type=gha,scope=kitty-desktop-amd64
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max,scope=kitty-desktop-amd64' || '' }}
       - name: the shelf's weather and player feeds, and its font
         run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/shelf-feeds.sh
       - name: the display comes up and a screenshot is a PNG
@@ -239,12 +313,22 @@ jobs:
   # proves the Dockerfile and that the container answers its health check.
   gateway-image:
     name: gateway image
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
       - name: build the image
-        run: docker build -f docker/gateway/Dockerfile -t kitties:ci .
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: docker/gateway/Dockerfile
+          load: true
+          tags: kitties:ci
+          cache-from: type=gha,scope=gateway-amd64
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max,scope=gateway-amd64' || '' }}
       - name: it serves the page and asks for the token
         run: |
           docker run -d --name gw -p 7488:7488 -e KITTIES_TOKEN=ci-token kitties:ci
@@ -310,6 +394,7 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: desktop/go.mod
+          cache-dependency-path: desktop/go.sum
       - name: linux build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
