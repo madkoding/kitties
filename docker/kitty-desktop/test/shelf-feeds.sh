@@ -96,6 +96,33 @@ out="$(PLAYER_STATUS=Stopped media)"
 out="$(NOPLAYER=1 media)"
 [ -z "$out" ] && ok "no player open, nothing printed (the island hides)" || bad "no player printed: $out"
 
+# The network island: kitty-shelf-net reads the routing table and the link state ("in-use:signal:name").
+NET="${NET:-kitty-shelf-net}"
+mkdir -p "$work/sys/eth0"
+printf 'Iface\tDestination\tGateway\nth0\t00000000\t0100A8C0\n' | sed 's/^th0/eth0/' >"$work/route"
+echo up >"$work/sys/eth0/operstate"
+net() { KITTY_NET_ROUTE="$work/route" KITTY_NET_SYS="$work/sys" sh -c "exec $NET" 2>/dev/null; }
+[ "$(net)" = "*:100:Kitty network (eth0)" ] && ok "network up: connected at 100%" || bad "network up: $(net)"
+echo down >"$work/sys/eth0/operstate"
+[ -z "$(net)" ] && ok "link down, nothing printed" || bad "link down printed: $(net)"
+printf 'Iface\tDestination\tGateway\n' >"$work/route"
+[ -z "$(net)" ] && ok "no default route, nothing printed" || bad "no route printed: $(net)"
+
+# The volume island: the <level> command of the desktop's rc.xml, with a pactl that prints like PulseAudio.
+RC="${RC:-/home/kitty/.config/lumen/rc.xml}"
+cat >"$work/bin/pactl" <<'STUB'
+#!/bin/sh
+echo "Volume: front-left: 42598 /  65% / -11.23 dB,   front-right: 42598 /  65% / -11.23 dB"
+STUB
+chmod +x "$work/bin/pactl"
+level="$(sed -n 's|.*<level>\(.*\)</level>.*|\1|p' "$RC" 2>/dev/null | sed 's/&amp;/\&/g;s/&lt;/</g;s/&gt;/>/g' | head -n1)"
+if [ -n "$level" ]; then
+    out="$(PATH="$work/bin:$PATH" sh -c "$level" 2>/dev/null)"
+    [ "$out" = "65" ] && ok "volume level reads 65 from pactl" || bad "volume level: '$out'"
+else
+    bad "no <level> command in $RC"
+fi
+
 # The shelf's font is Sansation and fontconfig resolves it to Sansation, not to a fallback.
 if command -v fc-match >/dev/null 2>&1; then
     fam="$(fc-match -f '%{family}' Sansation)"
