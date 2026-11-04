@@ -90,3 +90,7 @@ that is why `chromium` used to need `--no-sandbox`. Kitties now creates the cont
 the unprivileged `kitty`). `chromium` in the image is a wrapper that keeps the sandbox on and, only
 in a container made before this profile, falls back to `--no-sandbox` with a warning; recreate the
 kitty to get the sandbox back. Refresh the profile with `scripts/update-seccomp.sh`.
+
+Root has no password. The `kitty` user has passwordless `sudo` (`sudoers.d/kitty`), so it can install
+and configure anything in its own computer (`sudo apt install …`, or `kitty-install <package>`). From
+the host, `docker exec -u root -it <container> bash` also gives a root shell.
