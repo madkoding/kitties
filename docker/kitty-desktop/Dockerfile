@@ -22,10 +22,10 @@
 FROM debian:trixie-slim AS lumen
 ARG LUMEN_REF=main
 ARG LUMEN_COMMIT=
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential autoconf \
-        automake libtool pkg-config gettext autopoint libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev \
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl build-essential meson ninja-build \
+        pkg-config gettext libglib2.0-dev libxml2-dev libpango1.0-dev libcairo2-dev \
         libx11-dev libxft-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libsm-dev librsvg2-dev \
-        libimlib2-dev \
+        libimlib2-dev libxkbcommon-dev libxext-dev libxau-dev \
     && rm -rf /var/lib/apt/lists/*
 RUN set -e; \
     commit="${LUMEN_COMMIT}"; \
@@ -36,8 +36,8 @@ RUN set -e; \
     mkdir -p /out/usr/share/doc/lumen-wm; echo "$commit" > /out/usr/share/doc/lumen-wm/COMMIT; \
     curl -fsSL -o /tmp/lumen.tar.gz "https://github.com/madkoding/lumen-wm/archive/${commit}.tar.gz" \
     && mkdir /tmp/lumen && tar xzf /tmp/lumen.tar.gz -C /tmp/lumen --strip-components=1 \
-    && cd /tmp/lumen && ./bootstrap && ./configure --prefix=/usr --sysconfdir=/etc --disable-nls \
-    && make -j"$(nproc)" && make DESTDIR=/out install
+    && cd /tmp/lumen && meson setup build --prefix=/usr --sysconfdir=/etc -Dwayland=disabled -Dnls=false \
+    && DESTDIR=/out meson install -C build
 
 # The window theme, Numix (GPL-3) and the dark Greybird (GPL-2+ or CC-BY-SA-3.0+) from Debian: only
 # their Openbox themes and licences are kept;
@@ -110,7 +110,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip \
         xterm sudo playerctl dbus-x11 pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
         libglib2.0-0 libxml2 libpango-1.0-0 libpangocairo-1.0-0 libpangoxft-1.0-0 libcairo2 libxft2 libxrandr2 libxinerama1 \
-        libxcursor1 libxi6 libsm6 librsvg2-2 libimlib2 \
+        libxcursor1 libxi6 libsm6 librsvg2-2 libimlib2 libxkbcommon0 libxau6 \
         chromium fonts-dejavu fonts-noto-color-emoji \
         ca-certificates curl git jq python3 python3-websocket openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
