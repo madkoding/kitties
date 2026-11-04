@@ -37,7 +37,7 @@ if command -v voxl >/dev/null 2>&1; then
     )
     (
         while :; do
-            VOXL_PASSWORD="$(cat /tmp/voxl.pw)" voxl --addr=127.0.0.1 --port=6901 --audio-enabled="$audio" \
+            VOXL_PASSWORD="$(cat /tmp/voxl.pw)" voxl --addr=0.0.0.0 --port=6901 --audio-enabled="$audio" \
                 --file-transfers=none --title="Kitty desktop" >>/tmp/voxl.log 2>&1
             sleep 1
         done
