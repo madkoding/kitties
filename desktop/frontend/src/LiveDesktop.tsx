@@ -647,7 +647,7 @@ export default function LiveDesktop({
   const content = (
     <>
       {windowed ? (
-        <div class="flex items-center gap-2 flex-wrap shrink-0">
+        <div class="live-head titlebar flex items-center gap-2 flex-wrap shrink-0">
           <h2 class="font-mono text-base tracking-wide flex-1 min-w-0 truncate">{name}</h2>
           <span
             class={`state-pill max-w-full ${control ? "is-working" : "is-ok"}`}
@@ -947,15 +947,16 @@ export default function LiveDesktop({
   }
   return (
     <div
-      class="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-3 sm:p-6 backdrop"
+      class="live-window fixed inset-0 z-50 bg-black/80 backdrop"
       onClick={leave}
       data-modal
       data-testid="live-desktop"
     >
       <div
-        class="chat-modal w-full max-w-6xl h-full max-h-[56rem] p-3 sm:p-4 flex flex-col gap-3 overflow-hidden"
+        class="live-window-box chat-modal flex flex-col gap-3 overflow-hidden"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
+        aria-modal="true"
         aria-label={name}
       >
         {chat || onStartChat ? (
