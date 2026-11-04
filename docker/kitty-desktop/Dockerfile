@@ -109,7 +109,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
     && mkdir -p /home/kitty/work && chown -R kitty:kitty /home/kitty \
-    && echo 'kitty ALL=(root) NOPASSWD: /usr/local/sbin/kitty-apt' > /etc/sudoers.d/kitty \
+    && echo 'kitty ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/kitty \
     && chmod 440 /etc/sudoers.d/kitty
 
 COPY --from=lumen /out/ /
