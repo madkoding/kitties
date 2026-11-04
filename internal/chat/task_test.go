@@ -516,3 +516,24 @@ func TestUnattendedTaskHasNoTokenOrTimeLimitByDefault(t *testing.T) {
 		t.Errorf("unattended defaults: %+v", s.DefaultLimits)
 	}
 }
+
+// With no cap set, a task goes on past any number of windows until it is done.
+func TestUnattendedTaskHasNoRoundCapByDefault(t *testing.T) {
+	replies := make([]string, 0, 31)
+	for i := 0; i < 30; i++ {
+		replies = append(replies, "@tool click {\"x\": 1, \"y\": 1}")
+	}
+	replies = append(replies, "@tool done {\"summary\": \"ok\"}")
+	s, _, _ := deskService(t, replies...)
+	fresh, _, _, _ := fleet(t)
+	if d := service(t, fresh); d.UnattendedWindows != 0 || d.UnattendedRounds != 0 {
+		t.Fatalf("caps by default: %d windows, %d rounds", d.UnattendedWindows, d.UnattendedRounds)
+	}
+	s.MaxSteps, s.UnattendedWindows = 2, 0 // 30 rounds would be 15 windows
+	sess, _ := s.Create("", []string{"ana"})
+	_, _ = s.Send(context.Background(), sess.ID, "long job")
+	turn := waitDone(t, s, sess.ID).Turns[1]
+	if turn.Resumable || turn.Detail != "" {
+		t.Errorf("the task stopped: %+v", turn)
+	}
+}

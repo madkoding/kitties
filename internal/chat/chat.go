@@ -13,6 +13,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -186,10 +187,11 @@ type Service struct {
 	// MaxRounds bounds how many times a kitty may call connectors in one answer.
 	MaxRounds int
 	// UnattendedRounds is how many rounds of connector calls an unattended kitty may take in one
-	// answer (MaxRounds is for an attended one).
+	// answer (MaxRounds is for an attended one); zero, the default, sets no cap.
 	UnattendedRounds int
 	// UnattendedWindows is how many windows of a task's rounds an unattended kitty goes through by
-	// itself on the desktop before it stops at the safety cap and waits to be told to go on.
+	// itself on the desktop before it stops at the safety cap and waits to be told to go on; zero,
+	// the default, sets no cap.
 	UnattendedWindows int
 	// MaxTurns is how many turns of the thread a kitty is shown; zero (the default) shows all of
 	// it, fitted to the model's context window.
@@ -291,7 +293,7 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 // New creates the service, loading the sessions kept in dir.
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
-		now: time.Now, newID: randomID, MaxRounds: 4, UnattendedRounds: 40, UnattendedWindows: 8, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
+		now: time.Now, newID: randomID, MaxRounds: 4, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
 		DefaultLimits: kitty.Limits{MaxTokens: 0, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
 	if err := s.load(); err != nil {
@@ -1005,6 +1007,9 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	rounds, capped := s.MaxRounds, false
 	if !k.Limits.Or(s.DefaultLimits).Attended {
 		rounds = max(s.MaxRounds, s.UnattendedRounds)
+		if s.UnattendedRounds == 0 {
+			rounds = math.MaxInt
+		}
 	}
 	for round := 0; round < rounds; round++ {
 		capped = round == rounds-1
@@ -1207,16 +1212,6 @@ type taskState struct {
 // left with the person.
 func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Kitty, p *pendingTask) {
 	limits := k.Limits.Or(s.DefaultLimits)
-	if limits.Attended {
-		// The old cautious defaults, for a kitty that asked for them: unattended work has no
-		// per-task token limit unless one is set (the day's tokens still cap it).
-		if k.Limits.MaxTokens == 0 {
-			limits.MaxTokens = attendedTokens
-		}
-		if k.Limits.MaxSeconds == 0 {
-			limits.MaxSeconds = attendedSeconds
-		}
-	}
 	if limits.MaxSeconds > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(limits.MaxSeconds)*time.Second)
@@ -1260,12 +1255,6 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 	}
 }
 
-// attendedTokens and attendedSeconds are the per-task limits of an attended kitty that sets none.
-const (
-	attendedTokens  = 400000
-	attendedSeconds = 1800
-)
-
 // recapSteps is how many of its last steps a kitty is reminded of when it goes on with a task.
 const recapSteps = 30
 
@@ -1303,8 +1292,13 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 	// Unattended, a task goes through several windows of rounds by itself; the cap is the safety
 	// net next to the token and time budgets.
 	maxRounds := window
-	if !limits.Attended && s.UnattendedWindows > 1 {
-		maxRounds = window * s.UnattendedWindows
+	if !limits.Attended {
+		switch {
+		case s.UnattendedWindows == 0:
+			maxRounds = math.MaxInt // no cap: it goes on until done, stopped, or a limit the person set
+		case s.UnattendedWindows > 1:
+			maxRounds = window * s.UnattendedWindows
+		}
 	}
 	for ; ; st.rounds++ {
 		if runner == nil {

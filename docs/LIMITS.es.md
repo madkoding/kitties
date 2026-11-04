@@ -13,16 +13,15 @@ puede frenar una petición viene del modelo, no de Kitties.
 | Presupuesto de tokens diario y por tarea | `0` (sin límite) por defecto; `limits.day_tokens` / `limits.max_tokens` los fijan si quieres |
 | Conversación cortada a un número fijo de turnos | Ajustada a la ventana del modelo (cuentan imágenes y documentos); se sueltan primero los más antiguos |
 | 4 horas por tarea | Sin límite de tiempo por defecto; `limits.max_seconds` lo fija |
+| Rondas con tope (8 ventanas en el escritorio, 40 rondas de conectores por respuesta) | Sin tope; `limits.max_rounds` es el tamaño de la ventana de punto de control; la detección de pantalla atascada sigue avisando a quien se repite |
 
-`limits.attended: true` es el modo cauto opcional y conserva su tope por tarea (400.000 tokens).
+`limits.attended: true` es el modo cauto opcional: se detiene al final de sus rondas y espera un «continúa», sin tope propio de tokens ni de tiempo.
 
 ## No quitables (del modelo)
 
 - **Ventana de contexto.** `context_tokens` del perfil; por defecto la habitual del proveedor
   (Gemini 1.000.000; Ollama 32.768; Groq, DeepSeek, Qwen, Mistral 128.000; el resto 200.000). Pon la
   ventana real de tu modelo: Kitties ajusta archivos y conversaciones a ella en vez de fallar.
-- **Rondas.** `max_rounds` (ventanas de rondas) se queda: frena a un gatito que da vueltas en
-  círculo. Sigue solo por varias ventanas, así que una tarea larga no se corta.
 - **Tamaño de la respuesta.** Lo máximo que puede escribir una respuesta; Anthropic exige el valor.
   Sube `max_tokens` si el modelo permite más, bájalo si permite menos (rechazaría la petición).
 - **Imágenes (5 MB) y PDF (32 MB).** Límites de tamaño de los propios proveedores.

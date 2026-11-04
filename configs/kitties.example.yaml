@@ -53,7 +53,7 @@ kitties:
     limits:                      # what one task may spend; 0 takes the default
       max_tokens: 0              # 0 (default): no limit per task (set one only to cap a task)
       max_seconds: 0             # 0 (default): no time limit; set seconds to cap a task
-      max_rounds: 25             # a window of rounds; unattended, up to 8 windows by themselves
+      max_rounds: 25             # size of a window of rounds (a checkpoint at its end); no cap on how many
       attended: false            # true: stop at the end of the rounds and wait to be told to go on
       retries: 2                 # failed attempts tried another way
       day_tokens: 0              # 0 (default): no limit; set one to cap a day, spent it rests until tomorrow
