@@ -117,7 +117,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         inkscape imagemagick mtpaint mousepad \
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
         libx11-6 libxext6 libjpeg62-turbo \
-        libx264-164 libyuv0 libopus0 libpulse0 pulseaudio socat \
+        libx264-164 libyuv0 libopus0 libpulse0 pulseaudio pulseaudio-utils socat \
         tini procps tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
@@ -162,6 +162,7 @@ COPY --chmod=755 kitty-clip.sh /usr/local/bin/kitty-clip
 COPY --chmod=755 kitty-theme.sh /usr/local/bin/kitty-theme
 COPY --chmod=755 kitty-shelf-media.sh /usr/local/bin/kitty-shelf-media
 COPY --chmod=755 kitty-shelf-weather.sh /usr/local/bin/kitty-shelf-weather
+COPY --chmod=755 kitty-shelf-net.sh /usr/local/bin/kitty-shelf-net
 COPY --chown=kitty:kitty lumen/rc.xml lumen/menu.xml lumen/autostart /home/kitty/.config/lumen/
 # The file manager's settings and the desktop's (wallpaper only).
 COPY --chown=kitty:kitty home/ /home/kitty/
