@@ -1384,16 +1384,19 @@ test("Escape in the live desktop's chat box does not close the window", async ({
   await expect(live).toHaveCount(0);
 });
 
-test("from a kitty's drawer, the enlarged desktop offers the chat with it", async ({ page }) => {
+test("from a kitty's drawer, the enlarged desktop has its direct chat beside it", async ({
+  page,
+}) => {
   await open(page, `#chat/${ids.desktop}`);
   await kittyRow(page, "tom").click();
   const drawer = page.locator("[data-modal]");
   await drawer.getByTestId("live-enlarge").click();
-  const start = page.getByTestId("live-chat-start");
-  await expect(start).toBeVisible();
-  await start.getByRole("button", { name: "Chat with tom" }).click();
-  await expect(page).toHaveURL(/#chat\//);
-  await expect(page.getByTestId("live-desktop")).toHaveCount(0);
+  const chat = page.getByTestId("live-chat");
+  await expect(chat).toBeVisible();
+  await expect(chat.getByText("Opened the site").first()).toBeVisible();
+  await chat.getByRole("textbox").fill("hello from the drawer");
+  await chat.getByRole("button", { name: /send/i }).click();
+  await expect(chat.getByText("hello from the drawer").first()).toBeVisible();
 });
 
 test("on a phone the live desktop's chat is stacked under the picture, folded until asked for", async ({
@@ -1413,6 +1416,7 @@ test("on a phone the live desktop's chat is stacked under the picture, folded un
   expect(bar.x + bar.width).toBeLessThanOrEqual(edge.x + edge.width + 1);
   await chat.getByTestId("live-chat-toggle").click();
   await expect(chat.getByRole("textbox")).toBeVisible();
+  await shot(page, "58-live-chat-phone");
 });
 
 test("in a kitty's drawer the desktop is there, live, and one click on it takes the controls", async ({
