@@ -1315,13 +1315,10 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await page.mouse.up();
   await expect.poll(() => inputs).toContain("drag");
   await expect(live.locator(".live-gesture")).toHaveCount(0);
-  // The window keeps its margins, and the picture stays inside its frame.
+  // The window fills the screen, and the picture stays inside its frame.
   const view = page.viewportSize()!;
   const dialog = (await live.getByRole("dialog").boundingBox())!;
-  expect(dialog.x).toBeGreaterThanOrEqual(8);
-  expect(dialog.y).toBeGreaterThanOrEqual(8);
-  expect(dialog.x + dialog.width).toBeLessThanOrEqual(view.width - 8);
-  expect(dialog.y + dialog.height).toBeLessThanOrEqual(view.height - 8);
+  expect(dialog).toMatchObject({ x: 0, y: 0, width: view.width, height: view.height });
   const surface = (await live.locator(".live-surface").boundingBox())!;
   const shown = (await frame.boundingBox())!;
   expect(shown.x).toBeGreaterThanOrEqual(surface.x);
@@ -1417,6 +1414,39 @@ test("on a phone the live desktop's chat is stacked under the picture, folded un
   await chat.getByTestId("live-chat-toggle").click();
   await expect(chat.getByRole("textbox")).toBeVisible();
   await shot(page, "58-live-chat-phone");
+});
+
+test("the live desktop window fills the whole screen, on a laptop and on a phone", async ({
+  page,
+}) => {
+  for (const size of [
+    { width: 1440, height: 900 },
+    { width: 390, height: 800 },
+  ]) {
+    await page.setViewportSize(size);
+    await page.goto(`/${Q}#chat/${ids.desktop}`);
+    await page.getByTestId("open-desktop").first().click();
+    const live = page.getByTestId("live-desktop");
+    await expect(live).toBeVisible();
+    // The window covers the viewport edge to edge: nothing is cut, nothing floats in a margin.
+    const win = (await live.boundingBox())!;
+    expect(win).toMatchObject({ x: 0, y: 0, width: size.width, height: size.height });
+    const box = (await live.getByRole("dialog").boundingBox())!;
+    expect(box).toMatchObject({ x: 0, y: 0, width: size.width, height: size.height });
+    // The picture and the chat stay inside it.
+    const surface = (await live.locator(".live-surface").boundingBox())!;
+    expect(surface.x + surface.width).toBeLessThanOrEqual(size.width + 1);
+    expect(surface.y + surface.height).toBeLessThanOrEqual(size.height + 1);
+    const chat = (await live.getByTestId("live-chat").boundingBox())!;
+    expect(chat.x + chat.width).toBeLessThanOrEqual(size.width + 1);
+    if (size.width >= 768) {
+      // Beside the picture, the chat has the window's full height.
+      expect(chat.height).toBeGreaterThan(size.height - 80);
+    }
+    // Escape still closes it.
+    await page.keyboard.press("Escape");
+    await expect(live).toBeHidden();
+  }
 });
 
 test("in a kitty's drawer the desktop is there, live, and one click on it takes the controls", async ({
