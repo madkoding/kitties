@@ -20,6 +20,8 @@ done
 # followed as pictures. It starts again if it ends. The viewer, and the sound when the image has
 # PulseAudio: a virtual output whose monitor voxl sends as Opus over the same WebSocket (the page
 # only plays it after the person's first click, so it starts muted). No files.
+# Light on purpose so the sound does not stutter: 30 fps (VOXL_FPS), video quality CRF 30
+# (VOXL_CRF) between 0.5 and 4 Mbps (VOXL_MIN_KBPS, VOXL_MAX_KBPS) and Opus at 48 kbps (VOXL_AUDIO_BPS).
 audio=false
 if command -v pulseaudio >/dev/null 2>&1; then
     mkdir -p /tmp/kitty-pulse
@@ -39,7 +41,9 @@ if command -v voxl >/dev/null 2>&1; then
     )
     (
         while :; do
-            VOXL_PASSWORD="$(cat /tmp/voxl.pw)" voxl --addr=0.0.0.0 --port=6901 --framerate="${VOXL_FPS:-30}" --audio-enabled="$audio" \
+            VOXL_PASSWORD="$(cat /tmp/voxl.pw)" voxl --addr=0.0.0.0 --port=6901 --framerate="${VOXL_FPS:-30}" \
+                --crf="${VOXL_CRF:-30}" --max-kbps="${VOXL_MAX_KBPS:-4000}" --min-kbps="${VOXL_MIN_KBPS:-500}" \
+                --audio-enabled="$audio" --audio-bitrate="${VOXL_AUDIO_BPS:-48000}" \
                 --file-transfers=none --title="Kitty desktop" >>/tmp/voxl.log 2>&1
             sleep 1
         done
