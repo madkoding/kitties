@@ -88,8 +88,7 @@ that is why `chromium` used to need `--no-sandbox`. Kitties now creates the cont
 [`seccomp-kitty.json`](../internal/container/seccomp-kitty.json): Docker's default profile plus
 `clone`/`unshare` without `CAP_SYS_ADMIN` (no privileged mode, no extra capability, and the user is
 the unprivileged `kitty`). `chromium` in the image is a wrapper: it adds `--disable-gpu` and
-`--disable-dev-shm-usage` (Xvfb has no GPU; no compositor such as picom is needed or wanted, it
-would only cost CPU on every frame the live view sends). It keeps the sandbox when the container
+`--disable-dev-shm-usage` (Xvfb has no GPU; Chromium paints in software). It keeps the sandbox when the container
 can make user namespaces and otherwise runs without it (`--no-sandbox`), with a warning; recreate
 the kitty to get the sandbox back. `kitty-open` also retries without the sandbox when the sandboxed
 browser does not come up. Everything it did, and what Chromium said when it failed, is in
@@ -100,3 +99,11 @@ opens a temporary profile in `/tmp` when the workspace cannot hold one). Refresh
 Root has no password. The `kitty` user has passwordless `sudo` (`sudoers.d/kitty`), so it can install
 and configure anything in its own computer (`sudo apt install …`, or `kitty-install <package>`). From
 the host, `docker exec -u root -it <container> bash` also gives a root shell.
+
+## Compositor (picom)
+
+The desktop runs `picom` (xrender backend, [`picom.conf`](../docker/kitty-desktop/picom.conf)) so
+translucent windows, menus and tooltips blend correctly on X11. It is deliberately light: no
+shadows, fading or blur, and damage tracking on, so an idle desktop costs nothing and voxl's frames
+cost little extra. Start the container with `KITTY_COMPOSITOR=0` to run without it. Its log is
+`/tmp/picom.log`.
