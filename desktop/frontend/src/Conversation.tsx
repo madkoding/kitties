@@ -552,6 +552,47 @@ function Feedback({ chat, index, current }: { chat: string; index: number; curre
   );
 }
 
+// StepsFold is the steps of a turn folded under one line, for where there is no desktop column
+// (the chat beside a live desktop, which already is the picture). It opens on a tap; a task still
+// at work stays open so its latest step can be followed.
+function StepsFold({
+  steps,
+  chat,
+  working,
+  onOpen,
+}: {
+  steps: Step[];
+  chat: string;
+  working?: boolean;
+  onOpen: (src: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const shown = open || !!working;
+  const last = steps[steps.length - 1];
+  return (
+    <div class="steps-fold" data-testid="steps-fold">
+      <button
+        class="plain desk-link"
+        aria-expanded={shown}
+        onClick={() => setOpen(!open)}
+        data-testid="steps-toggle"
+        title={shown ? t("Hide the steps") : t("Show the steps")}
+      >
+        <IconMonitor size={12} />
+        {t("{n} steps on the desktop", { n: steps.length })}
+      </button>
+      {!shown && last && <div class="steps-last">{stepSentence(last.action, last.args)}</div>}
+      {shown && (
+        <div class="trail" aria-label={t("steps")}>
+          {steps.map((s, i) => (
+            <StepRow key={i} step={s} chat={chat} onOpen={onOpen} folded={i !== steps.length - 1} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TurnCard({
   turn,
   index,
@@ -563,6 +604,7 @@ function TurnCard({
   onOpen,
   onHelp,
   onContinue,
+  fold,
 }: {
   turn: Turn;
   index: number;
@@ -578,6 +620,8 @@ function TurnCard({
   onHelp?: () => void;
   // onContinue has a task that stopped on its budget go on from where it was.
   onContinue?: () => void;
+  // fold lists the steps right under the message, folded, instead of linking to the desktop column.
+  fold?: boolean;
 }) {
   const mine = turn.from === "user";
   // The scheduler's wake-up call and the answer to an approval read like the person's side,
@@ -617,7 +661,10 @@ function TurnCard({
           {turn.detail}
         </pre>
       )}
-      {turn.steps && turn.steps.length > 0 && (
+      {turn.steps && turn.steps.length > 0 && fold && (
+        <StepsFold steps={turn.steps} chat={chat} working={turn.working} onOpen={onOpen} />
+      )}
+      {turn.steps && turn.steps.length > 0 && !fold && (
         <button
           class="plain desk-link"
           onClick={() => onDesk(index)}
@@ -756,9 +803,20 @@ interface Props {
   // thinking until one of them is at work.
   pending: string | null;
   waiting?: boolean;
+  // sidebar is the chat beside a live desktop: one column (the desktop is the picture), the steps
+  // folded under each message, and no second desktop opened from it.
+  sidebar?: boolean;
 }
 
-export default function Conversation({ session, kitties, user, pending, waiting, onSend }: Props) {
+export default function Conversation({
+  session,
+  kitties,
+  user,
+  pending,
+  waiting,
+  onSend,
+  sidebar,
+}: Props) {
   const byId = new Map(kitties.map((k) => [k.id, k]));
   const [zoom, setZoom] = useState<string>("");
   // helping is the kitty whose desktop is open because it asked for help.
@@ -774,7 +832,7 @@ export default function Conversation({ session, kitties, user, pending, waiting,
   const [picked, setPicked] = useState<number | null>(null);
   const all = session?.turns || [];
   const tasks = all.map((turn, i) => (hasSteps(turn) ? i : -1)).filter((i) => i >= 0);
-  const split = tasks.length > 0;
+  const split = tasks.length > 0 && !sidebar;
   const lastTask = tasks[tasks.length - 1] ?? -1;
   // The width of the desktop column in a window, kept in this browser.
   const [deskW, setDeskW] = useState<number | null>(() => {
@@ -897,12 +955,17 @@ export default function Conversation({ session, kitties, user, pending, waiting,
               latest={i >= all.length - session.members.length}
               onDesk={showDesk}
               onOpen={setZoom}
-              onHelp={() => {
-                const k = turn.kitty ? byId.get(turn.kitty) : undefined;
-                if (k) {
-                  setHelping(k);
-                }
-              }}
+              fold={sidebar}
+              onHelp={
+                sidebar
+                  ? undefined
+                  : () => {
+                      const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+                      if (k) {
+                        setHelping(k);
+                      }
+                    }
+              }
               onContinue={
                 onSend
                   ? () => {
@@ -943,6 +1006,7 @@ export default function Conversation({ session, kitties, user, pending, waiting,
           <div ref={end} />
           {session &&
             !helping &&
+            !sidebar &&
             (session.turns || []).map((turn, i) => {
               const last = turn.steps?.[turn.steps.length - 1];
               const k = turn.kitty ? byId.get(turn.kitty) : undefined;

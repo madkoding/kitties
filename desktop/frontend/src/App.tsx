@@ -454,7 +454,26 @@ export default function App() {
             </button>
           </div>
         )}
-        {live && <LiveDesktop kitty={live} onClose={() => setLive(null)} />}
+        {live && (
+          <LiveDesktop
+            kitty={live}
+            onClose={() => setLive(null)}
+            chat={
+              session && session.members.includes(live.id)
+                ? {
+                    session,
+                    kitties,
+                    user,
+                    pending: unshown,
+                    waiting: pending !== null && !working,
+                    busy: pending !== null || working,
+                    onSend: send,
+                    onCancel: cancel,
+                  }
+                : undefined
+            }
+          />
+        )}
         {current ? (
           <Conversation
             session={session}
@@ -481,6 +500,7 @@ export default function App() {
             disabled={pending !== null || working}
             working={working}
             group={session.members.length > 1}
+            drops={!live}
             onSend={send}
             onCancel={cancel}
           />

@@ -1345,6 +1345,53 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live).toHaveCount(0);
 });
 
+test("the live desktop has the kitty's chat beside it: write to it, follow its steps, fold it", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("open-desktop").first().click();
+  const live = page.getByTestId("live-desktop");
+  const chat = live.getByTestId("live-chat");
+  await expect(chat).toBeVisible();
+  // The steps of the kitty's task read under its message, folded, and open on a tap.
+  const fold = chat.getByTestId("steps-fold").first();
+  await expect(fold).toBeVisible();
+  await fold.getByTestId("steps-toggle").click();
+  await expect(fold.locator(".step").first()).toBeVisible();
+  // It is the same chat: a message written here is the chat's.
+  await chat.getByRole("textbox").fill("hello from the window");
+  await chat.getByRole("button", { name: /send/i }).click();
+  await expect(chat.getByText("hello from the window").first()).toBeVisible();
+  await expect(live.getByTestId("live-frame")).toBeVisible();
+  await shot(page, "58-live-chat");
+  // The picture keeps its room and its controls; the chat folds away and comes back.
+  await expect(live.getByTestId("live-frame")).toBeVisible();
+  await chat.getByTestId("live-chat-toggle").click();
+  await expect(chat.getByRole("textbox")).toHaveCount(0);
+  await expect(live.getByTestId("take-control")).toBeVisible();
+  await chat.getByTestId("live-chat-toggle").click();
+  await expect(chat.getByRole("textbox")).toBeVisible();
+});
+
+test("on a phone the live desktop's chat is stacked under the picture, folded until asked for", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 800 });
+  await page.goto(`/${Q}#chat/${ids.desktop}`);
+  await page.getByTestId("open-desktop").first().click();
+  const live = page.getByTestId("live-desktop");
+  const chat = live.getByTestId("live-chat");
+  await expect(chat).toBeVisible();
+  await expect(chat.getByRole("textbox")).toHaveCount(0);
+  const surface = (await live.locator(".live-surface").boundingBox())!;
+  const bar = (await chat.boundingBox())!;
+  expect(bar.y).toBeGreaterThanOrEqual(surface.y + surface.height - 1);
+  const edge = (await live.getByRole("dialog").boundingBox())!;
+  expect(bar.x + bar.width).toBeLessThanOrEqual(edge.x + edge.width + 1);
+  await chat.getByTestId("live-chat-toggle").click();
+  await expect(chat.getByRole("textbox")).toBeVisible();
+});
+
 test("in a kitty's drawer the desktop is there, live, and one click on it takes the controls", async ({
   page,
 }) => {

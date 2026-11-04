@@ -140,6 +140,18 @@ cada imagen con solo lo que cambió), servido en `/v1/chats/{id}/turns/{n}/repla
 
 <img src="screenshots/49-live-desktop-control.png" alt="Tomando el control del escritorio de un kitty: un comando escrito en su terminal" width="100%">
 
+## El chat junto al escritorio en vivo
+
+La ventana del escritorio en vivo de una kitty lleva su chat como barra lateral: le escribes y
+sigues lo que hace en la pantalla sin dejar la imagen. Es el mismo chat de la página (`Conversation`
+y `Composer`, con los mismos turnos, adjuntos y valoraciones), así que nada se guarda dos veces;
+cada tarea muestra sus pasos plegados bajo el mensaje, y una tarea en curso se queda abierta. La
+barra se pliega a una tira (se recuerda en el navegador), en el móvil empieza plegada y se apila
+bajo la imagen, y nunca le quita al escritorio las teclas ni el sonido: escribir en ella es escribir
+en el chat, y los controles de la imagen siguen donde estaban.
+
+<img src="screenshots/58-live-chat.png" alt="El escritorio en vivo con el chat de la kitty al lado: sus pasos bajo el mensaje y el cuadro de mensaje" width="100%">
+
 ## Encender y apagar la máquina
 
 El escritorio de un kitty corre en su **máquina** (su contenedor), y la máquina puede estar apagada. Se

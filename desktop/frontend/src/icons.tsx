@@ -191,3 +191,5 @@ export const IconLogOut = (p: P) =>
     <path d="m16 17 5-5-5-5" />,
     <path d="M21 12H9" />,
   ]);
+export const IconChat = (p: P) =>
+  svg(p, [<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />]);

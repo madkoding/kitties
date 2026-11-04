@@ -3,6 +3,7 @@ import { api, type Kitty, rectsDesktop, shotData, streamDesktop, voxlSource } fr
 import { plainError } from "./friendly";
 import { t } from "./i18n";
 import { IconExpand, IconReduce, IconX } from "./icons";
+import LiveChat, { type LiveChatProps } from "./LiveChat";
 
 // LIVE DESKTOP: the kitty's display as it is now, followed while it is open: first as what
 // changed on it (rectangles drawn on a canvas, like VNC), else as motion JPEG from the gateway
@@ -132,8 +133,12 @@ export default function LiveDesktop({
   onClose,
   autoControl,
   inline,
+  chat,
 }: {
   kitty: Kitty;
+  // chat puts the kitty's chat beside the desktop window: write to it from here and follow what it
+  // does on the display. Without it (no chat with this kitty open) the window is only the desktop.
+  chat?: LiveChatProps;
   onClose: () => void;
   // autoControl takes the controls at once (the kitty asked for help).
   autoControl?: boolean;
@@ -946,7 +951,14 @@ export default function LiveDesktop({
         role="dialog"
         aria-label={name}
       >
-        {content}
+        {chat ? (
+          <div class="live-body">
+            <div class="live-main">{content}</div>
+            <LiveChat {...chat} kitty={kitty} />
+          </div>
+        ) : (
+          content
+        )}
       </div>
     </div>
   );
