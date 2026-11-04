@@ -107,8 +107,8 @@ el contenedor sigue sin publicar puertos: el gateway es su proxy inverso
 `POST /v1/kitties/{ref}/voxl/ticket` tras iniciar sesión, así que ningún token va en los enlaces del
 marco), y cada conexión es un `docker exec ... socat` hacia el contenedor. Solo pasa el visor (su
 página, scripts y WebSocket), no la transferencia de archivos, las grabaciones ni las capturas de
-voxl. Donde el navegador no tiene WebCodecs (piden HTTPS o localhost), en la app de escritorio y la
-de Android con un gateway que no es HTTPS, o con un escritorio de una imagen antigua, la página
+voxl. Donde el navegador no tiene WebCodecs (piden HTTPS o localhost), en la app de
+Android con un gateway que no es HTTPS, en un webview sin WebCodecs (la app de escritorio enmarca el gateway que arrancó y pide el ticket por su puente), o con un escritorio de una imagen antigua, la página
 retrocede sola: rectángulos (`/v1/kitties/{ref}/rects`: la imagen entera una vez y luego solo los
 mosaicos que cambian, unidos), imágenes enteras (`/stream`, motion JPEG) y, como último recurso,
 capturas una tras otra. Esas imágenes las saca `kitty-grab`, un programa en C de la imagen que se
