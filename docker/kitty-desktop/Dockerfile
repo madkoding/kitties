@@ -104,7 +104,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         inkscape imagemagick mtpaint mousepad \
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
         libx11-6 libxext6 libjpeg62-turbo \
-        libx264-164 libyuv0 libopus0 libpulse0 socat \
+        libx264-164 libyuv0 libopus0 libpulse0 pulseaudio socat \
         tini procps tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
@@ -155,6 +155,9 @@ COPY --chown=kitty:kitty home/ /home/kitty/
 # An empty desktop: PCManFM draws only the wallpaper, no icons (the shelf has the apps).
 RUN mkdir -p /home/kitty/Desktop && chown kitty:kitty /home/kitty/Desktop
 COPY --chown=kitty:kitty Xresources /home/kitty/.Xresources
+# Sound: PulseAudio with one virtual output ("output", started by the entrypoint); every program
+# finds it through this socket, and voxl streams its monitor as Opus.
+RUN printf 'default-server = unix:/tmp/kitty-pulse/native\nautospawn = no\n' >> /etc/pulse/client.conf
 
 USER kitty
 WORKDIR /home/kitty/work

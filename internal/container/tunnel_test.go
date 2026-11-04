@@ -2,9 +2,12 @@ package container
 
 import (
 	"context"
+	"errors"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -25,7 +28,7 @@ func TestTunnel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "docker exec -i kitty-ana socat - TCP:127.0.0.1:6901"; strings.Join(got, " ") != want {
+	if want := "docker exec -i kitty-ana socat - TCP:127.0.0.1:6901,nodelay"; strings.Join(got, " ") != want {
 		t.Errorf("command = %q, want %q", strings.Join(got, " "), want)
 	}
 	go func() { _, _ = c.Write([]byte("hello")) }()
@@ -80,5 +83,81 @@ func TestTunnelRunsTheCommand(t *testing.T) {
 	// A program that does not exist cannot be started.
 	if _, err := New(Runtime{Bin: filepath.Join(dir, "none")}).Tunnel(context.Background(), "kitty-ana", VoxlPort); err == nil {
 		t.Error("no engine, no tunnel")
+	}
+}
+
+// The port the engine published on the loopback is used first: no command is run.
+func TestTunnelDirect(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Skip("no loopback")
+	}
+	defer ln.Close()
+	go func() {
+		c, err := ln.Accept()
+		if err == nil {
+			_, _ = io.Copy(c, c)
+		}
+	}()
+	port := ln.Addr().(*net.TCPAddr).Port
+	oldRun, oldStart := runCmd, startTunnel
+	t.Cleanup(func() { runCmd, startTunnel = oldRun, oldStart; addrCache.Delete("kitty-direct:6901") })
+	runCmd = func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		switch args[0] {
+		case "port":
+			// A port on another address is not used; the unspecified one means the loopback.
+			return []byte("10.1.2.3:1\n0.0.0.0:" + strconv.Itoa(port) + "\n"), nil
+		case "inspect":
+			return []byte("not-an-address"), nil
+		}
+		t.Errorf("unexpected command %v", args)
+		return nil, errors.New("no")
+	}
+	startTunnel = func(context.Context, string, ...string) (io.WriteCloser, io.ReadCloser, func() error, error) {
+		t.Error("the direct connection needs no command")
+		return nil, nil, nil, errors.New("no")
+	}
+	c, err := New(Runtime{Bin: "docker"}).Tunnel(context.Background(), "kitty-direct", VoxlPort)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	_, _ = c.Write([]byte("hi"))
+	buf := make([]byte, 2)
+	if _, err := io.ReadFull(c, buf); err != nil || string(buf) != "hi" {
+		t.Errorf("echo = %q %v", buf, err)
+	}
+}
+
+// Addresses that cannot be reached fall back to the command, and are not tried again for a while.
+func TestTunnelDirectUnreachable(t *testing.T) {
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	port := ln.Addr().(*net.TCPAddr).Port
+	ln.Close() // nothing listens there now
+	oldRun, oldStart := runCmd, startTunnel
+	t.Cleanup(func() { runCmd, startTunnel = oldRun, oldStart; addrCache.Delete("kitty-far:6901") })
+	looks, starts := 0, 0
+	runCmd = func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		looks++
+		if args[0] == "port" {
+			return []byte("127.0.0.1:" + strconv.Itoa(port) + "\n"), nil
+		}
+		return []byte("127.0.0.1"), nil
+	}
+	startTunnel = func(context.Context, string, ...string) (io.WriteCloser, io.ReadCloser, func() error, error) {
+		starts++
+		r, w := io.Pipe()
+		return w, r, func() error { return nil }, nil
+	}
+	m := New(Runtime{Bin: "docker"})
+	for i := 0; i < 2; i++ {
+		c, err := m.Tunnel(context.Background(), "kitty-far", VoxlPort)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = c.Close()
+	}
+	if looks != 2 || starts != 2 {
+		t.Errorf("looks=%d starts=%d, want 2 and 2", looks, starts)
 	}
 }

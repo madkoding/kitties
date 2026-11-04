@@ -172,7 +172,7 @@ var voxlPassword = regexp.MustCompile(`^[0-9a-f]{32,}$`)
 
 // Voxl is how to reach a kitty's voxl, the H.264 live view that runs inside its container.
 type Voxl struct {
-	// Dial opens a connection to it (through the container engine: no port is published).
+	// Dial opens a connection to it (through the container engine: the loopback port it published, or `exec`).
 	Dial func(ctx context.Context) (net.Conn, error)
 	// Password signs in to it.
 	Password string
