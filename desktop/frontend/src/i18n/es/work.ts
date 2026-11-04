@@ -381,6 +381,8 @@ const dict: Dictionary = {
   "The desktop did not answer": "El escritorio no respondió",
   "{name}'s desktop": "Escritorio de {name}",
   "You have the controls: {name} waits": "Tienes el control: {name} espera",
+  "No sound in this view": "No hay sonido en esta vista",
+  "Take control to hear sound": "Toma el control para oír el sonido",
   "Watching live": "Viendo en vivo",
   "Give it back to {name}": "Devolvérselo a {name}",
   "Take control": "Tomar el control",
