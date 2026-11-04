@@ -209,7 +209,10 @@ func (s Spec) Validate() error {
 // Args builds the `run` argv for the spec.
 func (s Spec) Args() []string {
 	args := []string{"run", "-d", "--name", s.Name, "--label", Label + "=1", "--label", NameLabel + "=" + s.KittyName,
-		"--restart", "unless-stopped", "--shm-size", "512m"}
+		"--restart", "unless-stopped", "--shm-size", "512m",
+		// The live view (voxl) on a random port of the host's loopback only: the gateway reaches it
+		// there, with no `docker exec` in the way (see Manager.Tunnel).
+		"-p", "127.0.0.1::" + strconv.Itoa(VoxlPort)}
 	if s.MemoryMB > 0 {
 		args = append(args, "--memory", strconv.Itoa(s.MemoryMB)+"m")
 	}

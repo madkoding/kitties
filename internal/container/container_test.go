@@ -104,14 +104,14 @@ func TestSpecValidateAndArgs(t *testing.T) {
 	}
 	args := strings.Join(good.Args(), " ")
 	for _, want := range []string{"run -d --name kitty-mimi", "--label kitties.bot=1", "--label kitties.name=mimi",
-		"--memory 1024m", "--cpus 1.5", "--network cats",
+		"--memory 1024m", "--cpus 1.5", "-p 127.0.0.1::6901", "--network cats",
 		"-v /data/mimi:/home/kitty/work", "-e A=1 -e B=2", "-e KITTY_NAME=mimi -e DISPLAY=:99 ghcr.io/x/y:latest"} {
 		if !strings.Contains(args, want) {
 			t.Errorf("args lack %q: %s", want, args)
 		}
 	}
 	minimal := Spec{Name: "a", Image: "i"}
-	if a := strings.Join(minimal.Args(), " "); strings.Contains(a, "--memory") || strings.Contains(a, "-p ") {
+	if a := strings.Join(minimal.Args(), " "); strings.Contains(a, "--memory") || strings.Count(a, "-p ") != 1 {
 		t.Errorf("minimal args = %s", a)
 	}
 	bad := []Spec{

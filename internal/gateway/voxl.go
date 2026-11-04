@@ -19,10 +19,10 @@ import (
 //
 // Each kitty's desktop runs voxl (https://github.com/tembo/voxl, MIT; the image builds it with
 // x264, so the image is GPL): the display as H.264 over a WebSocket, decoded in the page with
-// WebCodecs, 60 pictures a second and a few milliseconds behind. The container publishes no
-// port, so the gateway is its reverse proxy: /v1/kitties/{ref}/voxl/ is voxl's own page, behind
-// the gateway's sign-in, and every connection to it is a `docker exec ... socat` into the
-// container's loopback. voxl's own password is the container's secret: it is added here, and the
+// WebCodecs, 60 pictures a second and a few milliseconds behind. The container publishes it only
+// on the host's loopback, so the gateway is its reverse proxy: /v1/kitties/{ref}/voxl/ is voxl's
+// own page, behind the gateway's sign-in, and every connection to it is dialled by Tunnel (the
+// published port, else the container's address, else `docker exec ... socat`). voxl's own password is the container's secret: it is added here, and the
 // person never sees it.
 //
 // Only what the viewer needs goes through (its page, scripts, font and the WebSocket): not voxl's

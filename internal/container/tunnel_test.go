@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -85,7 +86,7 @@ func TestTunnelRunsTheCommand(t *testing.T) {
 	}
 }
 
-// With an address on the engine's network the connection is direct: no command is run.
+// The port the engine published on the loopback is used first: no command is run.
 func TestTunnelDirect(t *testing.T) {
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -100,18 +101,23 @@ func TestTunnelDirect(t *testing.T) {
 	}()
 	port := ln.Addr().(*net.TCPAddr).Port
 	oldRun, oldStart := runCmd, startTunnel
-	t.Cleanup(func() { runCmd, startTunnel = oldRun, oldStart; addrCache.Delete("kitty-direct") })
+	t.Cleanup(func() { runCmd, startTunnel = oldRun, oldStart; addrCache.Delete("kitty-direct:6901") })
 	runCmd = func(_ context.Context, _ string, args ...string) ([]byte, error) {
-		if args[0] != "inspect" {
-			t.Errorf("unexpected command %v", args)
+		switch args[0] {
+		case "port":
+			// A port on another address is not used; the unspecified one means the loopback.
+			return []byte("10.1.2.3:1\n0.0.0.0:" + strconv.Itoa(port) + "\n"), nil
+		case "inspect":
+			return []byte("not-an-address"), nil
 		}
-		return []byte("bad 127.0.0.1 "), nil
+		t.Errorf("unexpected command %v", args)
+		return nil, errors.New("no")
 	}
 	startTunnel = func(context.Context, string, ...string) (io.WriteCloser, io.ReadCloser, func() error, error) {
 		t.Error("the direct connection needs no command")
 		return nil, nil, nil, errors.New("no")
 	}
-	c, err := New(Runtime{Bin: "docker"}).Tunnel(context.Background(), "kitty-direct", port)
+	c, err := New(Runtime{Bin: "docker"}).Tunnel(context.Background(), "kitty-direct", VoxlPort)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -123,15 +129,21 @@ func TestTunnelDirect(t *testing.T) {
 	}
 }
 
-// An address that cannot be reached falls back to the command, and is not tried again for a while.
+// Addresses that cannot be reached fall back to the command, and are not tried again for a while.
 func TestTunnelDirectUnreachable(t *testing.T) {
 	ln, _ := net.Listen("tcp", "127.0.0.1:0")
 	port := ln.Addr().(*net.TCPAddr).Port
 	ln.Close() // nothing listens there now
 	oldRun, oldStart := runCmd, startTunnel
-	t.Cleanup(func() { runCmd, startTunnel = oldRun, oldStart; addrCache.Delete("kitty-far") })
-	inspects, starts := 0, 0
-	runCmd = func(context.Context, string, ...string) ([]byte, error) { inspects++; return []byte("127.0.0.1"), nil }
+	t.Cleanup(func() { runCmd, startTunnel = oldRun, oldStart; addrCache.Delete("kitty-far:6901") })
+	looks, starts := 0, 0
+	runCmd = func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		looks++
+		if args[0] == "port" {
+			return []byte("127.0.0.1:" + strconv.Itoa(port) + "\n"), nil
+		}
+		return []byte("127.0.0.1"), nil
+	}
 	startTunnel = func(context.Context, string, ...string) (io.WriteCloser, io.ReadCloser, func() error, error) {
 		starts++
 		r, w := io.Pipe()
@@ -139,13 +151,13 @@ func TestTunnelDirectUnreachable(t *testing.T) {
 	}
 	m := New(Runtime{Bin: "docker"})
 	for i := 0; i < 2; i++ {
-		c, err := m.Tunnel(context.Background(), "kitty-far", port)
+		c, err := m.Tunnel(context.Background(), "kitty-far", VoxlPort)
 		if err != nil {
 			t.Fatal(err)
 		}
 		_ = c.Close()
 	}
-	if inspects != 1 || starts != 2 {
-		t.Errorf("inspects=%d starts=%d, want 1 and 2", inspects, starts)
+	if looks != 2 || starts != 2 {
+		t.Errorf("looks=%d starts=%d, want 2 and 2", looks, starts)
 	}
 }

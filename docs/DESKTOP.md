@@ -26,7 +26,7 @@ flowchart LR
 
 - **The computer.** One container per kitty, from the `kitty-desktop` image: a virtual display
   (Xvfb) with a real desktop on it (Lumen, Chromium, a terminal, PCManFM, LibreOffice, Inkscape).
-  It publishes no port: the gateway reaches it with `docker exec` only. Its work folder lives on the
+  Its only published port is the live view's, on the host's loopback (`127.0.0.1`, random port, behind a password); everything else goes with `docker exec`. Its work folder lives on the
   host, so its files outlive the container.
 - **The eyes.** The gateway takes a screenshot of the display and hands it to the model, which
   can see pictures. After every batch of actions a new one follows, so the kitty sees what its
@@ -93,7 +93,7 @@ or give the desktop back, it goes on by itself.
 The view is [voxl](https://github.com/tembo/voxl) (MIT; it links x264, so the image is GPL, like
 Kitties): the display as H.264 over a WebSocket, decoded in the page with WebCodecs. It runs inside
 each desktop on the container's own loopback, with a password made up at each start, and the
-container still publishes no port: the gateway is its reverse proxy
+container publishes it only on the host's loopback (the gateway dials that port, else the container's address, else `docker exec ... socat`): the gateway is its reverse proxy
 (`/v1/kitties/{ref}/voxl/t/{ticket}/`, a ticket asked for with `POST /v1/kitties/{ref}/voxl/ticket`
 after signing in, so no token goes in the frame's links), and every connection to it is a
 `docker exec ... socat` into the container. Only the viewer goes through (its page, scripts and
