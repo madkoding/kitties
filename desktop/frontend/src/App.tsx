@@ -201,11 +201,50 @@ export default function App() {
     }
   }, [current, loadSession]);
 
-  const working = useMemo(() => Boolean(session?.turns?.some((t) => t.working)), [session]);
+  // The chat a kitty's drawer shows beside its desktop: the direct chat with it, when there is one
+  // and no other chat is open (it is the chat of the page when it is the open one).
+  const [drawerSession, setDrawerSession] = useState<Session | null>(null);
+  const drawerKitty = kittyOpen
+    ? kitties.find((k) => k.id === kittyOpen || k.name === kittyOpen)
+    : undefined;
+  const drawerChatId = !current
+    ? chats.find((c) => c.members.length === 1 && c.members[0] === drawerKitty?.id)?.id
+    : undefined;
+  useEffect(() => {
+    if (!drawerChatId) {
+      setDrawerSession(null);
+      return;
+    }
+    let alive = true;
+    api
+      .chat(drawerChatId)
+      .then((s) => alive && setDrawerSession(s))
+      .catch(() => undefined);
+    const stop = watchChat(drawerChatId, (ev) => {
+      if (ev.turn === undefined || ev.index === undefined) {
+        return;
+      }
+      setDrawerSession((prev) => {
+        if (!prev || prev.id !== ev.session) {
+          return prev;
+        }
+        const turns = [...(prev.turns || [])];
+        turns[ev.index!] = ev.turn!;
+        return { ...prev, turns };
+      });
+    });
+    return () => {
+      alive = false;
+      stop();
+    };
+  }, [drawerChatId]);
+  // chatNow is the chat messages go to: the open one, or the drawer's.
+  const chatNow = current ? session : drawerSession;
+  const working = useMemo(() => Boolean(chatNow?.turns?.some((t) => t.working)), [chatNow]);
   // unshown is the message being sent until the chat itself has it.
   const unshown =
     pending !== null &&
-    !(session?.turns || [])
+    !(chatNow?.turns || [])
       .slice(pendingFrom)
       .some((t) => !t.kitty && t.text.trim() === pending.trim())
       ? pending
@@ -305,21 +344,25 @@ export default function App() {
   };
 
   const send = async (text: string, files: File[] = []) => {
-    if (!session) {
+    if (!chatNow) {
       return;
     }
-    setPendingFrom((session.turns || []).length);
+    setPendingFrom((chatNow.turns || []).length);
     // A message of files alone shows their names until the chat has it.
     setPending(text || files.map((f) => f.name).join(", "));
     setError("");
     let failed = "";
     try {
-      await api.send(session.id, text, files);
+      await api.send(chatNow.id, text, files);
     } catch (e) {
       failed = (e as Error).message;
     }
     setPending(null);
-    await loadSession(session.id);
+    if (current) {
+      await loadSession(chatNow.id);
+    } else {
+      setDrawerSession(await api.chat(chatNow.id).catch(() => chatNow));
+    }
     // A refresh clears the page's error when it reaches the gateway, so the refusal of a message
     // (a file the gateway will not take) is shown after it, and stays.
     await refresh();
@@ -329,9 +372,16 @@ export default function App() {
   };
 
   const cancel = async () => {
-    if (session) {
-      await api.cancel(session.id).catch(() => {});
-      loadSession(session.id);
+    if (chatNow) {
+      await api.cancel(chatNow.id).catch(() => {});
+      if (current) {
+        loadSession(chatNow.id);
+      } else {
+        api
+          .chat(chatNow.id)
+          .then(setDrawerSession)
+          .catch(() => undefined);
+      }
     }
   };
 
@@ -454,7 +504,32 @@ export default function App() {
             </button>
           </div>
         )}
-        {live && <LiveDesktop kitty={live} onClose={() => setLive(null)} />}
+        {live && (
+          <LiveDesktop
+            kitty={live}
+            onClose={() => setLive(null)}
+            chat={
+              session && session.members.includes(live.id)
+                ? {
+                    session,
+                    kitties,
+                    user,
+                    pending: unshown,
+                    waiting: pending !== null && !working,
+                    busy: pending !== null || working,
+                    onSend: send,
+                    onCancel: cancel,
+                  }
+                : undefined
+            }
+            onStartChat={async () => {
+              const s = await api.createChat("", [live.id]);
+              setLive(null);
+              refresh();
+              openChat(s.id);
+            }}
+          />
+        )}
         {current ? (
           <Conversation
             session={session}
@@ -481,6 +556,7 @@ export default function App() {
             disabled={pending !== null || working}
             working={working}
             group={session.members.length > 1}
+            drops={!live}
             onSend={send}
             onCancel={cancel}
           />
@@ -585,6 +661,20 @@ export default function App() {
           kitty={kitty}
           kitties={kitties}
           onOpenChat={openChat}
+          chat={
+            drawerSession
+              ? {
+                  session: drawerSession,
+                  kitties,
+                  user,
+                  pending: unshown,
+                  waiting: pending !== null && !working,
+                  busy: pending !== null || working,
+                  onSend: send,
+                  onCancel: cancel,
+                }
+              : undefined
+          }
           onClose={() => {
             location.hash = lastChat.current ? `#chat/${lastChat.current}` : "";
           }}

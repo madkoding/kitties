@@ -9,6 +9,9 @@ interface Props {
   group: boolean;
   onSend: (text: string, files: File[]) => void;
   onCancel: () => void;
+  // drops takes the files dropped anywhere on the page (default); only one composer at a time
+  // should, so the chat beside a live desktop takes them from the one under it.
+  drops?: boolean;
 }
 
 export default function Composer(p: Props) {
@@ -34,7 +37,11 @@ export default function Composer(p: Props) {
   };
 
   // A file dropped anywhere on the page joins the message, and the browser does not open it.
+  const drops = p.drops !== false;
   useEffect(() => {
+    if (!drops) {
+      return;
+    }
     const hasFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types || []).includes("Files");
     let depth = 0;
     const enter = (e: DragEvent) => {
@@ -70,7 +77,7 @@ export default function Composer(p: Props) {
       window.removeEventListener("dragleave", leave);
       window.removeEventListener("drop", drop);
     };
-  }, []);
+  }, [drops]);
 
   const submit = (e: Event) => {
     e.preventDefault();

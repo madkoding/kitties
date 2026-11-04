@@ -44,6 +44,12 @@ const dict: Dictionary = {
   "Show it on the desktop": "Verlo en el escritorio",
   "{n} steps on the desktop": "{n} pasos en el escritorio",
 
+  "Hide the steps": "Ocultar los pasos",
+  "Show the steps": "Ver los pasos",
+  "Chat with {name}": "Chat con {name}",
+  "Show the chat": "Mostrar el chat",
+  "Hide the chat": "Ocultar el chat",
+  "New message": "Mensaje nuevo",
   "Previous screenshot": "Captura anterior",
   "Next screenshot": "Captura siguiente",
   "Resize the desktop column": "Cambiar el ancho de la columna del escritorio",

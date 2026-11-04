@@ -130,6 +130,18 @@ picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.
 
 <img src="screenshots/49-live-desktop-control.png" alt="Taking control of a kitty's desktop: a command typed in its terminal" width="100%">
 
+## The chat beside the live desktop
+
+The window of a kitty's live desktop carries the kitty's chat as a sidebar, so you can write to it
+and follow what it does on the display without leaving the picture. It is the same chat as the
+page's (`Conversation` and `Composer`, with the same turns, attachments and ratings), so nothing is
+kept twice; each task shows its steps folded under the message, and a task at work stays open.
+The sidebar folds to a thin bar (remembered in the browser), starts folded on a phone, where it
+stacks under the picture, and never takes the keys or the sound from the desktop: typing in it is
+typing in the chat, and the controls of the picture stay where they were.
+
+<img src="screenshots/58-live-chat.png" alt="The live desktop with the kitty's chat beside it: its steps under the message and the composer" width="100%">
+
 ## Turning the machine on and off
 
 A kitty's desktop runs on its **machine** (its container), and the machine can be off. It is turned

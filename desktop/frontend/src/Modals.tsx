@@ -20,6 +20,7 @@ import { IconPlay, IconStop, IconTrash } from "./icons";
 import DesktopCare from "./DesktopCare";
 import MachinePower from "./MachinePower";
 import LiveDesktop from "./LiveDesktop";
+import type { LiveChatProps } from "./LiveChat";
 import { GoalsPanel, JournalPanel, LimitsForm } from "./Agenda";
 import { MemoryPanel } from "./Memory";
 import PixelCat, { BREEDS, CatPicker, COLORS, type Mood } from "./PixelCat";
@@ -582,6 +583,7 @@ export function KittyDrawer({
   onChanged,
   onChat,
   onOpenChat,
+  chat,
 }: {
   kitty: Kitty;
   kitties: Kitty[];
@@ -589,6 +591,8 @@ export function KittyDrawer({
   onChanged: () => void;
   onChat: () => void;
   onOpenChat: (id: string) => void;
+  // chat is the direct chat with this kitty, for the sidebar of its enlarged desktop.
+  chat?: LiveChatProps;
 }) {
   const [err, setErr] = useState("");
   const mood: Mood =
@@ -698,7 +702,13 @@ export function KittyDrawer({
           <div class="section-title !mx-0 mt-5">{t("Desktop")}</div>
           <MachinePower kitty={kitty} onChanged={onChanged} />
           {running ? (
-            <LiveDesktop kitty={kitty} inline onClose={() => undefined} />
+            <LiveDesktop
+              kitty={kitty}
+              inline
+              onClose={() => undefined}
+              chat={chat}
+              onStartChat={onChat}
+            />
           ) : (
             <p class="text-sm text-[var(--t3)]" data-testid="desktop-off">
               {t("Start {name} to see its desktop live and take control of it.", {
