@@ -264,6 +264,10 @@ jobs:
           test -n "$sha"
           echo "lumen-wm main is $sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      # The image is large (LibreOffice, Rust build of voxl): with BuildKit the layers live in the
+      # builder as well as in the daemon, and the runner's disk ran out. Drop what the job does not use.
+      - name: free disk space
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
       # BuildKit with the GitHub cache: every stage is its own layer (voxl's Rust build, the themes and
       # icons, kitty-grab, lumen-wm), so a new lumen-wm commit rebuilds only the lumen stage and its
       # dependants and the rest comes from the cache. Only main and tags write it (a pull request

@@ -176,6 +176,11 @@ jobs:
           sha="$(git ls-remote https://github.com/madkoding/lumen-wm.git refs/heads/main | cut -f1)"
           test -n "$sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+      # The kitty-desktop image is large: BuildKit keeps its layers in the builder as well as in the
+      # daemon, and trivy exports it once more, so the runner's disk ran out. Drop what the job does not use.
+      - name: free disk space
+        if: steps.scope.outputs.scan == 'true' && matrix.image == 'kitty-desktop'
+        run: sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc /usr/local/share/boost /opt/hostedtoolcache/CodeQL
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         if: steps.scope.outputs.scan == 'true'
       # Reads the cache the ci workflow writes on main (same scope), so the layers are not built a
@@ -192,6 +197,10 @@ jobs:
           tags: scan:image
           build-args: ${{ steps.lumen.outputs.sha != '' && format('LUMEN_COMMIT={0}', steps.lumen.outputs.sha) || '' }}
           cache-from: type=gha,scope=${{ matrix.scope }}
+      # The image is in the daemon now: the builder's copy of the layers and cache is not needed.
+      - name: drop the builder's cache
+        if: steps.scope.outputs.scan == 'true'
+        run: docker buildx prune --all --force
       - name: scan it
         if: steps.scope.outputs.scan == 'true'
         run: ./trivy image --skip-version-check --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 scan:image
