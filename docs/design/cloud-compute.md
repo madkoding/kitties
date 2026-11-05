@@ -1,7 +1,8 @@
 # Local or cloud: where a kitty's desktop runs
 
-Status: design proposal. Steps 1 and 2 (the provider interface, a fake and the contract tests in
-`internal/cloud`, and the config) are done; nothing reaches the gateway yet.
+Status: design proposal. Steps 1, 2 and 4a (the provider interface, a fake and the contract tests in
+`internal/cloud`, the config and the gateway wiring) are done. Cloud desktops can be created,
+slept, woken and removed from the gateway; their desktop channel is not built yet.
 
 ## Goal
 
@@ -99,7 +100,13 @@ provider before doing anything else.
    without this deployment's label. Tests run the contract against an in-memory Boat. Still to
    do: restore into a new machine, screenshot, exec and stream through the guest daemon, and a
    canary with a real key.
-4. **Lifecycle.** Idle sleep, activity leases (chat, goals, viewer and control hold a machine
+4. **Gateway wiring (done) and lifecycle.** `cloud.Containers` adapts a `Provider` to the
+   orchestrator's `Containers` interface and `cloud.Router` sends each kitty to the local engine
+   or the cloud by its `compute`. Up looks the name up before creating, so a crash never makes a
+   second machine; an unreadable inventory is never taken for an empty one. Exec, screenshot,
+   stream and tunnel return `ErrDesktopChannel` until the guest daemon exists. Nothing changes
+   unless a desktop is set to the cloud. The API key comes from the environment variable named
+   by `cloud.api_key_env` (`BOAT_API_KEY`); the vault is a later step. Still to do: idle sleep, activity leases (chat, goals, viewer and control hold a machine
    awake; dashboard polling does not), TTL renewal, explicit stop.
 5. **Persistence.** Permanent checkpoint per kitty, restore into a new VM, export of the
    workspace.

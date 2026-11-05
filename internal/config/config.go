@@ -153,6 +153,12 @@ type Cloud struct {
 	IdleMinutes int `yaml:"idle_minutes"`
 	// Size is the machine size the provider is asked for.
 	Size string `yaml:"size"`
+	// APIKeyEnv names the environment variable that holds the provider's API key (BOAT_API_KEY
+	// by default). The key is never written in this file.
+	APIKeyEnv string `yaml:"api_key_env"`
+	// Deployment is a stable id for this install; machines carry it, and Kitties touches only
+	// machines that do. Empty derives one from the data folder.
+	Deployment string `yaml:"deployment"`
 }
 
 // Containers is the container runtime block.
@@ -361,7 +367,7 @@ func Defaults() Config {
 			Runtime: "auto", Image: "ghcr.io/madkoding/kitty-desktop:latest",
 			MemoryMB: 2048, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6, AutoOffMinutes: kitty.DefaultAutoOffMinutes,
 		},
-		Cloud:      Cloud{MaxRunning: 5, IdleMinutes: 15, Size: "small"},
+		Cloud:      Cloud{MaxRunning: 5, IdleMinutes: 15, Size: "small", APIKeyEnv: "BOAT_API_KEY"},
 		Gateway:    Gateway{Listen: "127.0.0.1:7488"},
 		Updates:    Updates{Gateway: UpdateNotify, CheckHours: 12, Repo: "madkoding/kitties", API: "https://api.github.com"},
 		Connectors: map[string]Connector{},
@@ -522,6 +528,8 @@ func (c *Config) Validate() error {
 }
 
 // hasKitty reports whether a kitty of that name is configured, replicas included (team-2).
+var envName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
 // ComputeFor is where the kitty's desktop runs: its own compute, else the deployment's.
 func (c *Config) ComputeFor(k Kitty) string {
 	if k.Compute != "" {
@@ -531,6 +539,39 @@ func (c *Config) ComputeFor(k Kitty) string {
 		return ComputeCloud
 	}
 	return ComputeLocal
+}
+
+// CloudNeeded reports whether any desktop is set to run in the cloud.
+func (c *Config) CloudNeeded() bool {
+	if c.Containers.Runtime == "cloud" {
+		return true
+	}
+	for _, k := range c.Kitties {
+		if k.Compute == ComputeCloud {
+			return true
+		}
+	}
+	return false
+}
+
+// IsCloudContainer says whether the container with this name runs in the cloud: the configured
+// kitties (and their replicas) by their own compute, any other by the deployment's.
+func (c *Config) IsCloudContainer(name string) bool {
+	for _, k := range c.Kitties {
+		names := []string{k.Name}
+		if k.Replicas > 1 {
+			names = names[:0]
+			for i := 1; i <= k.Replicas; i++ {
+				names = append(names, fmt.Sprintf("%s-%d", k.Name, i))
+			}
+		}
+		for _, n := range names {
+			if kitty.ContainerName(n) == name {
+				return c.ComputeFor(k) == ComputeCloud
+			}
+		}
+	}
+	return c.ComputeFor(Kitty{}) == ComputeCloud
 }
 
 func (c *Config) validateCompute() error {
@@ -558,6 +599,9 @@ func (c *Config) validateCompute() error {
 	}
 	if c.Cloud.Size == "" {
 		return errors.New("cloud.size cannot be empty")
+	}
+	if c.Cloud.APIKeyEnv == "" || !envName.MatchString(c.Cloud.APIKeyEnv) {
+		return errors.New("cloud.api_key_env is not a valid variable name")
 	}
 	return nil
 }

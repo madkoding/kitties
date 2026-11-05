@@ -420,3 +420,30 @@ func TestComputeAndCloud(t *testing.T) {
 		}
 	}
 }
+
+func TestCloudNeededAndIsCloudContainer(t *testing.T) {
+	base := "default_provider: p\nproviders: { p: { kind: ollama, model: m } }\ncloud: { provider: boat }\n"
+	cfg, err := Parse([]byte(base + "kitties: [{ name: a }, { name: b, compute: cloud, replicas: 2 }]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.CloudNeeded() {
+		t.Error("a kitty in the cloud needs it")
+	}
+	for name, want := range map[string]bool{"kitty-a": false, "kitty-b-1": true, "kitty-b-2": true, "kitty-b": false, "kitty-new": false} {
+		if got := cfg.IsCloudContainer(name); got != want {
+			t.Errorf("%s: cloud = %v, want %v", name, got, want)
+		}
+	}
+	local, _ := Parse([]byte(base + "kitties: [{ name: a }]\n"))
+	if local.CloudNeeded() {
+		t.Error("nothing asks for the cloud")
+	}
+	all, _ := Parse([]byte(base + "containers: { runtime: cloud }\nkitties: [{ name: a }, { name: l, compute: local }]\n"))
+	if !all.CloudNeeded() || !all.IsCloudContainer("kitty-a") || all.IsCloudContainer("kitty-l") || !all.IsCloudContainer("kitty-created-later") {
+		t.Error("runtime: cloud moves every desktop but the opt-outs")
+	}
+	if _, err := Parse([]byte(base + "cloud: { provider: boat, api_key_env: 'no good' }\n")); err == nil {
+		t.Error("a bad variable name must fail")
+	}
+}

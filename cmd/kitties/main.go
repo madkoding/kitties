@@ -5,6 +5,8 @@ package main
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -23,6 +25,7 @@ import (
 	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/budget"
 	"github.com/madkoding/kitties/internal/chat"
+	"github.com/madkoding/kitties/internal/cloud"
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/demo"
@@ -109,6 +112,7 @@ type app struct {
 var (
 	detectRuntime = container.Detect
 	newContainers = func(rt container.Runtime) orchestrator.Containers { return container.New(rt) }
+	getenv        = os.Getenv
 	webFS         = web.FS
 	notifyContext = func() (context.Context, context.CancelFunc) {
 		return signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -195,6 +199,37 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	return 0
 }
 
+// cloudRouter sends each kitty's desktop to the local engine or to the cloud provider, as the
+// configuration says. A side that cannot work (no engine, no API key) fails only its own kitties,
+// with the reason; the note says what is missing. Nothing here runs unless a desktop is set to the
+// cloud.
+func cloudRouter(cfg config.Config, env func(string) string, local orchestrator.Containers, localErr error) (*cloud.Router, string) {
+	r := &cloud.Router{IsCloud: cfg.IsCloudContainer, LocalErr: localErr}
+	if local != nil {
+		r.Local = local
+	}
+	var notes []string
+	if localErr != nil {
+		notes = append(notes, localErr.Error()+"; local desktops will not start")
+	}
+	key := env(cfg.Cloud.APIKeyEnv)
+	if key == "" {
+		r.CloudErr = fmt.Errorf("cloud: set %s to the %s API key", cfg.Cloud.APIKeyEnv, cfg.Cloud.Provider)
+		notes = append(notes, r.CloudErr.Error()+"; cloud desktops will not start")
+		return r, strings.Join(notes, "; ")
+	}
+	deployment := cfg.Cloud.Deployment
+	if deployment == "" {
+		sum := sha256.Sum256([]byte(cfg.DataDirOr()))
+		deployment = "kitties-" + hex.EncodeToString(sum[:5])
+	}
+	r.Cloud = &cloud.Containers{
+		P:    &cloud.Boat{Key: key, Deployment: deployment, MaxRunning: cfg.Cloud.MaxRunning},
+		Size: cfg.Cloud.Size,
+	}
+	return r, strings.Join(notes, "; ")
+}
+
 // open builds the orchestrator and the chat service; the runtime is probed except for the
 // commands that never touch a container.
 func (a *app) open(cmd string) error {
@@ -211,6 +246,17 @@ func (a *app) open(cmd string) error {
 		}
 		a.cfg.DataDir = filepath.Join(a.cfg.DataDirOr(), "demo")
 		fmt.Fprintln(a.err, "kitties: demo mode, a scripted brain and a drawn desktop; nothing here is real")
+	} else if cmd != "providers" && a.cfg.CloudNeeded() {
+		rt, lerr := detectRuntime(context.Background(), a.cfg.Containers.Runtime)
+		var local orchestrator.Containers
+		if lerr == nil {
+			local = newContainers(rt)
+		}
+		router, note := cloudRouter(a.cfg, getenv, local, lerr)
+		if note != "" {
+			fmt.Fprintf(a.err, "kitties: %s\n", note)
+		}
+		opts = append(opts, orchestrator.WithContainers(router, nil))
 	} else if cmd != "providers" {
 		rt, err := detectRuntime(context.Background(), a.cfg.Containers.Runtime)
 		if err != nil {
