@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -36,6 +37,9 @@ type Config struct {
 	Kitties []Kitty `yaml:"kitties"`
 	// Containers is how each kitty's isolated desktop is run.
 	Containers Containers `yaml:"containers"`
+	// Cloud is the provider and limits for kitties whose desktop runs in the cloud instead of in a
+	// local container; see docs/design/cloud-compute.md.
+	Cloud Cloud `yaml:"cloud"`
 	// Gateway is the HTTP API people and other programs talk to.
 	Gateway Gateway `yaml:"gateway"`
 	// Updates is when the automatic updates run and what Kitties does about a new version of itself.
@@ -107,6 +111,8 @@ type Kitty struct {
 	Replicas int `yaml:"replicas"`
 	// Desktop is false to run the kitty without a container (brain only).
 	Desktop *bool `yaml:"desktop"`
+	// Compute is where its desktop runs: local, cloud, or empty to follow containers.runtime.
+	Compute string `yaml:"compute"`
 	// Limits bound one task: tokens, seconds, rounds and retries. Zero fields take the defaults.
 	Limits kitty.Limits `yaml:"limits"`
 	// Backup names the kitty that takes over a task this one could not finish.
@@ -128,9 +134,31 @@ type Goal struct {
 	On []string `yaml:"on"`
 }
 
+// Compute values: where a kitty's desktop runs.
+const (
+	ComputeLocal = "local"
+	ComputeCloud = "cloud"
+)
+
+// CloudProviders are the cloud providers Kitties knows how to run a desktop on.
+var CloudProviders = []string{"boat"}
+
+// Cloud is the cloud compute block. Credentials for the provider live in the vault, not here.
+type Cloud struct {
+	// Provider is one of CloudProviders; required once any kitty runs in the cloud.
+	Provider string `yaml:"provider"`
+	// MaxRunning bounds the desktops running at once (1 to 5).
+	MaxRunning int `yaml:"max_running"`
+	// IdleMinutes is how long a quiet desktop waits before it sleeps.
+	IdleMinutes int `yaml:"idle_minutes"`
+	// Size is the machine size the provider is asked for.
+	Size string `yaml:"size"`
+}
+
 // Containers is the container runtime block.
 type Containers struct {
-	// Runtime is docker, podman or auto.
+	// Runtime is docker, podman, auto or cloud (every desktop in the cloud, unless a kitty says
+	// compute: local).
 	Runtime string `yaml:"runtime"`
 	// Image is the image every kitty runs: a headless X display (Xvfb) with a browser and the
 	// usual desktop tools; see docker/kitty-desktop.
@@ -333,6 +361,7 @@ func Defaults() Config {
 			Runtime: "auto", Image: "ghcr.io/madkoding/kitty-desktop:latest",
 			MemoryMB: 2048, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6, AutoOffMinutes: kitty.DefaultAutoOffMinutes,
 		},
+		Cloud:      Cloud{MaxRunning: 5, IdleMinutes: 15, Size: "small"},
 		Gateway:    Gateway{Listen: "127.0.0.1:7488"},
 		Updates:    Updates{Gateway: UpdateNotify, CheckHours: 12, Repo: "madkoding/kitties", API: "https://api.github.com"},
 		Connectors: map[string]Connector{},
@@ -442,9 +471,12 @@ func (c *Config) Validate() error {
 		}
 	}
 	switch c.Containers.Runtime {
-	case "auto", "docker", "podman":
+	case "auto", "docker", "podman", "cloud":
 	default:
-		return fmt.Errorf("containers.runtime: %q is not auto, docker or podman", c.Containers.Runtime)
+		return fmt.Errorf("containers.runtime: %q is not auto, docker, podman or cloud", c.Containers.Runtime)
+	}
+	if err := c.validateCompute(); err != nil {
+		return err
 	}
 	if c.Containers.Image == "" {
 		return errors.New("containers.image cannot be empty")
@@ -490,6 +522,46 @@ func (c *Config) Validate() error {
 }
 
 // hasKitty reports whether a kitty of that name is configured, replicas included (team-2).
+// ComputeFor is where the kitty's desktop runs: its own compute, else the deployment's.
+func (c *Config) ComputeFor(k Kitty) string {
+	if k.Compute != "" {
+		return k.Compute
+	}
+	if c.Containers.Runtime == "cloud" {
+		return ComputeCloud
+	}
+	return ComputeLocal
+}
+
+func (c *Config) validateCompute() error {
+	anyCloud := c.Containers.Runtime == "cloud"
+	for i, k := range c.Kitties {
+		switch k.Compute {
+		case "", ComputeLocal:
+		case ComputeCloud:
+			anyCloud = true
+		default:
+			return fmt.Errorf("kitties[%d] (%s): compute: %q is not local or cloud", i, k.Name, k.Compute)
+		}
+	}
+	if c.Cloud.Provider != "" && !slices.Contains(CloudProviders, c.Cloud.Provider) {
+		return fmt.Errorf("cloud.provider: %q is not one of %s", c.Cloud.Provider, strings.Join(CloudProviders, ", "))
+	}
+	if anyCloud && c.Cloud.Provider == "" {
+		return errors.New("cloud.provider is required when a desktop runs in the cloud")
+	}
+	if c.Cloud.MaxRunning < 1 || c.Cloud.MaxRunning > 5 {
+		return errors.New("cloud.max_running is between 1 and 5")
+	}
+	if c.Cloud.IdleMinutes < 1 {
+		return errors.New("cloud.idle_minutes must be at least 1")
+	}
+	if c.Cloud.Size == "" {
+		return errors.New("cloud.size cannot be empty")
+	}
+	return nil
+}
+
 func (c *Config) hasKitty(name string) bool {
 	for _, k := range c.Kitties {
 		if k.Name == name {
