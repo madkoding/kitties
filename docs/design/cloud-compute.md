@@ -93,8 +93,12 @@ provider before doing anything else.
 2. **Config and per-kitty field (done).** `containers.runtime: cloud`, `compute` per kitty, the
    `cloud` block (provider `boat`, 1 to 5 running, idle minutes, size), validation and docs in
    `docs/CONFIGURATION.md`. The gateway does not read them yet.
-3. **First provider.** One backend behind `internal/cloud`, enough for a canary: create, sleep,
-   restore, screenshot, exec.
+3. **First provider (Boat client done).** `cloud.Boat` implements `Provider` over Boat's API:
+   create (idempotency key, ownership labels), get, list (paged; a partial inventory is an
+   error), orderly sleep with a permanent checkpoint, wake, delete. It never touches a machine
+   without this deployment's label. Tests run the contract against an in-memory Boat. Still to
+   do: restore into a new machine, screenshot, exec and stream through the guest daemon, and a
+   canary with a real key.
 4. **Lifecycle.** Idle sleep, activity leases (chat, goals, viewer and control hold a machine
    awake; dashboard polling does not), TTL renewal, explicit stop.
 5. **Persistence.** Permanent checkpoint per kitty, restore into a new VM, export of the
