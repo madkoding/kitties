@@ -58,7 +58,7 @@ func TestValidation(t *testing.T) {
 		{"providers:\n  p:\n    kind: codex\n    auth: oauth\n", "is not login"},
 		{"providers:\n  p:\n    kind: openai\n    auth: login\n", "takes an API key"},
 		{base + "kitties:\n  - name: a\n    connectors: [x]\n", "not a configured connector"},
-		{base + "containers:\n  runtime: lxc\n", "not auto, docker or podman"},
+		{base + "containers:\n  runtime: lxc\n", "not auto, docker, podman or cloud"},
 		{base + "containers:\n  image: ''\n", "image cannot be empty"},
 		{base + "containers:\n  cpus: -1\n", "cannot be negative"},
 		{base + "gateway:\n  listen: ''\n", "listen cannot be empty"},
@@ -369,6 +369,54 @@ func TestAutoOffMinutes(t *testing.T) {
 	for _, bad := range []string{"-5", "99999"} {
 		if _, err := Parse([]byte(base + "containers:\n  auto_off_minutes: " + bad + "\n")); err == nil || !strings.Contains(err.Error(), "auto_off_minutes") {
 			t.Errorf("auto_off_minutes %s = %v", bad, err)
+		}
+	}
+}
+
+func TestComputeAndCloud(t *testing.T) {
+	base := "default_provider: p\nproviders: { p: { kind: ollama, model: m } }\n"
+	cfg, err := Parse([]byte(base + "kitties: [{ name: a }]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Cloud.MaxRunning != 5 || cfg.Cloud.IdleMinutes != 15 || cfg.Cloud.Size != "small" {
+		t.Errorf("cloud defaults = %+v", cfg.Cloud)
+	}
+	if got := cfg.ComputeFor(cfg.Kitties[0]); got != ComputeLocal {
+		t.Errorf("default compute = %q", got)
+	}
+
+	// A kitty in the cloud needs a provider.
+	if _, err := Parse([]byte(base + "kitties: [{ name: a, compute: cloud }]\n")); err == nil || !strings.Contains(err.Error(), "cloud.provider") {
+		t.Errorf("cloud without a provider = %v", err)
+	}
+	cfg, err = Parse([]byte(base + "cloud: { provider: boat }\nkitties: [{ name: a, compute: cloud }, { name: b }]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ComputeFor(cfg.Kitties[0]) != ComputeCloud || cfg.ComputeFor(cfg.Kitties[1]) != ComputeLocal {
+		t.Error("a kitty's own compute wins; the others follow the runtime")
+	}
+
+	// runtime: cloud moves every desktop, and a kitty can opt out.
+	cfg, err = Parse([]byte(base + "containers: { runtime: cloud }\ncloud: { provider: boat }\nkitties: [{ name: a }, { name: b, compute: local }]\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ComputeFor(cfg.Kitties[0]) != ComputeCloud || cfg.ComputeFor(cfg.Kitties[1]) != ComputeLocal {
+		t.Error("runtime: cloud with a local opt-out")
+	}
+
+	for name, y := range map[string]string{
+		"compute":      "kitties: [{ name: a, compute: moon }]\n",
+		"provider":     "cloud: { provider: nope }\n",
+		"runtime":      "containers: { runtime: cloud }\n",
+		"max_running":  "cloud: { provider: boat, max_running: 6 }\n",
+		"idle_minutes": "cloud: { provider: boat, idle_minutes: 0 }\n",
+		"size":         "cloud: { provider: boat, size: '' }\n",
+	} {
+		if _, err := Parse([]byte(base + y)); err == nil {
+			t.Errorf("%s: %q must fail", name, y)
 		}
 	}
 }

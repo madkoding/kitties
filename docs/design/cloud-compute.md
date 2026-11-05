@@ -1,7 +1,7 @@
 # Local or cloud: where a kitty's desktop runs
 
-Status: design proposal. Step 1 (the provider interface, a fake and the contract tests in
-`internal/cloud`) is done; nothing reaches the gateway yet.
+Status: design proposal. Steps 1 and 2 (the provider interface, a fake and the contract tests in
+`internal/cloud`, and the config) are done; nothing reaches the gateway yet.
 
 ## Goal
 
@@ -90,8 +90,9 @@ provider before doing anything else.
    `Contract`, the rules every provider's tests must run. Pin the `Compute` contract and add a fake backend. Cover it in
    `tests/contract`-style cases first (create twice with one key makes one machine; an ambiguous
    answer makes none; restart reconciles).
-2. **Config and per-kitty field.** `runtime: cloud`, `compute` per kitty, validation and docs in
-   `docs/CONFIGURATION.md`.
+2. **Config and per-kitty field (done).** `containers.runtime: cloud`, `compute` per kitty, the
+   `cloud` block (provider `boat`, 1 to 5 running, idle minutes, size), validation and docs in
+   `docs/CONFIGURATION.md`. The gateway does not read them yet.
 3. **First provider.** One backend behind `internal/cloud`, enough for a canary: create, sleep,
    restore, screenshot, exec.
 4. **Lifecycle.** Idle sleep, activity leases (chat, goals, viewer and control hold a machine
@@ -113,8 +114,8 @@ provider before doing anything else.
 
 ## Open questions
 
-- Which provider first, and who pays for the canary? Decide before step 3. Suggested: Boat, since
-  the reference project proved it, with the canary on mad's account.
+- Which provider first, and who pays for the canary? Decide before step 3. Decided: Boat. Who pays for
+  the canary is still open.
 - Does the live view need the same rectangle protocol over the provider's network path, or is the
   existing stream enough?
 - Where do cloud credentials live for the desktop and Android apps that talk to a remote gateway?

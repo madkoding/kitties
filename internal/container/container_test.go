@@ -45,6 +45,9 @@ func TestDetect(t *testing.T) {
 	if _, err := Detect(context.Background(), "docker"); !errors.Is(err, ErrNotInstalled) {
 		t.Errorf("missing docker: %v", err)
 	}
+	if rt, err := Detect(context.Background(), "cloud"); err != nil || rt.Bin != "/usr/bin/podman" {
+		t.Errorf("cloud still finds a local engine for local kitties: %+v, %v", rt, err)
+	}
 	f = &fake{answer: func([]string) ([]byte, error) { return []byte("daemon down"), errors.New("x") }}
 	f.install(t, "docker")
 	if _, err := Detect(context.Background(), ""); err == nil || !strings.Contains(err.Error(), "daemon down") || !errors.Is(err, ErrNotRunning) {

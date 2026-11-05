@@ -144,7 +144,7 @@ func widenPath() {
 func Detect(ctx context.Context, want string) (Runtime, error) {
 	pathOnce.Do(widenPath)
 	candidates := []string{"docker", "podman"}
-	if want != "" && want != "auto" {
+	if want != "" && want != "auto" && want != "cloud" { // cloud: local kitties still find an engine
 		candidates = []string{want}
 	}
 	var reasons []string
