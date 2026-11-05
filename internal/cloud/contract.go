@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 )
 
 // Contract runs the rules every Provider must keep. A new provider's tests call it with a
@@ -47,6 +48,28 @@ func Contract(t *testing.T, fresh func(t *testing.T) Provider) {
 		}
 		if err := p.Delete(ctx, "nope"); !errors.Is(err, ErrNotFound) {
 			t.Errorf("delete = %v", err)
+		}
+	})
+
+	t.Run("a command runs on a running machine only", func(t *testing.T) {
+		p := fresh(t)
+		a, _ := p.Create(ctx, req)
+		if _, err := p.Exec(ctx, "nope", "true", time.Second); !errors.Is(err, ErrNotFound) {
+			t.Errorf("exec on an unknown machine = %v", err)
+		}
+		// A machine just made may still be starting; the provider waits or says it is not running.
+		if _, err := p.Wake(ctx, a.ID); err != nil {
+			t.Fatal(err)
+		}
+		r, err := p.Exec(ctx, a.ID, "echo hi", 5*time.Second)
+		if err != nil || r.ExitCode != 0 || r.Stdout == "" {
+			t.Fatalf("exec = %+v %v", r, err)
+		}
+		if _, err := p.Sleep(ctx, a.ID); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := p.Exec(ctx, a.ID, "echo hi", 5*time.Second); !errors.Is(err, ErrNotRunning) {
+			t.Errorf("exec on a sleeper = %v", err)
 		}
 	})
 

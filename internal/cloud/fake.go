@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+	"time"
 )
 
 // Fake is an in-memory Provider for tests, with switches for the failures a real cloud has.
@@ -20,6 +21,10 @@ type Fake struct {
 
 	loseNextCreate bool
 	failList       bool
+
+	// Commands are the shell commands Exec has run, in order. ExecOut, when set, answers them.
+	Commands []string
+	ExecOut  func(command string) ExecResult
 }
 
 // NewFake returns an empty provider.
@@ -128,4 +133,21 @@ func (f *Fake) Delete(_ context.Context, id string) error {
 	delete(f.byKey, m.Key)
 	delete(f.machines, id)
 	return nil
+}
+
+func (f *Fake) Exec(_ context.Context, id, command string, _ time.Duration) (ExecResult, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	m, ok := f.machines[id]
+	if !ok {
+		return ExecResult{}, ErrNotFound
+	}
+	if m.State != Running {
+		return ExecResult{}, ErrNotRunning
+	}
+	f.Commands = append(f.Commands, command)
+	if f.ExecOut != nil {
+		return f.ExecOut(command), nil
+	}
+	return ExecResult{Stdout: "ran: " + command}, nil
 }

@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/madkoding/kitties/internal/cloud"
 	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/orchestrator"
 )
@@ -642,5 +643,55 @@ func TestSecretStoresOffWhereTheKeyCannotBeKept(t *testing.T) {
 	warn.Reset()
 	if v, _ := openSecretStores(t.TempDir(), &warn); v != nil || !strings.Contains(warn.String(), "KITTIES_VAULT_KEY") {
 		t.Errorf("a bad key: %v %q", v, warn.String())
+	}
+}
+
+func TestCloudRouterAndOpen(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.Containers.Runtime = "cloud"
+	cfg.Cloud.Provider = "boat"
+	cfg.Kitties = []config.Kitty{{Name: "home", Compute: "local"}, {Name: "far"}}
+
+	// No key: the cloud side fails with the way out; the local side keeps working.
+	local := &fakeContainers{names: map[string]bool{}}
+	r, note := cloudRouter(cfg, func(string) string { return "" }, local, nil)
+	if r.Cloud != nil || !strings.Contains(note, "BOAT_API_KEY") {
+		t.Fatalf("router = %+v, note = %q", r, note)
+	}
+	if _, err := r.Up(context.Background(), container.Spec{Name: "kitty-far"}); err == nil || !strings.Contains(err.Error(), "BOAT_API_KEY") {
+		t.Errorf("a cloud kitty without a key = %v", err)
+	}
+	if _, err := r.Up(context.Background(), container.Spec{Name: "kitty-home"}); err != nil {
+		t.Errorf("a local kitty is not held back by the cloud: %v", err)
+	}
+
+	// With a key: a cloud backend, a stable deployment id, and a missing engine is reported.
+	r, note = cloudRouter(cfg, func(k string) string { return map[string]string{"BOAT_API_KEY": "sk"}[k] }, nil, container.ErrNoRuntime)
+	b, ok := r.Cloud.(*cloud.Containers)
+	if !ok || !strings.Contains(note, "local desktops will not start") {
+		t.Fatalf("router = %+v, note = %q", r, note)
+	}
+	boat := b.P.(*cloud.Boat)
+	r2, _ := cloudRouter(cfg, func(string) string { return "sk" }, nil, nil)
+	if boat.Deployment == "" || !strings.HasPrefix(boat.Deployment, "kitties-") || boat.Deployment != r2.Cloud.(*cloud.Containers).P.(*cloud.Boat).Deployment || boat.MaxRunning != 5 {
+		t.Errorf("boat = %+v", boat)
+	}
+	cfg.Cloud.Deployment = "mine"
+	r3, _ := cloudRouter(cfg, func(string) string { return "sk" }, nil, nil)
+	if r3.Cloud.(*cloud.Containers).P.(*cloud.Boat).Deployment != "mine" {
+		t.Error("a configured deployment id wins")
+	}
+
+	// Through the command line: the note shows, the fleet still runs.
+	withRuntime(t, true)
+	old := getenv
+	getenv = func(string) string { return "" }
+	t.Cleanup(func() { getenv = old })
+	dir := t.TempDir()
+	path := filepath.Join(dir, "k.yaml")
+	text := "data_dir: " + filepath.Join(dir, "data") + "\nproviders:\n  p:\n    kind: custom\n    model: m\n    base_url: http://127.0.0.1:1\ncontainers: { runtime: cloud }\ncloud: { provider: boat }\n"
+	_ = os.WriteFile(path, []byte(text), 0o600)
+	if code, _, errOut := exec(t, "", "-config", path, "ls"); code != 0 || !strings.Contains(errOut, "BOAT_API_KEY") {
+		t.Errorf("ls = %d %s", code, errOut)
 	}
 }

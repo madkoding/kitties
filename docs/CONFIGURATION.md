@@ -21,7 +21,7 @@ kitties:
     replicas: 3
 
 containers: { runtime: auto, image: ghcr.io/madkoding/kitty-desktop:latest, memory_mb: 2048, cpus: 2, auto_off_minutes: 15 }
-cloud:      { provider: "", max_running: 5, idle_minutes: 15, size: small }
+cloud:      { provider: "", max_running: 5, idle_minutes: 15, size: small, api_key_env: BOAT_API_KEY }
 gateway:    { listen: 127.0.0.1:7488, token: "" }
 motita:     { url: http://127.0.0.1:7477 }
 
@@ -218,6 +218,9 @@ Limits (20 files, 100 MB a message) are in [ARCHITECTURE.md](ARCHITECTURE.md#att
 `containers.runtime` is `auto`, `docker`, `podman` or `cloud`. With `cloud`, every kitty's desktop
 runs in the cloud; a kitty can choose for itself with `compute: local` or `compute: cloud` (empty
 follows the runtime). The `cloud` block names the provider (`boat`), the most desktops running at
-once (1 to 5), the idle minutes before one sleeps and the machine size. Provider credentials go in
-the vault, never in this file. The cloud backend is still being built: see
+once (1 to 5), the idle minutes before one sleeps and the machine size. The API key is read from the
+environment variable `cloud.api_key_env` (`BOAT_API_KEY`), never from this file;
+`cloud.deployment` is a stable id for this install (empty derives one from `data_dir`), and only
+machines carrying it are ever touched. Cloud desktops are created, slept, woken and removed, and run commands and take screenshots
+through the provider's command API; stdin input and the live view are not available yet: see
 [the design](design/cloud-compute.md).

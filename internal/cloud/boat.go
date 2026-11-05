@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -17,12 +18,21 @@ import (
 // DefaultBoatURL is Boat's API root.
 const DefaultBoatURL = "https://boat.dev/api/v1"
 
+// idRe is the shape of a sandbox id in Boat's API; anything else never reaches a URL.
+var idRe = regexp.MustCompile(`^bx_[23456789abcdefghjkmnpqrstuvwxyz]{8}$`)
+
+// sizes are the machine types Boat accepts, by the name the configuration uses.
+var sizes = map[string]bool{"small": true, "default": true, "large": true, "xlarge": true}
+
 // Labels every machine this package makes carries, so it never touches a machine it did not make.
 const (
 	labelDeployment = "kitties.deployment"
 	labelKitty      = "kitties.kitty"
 	labelKey        = "kitties.key"
 )
+
+// longCall marks a context whose caller bounds the wait itself.
+type longCall struct{}
 
 // APIError is a refusal from Boat. It never carries the API key.
 type APIError struct {
@@ -63,7 +73,6 @@ func (b *Boat) client() *http.Client {
 		return b.Client
 	}
 	return &http.Client{
-		Timeout: 60 * time.Second,
 		// A redirect would carry the bearer token somewhere else.
 		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 	}
@@ -120,6 +129,11 @@ func (b *Boat) do(ctx context.Context, method, path string, headers map[string]s
 		}
 		rd = bytes.NewReader(raw)
 	}
+	if ctx.Value(longCall{}) == nil { // every call is bounded; a command sets its own wait
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+		defer cancel()
+	}
 	req, err := http.NewRequestWithContext(ctx, method, b.base()+path, rd)
 	if err != nil {
 		return err
@@ -146,8 +160,11 @@ func (b *Boat) do(ctx context.Context, method, path string, headers map[string]s
 		if n, _ := strconv.Atoi(resp.Header.Get("Retry-After")); n > 0 {
 			e.RetryAfter = min(time.Duration(n)*time.Second, 5*time.Minute)
 		}
-		if resp.StatusCode == http.StatusNotFound {
+		switch {
+		case resp.StatusCode == http.StatusNotFound:
 			return fmt.Errorf("%w: %w", ErrNotFound, e)
+		case resp.StatusCode == http.StatusConflict && (e.Code == "sandbox_not_ready" || e.Code == "boat_starting"):
+			return fmt.Errorf("%w: %w", ErrNotRunning, e)
 		}
 		return e
 	}
@@ -166,13 +183,27 @@ func (b *Boat) machine(s boatSandbox) Machine {
 	switch s.State {
 	case "archived", "stopped":
 		m.State = Asleep
-	default:
+	case "error", "cancelled":
+		m.State = Failed
+	default: // init, provisioning, provisioned, cloning, ready, idle, running, archiving
 		m.State = Running
 	}
 	return m
 }
 
+// ready is a machine that can take a command now.
+func ready(s boatSandbox) bool {
+	switch s.State {
+	case "provisioned", "ready", "idle", "running":
+		return s.Hydrated == nil || *s.Hydrated
+	}
+	return false
+}
+
 func (b *Boat) get(ctx context.Context, id string) (boatSandbox, error) {
+	if !idRe.MatchString(id) {
+		return boatSandbox{}, fmt.Errorf("%w: %q is not a machine id", ErrNotFound, id)
+	}
 	var r struct {
 		Sandbox boatSandbox `json:"sandbox"`
 	}
@@ -244,10 +275,17 @@ func (b *Boat) Create(ctx context.Context, req CreateRequest) (Machine, error) {
 			return Machine{}, ErrLimit
 		}
 	}
+	size := req.Size
+	if size == "" {
+		size = "small"
+	}
+	if !sizes[size] {
+		return Machine{}, fmt.Errorf("cloud: size %q is not small, default, large or xlarge", size)
+	}
 	body := map[string]any{
 		"name":       "kn-" + req.Name + "-" + shortKey(req.Key),
 		"noEnv":      true,
-		"type":       "default",
+		"type":       size,
 		"ttlSeconds": b.ttl(),
 		"snapshots":  true,
 		"labels": map[string]string{
@@ -262,8 +300,8 @@ func (b *Boat) Create(ctx context.Context, req CreateRequest) (Machine, error) {
 	if err := b.do(ctx, http.MethodPost, "/sandboxes", map[string]string{"Idempotency-Key": req.Key}, body, &r); err != nil {
 		return Machine{}, err
 	}
-	if r.Sandbox.ID == "" {
-		return Machine{}, errors.New("boat: the answer names no machine")
+	if !idRe.MatchString(r.Sandbox.ID) {
+		return Machine{}, errors.New("boat: the answer names no valid machine")
 	}
 	if r.Sandbox.Labels == nil { // Boat may leave labels out of the answer
 		r.Sandbox.Labels = map[string]string{labelDeployment: b.Deployment, labelKitty: req.Name, labelKey: req.Key}
@@ -336,6 +374,9 @@ func (b *Boat) Sleep(ctx context.Context, id string) (Machine, error) {
 		if cur, err = b.get(ctx, id); err != nil {
 			return false, err
 		}
+		if b.machine(cur).State == Failed {
+			return false, errors.New("boat: the machine is in error")
+		}
 		if cur.LastSnapshotStatus == "failed" {
 			return false, errors.New("boat: the machine's snapshot failed")
 		}
@@ -384,7 +425,10 @@ func (b *Boat) Wake(ctx context.Context, id string) (Machine, error) {
 		if cur, err = b.get(ctx, id); err != nil {
 			return false, err
 		}
-		return b.machine(cur).State == Running && (cur.Hydrated == nil || *cur.Hydrated), nil
+		if b.machine(cur).State == Failed {
+			return false, errors.New("boat: the machine is in error")
+		}
+		return ready(cur), nil
 	}); err != nil {
 		return Machine{}, err
 	}
@@ -398,4 +442,40 @@ func (b *Boat) Delete(ctx context.Context, id string) error {
 		return err
 	}
 	return b.do(ctx, http.MethodDelete, "/sandboxes/"+url.PathEscape(id), map[string]string{"X-Ascii-Confirm-Delete": id}, nil, nil)
+}
+
+// Exec runs a shell command on a running machine and waits for it. Boat waits up to a minute for a
+// machine that is still starting, and refuses with a conflict (ErrNotRunning) for one that is
+// stopped. A command is never retried: a failure to hear back may mean it is still running.
+func (b *Boat) Exec(ctx context.Context, id, command string, timeout time.Duration) (ExecResult, error) {
+	if !idRe.MatchString(id) {
+		return ExecResult{}, fmt.Errorf("%w: %q is not a machine id", ErrNotFound, id)
+	}
+	if command == "" {
+		return ExecResult{}, errors.New("cloud: nothing to run")
+	}
+	secs := int(timeout / time.Second)
+	if secs < 1 {
+		secs = 30
+	}
+	secs = min(secs, 600)
+	ctx, cancel := context.WithTimeout(context.WithValue(ctx, longCall{}, true), time.Duration(secs+90)*time.Second)
+	defer cancel()
+	var r struct {
+		ExitCode        *int   `json:"exitCode"`
+		Stdout          string `json:"stdout"`
+		Stderr          string `json:"stderr"`
+		TimedOut        bool   `json:"timedOut"`
+		StdoutTruncated bool   `json:"stdoutTruncated"`
+		StderrTruncated bool   `json:"stderrTruncated"`
+	}
+	if err := b.do(ctx, http.MethodPost, "/sandboxes/"+url.PathEscape(id)+"/commands", nil,
+		map[string]any{"command": command, "timeoutSeconds": secs}, &r); err != nil {
+		return ExecResult{}, err
+	}
+	res := ExecResult{Stdout: r.Stdout, Stderr: r.Stderr, TimedOut: r.TimedOut, Truncated: r.StdoutTruncated || r.StderrTruncated, ExitCode: -1}
+	if r.ExitCode != nil {
+		res.ExitCode = *r.ExitCode
+	}
+	return res, nil
 }
