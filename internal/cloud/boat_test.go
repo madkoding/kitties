@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -25,6 +26,7 @@ type boatServer struct {
 	stopFails bool
 	hits      map[string]int
 	secret    string
+	cmds      []string
 }
 
 func newBoatServer(t *testing.T) (*boatServer, *Boat) {
@@ -65,7 +67,7 @@ func (s *boatServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		for k, v := range body["labels"].(map[string]any) {
 			labels[k] = v.(string)
 		}
-		b := &boatSandbox{ID: "bx_" + strings.Repeat("a", 7) + string(rune('0'+s.next)), Name: body["name"].(string), State: "provisioned", Labels: labels, SnapshotAvailable: false}
+		b := &boatSandbox{ID: "bx_aaaaaaa" + string("23456789"[s.next%8]), Name: body["name"].(string), State: "provisioned", Labels: labels, SnapshotAvailable: false}
 		s.boxes[b.ID] = b
 		s.keys[r.Header.Get("Idempotency-Key")] = b.ID
 		s.reply(w, 200, map[string]any{"sandbox": b})
@@ -101,6 +103,19 @@ func (s *boatServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		s.reply(w, 200, map[string]any{"sandbox": b})
+	case len(parts) == 3 && parts[2] == "commands":
+		b := s.boxes[parts[1]]
+		if b == nil {
+			s.reply(w, 404, map[string]string{"code": "not_found"})
+			return
+		}
+		if b.State == "archived" {
+			s.reply(w, 409, map[string]any{"code": "sandbox_not_ready", "retryable": false})
+			return
+		}
+		cmd, _ := body["command"].(string)
+		s.cmds = append(s.cmds, cmd)
+		s.reply(w, 200, map[string]any{"success": true, "exitCode": 0, "stdout": "out:" + cmd, "stderr": "", "timedOut": false, "timeout": body["timeoutSeconds"]})
 	case len(parts) == 3 && parts[2] == "stop":
 		b := s.boxes[parts[1]]
 		if s.stopFails {
@@ -173,17 +188,17 @@ func TestBoatSendsKeyAndNeverLeaksItInErrors(t *testing.T) {
 func TestBoatIgnoresMachinesItDidNotMake(t *testing.T) {
 	ctx := context.Background()
 	s, b := newBoatServer(t)
-	s.boxes["bx_foreign1"] = &boatSandbox{ID: "bx_foreign1", State: "idle", Labels: map[string]string{labelDeployment: "other"}}
-	s.boxes["bx_shared01"] = &boatSandbox{ID: "bx_shared01", State: "idle", Access: "shared", Labels: map[string]string{labelDeployment: "dep-1"}}
+	s.boxes["bx_ffffffff"] = &boatSandbox{ID: "bx_ffffffff", State: "idle", Labels: map[string]string{labelDeployment: "other"}}
+	s.boxes["bx_ssssssss"] = &boatSandbox{ID: "bx_ssssssss", State: "idle", Access: "shared", Labels: map[string]string{labelDeployment: "dep-1"}}
 	if all, err := b.List(ctx); err != nil || len(all) != 0 {
 		t.Fatalf("list = %v %v", all, err)
 	}
 	for _, f := range []func() error{
-		func() error { _, err := b.Get(ctx, "bx_foreign1"); return err },
-		func() error { _, err := b.Sleep(ctx, "bx_foreign1"); return err },
-		func() error { _, err := b.Wake(ctx, "bx_foreign1"); return err },
-		func() error { return b.Delete(ctx, "bx_foreign1") },
-		func() error { return b.Delete(ctx, "bx_shared01") },
+		func() error { _, err := b.Get(ctx, "bx_ffffffff"); return err },
+		func() error { _, err := b.Sleep(ctx, "bx_ffffffff"); return err },
+		func() error { _, err := b.Wake(ctx, "bx_ffffffff"); return err },
+		func() error { return b.Delete(ctx, "bx_ffffffff") },
+		func() error { return b.Delete(ctx, "bx_ssssssss") },
 	} {
 		if err := f(); !errors.Is(err, ErrNotFound) {
 			t.Errorf("a foreign machine must look absent: %v", err)
@@ -268,11 +283,11 @@ func TestBoatSleepFailuresAreNotSaved(t *testing.T) {
 func TestBoatSleepWaitIsBounded(t *testing.T) {
 	ctx := context.Background()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"sandbox":{"id":"bx_00000001","state":"busy","labels":{"kitties.deployment":"d"}}}`))
+		_, _ = w.Write([]byte(`{"sandbox":{"id":"bx_22222222","state":"busy","labels":{"kitties.deployment":"d"}}}`))
 	}))
 	defer srv.Close()
 	b := &Boat{Key: "k", Deployment: "d", BaseURL: srv.URL, Poll: time.Millisecond, Timeout: 30 * time.Millisecond}
-	if _, err := b.Sleep(ctx, "bx_00000001"); !errors.Is(err, context.DeadlineExceeded) {
+	if _, err := b.Sleep(ctx, "bx_22222222"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("sleep = %v", err)
 	}
 }
@@ -286,7 +301,7 @@ func TestBoatCheckpointFailureAndMissingMachineID(t *testing.T) {
 		case strings.HasPrefix(r.URL.Path, "/saved-snapshots/"):
 			_, _ = w.Write([]byte(`{"snapshot":{"status":"failed"}}`))
 		case r.Method == "GET":
-			_, _ = w.Write([]byte(`{"sandbox":{"id":"bx_00000001","state":"archived","snapshotAvailable":true,"labels":{"kitties.deployment":"d"}}}`))
+			_, _ = w.Write([]byte(`{"sandbox":{"id":"bx_22222222","state":"archived","snapshotAvailable":true,"labels":{"kitties.deployment":"d"}}}`))
 		default:
 			w.WriteHeader(200)
 		}
@@ -296,7 +311,7 @@ func TestBoatCheckpointFailureAndMissingMachineID(t *testing.T) {
 	if _, err := b.Create(ctx, CreateRequest{Key: "k", Name: "n"}); err == nil {
 		t.Error("an answer with no machine id must fail")
 	}
-	if _, err := b.Sleep(ctx, "bx_00000001"); err == nil || !strings.Contains(err.Error(), "checkpoint failed") {
+	if _, err := b.Sleep(ctx, "bx_22222222"); err == nil || !strings.Contains(err.Error(), "checkpoint failed") {
 		t.Errorf("sleep = %v", err)
 	}
 }
@@ -341,11 +356,11 @@ func TestBoatWakeReportsAnUnhydratedMachineAsNotReady(t *testing.T) {
 		if n < 3 {
 			h = "false"
 		}
-		_, _ = w.Write([]byte(`{"sandbox":{"id":"bx_00000001","state":"idle","hydrated":` + h + `,"labels":{"kitties.deployment":"d"}}}`))
+		_, _ = w.Write([]byte(`{"sandbox":{"id":"bx_22222222","state":"idle","hydrated":` + h + `,"labels":{"kitties.deployment":"d"}}}`))
 	}))
 	defer srv.Close()
 	b := &Boat{Key: "k", Deployment: "d", BaseURL: srv.URL, Poll: time.Millisecond, Timeout: time.Second}
-	m, err := b.Wake(ctx, "bx_00000001")
+	m, err := b.Wake(ctx, "bx_22222222")
 	if err != nil || m.State != Running || n < 3 {
 		t.Errorf("wake = %+v %v after %d reads", m, err, n)
 	}
@@ -359,12 +374,92 @@ func TestBoatRefusalCarriesCodeAndRetryAfter(t *testing.T) {
 	}))
 	defer srv.Close()
 	b := &Boat{Key: "k", Deployment: "d", BaseURL: srv.URL, Client: srv.Client(), TTL: 2 * time.Hour}
-	_, err := b.Get(context.Background(), "bx_00000001")
+	_, err := b.Get(context.Background(), "bx_22222222")
 	var ae *APIError
 	if !errors.As(err, &ae) || ae.Code != "rate_limited" || ae.RetryAfter != 7*time.Second || b.ttl() != 7200 {
 		t.Errorf("err = %v (%+v), ttl %d", err, ae, b.ttl())
 	}
 	if shortKey("0123456789abcdef") != "0123456789ab" || shortKey("ab") != "ab" {
 		t.Error("shortKey")
+	}
+}
+
+func TestBoatExecAndItsGuards(t *testing.T) {
+	ctx := context.Background()
+	s, b := newBoatServer(t)
+	m, _ := b.Create(ctx, CreateRequest{Key: "k", Name: "n"})
+	r, err := b.Exec(ctx, m.ID, "echo hi", 5*time.Second)
+	if err != nil || r.Stdout != "out:echo hi" || r.ExitCode != 0 || len(s.cmds) != 1 {
+		t.Fatalf("exec = %+v %v", r, err)
+	}
+	if _, err := b.Exec(ctx, m.ID, "", time.Second); err == nil {
+		t.Error("an empty command must fail")
+	}
+	if _, err := b.Exec(ctx, "../etc", "true", time.Second); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a bad id never reaches a URL: %v", err)
+	}
+	if _, err := b.Exec(ctx, "bx_zzzzzzzz", "true", time.Second); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown = %v", err)
+	}
+	if _, err := b.Get(ctx, "bx_00000001"); !errors.Is(err, ErrNotFound) || s.hits["GET /sandboxes/bx_00000001"] != 0 {
+		t.Error("an id outside Boat's alphabet is refused before any request")
+	}
+}
+
+func TestBoatExecReadsExitCodeTimeoutAndTruncation(t *testing.T) {
+	var asked map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&asked)
+		_, _ = w.Write([]byte(`{"exitCode":null,"stdout":"a","stderr":"b","timedOut":true,"stdoutTruncated":true}`))
+	}))
+	defer srv.Close()
+	b := &Boat{Key: "k", Deployment: "d", BaseURL: srv.URL}
+	r, err := b.Exec(context.Background(), "bx_22222222", "sleep 999", 0)
+	if err != nil || r.ExitCode != -1 || !r.TimedOut || !r.Truncated || r.Stdout != "a" || r.Stderr != "b" {
+		t.Errorf("exec = %+v %v", r, err)
+	}
+	if asked["timeoutSeconds"] != float64(30) {
+		t.Errorf("default timeout = %v", asked["timeoutSeconds"])
+	}
+	_, _ = b.Exec(context.Background(), "bx_22222222", "x", time.Hour)
+	if asked["timeoutSeconds"] != float64(600) {
+		t.Errorf("the cap = %v", asked["timeoutSeconds"])
+	}
+}
+
+func TestBoatSizesAndStates(t *testing.T) {
+	ctx := context.Background()
+	_, b := newBoatServer(t)
+	if _, err := b.Create(ctx, CreateRequest{Key: "k", Name: "n", Size: "huge"}); err == nil {
+		t.Error("an unknown size must fail")
+	}
+	for i, size := range []string{"", "small", "default", "large", "xlarge"} {
+		if _, err := b.Create(ctx, CreateRequest{Key: "k" + strconv.Itoa(i), Name: "n", Size: size}); err != nil {
+			t.Errorf("size %q: %v", size, err)
+		}
+	}
+	for state, want := range map[string]State{"archived": Asleep, "error": Failed, "cancelled": Failed, "provisioning": Running, "archiving": Running, "idle": Running} {
+		if got := b.machine(boatSandbox{State: state}).State; got != want {
+			t.Errorf("%s = %s, want %s", state, got, want)
+		}
+	}
+	f := false
+	if ready(boatSandbox{State: "idle", Hydrated: &f}) || ready(boatSandbox{State: "cloning"}) || !ready(boatSandbox{State: "ready"}) {
+		t.Error("ready")
+	}
+}
+
+func TestBoatWaitsStopOnAMachineInError(t *testing.T) {
+	ctx := context.Background()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"sandbox":{"id":"bx_22222222","state":"error","labels":{"kitties.deployment":"d"}}}`))
+	}))
+	defer srv.Close()
+	b := &Boat{Key: "k", Deployment: "d", BaseURL: srv.URL, Poll: time.Millisecond, Timeout: time.Second}
+	if _, err := b.Wake(ctx, "bx_22222222"); err == nil || !strings.Contains(err.Error(), "in error") {
+		t.Errorf("wake = %v", err)
+	}
+	if _, err := b.Sleep(ctx, "bx_22222222"); err == nil || !strings.Contains(err.Error(), "in error") {
+		t.Errorf("sleep = %v", err)
 	}
 }

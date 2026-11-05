@@ -221,6 +221,6 @@ follows the runtime). The `cloud` block names the provider (`boat`), the most de
 once (1 to 5), the idle minutes before one sleeps and the machine size. The API key is read from the
 environment variable `cloud.api_key_env` (`BOAT_API_KEY`), never from this file;
 `cloud.deployment` is a stable id for this install (empty derives one from `data_dir`), and only
-machines carrying it are ever touched. Cloud desktops are created, slept, woken and removed, but
-their screen, commands and live view are not available yet: see
+machines carrying it are ever touched. Cloud desktops are created, slept, woken and removed, and run commands and take screenshots
+through the provider's command API; stdin input and the live view are not available yet: see
 [the design](design/cloud-compute.md).

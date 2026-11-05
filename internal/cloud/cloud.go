@@ -13,6 +13,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 )
 
 // State is where a machine is in its life.
@@ -21,6 +22,8 @@ type State string
 const (
 	Running State = "running"
 	Asleep  State = "asleep"
+	// Failed is a machine the provider reports as broken or cancelled.
+	Failed State = "failed"
 )
 
 var (
@@ -28,6 +31,8 @@ var (
 	ErrNotFound = errors.New("no such machine")
 	// ErrLimit is returned when creating would pass the provider's running limit.
 	ErrLimit = errors.New("too many running machines")
+	// ErrNotRunning is returned when a command is sent to a machine that is not running.
+	ErrNotRunning = errors.New("the machine is not running")
 	// ErrAmbiguous is returned when it cannot be told whether a machine was made. Nothing is
 	// created behind that answer; the owner decides.
 	ErrAmbiguous = errors.New("cannot tell whether the machine exists")
@@ -50,6 +55,14 @@ type CreateRequest struct {
 	Size string
 }
 
+// ExecResult is what a command left behind.
+type ExecResult struct {
+	Stdout, Stderr string
+	ExitCode       int
+	TimedOut       bool
+	Truncated      bool // the provider cut the output short
+}
+
 // Provider is what the gateway needs from a cloud.
 type Provider interface {
 	Create(ctx context.Context, req CreateRequest) (Machine, error)
@@ -60,6 +73,8 @@ type Provider interface {
 	// Wake brings an asleep machine back from its checkpoint.
 	Wake(ctx context.Context, id string) (Machine, error)
 	Delete(ctx context.Context, id string) error
+	// Exec runs a shell command on a running machine and waits for it (up to timeout).
+	Exec(ctx context.Context, id, command string, timeout time.Duration) (ExecResult, error)
 }
 
 // Ensure creates the machine for req, or finds the one a lost answer already made. When even the

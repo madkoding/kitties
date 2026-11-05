@@ -3,19 +3,21 @@ package cloud
 import (
 	"context"
 	"crypto/rand"
+	"encoding/base64"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"strings"
+	"time"
 
 	"github.com/madkoding/kitties/internal/container"
 )
 
-// ErrDesktopChannel is returned for what needs the guest daemon (screenshots, commands, the live
-// view): the machine can be created, slept and woken, but the channel into its desktop is not
-// built yet. See docs/design/cloud-compute.md.
+// ErrDesktopChannel is returned for what needs the guest daemon (input on stdin, the live view,
+// tunnels): commands and screenshots work through the provider's command API, the rest waits for
+// the daemon. See docs/design/cloud-compute.md.
 var ErrDesktopChannel = errors.New("cloud: the desktop channel of a cloud machine is not available yet")
 
 // Backend is what the orchestrator asks of a place that runs desktops. It matches
@@ -133,14 +135,70 @@ func (c *Containers) ImageStale(context.Context, string, string) (bool, error) {
 	return false, nil
 }
 
-func (c *Containers) Exec(context.Context, string, ...string) (string, error) {
-	return "", ErrDesktopChannel
+// guestPrefix runs a command as the desktop's user on its display, as the local container does.
+const guestPrefix = "sudo -n -H -u kitty env DISPLAY=:99 "
+
+// execTimeout bounds one command on a machine.
+const execTimeout = 2 * time.Minute
+
+// quote makes one shell word of s.
+func quote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// run executes a shell command on the running machine called name.
+func (c *Containers) run(ctx context.Context, name, command string) (ExecResult, error) {
+	m, err := c.find(ctx, name)
+	if err != nil {
+		return ExecResult{}, err
+	}
+	return c.P.Exec(ctx, m.ID, command, execTimeout)
 }
+
+// Exec runs argv in the kitty's work folder, as the desktop's user. Like the local container, it
+// returns what the command wrote, and an error when it failed.
+func (c *Containers) Exec(ctx context.Context, name string, argv ...string) (string, error) {
+	if len(argv) == 0 {
+		return "", errors.New("nothing to run")
+	}
+	words := make([]string, len(argv))
+	for i, a := range argv {
+		words[i] = quote(a)
+	}
+	res, err := c.run(ctx, name, "cd "+container.Workdir+" && "+guestPrefix+strings.Join(words, " "))
+	if err != nil {
+		return "", err
+	}
+	out := res.Stdout + res.Stderr
+	switch {
+	case res.TimedOut:
+		return out, fmt.Errorf("exec in %s: timed out", name)
+	case res.ExitCode != 0:
+		return out, fmt.Errorf("exec in %s: exit status %d", name, res.ExitCode)
+	}
+	return out, nil
+}
+
 func (c *Containers) ExecInput(context.Context, string, string, ...string) (string, error) {
 	return "", ErrDesktopChannel
 }
-func (c *Containers) Screenshot(context.Context, string) ([]byte, error) {
-	return nil, ErrDesktopChannel
+
+// Screenshot runs the guest's kitty-shot helper (the same one the local image carries) and decodes
+// its picture, which travels as base64 inside the command's text output.
+func (c *Containers) Screenshot(ctx context.Context, name string) ([]byte, error) {
+	res, err := c.run(ctx, name, guestPrefix+"kitty-shot | base64 -w0")
+	if err != nil {
+		return nil, err
+	}
+	if res.ExitCode != 0 || res.TimedOut {
+		return nil, fmt.Errorf("screenshot of %s: %s", name, strings.TrimSpace(res.Stderr))
+	}
+	if res.Truncated {
+		return nil, fmt.Errorf("screenshot of %s: the picture is larger than the provider returns", name)
+	}
+	pic, err := base64.StdEncoding.DecodeString(strings.TrimSpace(res.Stdout))
+	if err != nil || len(pic) == 0 {
+		return nil, fmt.Errorf("screenshot of %s: the guest returned no picture", name)
+	}
+	return pic, nil
 }
 func (c *Containers) Stream(context.Context, string, int, int) (io.ReadCloser, error) {
 	return nil, ErrDesktopChannel

@@ -73,12 +73,10 @@ func TestContainersNeverTakeAnUnreadableInventoryForEmpty(t *testing.T) {
 func TestContainersDesktopChannelIsNotAvailableYet(t *testing.T) {
 	ctx := context.Background()
 	c := &Containers{P: NewFake(1)}
-	_, e1 := c.Exec(ctx, "n")
-	_, e2 := c.ExecInput(ctx, "n", "")
-	_, e3 := c.Screenshot(ctx, "n")
-	_, e4 := c.Stream(ctx, "n", 1, 1)
-	_, e5 := c.Tunnel(ctx, "n", 1)
-	for _, err := range []error{e1, e2, e3, e4, e5} {
+	_, e1 := c.ExecInput(ctx, "n", "")
+	_, e2 := c.Stream(ctx, "n", 1, 1)
+	_, e3 := c.Tunnel(ctx, "n", 1)
+	for _, err := range []error{e1, e2, e3} {
 		if !errors.Is(err, ErrDesktopChannel) {
 			t.Errorf("err = %v", err)
 		}
@@ -88,6 +86,70 @@ func TestContainersDesktopChannelIsNotAvailableYet(t *testing.T) {
 	}
 	if stale, err := c.ImageStale(ctx, "n", "x"); stale || err != nil {
 		t.Error("a cloud machine has no stale image")
+	}
+}
+
+func TestContainersExecQuotesAndReportsFailures(t *testing.T) {
+	ctx := context.Background()
+	f := NewFake(5)
+	c := &Containers{P: f}
+	if _, err := c.Up(ctx, container.Spec{Name: "kitty-a"}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := c.Exec(ctx, "kitty-a", "echo", "it's; rm -rf /")
+	if err != nil || !strings.Contains(out, `'it'\''s; rm -rf /'`) {
+		t.Fatalf("exec = %q %v", out, err)
+	}
+	cmd := f.Commands[0]
+	if !strings.HasPrefix(cmd, "cd /home/kitty/work && sudo -n -H -u kitty env DISPLAY=:99 'echo' ") {
+		t.Errorf("command = %q", cmd)
+	}
+	if _, err := c.Exec(ctx, "kitty-a"); err == nil {
+		t.Error("nothing to run")
+	}
+	if _, err := c.Exec(ctx, "kitty-none", "true"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown = %v", err)
+	}
+	f.ExecOut = func(string) ExecResult { return ExecResult{Stdout: "partial", Stderr: "boom", ExitCode: 2} }
+	if out, err := c.Exec(ctx, "kitty-a", "false"); err == nil || !strings.Contains(err.Error(), "exit status 2") || out != "partialboom" {
+		t.Errorf("failure = %q %v", out, err)
+	}
+	f.ExecOut = func(string) ExecResult { return ExecResult{TimedOut: true, ExitCode: -1} }
+	if _, err := c.Exec(ctx, "kitty-a", "sleep"); err == nil || !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("timeout = %v", err)
+	}
+	_ = c.Stop(ctx, "kitty-a")
+	if _, err := c.Exec(ctx, "kitty-a", "true"); !errors.Is(err, ErrNotRunning) {
+		t.Errorf("exec on a sleeper = %v", err)
+	}
+}
+
+func TestContainersScreenshotDecodesTheGuestPicture(t *testing.T) {
+	ctx := context.Background()
+	f := NewFake(5)
+	c := &Containers{P: f}
+	_, _ = c.Up(ctx, container.Spec{Name: "kitty-a"})
+	f.ExecOut = func(string) ExecResult { return ExecResult{Stdout: "UE5HZGF0YQ==\n"} } // "PNGdata"
+	pic, err := c.Screenshot(ctx, "kitty-a")
+	if err != nil || string(pic) != "PNGdata" {
+		t.Fatalf("screenshot = %q %v", pic, err)
+	}
+	if !strings.Contains(f.Commands[0], "kitty-shot | base64 -w0") {
+		t.Errorf("command = %q", f.Commands[0])
+	}
+	for name, res := range map[string]ExecResult{
+		"fails":     {ExitCode: 1, Stderr: "no display"},
+		"truncated": {Stdout: "UE5H", Truncated: true},
+		"garbage":   {Stdout: "!!!"},
+		"empty":     {},
+	} {
+		f.ExecOut = func(string) ExecResult { return res }
+		if _, err := c.Screenshot(ctx, "kitty-a"); err == nil {
+			t.Errorf("%s must fail", name)
+		}
+	}
+	if _, err := c.Screenshot(ctx, "kitty-none"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown = %v", err)
 	}
 }
 
