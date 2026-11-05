@@ -1,6 +1,7 @@
 # Local or cloud: where a kitty's desktop runs
 
-Status: design proposal, nothing is implemented yet.
+Status: design proposal. Step 1 (the provider interface, a fake and the contract tests in
+`internal/cloud`) is done; nothing reaches the gateway yet.
 
 ## Goal
 
@@ -84,7 +85,9 @@ provider before doing anything else.
 
 ## Steps
 
-1. **Interface and fake.** Pin the `Compute` contract and add a fake backend. Cover it in
+1. **Interface and fake (done).** `internal/cloud` has the `Provider` interface, `Ensure` (a lost
+   answer finds the machine by key; an ambiguous one creates nothing), an in-memory `Fake` and
+   `Contract`, the rules every provider's tests must run. Pin the `Compute` contract and add a fake backend. Cover it in
    `tests/contract`-style cases first (create twice with one key makes one machine; an ambiguous
    answer makes none; restart reconciles).
 2. **Config and per-kitty field.** `runtime: cloud`, `compute` per kitty, validation and docs in
@@ -110,7 +113,8 @@ provider before doing anything else.
 
 ## Open questions
 
-- Which provider first, and who pays for the canary?
+- Which provider first, and who pays for the canary? Decide before step 3. Suggested: Boat, since
+  the reference project proved it, with the canary on mad's account.
 - Does the live view need the same rectangle protocol over the provider's network path, or is the
   existing stream enough?
 - Where do cloud credentials live for the desktop and Android apps that talk to a remote gateway?
