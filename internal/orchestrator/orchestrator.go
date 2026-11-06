@@ -648,7 +648,40 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	// A machine just turned on has not been idle yet, and its desktop is still coming up.
 	m.use.touch(k.ID, m.now())
 	m.use.boot(k.ID, m.now())
+	if err := m.waitDesktop(ctx, k); err != nil {
+		return m.fail(k.ID, err)
+	}
 	return m.setStatus(k.ID, kitty.StatusRunning, "")
+}
+
+// How long a start waits for the desktop to come up (its live view answering), and how often it
+// asks. Past the wait the machine is called on anyway: the live view waits for itself too.
+var (
+	desktopReadyWait = 60 * time.Second
+	desktopReadyPoll = 500 * time.Millisecond
+)
+
+// waitDesktop waits, after the container is up, until its desktop says it is ready (kitty-ready),
+// with the kitty shown as starting its desktop meanwhile. An image without kitty-ready (an older
+// one, a demo) answers something else and is not waited for.
+func (m *Manager) waitDesktop(ctx context.Context, k *kitty.Kitty) error {
+	defer m.use.setStep(k.ID, "")
+	deadline := time.Now().Add(desktopReadyWait)
+	for first := true; ; first = false {
+		out, err := m.ctr().Exec(ctx, k.Container, "kitty-ready")
+		if err != nil || strings.TrimSpace(out) != "booting" || time.Now().After(deadline) {
+			return nil
+		}
+		if first {
+			m.use.setStep(k.ID, kitty.StepDesktop)
+			_ = m.setStatus(k.ID, kitty.StatusStarting, "")
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("the desktop did not come up: %w", ctx.Err())
+		case <-time.After(desktopReadyPoll):
+		}
+	}
 }
 
 // zoneChecker is what a runtime answers when it can tell a container's time zone.
