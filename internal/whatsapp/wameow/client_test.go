@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"go.mau.fi/whatsmeow"
+	"go.mau.fi/whatsmeow/proto/waCommon"
 	"go.mau.fi/whatsmeow/proto/waE2E"
 	"go.mau.fi/whatsmeow/store"
 	"go.mau.fi/whatsmeow/types"
@@ -40,6 +41,7 @@ type fakeConn struct {
 	groups     map[string]string
 	groupAsks  int
 	msgs       []*waE2E.Message
+	reads      []string
 }
 
 func (f *fakeConn) AddEventHandler(h whatsmeow.EventHandler) uint32 {
@@ -107,6 +109,19 @@ func (f *fakeConn) GetGroupInfo(_ context.Context, jid types.JID) (*types.GroupI
 		return nil, errors.New("not a member")
 	}
 	return &types.GroupInfo{GroupName: types.GroupName{Name: name}}, nil
+}
+
+func (f *fakeConn) MarkRead(_ context.Context, ids []types.MessageID, _ time.Time, chat, sender types.JID, _ ...types.ReceiptType) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reads = append(f.reads, chat.String()+" "+sender.String()+" "+strings.Join(ids, ","))
+	return nil
+}
+
+func (f *fakeConn) BuildReaction(chat, sender types.JID, id types.MessageID, reaction string) *waE2E.Message {
+	return &waE2E.Message{ReactionMessage: &waE2E.ReactionMessage{
+		Key:  &waCommon.MessageKey{RemoteJID: proto.String(chat.String()), Participant: proto.String(sender.String()), ID: proto.String(id)},
+		Text: proto.String(reaction)}}
 }
 
 func (f *fakeConn) Logout(context.Context) error {
@@ -640,5 +655,53 @@ func TestGroupNames(t *testing.T) {
 	rec.mu.Unlock()
 	if strings.Join(names, ",") != "Familia,Familia,," || f.groupAsks != 2 {
 		t.Fatalf("names = %q, asked %d", names, f.groupAsks)
+	}
+}
+
+func TestReadAndReact(t *testing.T) {
+	s, dev := paired(t)
+	blob, _ := s.Export()
+	f := &fakeConn{}
+	c := clientWith(f)
+	ref := whatsapp.Ref{Chat: "120363@g.us", Sender: "56912345678@s.whatsapp.net", ID: "m1"}
+	if err := c.MarkRead(context.Background(), ref); !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("before = %v", err)
+	}
+	if err := c.React(context.Background(), ref, "👍"); !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("before = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx, blob, func(whatsapp.Event) {}) }()
+	wait(t, "the connection", func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.connected })
+	if err := c.MarkRead(context.Background(), ref); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.React(context.Background(), whatsapp.Ref{Chat: "56912345678@s.whatsapp.net", ID: "m2"}, "❤️"); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []whatsapp.Ref{{Chat: "120363@g.us"}, {Chat: "a:x@s.whatsapp.net", ID: "m"}, {Chat: "1@g.us", Sender: "a:x@s.whatsapp.net", ID: "m"}} {
+		if err := c.MarkRead(context.Background(), bad); err == nil {
+			t.Fatalf("%+v was marked", bad)
+		}
+		if err := c.React(context.Background(), bad, "👍"); err == nil {
+			t.Fatalf("%+v got a reaction", bad)
+		}
+	}
+	cancel()
+	<-done
+	if f.reads[0] != "120363@g.us 56912345678@s.whatsapp.net m1" || len(f.reads) != 1 {
+		t.Fatalf("reads = %v", f.reads)
+	}
+	r := f.msgs[0].GetReactionMessage()
+	if f.sent[0] != "56912345678@s.whatsapp.net " || r.GetText() != "❤️" || r.GetKey().GetID() != "m2" {
+		t.Fatalf("reaction = %v", f.msgs[0])
+	}
+	// A message carries where it is, to point at it.
+	ev := translate(s, dev, &events.Message{Info: types.MessageInfo{ID: "m3", MessageSource: types.MessageSource{
+		Sender: types.NewJID("56912345678", types.DefaultUserServer), Chat: types.NewJID("56912345678", types.DefaultUserServer)}},
+		Message: &waE2E.Message{Conversation: proto.String("hola")}})[0]
+	if ev.Ref != (whatsapp.Ref{Chat: "56912345678@s.whatsapp.net", Sender: "56912345678@s.whatsapp.net", ID: "m3"}) {
+		t.Fatalf("ref = %+v", ev.Ref)
 	}
 }

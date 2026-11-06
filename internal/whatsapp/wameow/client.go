@@ -37,6 +37,8 @@ type conn interface {
 	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
 	Upload(ctx context.Context, plaintext []byte, appInfo whatsmeow.MediaType) (whatsmeow.UploadResponse, error)
 	GetGroupInfo(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
+	MarkRead(ctx context.Context, ids []types.MessageID, timestamp time.Time, chat, sender types.JID, receiptTypeExtra ...types.ReceiptType) error
+	BuildReaction(chat, sender types.JID, id types.MessageID, reaction string) *waE2E.Message
 }
 
 // Client is a whatsapp.Client over whatsmeow.
@@ -208,6 +210,7 @@ func translate(st *Store, dev *store.Device, evt any) []whatsapp.Event {
 		ev := whatsapp.Event{
 			Kind: whatsapp.EvMessage, From: phoneOf(st, e.Info.Sender, e.Info.SenderAlt),
 			Name: e.Info.PushName, Text: text, ID: e.Info.ID, Group: e.Info.IsGroup,
+			Ref: whatsapp.Ref{Chat: e.Info.Chat.String(), Sender: e.Info.Sender.String(), ID: e.Info.ID},
 		}
 		if ev.Group {
 			ev.Chat = e.Info.Chat.ToNonAD().String()
@@ -489,6 +492,47 @@ func (c *Client) SendFile(ctx context.Context, to string, f whatsapp.File, capti
 	if kind == whatsmeow.MediaAudio && caption != "" {
 		_, err = cn.SendMessage(ctx, jid, &waE2E.Message{Conversation: proto.String(caption)})
 	}
+	return err
+}
+
+// refOf is the chat and the sender of a message the bridge points at.
+func refOf(ref whatsapp.Ref) (chat, sender types.JID, err error) {
+	if ref.ID == "" {
+		return chat, sender, errors.New("no message to point at")
+	}
+	if chat, err = types.ParseJID(ref.Chat); err != nil {
+		return chat, sender, err
+	}
+	if ref.Sender != "" {
+		sender, err = types.ParseJID(ref.Sender)
+	}
+	return chat, sender, err
+}
+
+// MarkRead implements whatsapp.Client.
+func (c *Client) MarkRead(ctx context.Context, ref whatsapp.Ref) error {
+	cn, err := c.current()
+	if err != nil {
+		return err
+	}
+	chat, sender, err := refOf(ref)
+	if err != nil {
+		return err
+	}
+	return cn.MarkRead(ctx, []types.MessageID{ref.ID}, time.Now(), chat, sender)
+}
+
+// React implements whatsapp.Client.
+func (c *Client) React(ctx context.Context, ref whatsapp.Ref, emoji string) error {
+	cn, err := c.current()
+	if err != nil {
+		return err
+	}
+	chat, sender, err := refOf(ref)
+	if err != nil {
+		return err
+	}
+	_, err = cn.SendMessage(ctx, chat, cn.BuildReaction(chat, sender, ref.ID, emoji))
 	return err
 }
 
