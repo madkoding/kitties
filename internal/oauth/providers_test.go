@@ -353,7 +353,7 @@ func TestSpotifyRedirectUsesTheLoopbackIP(t *testing.T) {
 			t.Errorf("spotify %q = %q, want %q", in, got, want)
 		}
 	}
-	if got := RedirectFor("google", "http://localhost:7488/v1/oauth/callback"); got != "http://localhost:7488/v1/oauth/callback" {
+	if got := RedirectFor("microsoft", "http://localhost:7488/v1/oauth/callback"); got != "http://localhost:7488/v1/oauth/callback" {
 		t.Errorf("other services keep the address: %q", got)
 	}
 }

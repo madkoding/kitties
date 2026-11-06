@@ -5,6 +5,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/madkoding/kitties/internal/oauth"
 )
 
 func TestCheck(t *testing.T) {
@@ -94,5 +96,34 @@ func TestCheck(t *testing.T) {
 	}
 	if lookup(map[string]any{"a": map[string]any{"b": 2.0}}, "a.b") != "2" || lookup("x", "a") != "" || jsonText(map[string]any{"code": 1}) != `{"code":1}` {
 		t.Error("lookup and jsonText")
+	}
+}
+
+func TestGoogleCheckFollowsTheServices(t *testing.T) {
+	ctx := context.Background()
+	cases := []struct {
+		services, path, answer string
+	}{
+		{"", "/gmail/v1/users/me/profile", `{"emailAddress":"me@gmail.com"}`},
+		{"gmail,drive", "/gmail/v1/users/me/profile", `{"emailAddress":"me@gmail.com"}`},
+		{"calendar,drive", "/v1/userinfo", `{"email":"me@gmail.com"}`},
+	}
+	for _, c := range cases {
+		cap := &capture{answer: []string{c.answer}}
+		cap.install(t)
+		conn, err := Build("google-workspace", Settings{"token": "t", "services": c.services}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		who, err := conn.(Checker).Check(ctx)
+		if err != nil || who != "me@gmail.com" || cap.reqs[0].URL.Path != c.path {
+			t.Errorf("%q = %q %v %s", c.services, who, err, cap.reqs[0].URL)
+		}
+	}
+}
+
+func TestGoogleServicesMatchTheSignIn(t *testing.T) {
+	if strings.Join(GoogleServices, ",") != strings.Join(oauth.GoogleServiceOrder, ",") {
+		t.Errorf("connector %v, oauth %v", GoogleServices, oauth.GoogleServiceOrder)
 	}
 }
