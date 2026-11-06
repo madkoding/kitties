@@ -63,8 +63,10 @@ type WhatsApp struct {
 	Allow []string `yaml:"allow"`
 	// Kitty answers the messages (its name).
 	Kitty string `yaml:"kitty"`
-	// Groups lets the kitty answer in groups when someone on the list mentions it.
+	// Groups lets the kitty answer in the groups of AllowGroups when someone mentions it.
 	Groups bool `yaml:"groups"`
+	// AllowGroups are the groups it answers in (their ids, "…@g.us", as Settings lists them).
+	AllowGroups []string `yaml:"allow_groups"`
 	// Transcribe is the profile (openai or groq) whose speech API turns voice notes into text;
 	// empty takes the first such profile, "off" none.
 	Transcribe string `yaml:"transcribe"`
@@ -72,7 +74,7 @@ type WhatsApp struct {
 
 // Set reports whether the file says anything about WhatsApp.
 func (w WhatsApp) Set() bool {
-	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0
+	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0
 }
 
 // Provider is one AI profile.

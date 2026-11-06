@@ -46,7 +46,7 @@ func TestWhatsAppBridge(t *testing.T) {
 func TestWhatsAppFromTheFile(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.DataDir = t.TempDir()
-	cfg.WhatsApp = config.WhatsApp{Enabled: true, Allow: []string{"+56 9 1234 5678"}, Groups: true}
+	cfg.WhatsApp = config.WhatsApp{Enabled: true, Allow: []string{"+56 9 1234 5678"}, Groups: true, AllowGroups: []string{"1@g.us"}}
 	cfg.Providers = map[string]config.Provider{"main": {Kind: "groq", APIKey: "gk"}}
 	fleet, err := orchestrator.New(cfg)
 	if err != nil {
@@ -62,7 +62,7 @@ func TestWhatsAppFromTheFile(t *testing.T) {
 		t.Fatal(warn.String())
 	}
 	st := b.Status()
-	if !st.Enabled || !st.Groups || len(st.Allow) != 1 || st.Allow[0] != "56912345678" {
+	if !st.Enabled || !st.Groups || len(st.Allow) != 1 || st.Allow[0] != "56912345678" || st.AllowGroups[0] != "1@g.us" {
 		t.Fatalf("from the file = %+v", st)
 	}
 }
@@ -95,5 +95,27 @@ func TestTranscriber(t *testing.T) {
 	}
 	if _, ok := a.transcriber("", func(string) string { return "" }); ok {
 		t.Fatal("transcribes without a key")
+	}
+}
+
+func TestLibraryFile(t *testing.T) {
+	lib := map[string][]byte{"a.png": []byte("\x89PNG\r\n\x1a\nxx"), "v.mp4": []byte("....ftypmp42"), "n.ogg": []byte("OggS"), "t.txt": []byte("hola")}
+	get := libraryFile(func(name string) ([]byte, error) {
+		d, ok := lib[name]
+		if !ok {
+			return nil, os.ErrNotExist
+		}
+		return d, nil
+	})
+	for name, want := range map[string]string{"a.png": "image/png", "v.mp4": "video/mp4", "n.ogg": "audio/ogg"} {
+		if f, err := get(name); err != nil || f.MIME != want || f.Name != name {
+			t.Fatalf("%s = %+v %v", name, f, err)
+		}
+	}
+	if f, _ := get("t.txt"); !strings.HasPrefix(f.MIME, "text/") {
+		t.Fatalf("text = %q", f.MIME)
+	}
+	if _, err := get("none"); err == nil {
+		t.Fatal("a missing file was read")
 	}
 }

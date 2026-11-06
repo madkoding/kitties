@@ -464,12 +464,15 @@ func TestApplyEnvMCP(t *testing.T) {
 
 func TestWhatsAppSection(t *testing.T) {
 	base := "providers:\n  p:\n    kind: ollama\n"
-	cfg, err := Parse([]byte(base + "whatsapp:\n  enabled: true\n  allow: [\"+56 9 1234 5678\"]\n  kitty: ana\n  groups: true\n  transcribe: off\n"))
+	cfg, err := Parse([]byte(base + "whatsapp:\n  enabled: true\n  allow: [\"+56 9 1234 5678\"]\n  kitty: ana\n  groups: true\n  allow_groups: [\"1@g.us\"]\n  transcribe: off\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if w := cfg.WhatsApp; !w.Set() || !w.Enabled || w.Allow[0] != "+56 9 1234 5678" || w.Kitty != "ana" || !w.Groups || w.Transcribe != "off" {
+	if w := cfg.WhatsApp; !w.Set() || !w.Enabled || w.Allow[0] != "+56 9 1234 5678" || w.Kitty != "ana" || !w.Groups || w.Transcribe != "off" || w.AllowGroups[0] != "1@g.us" {
 		t.Fatalf("whatsapp = %+v", w)
+	}
+	if !(WhatsApp{AllowGroups: []string{"1@g.us"}}).Set() {
+		t.Fatal("a group list sets WhatsApp")
 	}
 	if (WhatsApp{Transcribe: "p"}).Set() {
 		t.Fatal("only the transcriber says the file sets WhatsApp")

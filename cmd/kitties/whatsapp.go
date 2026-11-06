@@ -3,9 +3,12 @@ package main
 import (
 	"fmt"
 	"io"
+	"mime"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/vault"
@@ -29,7 +32,10 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 		}
 	}
 	if w.Set() {
-		opt.Defaults = &whatsapp.Settings{Enabled: w.Enabled, Allow: w.Allow, Kitty: w.Kitty, Groups: w.Groups}
+		opt.Defaults = &whatsapp.Settings{Enabled: w.Enabled, Allow: w.Allow, Kitty: w.Kitty, Groups: w.Groups, AllowGroups: w.AllowGroups}
+	}
+	if a.arts != nil {
+		opt.File = libraryFile(a.arts.Get)
 	}
 	if t, ok := a.transcriber(w.Transcribe, os.Getenv); ok {
 		opt.Transcribe = t.Transcribe
@@ -40,6 +46,23 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 		return nil
 	}
 	return b
+}
+
+// libraryFile reads a file of the library for the kitties to send, with its media type from its
+// bytes (or its name, for audio and video).
+func libraryFile(get func(string) ([]byte, error)) func(string) (whatsapp.File, error) {
+	return func(name string) (whatsapp.File, error) {
+		data, err := get(name)
+		if err != nil {
+			return whatsapp.File{}, err
+		}
+		mt, _ := attach.Sniff(name, data)
+		if byName := mime.TypeByExtension(strings.ToLower(filepath.Ext(name))); byName != "" &&
+			(strings.HasPrefix(byName, "audio/") || strings.HasPrefix(byName, "video/")) {
+			mt = byName
+		}
+		return whatsapp.File{Name: name, MIME: mt, Data: data}, nil
+	}
 }
 
 // transcriber is the speech API voice notes go to: the named profile, else the first openai or
