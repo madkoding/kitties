@@ -1213,8 +1213,14 @@ export async function importKitty(ref: string, file: Blob): Promise<void> {
   if (!/^[\w-]+$/.test(ref)) {
     throw new ApiError(400, "not a kitty");
   }
-  const res = await fetch(shotURL(`/v1/kitties/${ref}/import`), {
+  let conn = savedConnection();
+  if (!conn.token) {
+    conn = await fetchLocalToken(conn);
+  }
+  // The token goes in a header, as every other call's, never in the address.
+  const res = await fetch(safeGatewayBase(conn.url) + `/v1/kitties/${ref}/import`, {
     method: "POST",
+    headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
     body: file,
   });
   if (!res.ok) {
