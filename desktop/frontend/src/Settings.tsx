@@ -45,6 +45,7 @@ import { ask } from "./Confirm";
 import Secrets from "./Secrets";
 import Exposure from "./Exposure";
 import McpConnector from "./McpConnector";
+import { SharedMemory } from "./Notes";
 import Updates from "./Updates";
 import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 
@@ -55,7 +56,8 @@ import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 // they are reached when away (notifications). Every form asks only for what it cannot guess;
 // names, addresses and limits wait under "More options".
 
-export type Tab = "models" | "connectors" | "secrets" | "notifications" | "gateway" | "preferences";
+export type Tab =
+  "models" | "connectors" | "secrets" | "memory" | "notifications" | "gateway" | "preferences";
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";
 const INPUT = "w-full px-3 py-2 text-sm";
@@ -2038,6 +2040,7 @@ export default function SettingsModal({
     { id: "models", label: t("Models") },
     { id: "connectors", label: t("Connections") },
     { id: "secrets", label: t("Secrets") },
+    { id: "memory", label: t("Shared memory") },
     { id: "notifications", label: t("Notifications") },
     { id: "gateway", label: inWails() ? t("Gateway") : t("Connection") },
     { id: "preferences", label: t("Preferences") },
@@ -2237,6 +2240,7 @@ export default function SettingsModal({
         )}
 
         {tab === "secrets" && <Secrets kitties={kitties} />}
+        {tab === "memory" && <SharedMemory />}
         {tab === "notifications" && view && (
           <NotifyForm view={view} onSaved={setView} onSetUp={setUpNtfy} />
         )}

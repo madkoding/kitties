@@ -71,6 +71,11 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	case strings.Contains(lower, "ask me before posting"):
 		// Asked to hold back, the kitty limits itself.
 		return provider.Reply{Content: "Sure.\n@limit set {\"connector\": \"team-slack\", \"action\": \"send\", \"mode\": \"ask\"}", Usage: usage}, nil
+	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "proposed to every kitty"):
+		return provider.Reply{Content: "I proposed it for every kitty: it reaches them once you say yes in the memory.", Usage: usage}, nil
+	case strings.Contains(lower, "tell every kitty that "):
+		text := strings.TrimSpace(last[strings.Index(lower, "tell every kitty that ")+len("tell every kitty that "):])
+		return provider.Reply{Content: fmt.Sprintf("Sure.\n@memory remember {\"text\": %q, \"scope\": \"shared\"}", text), Usage: usage}, nil
 	case strings.Contains(lower, "remember that "):
 		text := strings.TrimSpace(last[strings.Index(lower, "remember that ")+len("remember that "):])
 		return provider.Reply{Content: fmt.Sprintf("Noted.\n@memory remember {\"text\": %q}", text), Usage: usage}, nil
