@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p .",
+    "test": "node --experimental-strip-types --no-warnings --test --experimental-test-coverage test/*.test.ts",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
     "e2e": "playwright test -c e2e/playwright.config.ts",

@@ -261,7 +261,79 @@ test("the library: skills with a proposal, and the artifacts", async ({ page }) 
   await shot(page, "15-library-skills");
   await open(page, "#new-artifacts");
   await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
+  // The filters: a kind narrows the list, a search finds a file by its name.
+  const filters = page.getByTestId("artifact-filters");
+  await expect(filters).toBeVisible();
+  await filters.getByTestId("kind-data").click();
+  await expect(page.getByText("prices.csv").first()).toBeVisible();
+  await expect(page.getByText("competitor-notes.md")).toHaveCount(0);
+  await filters.getByTestId("kind-data").click();
+  await filters.getByRole("searchbox").fill("nothing-like-this");
+  await expect(page.getByTestId("artifacts-none")).toBeVisible();
+  await filters.getByRole("searchbox").fill("");
+  await filters.getByRole("searchbox").blur();
   await shot(page, "16-library-artifacts");
+  // A markdown file opens in a reader that draws it as a document.
+  await page.getByRole("button", { name: "competitor-notes.md", exact: true }).click();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.locator("h2", { hasText: "Competitor notes" })).toBeVisible();
+  await expect(reader.locator("table td", { hasText: "Acme" })).toBeVisible();
+  // Three headings or more: a table of contents that scrolls to each.
+  const toc = reader.getByTestId("md-toc");
+  await expect(toc.getByRole("button", { name: "Sources" })).toBeVisible();
+  await toc.getByRole("button", { name: "Sources" }).click();
+  await expect(reader.locator("#md-sources")).toBeInViewport();
+  await reader.locator("h2").first().scrollIntoViewIfNeeded();
+  await shot(page, "60-artifact-reader");
+  // Escape closes the reader and leaves the library open under it.
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+  await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
+});
+
+test("#artifact/<name> opens the reader, with the code in colour", async ({ page }) => {
+  await open(page, "#artifact/competitor-notes.md");
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.locator("h2", { hasText: "Competitor notes" })).toBeVisible();
+  await expect(reader.locator('pre[data-lang="sh"] .hl-com')).toHaveText(
+    "# the prices, once a week",
+  );
+  await expect(reader.getByTestId("artifact-share")).toBeVisible();
+  await reader.locator("pre[data-lang]").scrollIntoViewIfNeeded();
+  await shot(page, "61-artifact-code");
+  // Closing it takes the reader out of the address.
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+  expect(await page.evaluate(() => location.hash)).not.toContain("artifact");
+});
+
+test("an artifact tag in a chat opens the reader", async ({ page }) => {
+  await open(page, `#chat/${ids.single}`);
+  await page.getByTestId("artifact-tag").first().click();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader).toBeVisible();
+  await expect(reader.getByTestId("markdown")).toBeVisible();
+  // The source of the file, and back.
+  await reader.getByTestId("artifact-raw").click();
+  await expect(reader.locator("pre", { hasText: "# Launch plan" })).toBeVisible();
+  await reader.getByTestId("artifact-raw").click();
+  await expect(reader.locator("h2", { hasText: "Launch plan" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+});
+
+test("a kitty's answer reads as markdown, and its link to an artifact opens the reader", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.single}`);
+  const answer = page
+    .locator(".msg.agent .md-chat")
+    .filter({ hasText: "Here is how I would split it" });
+  await expect(answer.locator("ol li")).toHaveCount(3);
+  await answer.getByTestId("artifact-link").click();
+  await expect(
+    page.getByTestId("artifact-reader").locator("h2", { hasText: "Launch plan" }),
+  ).toBeVisible();
 });
 
 test("picking a service opens its form; an OAuth kind offers the sign-in", async ({ page }) => {

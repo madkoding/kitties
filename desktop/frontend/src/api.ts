@@ -1393,6 +1393,12 @@ export async function artifactText(name: string): Promise<string> {
     }
     return parsed.base64 ? "(binary file)" : parsed.body;
   }
+  // A link opened on a first visit (#artifact/<name>) can come before the token: it is fetched
+  // first, or the gateway refuses the file.
+  const conn = savedConnection();
+  if (!conn.token) {
+    await fetchLocalToken(conn);
+  }
   const res = await fetch(shotURL(path));
   if (!res.ok) {
     throw new ApiError(res.status, "no artifact");
