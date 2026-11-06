@@ -362,6 +362,37 @@ const dict: Dictionary = {
   "Quiet hours until {until}: {n} messages wait.":
     "Silencio hasta las {until}: {n} mensajes esperan.",
   "Remove {number}": "Quitar {number}",
+  Message: "Mensaje",
+  File: "Archivo",
+  "Voice notes": "Notas de voz",
+  "Never: the kitties write": "Nunca: los kitties escriben",
+  "Answer a voice note with one": "Responder una nota de voz con otra",
+  "Every answer": "Todas las respuestas",
+  "Short answers are read aloud; long ones and code still go as text.":
+    "Las respuestas cortas se leen en voz alta; las largas y el código siguen yendo como texto.",
+  "Needs an OpenAI profile with a key, for its speech.":
+    "Necesita un perfil de OpenAI con clave, por su voz.",
+  "Not an official API": "No es una API oficial",
+  "Kitties links as WhatsApp Web does. WhatsApp's terms do not allow it, and it may ban the number without warning.":
+    "Kitties se vincula como lo hace WhatsApp Web. Las condiciones de WhatsApp no lo permiten, y puede bloquear el número sin aviso.",
+  "A spare number, and a short list": "Un número de repuesto y una lista corta",
+  "Use a number that is not your own. Only the numbers and groups you add can talk to the kitties, and the kitties write only to them, a few messages an hour.":
+    "Usa un número que no sea el tuyo. Solo los números y grupos que agregues pueden hablar con los kitties, y los kitties solo les escriben a ellos, pocos mensajes por hora.",
+  "The session stays here": "La sesión se queda aquí",
+  "The linked device is sealed in this gateway's vault. Unlink it here or from the phone at any time.":
+    "El dispositivo vinculado queda sellado en la bóveda de este gateway. Desvincúlalo aquí o desde el teléfono cuando quieras.",
+  "Before you turn on WhatsApp": "Antes de activar WhatsApp",
+  "The kitties get a WhatsApp number of their own: the people on your list write to them, and they answer from here.":
+    "Los kitties tienen un número de WhatsApp propio: las personas de tu lista les escriben y ellos responden desde aquí.",
+  "For a business, the official way is the WhatsApp Cloud API connection (Meta Business), in Connections.":
+    "Para una empresa, la vía oficial es la conexión WhatsApp Cloud API (Meta Business), en Conexiones.",
+  "Accept and continue": "Aceptar y continuar",
+  "Voice note": "Nota de voz",
+  Reaction: "Reacción",
+  "Held by the hourly limit ({n})": "Retenidos por el límite por hora ({n})",
+  "These were not sent: more than {limit} messages went in an hour. Raise the limit above if they should go.":
+    "No se enviaron: salieron más de {limit} mensajes en una hora. Sube el límite arriba si deben salir.",
+  "Clear the list": "Vaciar la lista",
   "I understand that WhatsApp may ban this number":
     "Entiendo que WhatsApp puede bloquear este número",
   "QR code to link WhatsApp": "Código QR para vincular WhatsApp",

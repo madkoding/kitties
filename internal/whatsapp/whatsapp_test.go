@@ -350,7 +350,7 @@ func eventually(t *testing.T, what string, ok func() bool) {
 func (r *rig) linked(t *testing.T) *fakeClient {
 	t.Helper()
 	r.b.Start(context.Background())
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56 9 1234 5678"}}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56 9 1234 5678"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	f := r.next(t)
@@ -378,7 +378,7 @@ func TestOffByDefault(t *testing.T) {
 func TestLinkWithQRAndSealedSession(t *testing.T) {
 	r := newRig(t)
 	r.b.Start(context.Background())
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi"}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi"}, true); err != nil {
 		t.Fatal(err)
 	}
 	f := r.next(t)
@@ -412,13 +412,13 @@ func TestLinkWithQRAndSealedSession(t *testing.T) {
 		t.Fatal("the connector is not offered once connected")
 	}
 	// Off and on again: the kept session is handed back.
-	if err := r.b.Apply(Settings{Kitty: "mimi"}); err != nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi"}, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := r.reg.get(ConnectorName); ok {
 		t.Fatal("the connector stays offered once off")
 	}
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi"}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi"}, true); err != nil {
 		t.Fatal(err)
 	}
 	if g := r.next(t); string(g.session) != `{"secret":"keys"}` {
@@ -428,7 +428,7 @@ func TestLinkWithQRAndSealedSession(t *testing.T) {
 
 func TestSettingsAreKeptAndChecked(t *testing.T) {
 	r := newRig(t)
-	if err := r.b.Apply(Settings{Kitty: "mimi", Allow: []string{"+56 9 1234 5678", "0056912345678", "+1 (555) 000-1111"}}); err != nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi", Allow: []string{"+56 9 1234 5678", "0056912345678", "+1 (555) 000-1111"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	b2, err := New(Options{Dir: r.dir, Box: box{}, NewClient: func() Client { return newFake() }, Kitty: kittyOf})
@@ -445,7 +445,7 @@ func TestSettingsAreKeptAndChecked(t *testing.T) {
 		{Allow: []string{"12"}},
 		{Allow: make([]string, MaxAllow+1)},
 	} {
-		if err := r.b.Apply(bad); err == nil {
+		if err := r.b.Apply(bad, true); err == nil {
 			t.Fatalf("%+v was accepted", bad)
 		}
 	}
@@ -469,7 +469,7 @@ func TestNoVault(t *testing.T) {
 	if st.CanChange || st.Why == "" {
 		t.Fatalf("status = %+v", st)
 	}
-	if err := b.Apply(Settings{Enabled: true, Kitty: "x"}); !errors.Is(err, ErrNoVault) {
+	if err := b.Apply(Settings{Enabled: true, Kitty: "x"}, true); !errors.Is(err, ErrNoVault) {
 		t.Fatalf("err = %v", err)
 	}
 	if err := b.Link(); !errors.Is(err, ErrNotOn) {
@@ -586,7 +586,7 @@ func TestDesktopTaskGivesUp(t *testing.T) {
 
 func TestConnector(t *testing.T) {
 	r := newRig(t)
-	if err := r.b.Apply(Settings{Kitty: "mimi", Allow: []string{"+56912345678", "+15550001111"}}); err != nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi", Allow: []string{"+56912345678", "+15550001111"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	c := connectorOf{r.b}
@@ -595,7 +595,7 @@ func TestConnector(t *testing.T) {
 		t.Fatalf("off = %v", err)
 	}
 	r.b.Start(ctx)
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678", "+15550001111"}}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678", "+15550001111"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	f := r.next(t)
@@ -716,7 +716,7 @@ func TestLinkUnlinkAndLogout(t *testing.T) {
 		t.Fatal("still offered after a logout")
 	}
 	// Unlink while off forgets too.
-	if err := r.b.Apply(Settings{Kitty: "mimi"}); err != nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi"}, true); err != nil {
 		t.Fatal(err)
 	}
 	if err := r.b.Unlink(context.Background()); err != nil {
@@ -737,7 +737,7 @@ func TestRunFailsAndBadSession(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(r.dir, "session.bin"), []byte("garbage"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi"}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi"}, true); err != nil {
 		t.Fatal(err)
 	}
 	f := r.next(t)
@@ -762,7 +762,7 @@ func TestSessionThatCannotBeKept(t *testing.T) {
 
 func TestApplyBeforeStartWaits(t *testing.T) {
 	r := newRig(t)
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi"}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi"}, true); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -815,7 +815,7 @@ func TestSaveFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.b.opt.Dir = filepath.Join(file, "x")
-	if err := r.b.Apply(Settings{Kitty: "mimi"}); err == nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi"}, true); err == nil {
 		t.Fatal("a save into a file was accepted")
 	}
 	if err := r.b.saveSession([]byte("x")); err == nil {
@@ -850,7 +850,7 @@ func TestTypingWhileTheKittyThinks(t *testing.T) {
 func TestBusyInTheKittysLanguage(t *testing.T) {
 	r := newRig(t)
 	r.b.Start(context.Background())
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "luna", Allow: []string{"+56912345678"}}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "luna", Allow: []string{"+56912345678"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	f := r.next(t)
@@ -886,7 +886,7 @@ func TestGroups(t *testing.T) {
 		t.Fatalf("seen while off = %+v", st.SeenGroups)
 	}
 	set := Settings{Enabled: true, Kitty: "mimi", Groups: true, Allow: []string{"+56912345678"}}
-	if err := r.b.Apply(set); err != nil {
+	if err := r.b.Apply(set, true); err != nil {
 		t.Fatal(err)
 	}
 	// On, but the group is not on the list: it is offered in Settings and the mention is ignored.
@@ -907,7 +907,7 @@ func TestGroups(t *testing.T) {
 		t.Fatalf("seen = %+v", st.SeenGroups)
 	}
 	set.AllowGroups = []string{"120363@g.us", "120363@g.us"}
-	if err := r.b.Apply(set); err != nil {
+	if err := r.b.Apply(set, true); err != nil {
 		t.Fatal(err)
 	}
 	if st := r.b.Status(); len(st.AllowGroups) != 1 {
@@ -965,7 +965,7 @@ func TestGroups(t *testing.T) {
 func TestGroupList(t *testing.T) {
 	r := newRig(t)
 	for _, bad := range []string{"120363", "abc@g.us", "@g.us", "1@s.whatsapp.net", strings.Repeat("1", 41) + "@g.us"} {
-		if err := r.b.Apply(Settings{Kitty: "mimi", AllowGroups: []string{bad}}); err == nil {
+		if err := r.b.Apply(Settings{Kitty: "mimi", AllowGroups: []string{bad}}, true); err == nil {
 			t.Fatalf("%q was taken", bad)
 		}
 	}
@@ -973,10 +973,10 @@ func TestGroupList(t *testing.T) {
 	for i := range many {
 		many[i] = fmt.Sprintf("%d@g.us", i+1)
 	}
-	if err := r.b.Apply(Settings{Kitty: "mimi", AllowGroups: many}); err == nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi", AllowGroups: many}, true); err == nil {
 		t.Fatal("too many groups")
 	}
-	if err := r.b.Apply(Settings{Kitty: "mimi", AllowGroups: []string{" 1203-63@g.us "}}); err != nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi", AllowGroups: []string{" 1203-63@g.us "}}, true); err != nil {
 		t.Fatal(err)
 	}
 	// Only the last maxSeen groups are kept.
@@ -1012,7 +1012,7 @@ func TestSendToGroupsAndFiles(t *testing.T) {
 	r.b.sawLocked("120363@g.us", "Familia")
 	r.b.sawLocked("555@g.us", "Trabajo")
 	r.b.mu.Unlock()
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, Groups: true, AllowGroups: []string{"120363@g.us"}}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, Groups: true, AllowGroups: []string{"120363@g.us"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	c := connectorOf{r.b}
@@ -1159,7 +1159,7 @@ func TestDefaultsFromTheFile(t *testing.T) {
 	}
 	// Once saved from Settings, the file no longer counts.
 	b, _ = New(Options{Dir: dir, Box: box{}, NewClient: func() Client { return newFake() }, Kitty: kittyOf})
-	if err := b.Apply(Settings{Kitty: "mimi"}); err != nil {
+	if err := b.Apply(Settings{Kitty: "mimi"}, true); err != nil {
 		t.Fatal(err)
 	}
 	b, _ = New(Options{Dir: dir, Box: box{}, Defaults: &Settings{Enabled: true, Kitty: "mimi"}})
@@ -1208,7 +1208,7 @@ func TestReadAndReact(t *testing.T) {
 	if _, err := c.Call(ctx, map[string]any{"action": "react", "emoji": "👍"}); !errors.Is(err, ErrNotReady) {
 		t.Fatalf("not ready = %v", err)
 	}
-	if err := r.b.Apply(Settings{Kitty: "mimi", Allow: []string{"+56912345678"}}); err != nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi", Allow: []string{"+56912345678"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := c.Call(ctx, map[string]any{"action": "react", "emoji": "👍"}); !errors.Is(err, ErrNotOn) {
@@ -1232,7 +1232,7 @@ func TestKittyPerChat(t *testing.T) {
 	f := r.linked(t)
 	set := Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678", "+15550001111"}, Groups: true,
 		AllowGroups: []string{"120363@g.us"}, Kitties: map[string]string{"+1 555 000 1111": "luna", "120363@g.us": "luna", "56912345678": ""}}
-	if err := r.b.Apply(set); err != nil {
+	if err := r.b.Apply(set, true); err != nil {
 		t.Fatal(err)
 	}
 	if st := r.b.Status(); len(st.Kitties) != 2 || st.Kitties["15550001111"] != "k2" || st.Kitties["120363@g.us"] != "k2" {
@@ -1259,7 +1259,7 @@ func TestKittyPerChat(t *testing.T) {
 	}
 	// Moving a number to another kitty starts a new chat with it.
 	set.Kitties = map[string]string{"56912345678": "luna"}
-	if err := r.b.Apply(set); err != nil {
+	if err := r.b.Apply(set, true); err != nil {
 		t.Fatal(err)
 	}
 	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "again"})
@@ -1273,7 +1273,7 @@ func TestKittyPerChat(t *testing.T) {
 	// Bad entries.
 	for _, bad := range []map[string]string{{"12": "mimi"}, {"+56912345678": "nobody"}} {
 		set.Kitties = bad
-		if err := r.b.Apply(set); err == nil {
+		if err := r.b.Apply(set, true); err == nil {
 			t.Fatalf("%v was taken", bad)
 		}
 	}
@@ -1282,7 +1282,7 @@ func TestKittyPerChat(t *testing.T) {
 		many[fmt.Sprintf("+5691234%04d", i)] = "mimi"
 	}
 	set.Kitties = many
-	if err := r.b.Apply(set); err == nil {
+	if err := r.b.Apply(set, true); err == nil {
 		t.Fatal("too many kitties were taken")
 	}
 	if _, err := New(Options{Dir: t.TempDir(), Kitty: kittyOf, Defaults: &Settings{Kitties: map[string]string{"x": "mimi"}}}); err == nil {
@@ -1293,11 +1293,11 @@ func TestKittyPerChat(t *testing.T) {
 func TestHourlyLimit(t *testing.T) {
 	r := newRig(t)
 	f := r.linked(t)
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, MaxPerHour: 2}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, MaxPerHour: 2}, true); err != nil {
 		t.Fatal(err)
 	}
 	for _, bad := range []int{-1, MaxPerHourLimit + 1} {
-		if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", MaxPerHour: bad}); err == nil {
+		if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", MaxPerHour: bad}, true); err == nil {
 			t.Fatalf("%d was taken", bad)
 		}
 	}
@@ -1361,7 +1361,7 @@ func TestQuotes(t *testing.T) {
 		t.Fatalf("quote = %q", got)
 	}
 	// In a group the answer always quotes, only its first part.
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, Groups: true, AllowGroups: []string{"120363@g.us"}}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, Groups: true, AllowGroups: []string{"120363@g.us"}}, true); err != nil {
 		t.Fatal(err)
 	}
 	r.chats.reply = func(string) ([]chat.Turn, error) {
@@ -1387,7 +1387,7 @@ func TestQuietHours(t *testing.T) {
 	}
 	f := r.linked(t)
 	set := Settings{Enabled: true, Kitty: "luna", Allow: []string{"+56912345678"}, QuietFrom: "22:00", QuietTo: "08:00"}
-	if err := r.b.Apply(set); err != nil {
+	if err := r.b.Apply(set, true); err != nil {
 		t.Fatal(err)
 	}
 	if st := r.b.Status(); !st.Quiet || st.QuietFrom != "22:00" {
@@ -1493,7 +1493,7 @@ func TestQuietQueueSurvivesARestart(t *testing.T) {
 	r.b.now = func() time.Time { return night }
 	r.b.sleep = func(ctx context.Context, _ time.Duration) { <-ctx.Done() } // the gateway stops before 08:00
 	f := r.linked(t)
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, QuietFrom: "22:00", QuietTo: "08:00"}); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, QuietFrom: "22:00", QuietTo: "08:00"}, true); err != nil {
 		t.Fatal(err)
 	}
 	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "first", Ref: Ref{ID: "m1"}, Files: []File{{Name: "a.txt", MIME: "text/plain", Data: []byte("hi")}}})

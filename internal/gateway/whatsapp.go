@@ -12,7 +12,8 @@ import (
 // shows and changes it.
 type WhatsApp interface {
 	Status() whatsapp.Status
-	Apply(whatsapp.Settings) error
+	Apply(s whatsapp.Settings, acceptRisk bool) error
+	ClearHeld()
 	Link() error
 	Reconnect() error
 	Unlink(ctx context.Context) error
@@ -32,6 +33,7 @@ func (s *Server) whatsappRoutes() {
 	s.mux.Handle("POST /v1/whatsapp/reconnect", s.auth(s.handleWhatsAppReconnect))
 	s.mux.Handle("POST /v1/whatsapp/unlink", s.auth(s.handleWhatsAppUnlink))
 	s.mux.Handle("POST /v1/whatsapp/test", s.auth(s.handleWhatsAppTest))
+	s.mux.Handle("DELETE /v1/whatsapp/held", s.auth(s.handleWhatsAppClearHeld))
 }
 
 var errNoWhatsApp = errors.New("this gateway has no WhatsApp link")
@@ -47,7 +49,7 @@ func (s *Server) handleWhatsApp(w http.ResponseWriter, _ *http.Request) {
 }
 
 // handleSetWhatsApp keeps the settings. WhatsApp Web is not an official API and the number can
-// be banned, so turning it on must be accepted explicitly (accept_risk).
+// be banned, so turning it on the first time must be accepted explicitly (accept_risk).
 func (s *Server) handleSetWhatsApp(w http.ResponseWriter, r *http.Request) {
 	if s.whatsapp == nil {
 		fail(w, http.StatusNotFound, errNoWhatsApp)
@@ -61,11 +63,7 @@ func (s *Server) handleSetWhatsApp(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if in.Enabled && !s.whatsapp.Status().Enabled && !in.AcceptRisk {
-		fail(w, http.StatusBadRequest, errors.New("WhatsApp Web is not an official API and WhatsApp may ban the number: confirm with accept_risk"))
-		return
-	}
-	if err := s.whatsapp.Apply(in.Settings); err != nil {
+	if err := s.whatsapp.Apply(in.Settings, in.AcceptRisk); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
@@ -129,4 +127,14 @@ func (s *Server) handleWhatsAppTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// handleWhatsAppClearHeld forgets the messages the hourly limit held.
+func (s *Server) handleWhatsAppClearHeld(w http.ResponseWriter, _ *http.Request) {
+	if s.whatsapp == nil {
+		fail(w, http.StatusNotFound, errNoWhatsApp)
+		return
+	}
+	s.whatsapp.ClearHeld()
+	reply(w, http.StatusOK, s.whatsapp.Status())
 }

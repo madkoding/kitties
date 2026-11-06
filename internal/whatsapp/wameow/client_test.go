@@ -739,3 +739,32 @@ func TestSendReply(t *testing.T) {
 		t.Fatalf("direct = %v", ci)
 	}
 }
+
+func TestSendVoiceNote(t *testing.T) {
+	s, _ := paired(t)
+	blob, _ := s.Export()
+	f := &fakeConn{}
+	c := clientWith(f)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx, blob, func(whatsapp.Event) {}) }()
+	wait(t, "the connection", func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.connected })
+	// One Ogg page whose granule position is three seconds at 48 kHz.
+	page := append([]byte("OggS\x00\x04"), 0x00, 0x32, 0x02, 0, 0, 0, 0, 0)
+	voice := whatsapp.File{Name: "voice.ogg", MIME: "audio/ogg", Data: page, Voice: true}
+	if err := c.SendFile(context.Background(), "56912345678", voice, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SendFile(context.Background(), "56912345678", whatsapp.File{Name: "song.mp3", MIME: "audio/mpeg", Data: []byte("mp3")}, ""); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	<-done
+	a := f.msgs[0].GetAudioMessage()
+	if !a.GetPTT() || a.GetMimetype() != whatsapp.VoiceMIME || a.GetSeconds() != 3 {
+		t.Fatalf("voice note = %v", a)
+	}
+	if b := f.msgs[1].GetAudioMessage(); b.GetPTT() || b.Seconds != nil {
+		t.Fatalf("an audio went as a voice note: %v", b)
+	}
+}

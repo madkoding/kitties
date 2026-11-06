@@ -2237,7 +2237,7 @@ test("Settings: the Claude connector shows its switches, the command and the sig
   expect(tokenRead).toBe(0);
 });
 
-test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the list", async ({
+test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps the list", async ({
   page,
 }) => {
   const qr = fs
@@ -2255,16 +2255,32 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
       { id: "120363098765432109@g.us", name: "Trabajo" },
     ],
     can_change: true,
+    can_speak: true,
+    risk_accepted: false,
   };
   const put: Record<string, unknown>[] = [];
   const tests: unknown[] = [];
+  const cleared: string[] = [];
   await page.route("**/v1/whatsapp", (route) => {
     if (route.request().method() === "PUT") {
       const body = route.request().postDataJSON() as Record<string, unknown>;
       put.push(body);
-      const { accept_risk: _risk, ...settings } = body;
-      wa = { ...wa, ...settings, kitty_name: "mimi", state: "qr", qr: "2@demo", qr_png: qr };
+      const { accept_risk: risk, ...settings } = body;
+      wa = {
+        ...wa,
+        ...settings,
+        risk_accepted: wa.risk_accepted || !!risk,
+        kitty_name: "mimi",
+        state: "qr",
+        qr: "2@demo",
+        qr_png: qr,
+      };
     }
+    return route.fulfill({ json: wa });
+  });
+  await page.route("**/v1/whatsapp/held", (route) => {
+    cleared.push(route.request().method());
+    wa = { ...wa, held: 0, held_log: [] };
     return route.fulfill({ json: wa });
   });
   await page.route("**/v1/whatsapp/test", (route) => {
@@ -2296,10 +2312,22 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
   await box.getByTestId("whatsapp-limit").locator("input").fill("30");
   await box.getByLabel("Quiet hours start").fill("22:00");
   await box.getByLabel("Quiet hours end").fill("08:00");
-  // Turning it on waits for the risk to be accepted.
+  await box.getByTestId("whatsapp-voice").locator("select").selectOption("mirror");
+  // Turning it on the first time shows the welcome: cancelling it leaves it off.
   await box.getByTestId("whatsapp-enabled").click();
-  await expect(box.getByTestId("whatsapp-save")).toBeDisabled();
-  await box.getByTestId("whatsapp-accept").check();
+  const welcome = page.getByTestId("whatsapp-welcome");
+  await expect(welcome).toContainText("Before you turn on WhatsApp");
+  await expect(welcome).toContainText("Cloud API");
+  await page.keyboard.press("Escape");
+  await expect(welcome).toHaveCount(0);
+  await expect(box.getByTestId("whatsapp-enabled").locator("input")).not.toBeChecked();
+  await box.getByTestId("whatsapp-enabled").click();
+  await expect(welcome.getByTestId("whatsapp-welcome-accept")).toBeDisabled();
+  await welcome.getByTestId("whatsapp-accept").check();
+  await shot(page, "65-whatsapp-welcome");
+  await welcome.getByTestId("whatsapp-welcome-accept").click();
+  await expect(welcome).toHaveCount(0);
+  await expect(box.getByTestId("whatsapp-enabled").locator("input")).toBeChecked();
   await box.getByTestId("whatsapp-save").click();
   await expect(box.getByTestId("whatsapp-qr")).toBeVisible();
   await expect(box.getByTestId("whatsapp-state")).toContainText("Waiting for the QR code");
@@ -2314,6 +2342,7 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
       max_per_hour: 30,
       quiet_from: "22:00",
       quiet_to: "08:00",
+      voice: "mirror",
       accept_risk: true,
     },
   ]);
@@ -2333,6 +2362,38 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
     timeout: 10_000,
   });
   await expect(box).toContainText("2 messages from other numbers were ignored");
+  // The hourly limit held some: Settings lists them, newest first, and clears the list.
+  wa = {
+    ...wa,
+    held: 2,
+    held_log: [
+      {
+        at: "2026-11-06T18:42:00Z",
+        to: "120363012345678901@g.us",
+        name: "Familia",
+        kind: "voice",
+        text: "¡Listo! Ya reservé la mesa para el sábado a las nueve.",
+      },
+      {
+        at: "2026-11-06T18:40:00Z",
+        to: "56912345678",
+        kind: "text",
+        text: "Te dejo el resumen de la reunión en la biblioteca.",
+      },
+    ],
+  };
+  const held = box.getByTestId("whatsapp-held");
+  await expect(held).toContainText("Held by the hourly limit (2)", { timeout: 20_000 });
+  await held.locator("summary").click();
+  await expect(held.getByTestId("whatsapp-held-item")).toHaveCount(2);
+  await expect(held.getByTestId("whatsapp-held-item").first()).toContainText("Familia");
+  await expect(held.getByTestId("whatsapp-held-item").first()).toContainText("Voice note");
+  await expect(held.getByTestId("whatsapp-held-item").nth(1)).toContainText("+56912345678");
+  await held.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await shot(page, "66-whatsapp-held");
+  await held.getByTestId("whatsapp-held-clear").click();
+  await expect(held).toHaveCount(0);
+  expect(cleared).toEqual(["DELETE"]);
   await box.getByTestId("whatsapp-test").click();
   await expect(box.getByTestId("whatsapp-note")).toContainText("Sent");
   expect(tests).toEqual([{ to: "56912345678" }]);
@@ -2349,6 +2410,11 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
   await expect(box.getByTestId("whatsapp-relink")).toHaveCount(0);
   await box.getByTestId("whatsapp-reconnect").click();
   expect(reconnects).toEqual(["POST"]);
+  // Once accepted, turning it off and on again does not ask again.
+  await box.getByTestId("whatsapp-enabled").click();
+  await box.getByTestId("whatsapp-enabled").click();
+  await expect(box.getByTestId("whatsapp-enabled").locator("input")).toBeChecked();
+  await expect(page.getByTestId("whatsapp-welcome")).toHaveCount(0);
 });
 
 test("Settings: the MCP clients can be revoked and the token is read only on request", async ({

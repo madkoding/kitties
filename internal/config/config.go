@@ -81,12 +81,18 @@ type WhatsApp struct {
 	// Transcribe is the profile (openai or groq) whose speech API turns voice notes into text;
 	// empty takes the first such profile, "off" none.
 	Transcribe string `yaml:"transcribe"`
+	// Voice is when the kitties answer with a voice note: mirror (a voice note gets one),
+	// always, or off (the default).
+	Voice string `yaml:"voice"`
+	// Speak is the openai profile whose speech API reads the answers aloud; empty takes the first
+	// such profile, "off" none. SpeakVoice is its voice (alloy, nova, …; empty: alloy).
+	Speak      string `yaml:"speak"`
+	SpeakVoice string `yaml:"speak_voice"`
 }
 
 // Set reports whether the file says anything about WhatsApp.
 func (w WhatsApp) Set() bool {
-	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != ""
-
+	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != "" || w.Voice != ""
 }
 
 // Provider is one AI profile.

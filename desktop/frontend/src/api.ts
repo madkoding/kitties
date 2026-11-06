@@ -794,6 +794,7 @@ export const api = {
   unlinkWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/unlink"),
   testWhatsApp: (to: string) =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/whatsapp/test", { to }),
+  clearWhatsAppHeld: () => request<WhatsAppStatus>("DELETE", "/v1/whatsapp/held"),
   revokeMcpClient: (id: string) =>
     request<{ revoked: string }>("DELETE", `/v1/mcp/clients/${encodeURIComponent(id)}`),
   // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
@@ -1292,6 +1293,19 @@ export type WhatsAppSettings = {
   // quiet_from and quiet_to ("22:00", "08:00") are the quiet hours; empty: none.
   quiet_from?: string;
   quiet_to?: string;
+  // voice is when the kitties answer with a voice note: "" never, "mirror" a voice note gets
+  // one, "always" every answer.
+  voice?: "" | "mirror" | "always";
+};
+
+// WhatsAppHeld is a message the hourly limit did not send: to is a number (digits) or a group
+// (its id, with its name).
+export type WhatsAppHeld = {
+  at: string;
+  to: string;
+  name?: string;
+  kind: "text" | "voice" | "file" | "reaction";
+  text?: string;
 };
 
 // WhatsAppGroup is a group that wrote lately, to put on the list.
@@ -1319,6 +1333,11 @@ export type WhatsAppStatus = WhatsAppSettings & {
   seen_groups?: WhatsAppGroup[];
   sent_last_hour?: number;
   held?: number;
+  held_log?: WhatsAppHeld[];
+  // can_speak is true when there is a speech service for voice notes; risk_accepted once the
+  // person accepted, the first time, that WhatsApp may ban the number.
+  can_speak?: boolean;
+  risk_accepted?: boolean;
   quiet?: boolean;
   waiting?: number;
   can_change: boolean;
