@@ -32,7 +32,7 @@ func (s *Server) WithMCP(token string, exec bool) *Server {
 		return s
 	}
 	srv := mcp.New("kitties", s.version)
-	for _, t := range s.mcpTools(exec) {
+	for _, t := range append(s.mcpTools(exec), s.mcpMoreTools()...) {
 		srv.Add(t)
 	}
 	// Methods are named so the page's "GET /" does not swallow them; GET and DELETE are answered 405.

@@ -312,3 +312,20 @@ func TestUseTrackerCounts(t *testing.T) {
 		t.Errorf("streams = %d", s)
 	}
 }
+
+func TestComputeFollowsTheConfiguration(t *testing.T) {
+	m, _, _, solo := powerManager(t)
+	if got, err := m.Compute(solo.ID); err != nil || got != "local" {
+		t.Fatalf("compute = %q %v", got, err)
+	}
+	m.cfg.Containers.Runtime = "cloud"
+	if got, _ := m.Compute(solo.ID); got != "cloud" {
+		t.Errorf("a cloud deployment: %q", got)
+	}
+	if _, err := m.Compute("team-1"); !errors.Is(err, kitty.ErrNoMachine) {
+		t.Errorf("no desktop: %v", err)
+	}
+	if _, err := m.Compute("zz"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown: %v", err)
+	}
+}

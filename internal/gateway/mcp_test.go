@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/madkoding/kitties/internal/agenda"
+	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/kitty"
 )
@@ -247,5 +249,142 @@ func TestMCPChatTools(t *testing.T) {
 	// Wrong argument shapes are protocol errors.
 	if _, _, resp := tool(t, s, "kitty_get", "not an object"); resp["error"] == nil {
 		t.Error("bad arguments")
+	}
+}
+
+// computeFleet is a powerFleet that also says where desktops run.
+type computeFleet struct{ *powerFleet }
+
+func (computeFleet) Compute(ref string) (string, error) {
+	if ref == "bo" {
+		return "", kitty.ErrNoMachine
+	}
+	return "cloud", nil
+}
+
+func TestMCPMachineTools(t *testing.T) {
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": {ID: "a1", Name: "ana", Desktop: true, Status: kitty.StatusRunning}}}
+	chats := &fakeChats{sessions: map[string]*chat.Session{}}
+	// A fleet that knows neither compute nor power says so.
+	plain := New(f, chats, "gw", "test").WithMCP(mcpToken, false)
+	if _, isErr, _ := tool(t, plain, "kitty_compute", map[string]any{"ref": "ana"}); !isErr {
+		t.Error("compute without support")
+	}
+	if _, isErr, _ := tool(t, plain, "kitty_power", map[string]any{"ref": "ana", "on": true}); !isErr {
+		t.Error("power without support")
+	}
+	p := &powerFleet{fakeFleet: f, power: kitty.Power{State: kitty.PowerOn}}
+	s := New(computeFleet{p}, chats, "gw", "test").WithMCP(mcpToken, false)
+	text, _, _ := tool(t, s, "kitty_compute", map[string]any{"ref": "ana"})
+	if !strings.Contains(text, `"compute": "cloud"`) || !strings.Contains(text, `"state": "on"`) {
+		t.Errorf("kitty_compute: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "kitty_compute", map[string]any{"ref": "bo"}); !isErr {
+		t.Error("no machine")
+	}
+	if _, _, resp := tool(t, s, "kitty_power", map[string]any{"ref": "ana"}); resp["error"] == nil {
+		t.Error("on is required")
+	}
+	if text, _, _ = tool(t, s, "kitty_power", map[string]any{"ref": "ana", "on": true}); !strings.Contains(text, "starting") || len(p.ons) != 1 {
+		t.Errorf("power on: %q %v", text, p.ons)
+	}
+	p.inUse = true
+	if _, isErr, _ := tool(t, s, "kitty_power", map[string]any{"ref": "ana", "on": false}); !isErr {
+		t.Error("off while in use must fail")
+	}
+	if text, _, _ = tool(t, s, "kitty_power", map[string]any{"ref": "ana", "on": false, "force": true}); !strings.Contains(text, "off") || len(p.offs) != 1 || !p.offs[0].Force {
+		t.Errorf("forced off: %q %v", text, p.offs)
+	}
+	if _, isErr, _ := tool(t, s, "kitty_power", map[string]any{"ref": "bo", "on": true}); !isErr {
+		t.Error("power of a missing machine")
+	}
+}
+
+func TestMCPApprovalsAndGoals(t *testing.T) {
+	s, _, _ := mcpServer(false)
+	// Nothing wired: the tools say so.
+	for _, c := range []struct {
+		name string
+		args map[string]any
+	}{
+		{"approval_list", map[string]any{}}, {"approval_reject", map[string]any{"id": "x"}},
+		{"goal_list", map[string]any{}}, {"goal_add", map[string]any{"kitty": "ana", "title": "t"}},
+		{"goal_run", map[string]any{"id": "g1"}}, {"goal_remove", map[string]any{"id": "g1"}},
+		{"kitty_journal", map[string]any{"ref": "ana"}},
+	} {
+		if _, isErr, _ := tool(t, s, c.name, c.args); !isErr {
+			t.Errorf("%s without its service", c.name)
+		}
+	}
+	ap := &fakeApprover{list: []approvals.Approval{{ID: "p1", Status: approvals.Pending, Kitty: "a1"}}}
+	ag := newFakeAgenda()
+	s.WithApprovals(ap).WithAgenda(ag)
+	if text, _, _ := tool(t, s, "approval_list", map[string]any{"status": "pending"}); !strings.Contains(text, "p1") {
+		t.Errorf("approval_list: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "approval_reject", map[string]any{"id": "ghost"}); !isErr {
+		t.Error("unknown approval")
+	}
+	if text, _, _ := tool(t, s, "approval_reject", map[string]any{"id": "p1", "reason": "no"}); !strings.Contains(text, "rejected") {
+		t.Errorf("approval_reject: %q", text)
+	}
+	// There is no tool to approve.
+	resp, _ := rpc(s, "tools/list", nil)
+	if strings.Contains(string(mustJSON(resp)), "approval_approve") {
+		t.Error("approving is the person's")
+	}
+	text, _, _ := tool(t, s, "goal_add", map[string]any{"kitty": "ana", "title": "Inbox", "every": "@hourly"})
+	if !strings.Contains(text, `"id": "g1"`) {
+		t.Fatalf("goal_add: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "goal_add", map[string]any{"kitty": "ghost", "title": "t"}); !isErr {
+		t.Error("goal for a missing kitty")
+	}
+	if _, isErr, _ := tool(t, s, "goal_add", map[string]any{"kitty": "ana", "title": "t", "on": []string{"nope"}}); !isErr {
+		t.Error("goal on an unknown connector")
+	}
+	if _, isErr, _ := tool(t, s, "goal_add", map[string]any{"kitty": "ana", "title": "t", "every": "bad cron"}); !isErr {
+		t.Error("bad schedule")
+	}
+	if text, _, _ = tool(t, s, "goal_list", map[string]any{"kitty": "ana"}); !strings.Contains(text, "Inbox") {
+		t.Errorf("goal_list: %q", text)
+	}
+	if text, _, _ = tool(t, s, "goal_list", map[string]any{}); !strings.Contains(text, "Inbox") {
+		t.Errorf("goal_list all: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "goal_list", map[string]any{"kitty": "ghost"}); !isErr {
+		t.Error("goals of a missing kitty")
+	}
+	if text, _, _ = tool(t, s, "goal_run", map[string]any{"id": "g1"}); !strings.Contains(text, "chat-g1") {
+		t.Errorf("goal_run: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "goal_run", map[string]any{"id": "zz"}); !isErr {
+		t.Error("run a missing goal")
+	}
+	ag.entries["a1"] = []agenda.Entry{{}, {}, {}}
+	if text, _, _ = tool(t, s, "kitty_journal", map[string]any{"ref": "ana", "n": 2}); strings.Count(text, "{") != 3 {
+		t.Errorf("kitty_journal: %q", text)
+	}
+	if text, _, _ = tool(t, s, "kitty_journal", map[string]any{"ref": "ana", "n": 9999}); !strings.Contains(text, "journal") {
+		t.Errorf("journal default: %q", text)
+	}
+	if text, _, _ = tool(t, s, "kitty_journal", map[string]any{"ref": "bob"}); text == "" {
+		t.Error("journal of a missing kitty")
+	}
+	if text, _, _ = tool(t, s, "goal_remove", map[string]any{"id": "g1"}); !strings.Contains(text, "removed") {
+		t.Errorf("goal_remove: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "goal_remove", map[string]any{"id": "g1"}); !isErr {
+		t.Error("remove twice")
+	}
+	// An approval service that holds nothing answers with an error result.
+	s.WithApprovals(&fakeApprover{none: true})
+	if _, isErr, _ := tool(t, s, "approval_list", map[string]any{}); !isErr {
+		t.Error("approvals off")
+	}
+	// An empty journal is a list, not null.
+	ag.entries = map[string][]agenda.Entry{}
+	if text, _, _ = tool(t, s, "kitty_journal", map[string]any{"ref": "ana"}); !strings.Contains(text, "[]") {
+		t.Errorf("empty journal: %q", text)
 	}
 }
