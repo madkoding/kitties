@@ -49,9 +49,15 @@ func ValidAutoOff(minutes int) error {
 	return nil
 }
 
+// StepDesktop is a starting machine whose container is up and whose desktop is coming up.
+const StepDesktop = "desktop"
+
 // Power is what is known about a kitty's machine now.
 type Power struct {
 	State string `json:"state"` // on | starting | off | error
+	// Step is what a starting machine is doing: StepDesktop once its container is up and its
+	// desktop is still coming up (empty before, while the container is made or its image pulled).
+	Step  string `json:"step,omitempty"`
 	Error string `json:"error,omitempty"`
 	// OffReason is why it is off: idle, manual or kitty (empty when unknown or on).
 	OffReason string `json:"off_reason,omitempty"`

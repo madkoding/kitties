@@ -527,6 +527,7 @@ const dict: Dictionary = {
   "you are watching its desktop": "você está vendo a área de trabalho dele",
   "running a command": "executando um comando",
   "in use": "em uso",
+  "Starting the desktop…": "Iniciando a área de trabalho…",
   "Starting…": "Iniciando…",
   "Failed to start: {error}": "Não conseguiu iniciar: {error}",
   "Failed to start": "Não conseguiu iniciar",

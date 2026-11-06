@@ -49,7 +49,7 @@ func TestADesktopFollowsTheHostsTimeZone(t *testing.T) {
 	if err := m.Start(ctx, "mimi"); err != nil {
 		t.Fatal(err)
 	}
-	if c := strings.Join(z.calls, "|"); c != "list|start" || z.asked[len(z.asked)-1] != "America/Santiago" {
+	if c := strings.Join(z.calls, "|"); c != "list|start|exec" || z.asked[len(z.asked)-1] != "America/Santiago" {
 		t.Errorf("same zone: calls %q asked %v", c, z.asked)
 	}
 
@@ -109,7 +109,7 @@ func TestADesktopKeepsTheConfiguredTimeZone(t *testing.T) {
 	_ = m.Stop(ctx, "mimi")
 	z.calls = nil
 	_ = m.Start(ctx, "mimi")
-	if c := strings.Join(z.calls, "|"); c != "list|start" || z.asked[len(z.asked)-1] != "Asia/Tokyo" {
+	if c := strings.Join(z.calls, "|"); c != "list|start|exec" || z.asked[len(z.asked)-1] != "Asia/Tokyo" {
 		t.Errorf("calls %q asked %v", c, z.asked)
 	}
 }
@@ -123,7 +123,7 @@ func TestARuntimeWithoutZonesIsLeftAlone(t *testing.T) {
 	_ = m.Stop(ctx, "mimi")
 	f.calls = nil
 	_ = m.Start(ctx, "mimi")
-	if c := strings.Join(f.calls, "|"); c != "list|start" {
+	if c := strings.Join(f.calls, "|"); c != "list|start|exec" {
 		t.Errorf("calls %q", c)
 	}
 }
