@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { artifactText, fileText, shotData, shotURL } from "./api";
-import { previewOf } from "./library";
+import { previewOf } from "./artifacts";
 import { headings, highlight, inline, markdown, type Inline } from "./markdown";
 import { t } from "./i18n";
 import { Modal } from "./Modal";
