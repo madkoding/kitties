@@ -55,3 +55,26 @@ test("facets: only the kinds and kitties the library has", () => {
   assert.deepEqual(facets(list), { kinds: ["doc", "data", "image"], by: ["luna", "mimi"] });
   assert.deepEqual(facets([]), { kinds: [], by: [] });
 });
+
+test("previewOf: pictures, text, and what has no preview", async () => {
+  const { previewOf } = await import("../src/library.ts");
+  assert.equal(previewOf("cat.PNG"), "image");
+  assert.equal(previewOf("photo.jpeg"), "image");
+  assert.equal(previewOf("notes.md"), "text");
+  assert.equal(previewOf("data.csv"), "text");
+  assert.equal(previewOf("README"), "text");
+  assert.equal(previewOf("report.pdf"), "none");
+  assert.equal(previewOf("deck.pptx"), "none");
+});
+
+test("bytes: sizes a person reads", async () => {
+  const { bytes } = await import("../src/library.ts");
+  assert.equal(bytes(0), "0 B");
+  assert.equal(bytes(-5), "0 B");
+  assert.equal(bytes(812), "812 B");
+  assert.equal(bytes(4300), "4.2 KB");
+  assert.equal(bytes(2048), "2 KB");
+  assert.equal(bytes(13 * 1024 * 1024 + 5), "13 MB");
+  assert.equal(bytes(1.5 * 1024 ** 3), "1.5 GB");
+  assert.equal(bytes(3 * 1024 ** 5), "3072 TB");
+});

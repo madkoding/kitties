@@ -444,6 +444,36 @@ const dict: Dictionary = {
   "Cookies, sessions and passwords backed up {when}.": "Cookies, sessões e senhas copiados {when}.",
   "Cookies, sessions and passwords are not backed up yet.":
     "Cookies, sessões e senhas ainda não foram copiados.",
+  "This file is not there any more.": "Este arquivo não está mais aí.",
+  "There is no preview for this kind of file: download it.":
+    "Não há prévia para este tipo de arquivo: baixe-o.",
+  "Update {name}'s desktop? It restarts. Its files, settings and programs stay; its cookies, sessions and saved passwords are backed up first and put back in the new one.":
+    "Atualizar a área de trabalho de {name}? Ela reinicia. Seus arquivos, configurações e programas ficam; antes, seus cookies, sessões e senhas salvas são copiados e colocados na nova.",
+  "Put {file} back into {name}'s computer? Files it has that are newer stay as they are.":
+    "Restaurar {file} no computador de {name}? Os arquivos dele que forem mais novos ficam como estão.",
+  Restore: "Restaurar",
+  "Kept on this computer, safe from updates: home and programs {home}, work {work}, Shared {shared}.":
+    "Guardado neste computador, a salvo das atualizações: início e programas {home}, trabalho {work}, Compartilhado {shared}.",
+  "Kept on this computer, safe from updates: work {work}, Shared {shared}. Its settings and programs join them at its next update.":
+    "Guardado neste computador, a salvo das atualizações: trabalho {work}, Compartilhado {shared}. Suas configurações e programas se juntam na próxima atualização.",
+  "Shared holds up to {quota}.": "Compartilhado comporta até {quota}.",
+  "Its settings and programs are moving to this computer: they will be there after its next start.":
+    "Suas configurações e programas estão indo para este computador: estarão lá após o próximo início.",
+  "Export files": "Exportar arquivos",
+  "Restore from an export": "Restaurar de uma exportação",
+  "The export leaves out keys, passwords and the browser's sessions; those stay in the sealed backup.":
+    "A exportação deixa de fora chaves, senhas e as sessões do navegador; essas ficam na cópia criptografada.",
+  "What the kitties made for you, from the Shared folder of their computers: documents, pictures, files. It stays there through updates.":
+    "O que os kitties fizeram para você, da pasta Compartilhado dos computadores deles: documentos, imagens, arquivos. Fica lá através das atualizações.",
+  "Each kitty's folder holds up to {quota}.": "A pasta de cada kitty comporta até {quota}.",
+  "Copy it into the library, where every kitty can read it":
+    "Copiar para a biblioteca, onde todos os kitties podem lê-lo",
+  "keep in library": "guardar na biblioteca",
+  "Delete {name} from {kitty}'s Shared folder?":
+    "Excluir {name} da pasta Compartilhado de {kitty}?",
+  "Nothing shared yet. Ask a kitty to share a file with you: it leaves it in ~/Shared on its computer and it shows up here.":
+    "Nada compartilhado ainda. Peça a um kitty para compartilhar um arquivo com você: ele o deixa em ~/Shared no computador dele e aparece aqui.",
+  shared: "compartilhado",
   "Back up now": "Copiar agora",
   "The backup is sealed and kept away from the desktop, and goes back into it when it is made anew. It is also made when the desktop stops.":
     "A cópia é criptografada e guardada longe da área de trabalho, e volta a ela quando é refeita. Também é feita quando a área de trabalho para.",

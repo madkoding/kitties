@@ -118,6 +118,24 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     "text/markdown",
   );
   await api("PUT", "/v1/artifacts/prices.csv", "name,price\nAcme,12\nGlobex,20\n", "text/csv");
+  // What the kitties left in the Shared folders of their computers (a folder of the host each).
+  const shared = (kitty: string, file: string, data: string | Buffer) => {
+    const p = path.join(dataDir, "shared", kitty, file);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, data);
+  };
+  shared(
+    "tom",
+    "launch-checklist.md",
+    "# Launch checklist\n\n- [x] Landing page copy\n- [x] Pricing table\n- [ ] Announcement post\n\nDrafted on the desktop, in LibreOffice and Mousepad.",
+  );
+  shared(
+    "tom",
+    "screens/app-icon.png",
+    fs.readFileSync(path.join(ROOT, "desktop/build/appicon.png")),
+  );
+  shared("luna", "budget.csv", "item,cost\nAds,120\nDomain,12\n");
+  shared("luna", "press-kit.pdf", "%PDF-1.4\n% a demo file\n");
   fs.mkdirSync(path.join(dataDir, "skills/proposed"), { recursive: true });
   fs.writeFileSync(
     path.join(dataDir, "skills/proposed/close-a-cookie-banner.md"),

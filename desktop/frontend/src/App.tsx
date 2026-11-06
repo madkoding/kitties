@@ -30,6 +30,7 @@ type ModalKind =
   | "models-add"
   | "library"
   | "artifacts"
+  | "shared"
   | "connector"
   | "artifact"
   | "approvals"
@@ -45,10 +46,10 @@ function routeFromHash(): {
   artifact: string;
 } {
   const m = location.hash.match(
-    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications|preferences))?/,
+    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|preferences))?/,
   );
   const n = location.hash.match(
-    /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications|preferences)/,
+    /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|preferences)/,
   );
   const c = location.hash.match(/^#connector\/([a-z0-9-]+)/);
   // #artifact/<name> opens a file of the library in the reader: a link that can be shared.
@@ -605,9 +606,9 @@ export default function App() {
           }}
         />
       )}
-      {(modal === "library" || modal === "artifacts") && (
+      {(modal === "library" || modal === "artifacts" || modal === "shared") && (
         <LibraryModal
-          initial={modal === "artifacts" ? "artifacts" : "skills"}
+          initial={modal === "artifacts" || modal === "shared" ? modal : "skills"}
           onClose={closeModal}
         />
       )}
