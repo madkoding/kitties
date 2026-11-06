@@ -26,8 +26,9 @@ escribirles con el conector `whatsapp-web`.
 1. Ajustes, **Conexiones**, la sección **WhatsApp (dispositivo vinculado)** al final.
 2. Elige **el kitty que responde** y agrega los **números que pueden escribir** con su código de
    país (`+56 9 1234 5678`). La lista parte vacía: hasta que agregues a alguien, se ignora todo
-   mensaje. Marca **Responder en grupos cuando alguien de la lista nombra al kitty** para que también
-   hable en grupos.
+   mensaje. Marca **Responder en grupos cuando alguien nombra al kitty** para que también hable en
+   grupos, y elige los grupos: ahí aparecen los que escribieron hace poco (WhatsApp no le da a un
+   dispositivo vinculado la lista de grupos hasta que escriben).
 3. Marca **Activar WhatsApp**, luego **Entiendo que WhatsApp puede bloquear este número**, y
    **Guardar**.
 4. Aparece un código QR. En el teléfono del número de los kitties: WhatsApp, Ajustes,
@@ -49,14 +50,19 @@ olvida la sesión.
 - **"escribiendo…" mientras piensa.** El chat del teléfono muestra al kitty escribiendo hasta que
   sale la respuesta. Un mensaje que llega mientras sigue ocupado recibe un aviso corto en el idioma
   del kitty (el de su alma, o si no el del mensaje: inglés, español o portugués).
-- **Grupos, cuando lo nombran.** Con grupos activado, un mensaje de grupo se responde solo si quien
-  escribe está en la lista y menciona con @ al número de los kitties, responde a uno de sus
-  mensajes o nombra al kitty. Cada grupo tiene su chat (`WhatsApp group …`), con cada línea firmada
-  por quien la escribió; la respuesta va al grupo.
+- **Grupos con su propia lista.** Con grupos activado, el kitty responde solo en los grupos que
+  elegiste, y ahí cualquiera le habla mencionando con @ al número de los kitties, respondiendo a uno
+  de sus mensajes o nombrando al kitty. Cada grupo tiene su chat (`WhatsApp group: <nombre>`), con
+  cada línea firmada por quien la escribió; la respuesta va al grupo. Una mención en un grupo que no
+  está en la lista se ignora y se cuenta.
 - **Fotos, videos, documentos y audios.** Le llegan al kitty como archivos del chat (hasta 25 MB
   cada uno), con su pie de foto como texto. Una **nota de voz** se pasa a texto con la API de voz
-  (Whisper) de un perfil `openai` o `groq` con llave; sin uno llega como archivo de audio. Stickers,
-  ubicaciones y contactos no se responden.
+  (Whisper) de un perfil `openai` o `groq` con llave; sin uno llega como archivo de audio.
+- **Stickers, ubicaciones y contactos.** Un sticker llega como su imagen (con su emoji), una
+  ubicación como su nombre y dirección con un enlace al mapa, y un contacto compartido como su
+  nombre y números.
+- **Archivos de vuelta.** Un archivo que el kitty guarda en la biblioteca mientras responde le llega
+  solo a la persona (o al grupo): una imagen como imagen y lo demás como documento (hasta 16 MB).
 - **La lista funciona en ambos sentidos.** Un mensaje de un número que no está se ignora (y se
   cuenta en Ajustes) sin respuesta; los kitties solo pueden escribir a números de la lista.
 - **Los kitties escriben con el conector.** Mientras el vínculo está conectado, `whatsapp-web` se
@@ -64,10 +70,12 @@ olvida la sesión.
 
   ```
   @connector whatsapp-web {"action": "send", "to": "+56912345678", "text": "El informe está listo."}
+  @connector whatsapp-web {"action": "send", "to": "Familia", "text": "Aquí está.", "file": "informe.pdf"}
   @connector whatsapp-web {"action": "status"}
   ```
 
-  Sin `to` escribe a quien escribió último (o al único número de la lista). Un envío llega a otras
+  `to` es un número o un grupo de la lista (su nombre o su id); `file` es un archivo de la
+  biblioteca, que va con `text` como pie. Sin `to` escribe a quien escribió último (o al único número de la lista). Un envío llega a otras
   personas, así que como todo `send` **queda retenido para tu aprobación** hasta que confíes en el
   kitty para eso ([AUTONOMY.md](AUTONOMY.md)). Las respuestas a quien escribió no se retienen: lo
   pidió.
@@ -83,7 +91,8 @@ whatsapp:
   enabled: true                  # activarlo aquí es aceptar el riesgo
   allow: ["+56 9 1234 5678"]
   kitty: mimi                    # vacío: el primer kitty
-  groups: false
+  groups: true
+  allow_groups: ["120363012345678901@g.us"]   # los ids que lista Ajustes (GET /v1/whatsapp, seen_groups)
   transcribe: ""                 # el perfil openai o groq para notas de voz; vacío: el primero; off: ninguno
 ```
 
@@ -106,8 +115,8 @@ el teléfono de nuevo con otro código.
 
 | Ruta | Qué hace |
 | --- | --- |
-| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored` |
-| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups"}`; activarlo necesita `"accept_risk": true` |
+| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored`, `seen_groups` (los grupos que escribieron hace poco) |
+| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups"}`; activarlo necesita `"accept_risk": true` |
 | `POST /v1/whatsapp/link` | Códigos QR nuevos (si expiraron o el teléfono quitó el dispositivo) |
 | `POST /v1/whatsapp/unlink` | Quita el dispositivo del teléfono y olvida la sesión |
 | `POST /v1/whatsapp/test` | `{"to": "+56912345678"}` manda un mensaje corto a un número de la lista |

@@ -26,8 +26,9 @@ connector.
 1. Settings, **Connections**, the **WhatsApp (linked device)** section at the end.
 2. Choose **the kitty that answers**, and add the **numbers that may write** with their country
    code (`+56 9 1234 5678`). The list starts empty: until you add someone, every message is
-   ignored. Tick **Answer in groups when someone on the list mentions the kitty** to let it talk in
-   groups too.
+   ignored. Tick **Answer in groups when someone mentions the kitty** to let it talk in groups too,
+   and pick the groups: the ones that wrote lately show up there (WhatsApp gives a linked device no
+   list of groups until they write).
 3. Tick **Turn on WhatsApp**, then **I understand that WhatsApp may ban this number**, and **Save**.
 4. A QR code appears. On the phone of the kitties' number: WhatsApp, Settings, **Linked devices**,
    **Link a device**, and point it at the code. The code changes every few seconds; if they run out,
@@ -47,14 +48,18 @@ off for about two weeks). **Unlink** removes the device from the phone and forge
 - **"typing…" while it thinks.** The chat on the phone shows the kitty typing until the answer goes.
   A message that comes while it is still busy gets a short note in the kitty's language (its soul's
   language, else the language of the message: English, Spanish or Portuguese).
-- **Groups, when they mention it.** With groups on, a group message is answered only if its sender
-  is on the list and it @mentions the kitties' number, answers one of its messages, or names the
-  kitty. Each group has its own chat (`WhatsApp group …`), with every line signed by its sender;
-  the answer goes to the group.
+- **Groups on their own list.** With groups on, the kitty answers only in the groups you picked,
+  and there anyone may talk to it by @mentioning the kitties' number, answering one of its
+  messages, or naming the kitty. Each group has its own chat (`WhatsApp group: <name>`), with every
+  line signed by its sender; the answer goes to the group. A mention in a group not on the list is
+  ignored and counted.
 - **Pictures, videos, documents and audio.** They reach the kitty as files of the chat (up to 25 MB
   each), with their caption as the text. A **voice note** is turned into text with the speech API
   (Whisper) of an `openai` or `groq` profile with a key; without one it comes as an audio file.
-  Stickers, locations and contacts are not answered.
+- **Stickers, locations and contacts.** A sticker comes as its picture (with its emoji), a location
+  as its name and address with a map link, a shared contact as its name and numbers.
+- **Files back.** A file the kitty saves to the library while it answers goes to the person (or the
+  group) by itself, a picture as a picture and anything else as a document (up to 16 MB).
 - **The allow list works both ways.** A message from a number that is not on it is ignored (and
   counted in Settings), without an answer; the kitties can only write to numbers on it.
 - **The kitties write with the connector.** While the link is connected, `whatsapp-web` is offered
@@ -62,10 +67,12 @@ off for about two weeks). **Unlink** removes the device from the phone and forge
 
   ```
   @connector whatsapp-web {"action": "send", "to": "+56912345678", "text": "The report is ready."}
+  @connector whatsapp-web {"action": "send", "to": "Familia", "text": "Here it is.", "file": "report.pdf"}
   @connector whatsapp-web {"action": "status"}
   ```
 
-  `to` left out writes to whoever wrote last (or to the only number on the list). A send reaches
+  `to` is a number or a group on the list (its name or its id); `file` is a file of the library,
+  sent with `text` as its caption. `to` left out writes to whoever wrote last (or to the only number on the list). A send reaches
   other people, so like every `send` it is **held for your approval** until you trust the kitty with
   it ([AUTONOMY.md](AUTONOMY.md)). The answers to a person who wrote are not held: they asked.
 
@@ -79,7 +86,8 @@ whatsapp:
   enabled: true                  # turning it on here is accepting the risk
   allow: ["+56 9 1234 5678"]
   kitty: mimi                    # empty: the first kitty
-  groups: false
+  groups: true
+  allow_groups: ["120363012345678901@g.us"]   # the ids Settings lists (GET /v1/whatsapp, seen_groups)
   transcribe: ""                 # the openai or groq profile for voice notes; empty: the first; off: none
 ```
 
@@ -102,8 +110,8 @@ phone is linked again with a new code.
 
 | Route | What it does |
 | --- | --- |
-| `GET /v1/whatsapp` | The link: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` and `qr_png` (a PNG data URL) while it waits, `phone`, `linked`, `ignored` |
-| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups"}`; turning it on needs `"accept_risk": true` |
+| `GET /v1/whatsapp` | The link: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` and `qr_png` (a PNG data URL) while it waits, `phone`, `linked`, `ignored`, `seen_groups` (the groups that wrote lately) |
+| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups"}`; turning it on needs `"accept_risk": true` |
 | `POST /v1/whatsapp/link` | New QR codes (after they expired or the phone logged the device out) |
 | `POST /v1/whatsapp/unlink` | Removes the device from the phone and forgets the session |
 | `POST /v1/whatsapp/test` | `{"to": "+56912345678"}` sends a short message to a number on the list |
