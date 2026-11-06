@@ -1978,3 +1978,92 @@ html.mac-inset .live-head {
   padding-left: 0.5rem;
   padding-right: 0.5rem;
 }
+
+/* An artifact read as a document (the reader), and the link to one inside a message. */
+.md {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--t2);
+  overflow-wrap: anywhere;
+}
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  color: var(--t1);
+  font-weight: 600;
+  margin: 1.1em 0 0.4em;
+  line-height: 1.3;
+}
+.md h2 {
+  font-size: 1.25rem;
+}
+.md h3 {
+  font-size: 1.1rem;
+}
+.md p,
+.md ul,
+.md ol,
+.md pre,
+.md blockquote,
+.md table {
+  margin: 0.6em 0;
+}
+.md ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+}
+.md ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+}
+.md pre {
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.625rem;
+  background: rgb(0 0 0 / calc(var(--well-k) * 0.22));
+  border-radius: var(--radius-cut);
+}
+.md code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 1px 0.3125rem;
+  background: rgb(var(--ov-rgb) / 0.08);
+  border-radius: var(--radius-cut);
+}
+.md pre code {
+  padding: 0;
+  background: none;
+}
+.md blockquote {
+  padding-left: 0.75rem;
+  border-left: 2px solid rgb(var(--neon-rgb) / 0.4);
+  color: var(--t3);
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid rgb(var(--ov-rgb) / 0.12);
+  margin: 1em 0;
+}
+.md table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.md th,
+.md td {
+  border: 1px solid rgb(var(--ov-rgb) / 0.12);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}
+.md a,
+.artifact-link {
+  color: var(--neon-cyan);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.msg .text .artifact-link {
+  font: inherit;
+}

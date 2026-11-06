@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Kitty, Session, Step, Turn } from "./api";
-import { api, shotData, shotURL } from "./api";
-import { inline, stepArgs, stepSentence, when } from "./format";
+import { api, shotData } from "./api";
+import ArtifactReader, { Inlines } from "./ArtifactReader";
+import { stepArgs, stepSentence, when } from "./format";
 import { actionLabel, plainError } from "./friendly";
 import { gatewayText } from "./gatewayText";
 import { t } from "./i18n";
@@ -14,18 +15,10 @@ import HelpModal from "./Help";
 import { Sent } from "./Attachments";
 import LiveDesktop from "./LiveDesktop";
 
-function Text({ text }: { text: string }) {
+function Text({ text, onOpen }: { text: string; onOpen?: (name: string) => void }) {
   return (
     <div class="text">
-      {inline(text).map((part, i) =>
-        typeof part === "string" ? (
-          part
-        ) : part.t === "b" ? (
-          <strong key={i}>{part.v}</strong>
-        ) : (
-          <code key={i}>{part.v}</code>
-        ),
-      )}
+      <Inlines text={text} onOpen={onOpen} />
     </div>
   );
 }
@@ -604,6 +597,7 @@ function TurnCard({
   onOpen,
   onHelp,
   onContinue,
+  onArtifact,
   fold,
 }: {
   turn: Turn;
@@ -620,6 +614,8 @@ function TurnCard({
   onHelp?: () => void;
   // onContinue has a task that stopped on its budget go on from where it was.
   onContinue?: () => void;
+  // onArtifact reads an artifact of the library: the tags under the message, and the links in it.
+  onArtifact?: (name: string) => void;
   // fold lists the steps right under the message, folded, instead of linking to the desktop column.
   fold?: boolean;
 }) {
@@ -650,7 +646,7 @@ function TurnCard({
           <IconHand size={14} /> {t("{name} needs your help with this one.", { name: turn.from })}
         </div>
       )}
-      {turn.text && <Text text={mine ? turn.text : gatewayText(turn.text)} />}
+      {turn.text && <Text text={mine ? turn.text : gatewayText(turn.text)} onOpen={onArtifact} />}
       {turn.attachments && turn.attachments.length > 0 && (
         <Sent chat={chat} files={turn.attachments} onOpen={onOpen} />
       )}
@@ -775,14 +771,14 @@ function TurnCard({
             </span>
           ))}
           {turn.artifacts?.map((n) => (
-            <a
+            <button
               key={"a" + n}
               class="tag tag-green"
-              href={shotURL(`/v1/artifacts/${encodeURIComponent(n)}`)}
-              target="_blank"
+              data-testid="artifact-tag"
+              onClick={() => onArtifact?.(n)}
             >
               ↓ {n}
-            </a>
+            </button>
           ))}
           {!mine && !system && turn.kitty && !turn.working && (
             <Feedback chat={chat} index={index} current={turn.feedback || ""} />
@@ -819,6 +815,8 @@ export default function Conversation({
 }: Props) {
   const byId = new Map(kitties.map((k) => [k.id, k]));
   const [zoom, setZoom] = useState<string>("");
+  // reading is the artifact open in the reader.
+  const [reading, setReading] = useState("");
   // helping is the kitty whose desktop is open because it asked for help.
   const [helping, setHelping] = useState<Kitty | null>(null);
   // The requests for help the person put off, by the step that asked: a new request opens again.
@@ -955,6 +953,7 @@ export default function Conversation({
               latest={i >= all.length - session.members.length}
               onDesk={showDesk}
               onOpen={setZoom}
+              onArtifact={setReading}
               fold={sidebar}
               onHelp={
                 sidebar
@@ -1098,6 +1097,7 @@ export default function Conversation({
           />
         </div>
       )}
+      {reading && <ArtifactReader name={reading} onClose={() => setReading("")} />}
     </div>
   );
 }

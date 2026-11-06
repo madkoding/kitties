@@ -122,7 +122,7 @@ jobs:
           go-version-file: desktop/go.mod
           cache-dependency-path: desktop/go.sum
       - name: build the page
-        run: cd desktop/frontend && npm ci && npm run typecheck && npm run build
+        run: cd desktop/frontend && npm ci && npm run typecheck && npm test && npm run build
       # The built page is built once, here, and the Android and end to end jobs take it from this artifact.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

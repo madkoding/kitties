@@ -263,6 +263,7 @@ const dict: Dictionary = {
   "Nothing saved yet. A kitty saves one with @artifact save, or a connector such as the diagram renderer does.":
     "Nada guardado ainda. Um kitty guarda um com @artifact save, ou uma conexão como o gerador de diagramas faz isso.",
   "Close the artifact": "Fechar o arquivo",
+  "This file is not in the library.": "Este arquivo não está na biblioteca.",
 
   // Signing in with a subscription
   Copied: "Copiado",

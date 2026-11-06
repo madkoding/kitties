@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useState } from "preact/hooks";
 import type { ArtifactInfo, Skill } from "./api";
-import { api, artifactText, shotURL } from "./api";
+import { api, shotURL } from "./api";
+import ArtifactReader from "./ArtifactReader";
 import { ask } from "./Confirm";
 import { when } from "./format";
 import { t } from "./i18n";
@@ -18,7 +19,7 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
   const [arts, setArts] = useState<ArtifactInfo[]>([]);
   const [open, setOpen] = useState<Skill | null>(null);
   const [draft, setDraft] = useState<{ name: string; body: string } | null>(null);
-  const [reading, setReading] = useState<{ name: string; text: string } | null>(null);
+  const [reading, setReading] = useState<string | null>(null);
   const [err, setErr] = useState("");
   const load = () => {
     api
@@ -32,7 +33,7 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
   };
   useEffect(load, []);
   useLayoutEffect(() => {
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && onClose();
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [onClose]);
@@ -224,15 +225,7 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
             <div class="flex flex-col gap-1 mt-3">
               {arts.map((a) => (
                 <div key={a.name} class="row !py-2.5">
-                  <button
-                    class="row-hit"
-                    onClick={() =>
-                      artifactText(a.name)
-                        .then((text) => setReading({ name: a.name, text }))
-                        .catch((e) => setErr((e as Error).message))
-                    }
-                    aria-label={a.name}
-                  />
+                  <button class="row-hit" onClick={() => setReading(a.name)} aria-label={a.name} />
                   <span class="dot running" />
                   <div class="flex-1 min-w-0">
                     <div class="flex items-center gap-2 flex-wrap">
@@ -276,29 +269,7 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
                 </div>
               )}
             </div>
-            {reading && (
-              <div class="mt-3 p-4 border border-[rgb(var(--neon-rgb)/0.3)] bg-[rgb(var(--bg-rgb)/0.6)]">
-                <div class="flex items-center justify-between">
-                  <h3 class="font-mono text-sm">{reading.name}</h3>
-                  <button
-                    class="plain p-1 text-[var(--t3)]"
-                    onClick={() => setReading(null)}
-                    aria-label={t("Close the artifact")}
-                  >
-                    <IconX size={14} />
-                  </button>
-                </div>
-                {reading.name.endsWith(".svg") ? (
-                  <img
-                    class="mt-2 max-h-80 bg-white"
-                    src={"data:image/svg+xml;utf8," + encodeURIComponent(reading.text)}
-                    alt={reading.name}
-                  />
-                ) : (
-                  <pre class="skill-body mt-2">{reading.text}</pre>
-                )}
-              </div>
-            )}
+            {reading && <ArtifactReader name={reading} onClose={() => setReading(null)} />}
           </div>
         )}
       </div>

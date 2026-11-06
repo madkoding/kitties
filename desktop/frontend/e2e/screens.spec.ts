@@ -262,6 +262,23 @@ test("the library: skills with a proposal, and the artifacts", async ({ page }) 
   await open(page, "#new-artifacts");
   await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
   await shot(page, "16-library-artifacts");
+  // A markdown file opens in a reader that draws it as a document.
+  await page.getByRole("button", { name: "competitor-notes.md", exact: true }).click();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.locator("h2", { hasText: "Competitor notes" })).toBeVisible();
+  await expect(reader.locator("table td", { hasText: "Acme" })).toBeVisible();
+  await shot(page, "60-artifact-reader");
+  // Escape closes the reader and leaves the library open under it.
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+  await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
+});
+
+test("an artifact tag in a chat opens the reader", async ({ page }) => {
+  await open(page, `#chat/${ids.single}`);
+  await page.getByTestId("artifact-tag").first().click();
+  await expect(page.getByTestId("artifact-reader")).toBeVisible();
+  await expect(page.getByTestId("markdown")).toBeVisible();
 });
 
 test("picking a service opens its form; an OAuth kind offers the sign-in", async ({ page }) => {
