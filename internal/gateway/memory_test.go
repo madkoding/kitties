@@ -169,6 +169,15 @@ func TestNotifySettingsAPI(t *testing.T) {
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/notify", "tok", map[string]any{"connector": "bad"}); code != 400 {
 		t.Error("a bad connector")
 	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/autonomy", "tok", map[string]any{"follow_ups": "5m 1h", "brain_wait": "off"}); code != 200 || f.auto.FollowUps != "5m 1h" || f.auto.BrainWait != "off" {
+		t.Errorf("autonomy: %d %+v", code, f.auto)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/autonomy", "tok", map[string]any{"brain_wait": "soon"}); code != 400 {
+		t.Errorf("bad autonomy: %d", code)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/autonomy", "tok", "{nope"); code != 400 {
+		t.Errorf("bad autonomy body: %d", code)
+	}
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/notify", "tok", "{nope"); code != 400 {
 		t.Error("bad json")
 	}

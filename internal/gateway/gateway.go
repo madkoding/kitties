@@ -88,6 +88,8 @@ type Fleet interface {
 	// Notify is where the person is told outside the interface; SetNotify changes it.
 	Notify() notify.Config
 	SetNotify(c notify.Config) error
+	// SetAutonomy changes how long the kitties keep at a task on their own.
+	SetAutonomy(a config.Autonomy) error
 }
 
 // Chats is what the gateway needs from the chat service.
@@ -596,7 +598,7 @@ func codeFor(err error) int {
 		strings.Contains(msg, "does not sign in"), strings.Contains(msg, "only signs in back to"), strings.Contains(msg, "no OAuth flow"), strings.Contains(msg, "not signed in"),
 		strings.HasPrefix(msg, "schedule:"), strings.HasPrefix(msg, "on:"), strings.Contains(msg, "a goal "), strings.Contains(msg, "back itself up"),
 		strings.Contains(msg, "limits"), strings.Contains(msg, "auto_off_minutes"), strings.HasPrefix(msg, "a limit "), strings.Contains(msg, "not ask or auto"), strings.Contains(msg, "can be for good"), strings.Contains(msg, "always asked"),
-		strings.HasPrefix(msg, "notify."), strings.Contains(msg, "rating is"), strings.Contains(msg, "feedback is for"), strings.Contains(msg, "demand is a level"),
+		strings.HasPrefix(msg, "notify."), strings.HasPrefix(msg, "autonomy."), strings.Contains(msg, "rating is"), strings.Contains(msg, "feedback is for"), strings.Contains(msg, "demand is a level"),
 		strings.Contains(msg, "a note needs"), strings.HasPrefix(msg, "scope "), strings.Contains(msg, "the turn is"),
 		strings.HasPrefix(msg, "there is no "), strings.HasPrefix(msg, "a secret"), strings.Contains(msg, "is not running"), strings.Contains(msg, "nothing to back up"), strings.Contains(msg, "cannot back up"), strings.Contains(msg, "keeps no backups"), strings.Contains(msg, "still think with"):
 		return http.StatusBadRequest

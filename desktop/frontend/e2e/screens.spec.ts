@@ -1837,6 +1837,38 @@ test("a gateway that cannot replace itself says how it is updated, and one that 
   await expect(box.getByTestId("update-check")).toBeDisabled();
 });
 
+test("how long the kitties keep at a task on their own: checked, saved and kept", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("autonomy");
+  await expect(box).toContainText("Working on their own");
+  // A wait that is not one is refused with the reason.
+  await box.locator("#auto-brain-wait").fill("soon");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box).toContainText("autonomy.brain_wait");
+  await box.locator("#auto-follow-ups").fill("15m 1h 4h");
+  await box.locator("#auto-brain-wait").fill("45m");
+  await box.locator("#auto-stand-ins").fill("2");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box.getByText("Saved.")).toBeVisible();
+  await box.scrollIntoViewIfNeeded();
+  await shot(page, "60-autonomy");
+  // It is the gateway's: it stays after a reload. Empty fields take the defaults again.
+  await page.reload();
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  await expect(box.locator("#auto-follow-ups")).toHaveValue("15m 1h 4h");
+  await expect(box.locator("#auto-stand-ins")).toHaveValue("2");
+  await box.locator("#auto-follow-ups").fill("");
+  await box.locator("#auto-brain-wait").fill("");
+  await box.locator("#auto-stand-ins").fill("");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box.getByText("Saved.")).toBeVisible();
+});
+
 test("the secrets a kitty may type: saved with who may use them, changed and removed, never shown", async ({
   page,
 }) => {

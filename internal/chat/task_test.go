@@ -31,6 +31,7 @@ type deskFleet struct {
 	shotErr error
 	shots   int
 	ocr     string   // what kitty-ocr prints
+	cat     string   // what cat prints (a kitty's TODO.md)
 	inputs  []string // what was given to commands on their input
 	png     []byte   // the screenshot, when it has to be a real picture
 	execErr error
@@ -48,6 +49,12 @@ func (d *deskFleet) Exec(ctx context.Context, ref string, argv ...string) (strin
 	}
 	if len(argv) > 0 && argv[0] == "kitty-ocr" {
 		return d.ocr, nil
+	}
+	if len(argv) > 0 && argv[0] == "cat" {
+		if d.cat == "" {
+			return "", errors.New("no such file")
+		}
+		return d.cat, nil
 	}
 	return "ok", d.execErr
 }

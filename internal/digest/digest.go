@@ -118,6 +118,9 @@ func (r *Reporter) Build(now time.Time) notify.Notification {
 			line += fmt.Sprintf(" (%s tokens, %d actions today)", short(d.Tokens), d.Actions)
 		}
 		lines = append(lines, line)
+		if f := followUps(r.src.Journal(k.ID, 500), since); f != "" {
+			lines = append(lines, "  follow-ups: "+f)
+		}
 	}
 	if len(lines) == 0 {
 		lines = append(lines, "No kitties yet.")
@@ -134,6 +137,42 @@ func (r *Reporter) Build(now time.Time) notify.Notification {
 		}
 	}
 	return notify.Notification{Event: notify.Digest, Title: "Your kitties, last 24 hours", Body: body}
+}
+
+// followUps says, for each goal that ran again on its own since then, how its last follow-up
+// ended: "Inbox → done, Groups → blocked (gave up)". Entries come newest first.
+func followUps(entries []agenda.Entry, since time.Time) string {
+	type run struct{ title, result string }
+	var order []string
+	runs := map[string]*run{}
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		if e.At.Before(since) || e.Goal == "" {
+			continue
+		}
+		f, ok := runs[e.Goal]
+		switch {
+		case e.Kind == agenda.KindRun && strings.HasSuffix(e.Text, " (follow_up)"):
+			if !ok {
+				f = &run{}
+				runs[e.Goal] = f
+				order = append(order, e.Goal)
+			}
+			f.title, f.result = strings.TrimSuffix(e.Text, " (follow_up)"), "running"
+		case !ok:
+		case e.Kind == agenda.KindDone, e.Kind == agenda.KindBlocked, e.Kind == agenda.KindEscalated, e.Kind == agenda.KindDelegated:
+			if f.result == "running" {
+				f.result = e.Kind
+			}
+		case e.Kind == agenda.KindRetry && strings.Contains(e.Text, "no follow-up left"):
+			f.result += " (gave up)"
+		}
+	}
+	parts := make([]string, 0, len(order))
+	for _, id := range order {
+		parts = append(parts, runs[id].title+" → "+runs[id].result)
+	}
+	return strings.Join(parts, ", ")
 }
 
 // compose is the summary to send: the kitties' last day, after the person's own day when the
