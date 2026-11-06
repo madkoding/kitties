@@ -1993,6 +1993,7 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
   await box.getByTestId("whatsapp-add").click();
   await expect(box.getByTestId("whatsapp-allowed")).toHaveText("+56912345678");
   await box.getByTestId("whatsapp-kitty").selectOption(ids.mimi);
+  await box.getByTestId("whatsapp-groups").locator("input").check();
   // Turning it on waits for the risk to be accepted.
   await box.getByTestId("whatsapp-enabled").click();
   await expect(box.getByTestId("whatsapp-save")).toBeDisabled();
@@ -2001,7 +2002,7 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
   await expect(box.getByTestId("whatsapp-qr")).toBeVisible();
   await expect(box.getByTestId("whatsapp-state")).toContainText("Waiting for the QR code");
   expect(put).toEqual([
-    { enabled: true, allow: ["56912345678"], kitty: ids.mimi, accept_risk: true },
+    { enabled: true, allow: ["56912345678"], kitty: ids.mimi, groups: true, accept_risk: true },
   ]);
   await box.evaluate((el) => el.scrollIntoView({ block: "start" }));
   await shot(page, "60-settings-whatsapp");

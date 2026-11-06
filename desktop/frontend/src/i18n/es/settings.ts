@@ -327,6 +327,8 @@ const dict: Dictionary = {
   Add: "Agregar",
   "Nobody yet: every message is ignored until you add a number.":
     "Nadie todavía: se ignora todo mensaje hasta que agregues un número.",
+  "Answer in groups when someone on the list mentions the kitty":
+    "Responder en grupos cuando alguien de la lista nombra al kitty",
   "Remove {number}": "Quitar {number}",
   "I understand that WhatsApp may ban this number":
     "Entiendo que WhatsApp puede bloquear este número",

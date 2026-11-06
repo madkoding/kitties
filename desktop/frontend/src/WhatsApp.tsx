@@ -17,11 +17,21 @@ import { IconX } from "./icons";
 const MOVING = ["starting", "qr", "disconnected"];
 
 function pick(s: WhatsAppStatus): WhatsAppSettings {
-  return { enabled: s.enabled, allow: [...(s.allow || [])], kitty: s.kitty || "" };
+  return {
+    enabled: s.enabled,
+    allow: [...(s.allow || [])],
+    kitty: s.kitty || "",
+    groups: !!s.groups,
+  };
 }
 
 function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
-  return a.enabled === b.enabled && a.kitty === b.kitty && a.allow.join(",") === b.allow.join(",");
+  return (
+    a.enabled === b.enabled &&
+    a.kitty === b.kitty &&
+    a.groups === b.groups &&
+    a.allow.join(",") === b.allow.join(",")
+  );
 }
 
 // digits is a number as the gateway keeps it, to compare what was typed with the list.
@@ -233,6 +243,18 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           </span>
         ))}
       </div>
+      <label
+        class="flex items-center gap-2 mt-3 text-sm cursor-pointer"
+        data-testid="whatsapp-groups"
+      >
+        <input
+          type="checkbox"
+          checked={want.groups}
+          disabled={disabled}
+          onChange={() => setWant({ ...want, groups: !want.groups })}
+        />
+        {t("Answer in groups when someone on the list mentions the kitty")}
+      </label>
       {turningOn && changed && (
         <label class="flex items-center gap-2 mt-3 text-sm cursor-pointer">
           <input
