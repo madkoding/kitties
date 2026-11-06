@@ -62,7 +62,9 @@ kitties' containers mount their workspaces by host path.
 The desktops show the host's hour: the gateway passes the host's time zone to each desktop
 (`TZ`), read from `TZ` in `deploy/.env` or, when empty, from the host's `/etc/localtime` and zone
 files, mounted read-only. A desktop made in another zone (the host moved) is made anew, its
-sessions kept, the next time it starts while no one uses it. The clock itself is the host's:
+sessions kept, the next time it starts while no one uses it. On Windows the zone is Windows'
+own, given its IANA name (CLDR's table); a desktop in the cloud is put in the same zone each
+time it is made or woken. The clock itself is the host's:
 containers share its kernel, so there is nothing to sync inside them.
 
 ## 2. A binary and systemd

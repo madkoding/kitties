@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -31,12 +32,13 @@ func hostFiles(t *testing.T) (etc, zoneinfo string) {
 	write(filepath.Join(zoneinfo, "posix", "America", "Lima"), "TZif-lima")
 	write(filepath.Join(zoneinfo, "Europe", "Madrid"), "TZif-madrid")
 	write(filepath.Join(zoneinfo, "zone1970.tab"), "# comment\nCL\t-3327-07040\tAmerica/Santiago\tmost of Chile\nbad line\n")
-	oldTZ, oldLocal, oldDirs, oldNow, oldEnv := timezoneFile, localtimeFile, zoneinfoDirs, clockNow, getEnv
+	oldTZ, oldLocal, oldDirs, oldNow, oldEnv, oldWin := timezoneFile, localtimeFile, zoneinfoDirs, clockNow, getEnv, windowsZoneID
+	windowsZoneID = func() string { return "" }
 	timezoneFile, localtimeFile = filepath.Join(etc, "timezone"), filepath.Join(etc, "localtime")
 	zoneinfoDirs = []string{filepath.Join(root, "missing"), zoneinfo}
 	getEnv = func(string) string { return "" }
 	t.Cleanup(func() {
-		timezoneFile, localtimeFile, zoneinfoDirs, clockNow, getEnv = oldTZ, oldLocal, oldDirs, oldNow, oldEnv
+		timezoneFile, localtimeFile, zoneinfoDirs, clockNow, getEnv, windowsZoneID = oldTZ, oldLocal, oldDirs, oldNow, oldEnv, oldWin
 	})
 	return etc, zoneinfo
 }
@@ -148,3 +150,33 @@ func TestZoneStale(t *testing.T) {
 		t.Errorf("failed inspect: %v", err)
 	}
 }
+
+func TestHostTimezoneOnWindows(t *testing.T) {
+	hostFiles(t)
+	clockNow = func() time.Time { return time.Date(2026, 11, 6, 10, 0, 0, 0, time.FixedZone("x", -3*3600)) }
+	for id, want := range map[string]string{
+		"Pacific SA Standard Time\r\n":        "America/Santiago",
+		"India Standard Time":                 "Asia/Kolkata", // CLDR's Asia/Calcutta, by its current name
+		"Pacific SA Standard Time_dstoff\r\n": "Etc/GMT+3",    // summer time off: the offset
+		"Mars Standard Time":                  "Etc/GMT+3",    // unknown id
+		"":                                    "Etc/GMT+3",
+	} {
+		windowsZoneID = func() string { return id }
+		if z := HostTimezone(); z != want {
+			t.Errorf("%q: %q, want %q", id, z, want)
+		}
+	}
+	// Every name in the table is one the desktop can take.
+	for id, z := range windowsZones {
+		if !zoneName.MatchString(z) {
+			t.Errorf("%s: %q", id, z)
+		}
+	}
+	// Off Windows, nothing is asked.
+	if runtime.GOOS != "windows" && realWindowsZoneID() != "" {
+		t.Error("tzutil asked off Windows")
+	}
+}
+
+// realWindowsZoneID is the lookup before any test replaces it.
+var realWindowsZoneID = windowsZoneID

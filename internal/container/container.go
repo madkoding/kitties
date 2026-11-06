@@ -266,13 +266,27 @@ var (
 	localtimeFile = "/etc/localtime"
 	zoneinfoDirs  = []string{"/usr/share/zoneinfo", "/usr/lib/zoneinfo", "/usr/share/lib/zoneinfo"}
 	clockNow      = time.Now
+	// windowsZoneID is the id of the host's zone on Windows, as tzutil /g prints it (with
+	// "_dstoff" when summer time is switched off); empty elsewhere.
+	windowsZoneID = func() string {
+		if runtime.GOOS != "windows" {
+			return ""
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "tzutil", "/g").Output()
+		if err != nil {
+			return ""
+		}
+		return string(out)
+	}
 )
 
 // HostTimezone is the IANA name of the host's time zone: $TZ, /etc/timezone, where
 // /etc/localtime points (Linux and macOS), or the zone whose rules /etc/localtime holds (a copy,
-// or a file mounted into the gateway's own container). When none tells it (Windows), the host's
-// offset from UTC right now, such as Etc/GMT+3: the desktop shows the hour of the host, and a
-// change of offset (summer time) is noticed at its next start.
+// or a file mounted into the gateway's own container), or Windows' own zone. When none tells it,
+// the host's offset from UTC right now, such as Etc/GMT+3: the desktop shows the hour of the
+// host, and a change of offset (summer time) is noticed at its next start.
 func HostTimezone() string {
 	ok := func(z string) string {
 		z = strings.TrimPrefix(strings.TrimSpace(z), ":")
@@ -298,6 +312,13 @@ func HostTimezone() string {
 	}
 	if b, err := os.ReadFile(localtimeFile); err == nil && len(b) > 0 {
 		if z := zoneOfRules(b); z != "" {
+			return z
+		}
+	}
+	// Windows names its zones its own way (Pacific SA Standard Time): CLDR's table gives the IANA
+	// name, summer time included. With summer time switched off, the offset is the truth.
+	if id := strings.TrimSpace(windowsZoneID()); id != "" && !strings.HasSuffix(id, "_dstoff") {
+		if z := windowsZones[id]; z != "" {
 			return z
 		}
 	}
