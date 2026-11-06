@@ -90,11 +90,19 @@ type Event struct {
 	Mentioned bool
 	// ChatName is the group's name, when WhatsApp gave it.
 	ChatName string
+	// Ref points at the message, to mark it read or react to it.
+	Ref Ref
 	// Files are the pictures, documents and audios of the message (Text is their caption).
 	Files []File
 	// Session is the whole state of the linked device, to keep sealed (EvSession).
 	Session []byte
 	Err     string
+}
+
+// Ref points at a message for the Client: its chat, its sender and its id, as WhatsApp names
+// them (opaque to the bridge).
+type Ref struct {
+	Chat, Sender, ID string
 }
 
 // File is a picture, document, video or audio that came in a message.
@@ -115,6 +123,10 @@ type Client interface {
 	Send(ctx context.Context, to, text string) error
 	// SendFile sends a picture, video, audio or document, with text as its caption.
 	SendFile(ctx context.Context, to string, f File, caption string) error
+	// MarkRead marks a message as read (the blue ticks).
+	MarkRead(ctx context.Context, ref Ref) error
+	// React puts an emoji on a message ("" takes it off).
+	React(ctx context.Context, ref Ref, emoji string) error
 	// Typing shows (on) or stops showing that the number is writing to to.
 	Typing(ctx context.Context, to string, on bool) error
 	// Logout removes this device from the phone.
@@ -153,7 +165,18 @@ type Settings struct {
 	Groups bool `json:"groups"`
 	// AllowGroups are the groups (their JIDs, "…@g.us") the kitty answers in and may write to.
 	AllowGroups []string `json:"allow_groups"`
+	// Kitties gives a number (digits) or a group (its JID) a kitty of its own instead of Kitty.
+	Kitties map[string]string `json:"kitties,omitempty"`
+	// MaxPerHour is the most messages sent in an hour (0 is DefaultPerHour), to keep the number
+	// from looking like a bot.
+	MaxPerHour int `json:"max_per_hour,omitempty"`
 }
+
+// DefaultPerHour is the hourly limit of messages when Settings sets none.
+const DefaultPerHour = 60
+
+// MaxPerHourLimit is the highest hourly limit Settings takes.
+const MaxPerHourLimit = 1000
 
 // Group is a group the linked number is in, as Settings lists it.
 type Group struct {
@@ -182,6 +205,10 @@ type Status struct {
 	Ignored int `json:"ignored"`
 	// LastMessage is when the last allowed message came.
 	LastMessage time.Time `json:"last_message,omitzero"`
+	// SentLastHour counts the messages sent in the last hour, and Held the ones not sent since the
+	// start because the hourly limit was reached.
+	SentLastHour int `json:"sent_last_hour"`
+	Held         int `json:"held"`
 	// SeenGroups are the groups that wrote lately, newest first, to choose from.
 	SeenGroups []Group `json:"seen_groups"`
 	// CanChange is false when there is no vault to seal the session with; Why says so.
@@ -225,6 +252,8 @@ var (
 	ErrNotAllow = errors.New("that number is not on the allow list")
 	// ErrNotAllowGroup is returned for a group not on the list.
 	ErrNotAllowGroup = errors.New("that group is not on the allow list")
+	// ErrLimit is returned while the hourly limit of messages is reached.
+	ErrLimit = errors.New("the hourly limit of WhatsApp messages is reached: try again later, or raise it in Settings")
 )
 
 // Bridge links WhatsApp with the kitties.
@@ -237,6 +266,8 @@ type Bridge struct {
 	set     Settings
 	chats   map[string]string // number (or "g:" and a group) -> chat id
 	seen    []Group
+	sent    []time.Time    // when the messages of the last hour went
+	refs    map[string]Ref // the last message of each chat (by key), to react to
 	status  Status
 	client  Client
 	cancel  context.CancelFunc
@@ -260,7 +291,7 @@ func New(opt Options) (*Bridge, error) {
 	if opt.Log == nil {
 		opt.Log = func(string, ...any) {}
 	}
-	b := &Bridge{opt: opt, chats: map[string]string{}, numbers: map[string]*sync.Mutex{}, wait: 2 * time.Hour}
+	b := &Bridge{opt: opt, chats: map[string]string{}, numbers: map[string]*sync.Mutex{}, refs: map[string]Ref{}, wait: 2 * time.Hour}
 	data, err := os.ReadFile(b.settingsPath())
 	switch {
 	case errors.Is(err, os.ErrNotExist):
@@ -275,6 +306,9 @@ func New(opt Options) (*Bridge, error) {
 				b.set.Allow = append(b.set.Allow, d)
 			}
 			if b.set.AllowGroups, err = groupList(opt.Defaults.AllowGroups); err != nil {
+				return nil, err
+			}
+			if b.set.Kitties, err = b.kittiesOf(opt.Defaults.Kitties); err != nil {
 				return nil, err
 			}
 			if b.set.Enabled && !b.usable() {
@@ -335,6 +369,11 @@ func (b *Bridge) Status() Status {
 	st.Allow = append([]string{}, b.set.Allow...)
 	st.AllowGroups = append([]string{}, b.set.AllowGroups...)
 	st.SeenGroups = append([]Group{}, b.seen...)
+	st.Kitties = map[string]string{}
+	for k, v := range b.set.Kitties {
+		st.Kitties[k] = v
+	}
+	st.SentLastHour = b.recentLocked(time.Now())
 	st.CanChange = b.usable()
 	if b.opt.Box == nil {
 		st.Why = ErrNoVault.Error()
@@ -387,6 +426,13 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 		return Settings{}, err
 	}
 	out.AllowGroups = groups
+	if s.MaxPerHour < 0 || s.MaxPerHour > MaxPerHourLimit {
+		return Settings{}, fmt.Errorf("the hourly limit goes from 1 to %d messages (0 is %d)", MaxPerHourLimit, DefaultPerHour)
+	}
+	out.MaxPerHour = s.MaxPerHour
+	if out.Kitties, err = b.kittiesOf(s.Kitties); err != nil {
+		return Settings{}, err
+	}
 	seen := map[string]bool{}
 	for _, n := range s.Allow {
 		d, err := Normalize(n)
@@ -407,6 +453,39 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 			return Settings{}, err
 		}
 		out.Kitty = k.ID
+	}
+	return out, nil
+}
+
+// kittiesOf checks a map of numbers and groups to kitties, keeping the kitties' ids.
+func (b *Bridge) kittiesOf(in map[string]string) (map[string]string, error) {
+	if len(in) == 0 {
+		return nil, nil
+	}
+	if len(in) > 2*MaxAllow {
+		return nil, fmt.Errorf("at most %d numbers and groups have a kitty of their own", 2*MaxAllow)
+	}
+	out := map[string]string{}
+	for key, ref := range in {
+		key, ref = strings.TrimSpace(key), strings.TrimSpace(ref)
+		if !IsGroup(key) {
+			d, err := Normalize(key)
+			if err != nil {
+				return nil, err
+			}
+			key = d
+		}
+		if ref == "" {
+			continue
+		}
+		if b.opt.Kitty != nil {
+			k, err := b.opt.Kitty(ref)
+			if err != nil {
+				return nil, err
+			}
+			ref = k.ID
+		}
+		out[key] = ref
 	}
 	return out, nil
 }
@@ -659,7 +738,7 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 	if ev.Group {
 		// In a group on the list anyone may talk to the kitty, by naming it.
 		b.sawLocked(ev.Chat, ev.ChatName)
-		if !ev.Mentioned && !mentions(text, b.kittyNameLocked()) {
+		if !ev.Mentioned && !mentions(text, b.kittyNameLocked(ev.Chat)) {
 			return
 		}
 		if !b.groupAllowedLocked(ev.Chat) {
@@ -680,6 +759,10 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 		b.last = ev.From
 	}
 	b.status.LastMessage = time.Now()
+	in.ref, in.who = ev.Ref, in.to
+	if ev.Ref.ID != "" {
+		b.refs[in.key] = ev.Ref
+	}
 	lock := b.numbers[in.key]
 	if lock == nil {
 		lock = &sync.Mutex{}
@@ -704,6 +787,9 @@ type inbound struct {
 	key, to          string
 	group            bool
 	groupName        string
+	// who is the number or group whose kitty answers; ref the message.
+	who string
+	ref Ref
 }
 
 // groupAllowedLocked reports whether a group is on the list.
@@ -740,11 +826,29 @@ func (b *Bridge) sawLocked(id, name string) {
 	}
 }
 
-func (b *Bridge) kittyNameLocked() string {
-	if b.opt.Kitty == nil || b.set.Kitty == "" {
-		return ""
+// kittyRefLocked is the kitty that answers a number or a group (its JID).
+func (b *Bridge) kittyRefLocked(who string) string {
+	if ref := b.set.Kitties[who]; ref != "" {
+		return ref
 	}
-	if k, err := b.opt.Kitty(b.set.Kitty); err == nil {
+	return b.set.Kitty
+}
+
+// kittyLocked is that kitty, when it is there.
+func (b *Bridge) kittyLocked(who string) *kitty.Kitty {
+	ref := b.kittyRefLocked(who)
+	if b.opt.Kitty == nil || ref == "" {
+		return nil
+	}
+	k, err := b.opt.Kitty(ref)
+	if err != nil {
+		return nil
+	}
+	return k
+}
+
+func (b *Bridge) kittyNameLocked(who string) string {
+	if k := b.kittyLocked(who); k != nil {
 		return k.Name
 	}
 	return ""
@@ -779,10 +883,14 @@ func isWordByte(c byte) bool {
 // chatFor is the chat of a number or a group, made the first time it writes.
 func (b *Bridge) chatFor(in inbound) (string, error) {
 	b.mu.Lock()
-	id, kittyRef := b.chats[in.key], b.set.Kitty
+	id, kittyRef := b.chats[in.key], b.kittyRefLocked(in.to)
+	if k := b.kittyLocked(in.to); k != nil {
+		kittyRef = k.ID
+	}
 	b.mu.Unlock()
 	if id != "" {
-		if _, err := b.opt.Chats.Get(id); err == nil {
+		// A chat whose kitty is no longer the one that answers is left for a new one.
+		if sess, err := b.opt.Chats.Get(id); err == nil && (len(sess.Members) == 0 || contains(sess.Members, kittyRef)) {
 			return id, nil
 		}
 	}
@@ -803,6 +911,15 @@ func (b *Bridge) chatFor(in inbound) (string, error) {
 	defer b.mu.Unlock()
 	b.chats[in.key] = sess.ID
 	return sess.ID, b.saveLocked()
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // typingEvery is how often "writing…" is shown again while the kitty thinks (WhatsApp drops it
@@ -863,6 +980,11 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 		b.opt.Log("whatsapp: no chat for +%s: %v", in.from, err)
 		return
 	}
+	if in.ref.ID != "" {
+		if err := c.MarkRead(ctx, in.ref); err != nil {
+			b.opt.Log("whatsapp: mark read: %v", err)
+		}
+	}
 	stopTyping := b.typing(ctx, c, in.to)
 	files := b.uploads(ctx, &in)
 	events, unsubscribe := b.opt.Chats.Subscribe(id)
@@ -875,7 +997,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 	}
 	stopTyping()
 	if errors.Is(err, chat.ErrBusy) {
-		b.reply(ctx, c, in.to, b.busyText(in.text))
+		b.reply(ctx, c, in.to, b.busyText(in.who, in.text))
 		return
 	}
 	if err != nil {
@@ -890,7 +1012,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 	first := len(sess.Turns) - len(turns)
 	working := map[int]string{}
 	for i, t := range turns {
-		b.reply(ctx, c, in.to, t.Text)
+		b.replyTo(ctx, c, in.to, in.ref, t.Text)
 		b.replyFiles(ctx, c, in.to, t.Artifacts)
 		if t.Working {
 			working[first+i] = t.Text
@@ -924,15 +1046,13 @@ var busy = map[string]string{
 	"pt": "⏳ Ainda estou na sua mensagem anterior; escrevo assim que terminar.",
 }
 
-func (b *Bridge) busyText(text string) string {
+func (b *Bridge) busyText(who, text string) string {
 	b.mu.Lock()
-	ref := b.set.Kitty
+	k := b.kittyLocked(who)
 	b.mu.Unlock()
 	lang := ""
-	if b.opt.Kitty != nil && ref != "" {
-		if k, err := b.opt.Kitty(ref); err == nil {
-			lang = k.Soul.Language
-		}
+	if k != nil {
+		lang = k.Soul.Language
 	}
 	return busy[LanguageOf(lang, text)]
 }
@@ -979,7 +1099,27 @@ func LanguageOf(lang, text string) string {
 
 // reply writes text to a number, in parts WhatsApp takes.
 func (b *Bridge) reply(ctx context.Context, c Client, to, text string) {
+	b.replyTo(ctx, c, to, Ref{}, text)
+}
+
+// replyTo writes text to a number or a group; an answer that is a single emoji goes as a
+// reaction to ref, when there is one.
+func (b *Bridge) replyTo(ctx context.Context, c Client, to string, ref Ref, text string) {
+	if e := strings.TrimSpace(text); ref.ID != "" && IsEmoji(e) {
+		if err := b.take(); err != nil {
+			b.opt.Log("whatsapp: react in %s: %v", to, err)
+			return
+		}
+		if err := c.React(ctx, ref, e); err != nil {
+			b.opt.Log("whatsapp: react in %s: %v", to, err)
+		}
+		return
+	}
 	for _, part := range Split(Plain(text), maxPart) {
+		if err := b.take(); err != nil {
+			b.opt.Log("whatsapp: reply to %s: %v", to, err)
+			return
+		}
 		if err := c.Send(ctx, to, part); err != nil {
 			b.opt.Log("whatsapp: reply to +%s: %v", to, err)
 			return
@@ -988,6 +1128,52 @@ func (b *Bridge) reply(ctx context.Context, c Client, to, text string) {
 }
 
 const maxPart = 4000
+
+// take counts one message against the hourly limit, or says it is reached.
+func (b *Bridge) take() error {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	now := time.Now()
+	limit := b.set.MaxPerHour
+	if limit <= 0 {
+		limit = DefaultPerHour
+	}
+	if b.recentLocked(now) >= limit {
+		b.status.Held++
+		return ErrLimit
+	}
+	b.sent = append(b.sent, now)
+	return nil
+}
+
+// recentLocked drops the sends older than an hour and counts the rest.
+func (b *Bridge) recentLocked(now time.Time) int {
+	i := 0
+	for i < len(b.sent) && now.Sub(b.sent[i]) >= time.Hour {
+		i++
+	}
+	b.sent = b.sent[i:]
+	return len(b.sent)
+}
+
+// IsEmoji reports whether s is one emoji (with its modifiers), the way a reaction is.
+func IsEmoji(s string) bool {
+	if s == "" || len(s) > 32 {
+		return false
+	}
+	pictos := 0
+	for _, r := range s {
+		switch {
+		case r == 0x200d || (r >= 0xfe00 && r <= 0xfe0f) || (r >= 0x1f3fb && r <= 0x1f3ff) || (r >= 0xe0020 && r <= 0xe007f):
+			// joiners, variation selectors, skin tones, tags
+		case r >= 0x1f1e6 && r <= 0x1f1ff, r >= 0x1f000 && r <= 0x1faff, r >= 0x2600 && r <= 0x27bf, r >= 0x2b00 && r <= 0x2bff, r == 0x2764:
+			pictos++
+		default:
+			return false
+		}
+	}
+	return pictos > 0 && pictos <= 4
+}
 
 // maxCaption is the longest text sent as a file's caption; a longer one goes before it.
 const maxCaption = 1000
@@ -1018,6 +1204,9 @@ func (b *Bridge) sendFile(ctx context.Context, c Client, to, name, caption strin
 	}
 	if f.Name == "" {
 		f.Name = name
+	}
+	if err := b.take(); err != nil {
+		return err
 	}
 	return c.SendFile(ctx, to, f, caption)
 }
@@ -1069,6 +1258,9 @@ func (b *Bridge) sendWith(ctx context.Context, to, text, file string) error {
 		caption, parts = parts[0], nil
 	}
 	for _, part := range parts {
+		if err := b.take(); err != nil {
+			return err
+		}
 		if err := c.Send(ctx, n, part); err != nil {
 			return err
 		}
@@ -1077,6 +1269,44 @@ func (b *Bridge) sendWith(ctx context.Context, to, text, file string) error {
 		return b.sendFile(ctx, c, n, file, caption)
 	}
 	return nil
+}
+
+// react puts an emoji on the last message of a number or a group on the list.
+func (b *Bridge) react(ctx context.Context, to, emoji string) error {
+	b.mu.Lock()
+	c, state, enabled, last := b.client, b.status.State, b.set.Enabled, b.last
+	b.mu.Unlock()
+	if !enabled {
+		return ErrNotOn
+	}
+	if c == nil || state != StateConnected {
+		return ErrNotReady
+	}
+	emoji = strings.TrimSpace(emoji)
+	if emoji != "" && !IsEmoji(emoji) {
+		return fmt.Errorf("%q is not an emoji", emoji)
+	}
+	if strings.TrimSpace(to) == "" {
+		to = last
+	}
+	b.mu.Lock()
+	dest, err := b.destLocked(to)
+	key := dest
+	if IsGroup(dest) {
+		key = "g:" + dest
+	}
+	ref := b.refs[key]
+	b.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if ref.ID == "" {
+		return errors.New("there is no message of that chat to react to yet")
+	}
+	if err := b.take(); err != nil {
+		return err
+	}
+	return c.React(ctx, ref, emoji)
 }
 
 // destLocked is where a message for to goes: a number on the list, or a group on it (its JID or
@@ -1201,6 +1431,8 @@ func (c connectorOf) Describe() string {
 		`writes to a number or a group on the allow list (` + allow + `; "to" left out writes to whoever wrote last). ` +
 		`Add "file": "<name of a file in the library>" to send a picture, video, audio or document, with "text" as its caption. ` +
 		`Files you save to the library while answering someone on WhatsApp are sent to them by themselves. ` +
+		`{"action": "react", "to": "+56912345678", "emoji": "👍"} puts an emoji on the last message of that chat ("to" left out: whoever wrote last); ` +
+		`an answer that is only an emoji goes as a reaction too. ` +
 		`{"action": "status"} says whether it is connected. The people on the list also write to you here.`
 }
 
@@ -1236,6 +1468,11 @@ func (c connectorOf) Call(ctx context.Context, args map[string]any) (string, err
 			return "", err
 		}
 		return "sent", nil
+	case "react":
+		if err := c.b.react(ctx, str("to"), str("emoji")); err != nil {
+			return "", err
+		}
+		return "reacted", nil
 	case "status":
 		st := c.b.Status()
 		out := "WhatsApp is " + st.State
@@ -1247,6 +1484,6 @@ func (c connectorOf) Call(ctx context.Context, args map[string]any) (string, err
 		c.b.mu.Unlock()
 		return out + "; it may write to " + strings.Join(to, ", "), nil
 	default:
-		return "", fmt.Errorf("unknown action %q (send, status)", action)
+		return "", fmt.Errorf("unknown action %q (send, react, status)", action)
 	}
 }

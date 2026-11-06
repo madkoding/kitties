@@ -26,6 +26,8 @@ type fakeClient struct {
 	emit    func(Event)
 	sent    []string
 	typing  []string
+	reads   []string
+	reacts  []string
 	sendErr error
 	logout  int
 	runErr  error
@@ -79,6 +81,26 @@ func (f *fakeClient) SendFile(_ context.Context, to string, file File, caption s
 	}
 	f.sent = append(f.sent, to+": ["+file.Name+"|"+file.MIME+"|"+string(file.Data)+"] "+caption)
 	return nil
+}
+
+func (f *fakeClient) MarkRead(_ context.Context, ref Ref) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reads = append(f.reads, ref.ID)
+	return nil
+}
+
+func (f *fakeClient) React(_ context.Context, ref Ref, emoji string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reacts = append(f.reacts, ref.Chat+"/"+ref.ID+" "+emoji)
+	return nil
+}
+
+func (f *fakeClient) snapshot() (reads, reacts []string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.reads...), append([]string(nil), f.reacts...)
 }
 
 func (f *fakeClient) Typing(_ context.Context, to string, on bool) error {
@@ -1128,5 +1150,179 @@ func TestDefaultsFromTheFile(t *testing.T) {
 	b, _ = New(Options{Dir: dir, Box: box{}, Defaults: &Settings{Enabled: true, Kitty: "mimi"}})
 	if b.Status().Enabled {
 		t.Fatal("the file won over Settings")
+	}
+}
+
+func TestReadAndReact(t *testing.T) {
+	r := newRig(t)
+	f := r.linked(t)
+	c := connectorOf{r.b}
+	ctx := context.Background()
+	if _, err := c.Call(ctx, map[string]any{"action": "react", "to": "+56912345678", "emoji": "👍"}); err == nil {
+		t.Fatal("reacted with no message")
+	}
+	// The kitty answers with an emoji only: it goes as a reaction; the message is marked read.
+	r.chats.reply = func(string) ([]chat.Turn, error) { return []chat.Turn{{From: "mimi", Text: " 👍🏽 "}}, nil }
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "listo?", Ref: Ref{Chat: "56912345678@s.whatsapp.net", ID: "m1"}})
+	eventually(t, "the reaction", func() bool { _, re := f.snapshot(); return len(re) == 1 })
+	reads, reacts := f.snapshot()
+	if reads[0] != "m1" || reacts[0] != "56912345678@s.whatsapp.net/m1 👍🏽" || len(f.messages()) != 0 {
+		t.Fatalf("reads = %v, reacts = %v, sent = %v", reads, reacts, f.messages())
+	}
+	// The connector reacts to the last message of a chat.
+	for _, args := range []map[string]any{{"action": "react", "emoji": "❤️"}, {"action": "react", "to": "+56912345678", "emoji": ""}} {
+		if out, err := c.Call(ctx, args); err != nil || out != "reacted" {
+			t.Fatalf("%v = %q %v", args, out, err)
+		}
+	}
+	for _, args := range []map[string]any{{"action": "react", "emoji": "hola"}, {"action": "react", "to": "+4411112222", "emoji": "👍"}} {
+		if _, err := c.Call(ctx, args); err == nil {
+			t.Fatalf("%v reacted", args)
+		}
+	}
+	if _, reacts := f.snapshot(); len(reacts) != 3 || reacts[1] != "56912345678@s.whatsapp.net/m1 ❤️" {
+		t.Fatalf("reacts = %v", reacts)
+	}
+	if !strings.Contains(c.Describe(), `"react"`) {
+		t.Fatal("react is not described")
+	}
+	// Off, or not connected.
+	r.b.mu.Lock()
+	r.b.status.State = StateDisconnected
+	r.b.mu.Unlock()
+	if _, err := c.Call(ctx, map[string]any{"action": "react", "emoji": "👍"}); !errors.Is(err, ErrNotReady) {
+		t.Fatalf("not ready = %v", err)
+	}
+	if err := r.b.Apply(Settings{Kitty: "mimi", Allow: []string{"+56912345678"}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Call(ctx, map[string]any{"action": "react", "emoji": "👍"}); !errors.Is(err, ErrNotOn) {
+		t.Fatalf("off = %v", err)
+	}
+}
+
+func TestIsEmoji(t *testing.T) {
+	for s, want := range map[string]bool{
+		"👍": true, "👍🏽": true, "❤️": true, "🇨🇱": true, "👨‍👩‍👧": true, "☀": true, "😀😀": true,
+		"": false, "ok": false, "👍 ok": false, "1": false, "😀😀😀😀😀": false, "\ufe0f": false, strings.Repeat("😀", 9): false,
+	} {
+		if got := IsEmoji(s); got != want {
+			t.Fatalf("IsEmoji(%q) = %v", s, got)
+		}
+	}
+}
+
+func TestKittyPerChat(t *testing.T) {
+	r := newRig(t)
+	f := r.linked(t)
+	set := Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678", "+15550001111"}, Groups: true,
+		AllowGroups: []string{"120363@g.us"}, Kitties: map[string]string{"+1 555 000 1111": "luna", "120363@g.us": "luna", "56912345678": ""}}
+	if err := r.b.Apply(set); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.b.Status(); len(st.Kitties) != 2 || st.Kitties["15550001111"] != "k2" || st.Kitties["120363@g.us"] != "k2" {
+		t.Fatalf("kitties = %v", st.Kitties)
+	}
+	f.push(Event{Kind: EvMessage, From: "15550001111", Text: "hola"})
+	eventually(t, "luna's chat", func() bool { return len(f.messages()) == 1 })
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "hi"})
+	eventually(t, "mimi's chat", func() bool { return len(f.messages()) == 2 })
+	// In the group luna answers to her own name, not mimi's.
+	g := Event{Kind: EvMessage, From: "4411112222", Group: true, Chat: "120363@g.us", Text: "mimi?"}
+	f.push(g)
+	g.Text = "luna, ¿estás?"
+	f.push(g)
+	eventually(t, "the group chat", func() bool { return len(f.messages()) == 3 })
+	r.chats.mu.Lock()
+	members := map[string]string{}
+	for _, s := range r.chats.sessions {
+		members[s.Title] = strings.Join(s.Members, ",")
+	}
+	r.chats.mu.Unlock()
+	if members["WhatsApp +15550001111"] != "k2" || members["WhatsApp +56912345678"] != "k1" || members["WhatsApp group 120363"] != "k2" {
+		t.Fatalf("members = %v", members)
+	}
+	// Moving a number to another kitty starts a new chat with it.
+	set.Kitties = map[string]string{"56912345678": "luna"}
+	if err := r.b.Apply(set); err != nil {
+		t.Fatal(err)
+	}
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "again"})
+	eventually(t, "the new chat", func() bool { return len(f.messages()) == 4 })
+	r.chats.mu.Lock()
+	created := r.chats.created
+	r.chats.mu.Unlock()
+	if created != 4 {
+		t.Fatalf("chats = %d", created)
+	}
+	// Bad entries.
+	for _, bad := range []map[string]string{{"12": "mimi"}, {"+56912345678": "nobody"}} {
+		set.Kitties = bad
+		if err := r.b.Apply(set); err == nil {
+			t.Fatalf("%v was taken", bad)
+		}
+	}
+	many := map[string]string{}
+	for i := 0; i <= 2*MaxAllow; i++ {
+		many[fmt.Sprintf("+5691234%04d", i)] = "mimi"
+	}
+	set.Kitties = many
+	if err := r.b.Apply(set); err == nil {
+		t.Fatal("too many kitties were taken")
+	}
+	if _, err := New(Options{Dir: t.TempDir(), Kitty: kittyOf, Defaults: &Settings{Kitties: map[string]string{"x": "mimi"}}}); err == nil {
+		t.Fatal("a bad number in the file was taken")
+	}
+}
+
+func TestHourlyLimit(t *testing.T) {
+	r := newRig(t)
+	f := r.linked(t)
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, MaxPerHour: 2}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []int{-1, MaxPerHourLimit + 1} {
+		if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", MaxPerHour: bad}); err == nil {
+			t.Fatalf("%d was taken", bad)
+		}
+	}
+	c := connectorOf{r.b}
+	ctx := context.Background()
+	for i := 0; i < 2; i++ {
+		if _, err := c.Call(ctx, map[string]any{"to": "+56912345678", "text": "x"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := c.Call(ctx, map[string]any{"to": "+56912345678", "text": "x"}); !errors.Is(err, ErrLimit) {
+		t.Fatalf("over the limit = %v", err)
+	}
+	r.b.opt.File = func(string) (File, error) { return File{Data: []byte("x")}, nil }
+	if _, err := c.Call(ctx, map[string]any{"to": "+56912345678", "file": "a.txt"}); !errors.Is(err, ErrLimit) {
+		t.Fatalf("a file over the limit = %v", err)
+	}
+	// A reply over the limit is held, and so is a reaction.
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "hola", Ref: Ref{ID: "m1"}})
+	eventually(t, "the held reply", func() bool { return r.b.Status().Held == 3 })
+	if _, err := c.Call(ctx, map[string]any{"action": "react", "emoji": "👍"}); !errors.Is(err, ErrLimit) {
+		t.Fatalf("a reaction over the limit = %v", err)
+	}
+	r.chats.reply = func(string) ([]chat.Turn, error) { return []chat.Turn{{From: "mimi", Text: "👍"}}, nil }
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "ok?", Ref: Ref{ID: "m2"}})
+	eventually(t, "the held reaction", func() bool { return r.b.Status().Held == 5 })
+	if st := r.b.Status(); st.SentLastHour != 2 || len(f.messages()) != 2 {
+		t.Fatalf("status = %+v, sent %v", st, f.messages())
+	}
+	// An hour later there is room again; the default limit is larger.
+	r.b.mu.Lock()
+	for i := range r.b.sent {
+		r.b.sent[i] = r.b.sent[i].Add(-time.Hour)
+	}
+	r.b.set.MaxPerHour = 0
+	r.b.mu.Unlock()
+	if _, err := c.Call(ctx, map[string]any{"to": "+56912345678", "text": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.b.Status(); st.SentLastHour != 1 {
+		t.Fatalf("sent = %d", st.SentLastHour)
 	}
 }
