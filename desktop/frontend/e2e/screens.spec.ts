@@ -405,7 +405,10 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   await expect(page.getByTestId("level")).toContainText("They are demanding");
   const notes = page.getByTestId("notes");
   await expect(notes).toContainText("Answer in Spanish when I write in Spanish");
-  await expect(notes.locator(".tag", { hasText: "yours" })).toHaveCount(1);
+  await expect(notes.locator(".tag", { hasText: "yours" })).toHaveCount(2);
+  // The shared note is every kitty's: tom sees it too.
+  await expect(notes.locator(".tag", { hasText: "shared" })).toHaveCount(1);
+  await expect(notes).toContainText("My name is Mad and I work from Santiago");
   await expect(notes).toContainText("Correction: Too long: two lines at most");
   await expect(notes).toContainText("I prefer short answers");
   // The yes it gave to Slack is on its way to being trusted: twelve in a row for a demanding person.
@@ -428,6 +431,9 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   await expect(page.getByTestId("level")).toContainText("They are easygoing");
   await memory.getByRole("button", { name: "4 · demanding" }).click();
   await expect(page.getByTestId("level")).toContainText("They are demanding");
+  await open(page, `#kitty/${ids.tom}`);
+  await openConfig(page);
+  await expect(page.getByTestId("notes")).toContainText("My name is Mad and I work from Santiago");
 });
 
 test("notifications: pick a channel, send a test and be told when something waits", async ({

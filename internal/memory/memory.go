@@ -20,17 +20,23 @@ import (
 	"time"
 )
 
-// The scopes of a note: what the person likes, how the work goes, or a project.
+// The scopes of a note: what the person likes, how the work goes, a project, or what every
+// kitty should know (shared).
 const (
-	ScopeUser = "user"
-	ScopeWork = "work"
+	ScopeUser   = "user"
+	ScopeWork   = "work"
+	ScopeShared = "shared"
 )
+
+// sharedKey is where the notes every kitty shares are kept, beside the kitties' own. A kitty's
+// id never starts with an underscore, so it cannot clash with one.
+const sharedKey = "_shared"
 
 var projectScope = regexp.MustCompile(`^project:[a-z0-9][a-z0-9 _-]{0,39}$`)
 
-// ValidScope reports whether s names a scope: user, work or project:<name>.
+// ValidScope reports whether s names a scope: user, work, shared or project:<name>.
 func ValidScope(s string) bool {
-	return s == ScopeUser || s == ScopeWork || projectScope.MatchString(s)
+	return s == ScopeUser || s == ScopeWork || s == ScopeShared || projectScope.MatchString(s)
 }
 
 // Slug is a project's name as a scope: lowercase letters, digits, spaces, dashes.
@@ -186,7 +192,10 @@ func (s *Store) Remember(kitty, scope, text, source string, pinned bool) (*Note,
 		scope = ScopeUser
 	}
 	if !ValidScope(scope) {
-		return nil, fmt.Errorf("scope %q is not user, work or project:<name>", scope)
+		return nil, fmt.Errorf("scope %q is not user, work, shared or project:<name>", scope)
+	}
+	if scope == ScopeShared {
+		kitty = sharedKey
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -227,16 +236,18 @@ func (s *Store) evict(f *file) {
 	}
 }
 
-// Forget removes one note.
+// Forget removes one note, the kitty's own or a shared one.
 func (s *Store) Forget(kitty, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f := s.load(kitty)
-	for i, n := range f.Notes {
-		if n.ID == id {
-			f.Notes = append(f.Notes[:i], f.Notes[i+1:]...)
-			s.save(kitty, f)
-			return nil
+	for _, key := range []string{kitty, sharedKey} {
+		f := s.load(key)
+		for i, n := range f.Notes {
+			if n.ID == id {
+				f.Notes = append(f.Notes[:i], f.Notes[i+1:]...)
+				s.save(key, f)
+				return nil
+			}
 		}
 	}
 	return fmt.Errorf("no such note %q", id)
@@ -254,12 +265,17 @@ func (s *Store) ForgetKitty(kitty string) error {
 	return err
 }
 
-// Notes returns a kitty's notes of a scope ("" for all), strongest first.
+// Notes returns a kitty's notes of a scope ("" for all), strongest first. They include the
+// shared notes, which every kitty sees.
 func (s *Store) Notes(kitty, scope string) []Note {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []Note
-	for _, n := range s.load(kitty).Notes {
+	all := s.load(kitty).Notes
+	if kitty != sharedKey {
+		all = append(append([]*Note(nil), all...), s.load(sharedKey).Notes...)
+	}
+	for _, n := range all {
 		if scope == "" || n.Scope == scope {
 			out = append(out, *n)
 		}
@@ -378,7 +394,8 @@ func (s *Store) Distilled(kitty string, notes []Note) {
 		for _, k := range kept {
 			dup = dup || (k.Scope == n.Scope && norm(k.Text) == norm(n.Text))
 		}
-		if dup || !ValidScope(n.Scope) || strings.TrimSpace(n.Text) == "" {
+		// Shared notes are tended by hand or by remember, never replaced by one kitty's distillation.
+		if dup || !ValidScope(n.Scope) || n.Scope == ScopeShared || strings.TrimSpace(n.Text) == "" {
 			continue
 		}
 		kept = append(kept, &Note{ID: s.id(), Scope: n.Scope, Text: clip(n.Text, 240), Strength: max(1, n.Strength), At: s.now(), Updated: s.now(), Source: "distilled"})
@@ -408,12 +425,14 @@ func (s *Store) Prompt(kitty, person, project string) string {
 	}
 	notes := s.Notes(kitty, "")
 	p := s.Profile(kitty)
-	var user, work, proj []string
+	var user, work, proj, shared []string
 	for _, n := range notes {
 		line := "- " + n.Text
 		switch {
 		case n.Scope == ScopeUser && len(user) < 12:
 			user = append(user, line)
+		case n.Scope == ScopeShared && len(shared) < 12:
+			shared = append(shared, line)
 		case n.Scope == ScopeWork && len(work) < 8:
 			work = append(work, line)
 		case project != "" && n.Scope == "project:"+project && len(proj) < 10:
@@ -424,6 +443,9 @@ func (s *Store) Prompt(kitty, person, project string) string {
 	fmt.Fprintf(&b, "How demanding %s is with you: %d of 5. %s\n", person, p.Demand, LevelText(p.Demand))
 	if len(user) > 0 {
 		fmt.Fprintf(&b, "What you have learned about %s and how they like things done (follow it):\n%s\n", person, strings.Join(user, "\n"))
+	}
+	if len(shared) > 0 {
+		fmt.Fprintf(&b, "What every kitty of %s knows (shared, follow it):\n%s\n", person, strings.Join(shared, "\n"))
 	}
 	if len(work) > 0 {
 		fmt.Fprintf(&b, "Lessons about the work:\n%s\n", strings.Join(work, "\n"))

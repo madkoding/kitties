@@ -14,7 +14,7 @@ func (s *Server) mcpMemoryTools() []mcp.Tool {
 	return []mcp.Tool{
 		{Name: "memory_list", Description: "What a kitty knows about the person and the work: its notes (id, scope, text, strength), how demanding the person is, and the trust earned per action.",
 			InputSchema: obj([]string{"ref"}, map[string]any{"ref": str("the kitty's id or name"),
-				"scope": str("only this scope: user, work or project:<name>; empty is all")}),
+				"scope": str("only this scope: user, work, shared or project:<name>; empty is all")}),
 			Annotations: mcp.Annotations{ReadOnly: true},
 			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
 				var a struct {
@@ -45,7 +45,7 @@ func (s *Server) mcpMemoryTools() []mcp.Tool {
 		{Name: "memory_remember", Description: "Tell a kitty something to keep in mind from now on (a preference, a correction, a fact of a project). Short, one thing each, never secrets. It is pinned: a distillation never drops it.",
 			InputSchema: obj([]string{"ref", "text"}, map[string]any{"ref": str("the kitty's id or name"),
 				"text":  str("the note, up to 240 characters"),
-				"scope": str("user (how the person likes things, the default), work (a lesson about the work) or project:<name>")}),
+				"scope": str("user (how the person likes things, the default), work (a lesson about the work), shared (every kitty sees it) or project:<name>")}),
 			Annotations: mcp.Annotations{},
 			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
 				var a struct {

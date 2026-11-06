@@ -57,7 +57,9 @@ In the YAML, under a kitty:
 Autonomy needs a memory, a leash that loosens with trust, and a way to reach you.
 
 - **Memory.** Each kitty keeps what it knows about you and the work: notes in three scopes
-  (*you*, *work* and one per project), pinned notes of your own, and a level of how demanding you
+  (*you*, *work* and one per project), plus *shared* notes that every kitty knows (kept once, in
+  `memory/_shared.json`; a kitty's distillation never rewrites them and removing a kitty keeps
+  them), pinned notes of your own, and a level of how demanding you
   are (1 relaxed to 5 strict) that it learns from the thumbs under its answers. Every few verdicts
   it distils the corrections into lasting notes with its own brain. It writes notes itself
   (`@memory remember {...}` or the native `memory_*` tools) when you say "remember that...". The

@@ -19,7 +19,7 @@ func open(t *testing.T) *Store {
 }
 
 func TestScopesAndSlugs(t *testing.T) {
-	for _, ok := range []string{"user", "work", "project:launch", "project:q4 report", "project:a-b_c"} {
+	for _, ok := range []string{"user", "work", "shared", "project:launch", "project:q4 report", "project:a-b_c"} {
 		if !ValidScope(ok) {
 			t.Errorf("%q is a scope", ok)
 		}
@@ -238,5 +238,59 @@ func TestDistilledPersistenceAndPrompt(t *testing.T) {
 		if _, err := bad.Remember("k", ScopeUser, "x", "kitty", false); err != nil {
 			t.Error("an unwritable memory still works in memory")
 		}
+	}
+}
+
+func TestSharedNotes(t *testing.T) {
+	s := open(t)
+	sh, err := s.Remember("k1", ScopeShared, "Answer in Spanish", "person", true)
+	if err != nil || sh.Scope != ScopeShared {
+		t.Fatalf("shared: %+v %v", sh, err)
+	}
+	if _, err := s.Remember("k1", ScopeUser, "Likes tables", "kitty", false); err != nil {
+		t.Fatal(err)
+	}
+	// Every kitty sees the shared note; only k1 its own.
+	if n := s.Notes("k2", ""); len(n) != 1 || n[0].Text != "Answer in Spanish" {
+		t.Errorf("k2 notes: %+v", n)
+	}
+	if n := s.Notes("k1", ""); len(n) != 2 {
+		t.Errorf("k1 notes: %+v", n)
+	}
+	if n := s.Notes("k1", ScopeShared); len(n) != 1 {
+		t.Errorf("k1 shared: %+v", n)
+	}
+	if p := s.Prompt("k2", "Mad", ""); !strings.Contains(p, "What every kitty of Mad knows") || !strings.Contains(p, "Answer in Spanish") {
+		t.Errorf("prompt: %q", p)
+	}
+	// The same thing told from another kitty strengthens the one shared note.
+	if again, _ := s.Remember("k2", ScopeShared, "answer in  spanish", "kitty", false); again.ID != sh.ID || again.Strength != 2 {
+		t.Errorf("again: %+v", again)
+	}
+	// A distillation neither drops nor writes shared notes.
+	s.Distilled("k1", []Note{{Scope: ScopeShared, Text: "Invented"}, {Scope: ScopeWork, Text: "Check twice"}})
+	if n := s.Notes("k1", ScopeShared); len(n) != 1 || n[0].Text != "Answer in Spanish" {
+		t.Errorf("after distill: %+v", n)
+	}
+	// Removing a kitty keeps what is shared.
+	if err := s.ForgetKitty("k1"); err != nil {
+		t.Fatal(err)
+	}
+	if n := s.Notes("k3", ""); len(n) != 1 {
+		t.Errorf("after ForgetKitty: %+v", n)
+	}
+	// It is kept on disk, and any kitty can forget it.
+	s2 := Open(s.dir)
+	if n := s2.Notes("k9", ScopeShared); len(n) != 1 {
+		t.Errorf("reopened: %+v", n)
+	}
+	if err := s2.Forget("k9", sh.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := s2.Notes("k2", ""); len(n) != 0 {
+		t.Errorf("after forget: %+v", n)
+	}
+	if err := s2.Forget("k9", "nope"); err == nil {
+		t.Error("forgetting a missing note")
 	}
 }

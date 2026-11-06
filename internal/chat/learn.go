@@ -53,7 +53,7 @@ func (s *Service) memoryPrompt(k *kitty.Kitty, sess *Session) string {
 	}
 	return "\n" + s.memory.Prompt(k.ID, s.userName(), project) +
 		"When you notice something lasting about how this person likes things done, or learn a lesson about the work, keep it with " +
-		"@memory remember {\"text\": \"...\", \"scope\": \"user\"} (user, work or project): short, one thing each, never secrets. " +
+		"@memory remember {\"text\": \"...\", \"scope\": \"user\"} (user, work, project, or shared when every kitty should know it): short, one thing each, never secrets. " +
 		"Drop a note that turned out wrong with @memory forget {\"id\": \"...\"}.\n"
 }
 
@@ -321,7 +321,13 @@ func (s *Service) distill(ctx context.Context, k *kitty.Kitty) ([]memory.Note, e
 	}
 	var b strings.Builder
 	b.WriteString("Current notes:\n")
-	notes := s.memory.Notes(k.ID, "")
+	// The shared notes are every kitty's: one kitty's distillation does not rework them.
+	var notes []memory.Note
+	for _, n := range s.memory.Notes(k.ID, "") {
+		if n.Scope != memory.ScopeShared {
+			notes = append(notes, n)
+		}
+	}
 	for _, n := range notes {
 		fmt.Fprintf(&b, "[%s] %s\n", n.Scope, n.Text)
 	}

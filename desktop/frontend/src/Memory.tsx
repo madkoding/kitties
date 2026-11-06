@@ -14,7 +14,11 @@ const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider
 const INPUT = "w-full px-3 py-2 text-sm";
 const LEVELS = ["relaxed", "easygoing", "balanced", "demanding", "strict"];
 
-const SCOPE_TAG: Record<string, string> = { user: "tag-accent", work: "tag-amber" };
+const SCOPE_TAG: Record<string, string> = {
+  user: "tag-accent",
+  work: "tag-amber",
+  shared: "tag-green",
+};
 
 export function MemoryPanel({ kitty }: { kitty: Kitty }) {
   const [view, setView] = useState<MemoryView | null>(null);
@@ -140,7 +144,10 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
       <div class="flex flex-col gap-1" data-testid="notes">
         {view.notes.map((n) => (
           <div key={n.id} class="flex items-start gap-2 text-sm">
-            <span class={`tag ${SCOPE_TAG[n.scope] || "tag-magenta"}`}>
+            <span
+              class={`tag ${SCOPE_TAG[n.scope] || "tag-magenta"}`}
+              title={n.scope === "shared" ? t("Every kitty knows it") : undefined}
+            >
               {n.scope.startsWith("project:") ? n.scope.replace("project:", "") : t(n.scope)}
             </span>
             <span class="flex-1 min-w-0">{n.text}</span>
@@ -168,6 +175,7 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
         >
           <option value="user">{t("about me")}</option>
           <option value="work">{t("about the work")}</option>
+          <option value="shared">{t("for every kitty")}</option>
         </select>
         <input
           class={INPUT}

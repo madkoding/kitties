@@ -219,6 +219,7 @@ func TestDistillation(t *testing.T) {
 	ana, _ := s.fleet.Get("ana")
 	_, _ = m.Remember(ana.ID, memory.ScopeUser, "Pat wrote this one", "person", true)
 	_, _ = m.Remember(ana.ID, memory.ScopeUser, "Correction: too long", "feedback", false)
+	_, _ = m.Remember(ana.ID, memory.ScopeShared, "Every kitty answers in Spanish", "person", true)
 	m.Record(ana.ID, memory.Feedback{Rating: "down", Note: "too long", Request: "summarise", Excerpt: "a very long summary"})
 	// The brain is asked with the notes and the verdicts, and its list replaces what is not pinned.
 	sa.replies = []string{"Here you go:\n[{\"scope\": \"user\", \"text\": \"Keep answers to two lines\"}, {\"scope\": \"WORK\", \"text\": \"Summaries first\"}, {\"text\": \"No scope means user\"}]\nDone."}
@@ -227,6 +228,9 @@ func TestDistillation(t *testing.T) {
 		t.Fatal(err)
 	}
 	asked := sa.seen[0][1].Content
+	if strings.Contains(asked, "Every kitty answers in Spanish") {
+		t.Errorf("the shared notes are not one kitty's to distill: %q", asked)
+	}
 	if !strings.Contains(asked, "[user] Correction: too long") || !strings.Contains(asked, "- down | asked: summarise | the kitty did: a very long summary | the person said: too long") {
 		t.Errorf("the brain was asked %q", asked)
 	}

@@ -153,6 +153,11 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     text: "Answer in Spanish when I write in Spanish",
     scope: "user",
   });
+  // And one every kitty knows.
+  await api("POST", "/v1/kitties/mimi/memory", {
+    text: "My name is Mad and I work from Santiago",
+    scope: "shared",
+  });
   const memo = await newChat(["mimi"], "Preferences");
   await say(memo, "Mimi, remember that I prefer short answers.");
   await api("POST", `/v1/chats/${single}/turns/1/feedback`, {
