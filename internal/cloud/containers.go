@@ -383,3 +383,69 @@ func (r *Router) List(ctx context.Context) ([]container.Info, error) {
 	}
 	return out, nil
 }
+
+// homes are the local desktops' part: a machine in the cloud keeps its own disk, so it has
+// nothing to move and no home of the host.
+type homes interface {
+	ImageHasHome(ctx context.Context, image string) (bool, error)
+	HasHome(ctx context.Context, name string) (bool, error)
+	ExecOut(ctx context.Context, name string, w io.Writer, argv ...string) error
+	ExecIn(ctx context.Context, name string, r io.Reader, argv ...string) (string, error)
+	Restart(ctx context.Context, name string) error
+}
+
+var errNoHomes = errors.New("this desktop's runtime does not keep homes on the host")
+
+// localHomes is the local backend's homes, for a desktop that is not in the cloud.
+func (r *Router) localHomes(name string) (homes, error) {
+	if name != "" && r.IsCloud != nil && r.IsCloud(name) {
+		return nil, errNoHomes
+	}
+	h, ok := r.Local.(homes)
+	if !ok {
+		return nil, errNoHomes
+	}
+	return h, nil
+}
+
+// ImageHasHome is the local engine's answer: the image is a local one.
+func (r *Router) ImageHasHome(ctx context.Context, image string) (bool, error) {
+	h, err := r.localHomes("")
+	if err != nil {
+		return false, nil
+	}
+	return h.ImageHasHome(ctx, image)
+}
+
+// HasHome says a machine in the cloud has its home already: there is nothing to move out of it.
+func (r *Router) HasHome(ctx context.Context, name string) (bool, error) {
+	h, err := r.localHomes(name)
+	if err != nil {
+		return true, nil
+	}
+	return h.HasHome(ctx, name)
+}
+
+func (r *Router) ExecOut(ctx context.Context, name string, w io.Writer, argv ...string) error {
+	h, err := r.localHomes(name)
+	if err != nil {
+		return err
+	}
+	return h.ExecOut(ctx, name, w, argv...)
+}
+
+func (r *Router) ExecIn(ctx context.Context, name string, rd io.Reader, argv ...string) (string, error) {
+	h, err := r.localHomes(name)
+	if err != nil {
+		return "", err
+	}
+	return h.ExecIn(ctx, name, rd, argv...)
+}
+
+func (r *Router) Restart(ctx context.Context, name string) error {
+	h, err := r.localHomes(name)
+	if err != nil {
+		return err
+	}
+	return h.Restart(ctx, name)
+}

@@ -169,6 +169,12 @@ func (s Soul) SystemPrompt(c Context) string {
 		b.WriteString("You run inside your own isolated Linux container with a virtual X display (Xvfb); " +
 			"you can open graphical applications and a browser there, and nothing you do touches the host. " +
 			"To the person, it is simply your own computer.\n")
+		b.WriteString("Your home (/home/kitty) outlives updates of that computer: your settings stay, and so do programs you " +
+			"install for yourself in ~/.local or /opt/kitty-apps; Debian packages come back by themselves " +
+			"(kitty-install <package>, kitty-install --remove <package>). " +
+			"To give the person a file you made (a document, a picture, a spreadsheet), put it in ~/Shared " +
+			"(kitty-share <file>): they see it in the app, under Library > Shared, and can preview and download it. " +
+			"Tell them its name when you do.\n")
 	}
 	if c.Workspace != "" {
 		fmt.Fprintf(&b, "Your working folder is %s.\n", c.Workspace)

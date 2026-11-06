@@ -612,6 +612,10 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	if err != nil {
 		return m.fail(k.ID, err)
 	}
+	spec, err := m.desktopSpec(ctx, k)
+	if err != nil {
+		return m.fail(k.ID, err)
+	}
 	// A desktop in another time zone than the host's (the host moved, or the gateway could not
 	// tell its zone when it made it) is made anew, so its clock shows the host's hour; a running
 	// one only while no one uses it (a gateway that starts finds them all idle).
@@ -624,19 +628,12 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 		}
 	default:
 		// A stopped container of an older image is made anew with the newest (its sessions were
-		// backed up when it stopped, and are put back below); a running one keeps them first.
+		// backed up when it stopped, and are put back below); a running one keeps them first. Its
+		// home, its workspace and its Shared folder are on the host and stay (home.go).
 		if exists {
-			if running {
-				m.saveSessions(ctx, k)
-			}
-			if err := m.ctr().Remove(ctx, k.Container); err != nil {
+			if err := m.dropContainer(ctx, k, running); err != nil {
 				return m.fail(k.ID, err)
 			}
-		}
-		c := m.cfg.Containers
-		spec := container.Spec{
-			Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: c.MemoryMB, CPUs: c.CPUs,
-			Network: c.Network, Workspace: k.Workspace, Env: c.Env,
 		}
 		if _, err := m.ctr().Up(ctx, spec); err != nil {
 			return m.fail(k.ID, err)
@@ -644,6 +641,8 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 		// A container made anew gets back what its kitty's browser knew.
 		m.restoreSessions(ctx, k)
 	}
+	// An older desktop's home, copied out when it was removed, goes into the new one.
+	m.finishMove(ctx, k, spec)
 	m.applyTheme(ctx, k, false)
 	// A machine just turned on has not been idle yet, and its desktop is still coming up.
 	m.use.touch(k.ID, m.now())
@@ -737,7 +736,7 @@ func (m *Manager) Stop(ctx context.Context, ref string) error {
 	return m.setStatus(k.ID, kitty.StatusStopped, "")
 }
 
-// Remove deletes the kitty and its container. The workspace stays on disk.
+// Remove deletes the kitty and its container. Its workspace, home and Shared folder stay on disk.
 func (m *Manager) Remove(ctx context.Context, ref string) error {
 	k, err := m.Get(ref)
 	if err != nil {
