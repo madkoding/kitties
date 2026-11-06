@@ -64,6 +64,9 @@ type Turn struct {
 	// Resumable is true when the task stopped on its budget (time, tokens or rounds) and can go
 	// on from where it was: the kitty's next answer gets the steps it had taken.
 	Resumable bool `json:"resumable,omitempty"`
+	// Parked is true when the kitty stopped on its day's tokens: it goes on by itself once
+	// they are back (a new day, or a higher limit), see resume.go.
+	Parked bool `json:"parked,omitempty"`
 	// Delegations are the subtasks the kitty handed to other kitties in this turn.
 	Delegations []Delegation `json:"delegations,omitempty"`
 	// Approvals are the actions this turn held for the person's yes.
@@ -182,8 +185,10 @@ type Service struct {
 	vault *vault.Store
 	// helps are the kitties waiting for the person's answer, by turn (help.go).
 	helps map[string]chan HelpAnswer
-	now   func() time.Time
-	newID func() string
+	// resuming are the parked chats being woken up (resume.go).
+	resuming map[string]bool
+	now      func() time.Time
+	newID    func() string
 	// MaxRounds bounds how many times a kitty may call connectors in one answer.
 	MaxRounds int
 	// UnattendedRounds is how many rounds of connector calls an unattended kitty may take in one
@@ -783,7 +788,7 @@ func (s *Service) sendWith(ctx context.Context, id, from, fromID, text string, f
 	for _, k := range responders {
 		turn, pending, err := s.answer(ctx, id, k, kitties)
 		if err != nil {
-			turn = Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: "(" + k.Name + " could not answer: " + Plain(err.Error()) + ")", Detail: err.Error()}
+			turn = Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: "(" + k.Name + " could not answer: " + Plain(err.Error()) + ")", Detail: err.Error(), Parked: errors.Is(err, ErrDayTokens)}
 		}
 		s.mu.Lock()
 		sess.Turns = append(sess.Turns, turn)
@@ -1215,6 +1220,8 @@ type taskState struct {
 	pre map[int]outcome
 	// detail is why the task failed, as the error said it.
 	detail string
+	// parked is whether it stopped on the kitty's day's tokens.
+	parked bool
 }
 
 // runTask drives a desktop task to its end within the kitty's limits: rounds of actions, a
@@ -1262,6 +1269,7 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 		s.edit(id, index, func(t *Turn) {
 			t.Detail = st.detail
 			t.Resumable = strings.HasPrefix(fail, "stopped")
+			t.Parked = st.parked
 		})
 	}
 }
@@ -1419,6 +1427,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		}
 		st.messages = fitContext(trimHistory(st.messages, s.MaxTurns*2), provider.ContextWindow(p.brain))
 		if err := s.overTokens(k); err != nil {
+			st.parked = true
 			return "stopped: " + err.Error(), false
 		}
 		answer, err := s.askPatiently(ctx, id, index, p, st.messages, limits)

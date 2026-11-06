@@ -21,7 +21,8 @@ A kitty is not only something you talk to. Each one has an agenda:
 - **Limits.** Per kitty: tokens, seconds and rounds per task, and how many times a failed
   attempt is tried another way. Unattended, there is no per-task token limit by default (nor a daily one) nor time limit; set `max_tokens`/`max_seconds` to cap one, and `day_tokens` caps the whole day. They are the safety net of unattended work: a task that hits
   one stops, says so (and can be resumed) instead of running on. A **daily budget** caps what a kitty spends around the clock: out of tokens it rests until
-  tomorrow (and tells you once); past its actions for the day, every post, reply or refund waits
+  tomorrow (and tells you once), then goes on by itself from where it stopped (right away if you
+  raise or remove the limit); past its actions for the day, every post, reply or refund waits
   for your yes even if it normally acts alone.
 - **Recovery.** A brain that is down for a while (busy, failing, unreachable) is waited for,
   up to half an hour, ever longer between tries, instead of failing the attempt; each wait shows
