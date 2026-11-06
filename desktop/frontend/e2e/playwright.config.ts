@@ -38,6 +38,11 @@ export default defineConfig({
     deviceScaleFactor: 1,
     colorScheme: "dark",
     trace: "retain-on-failure",
+    // KITTIES_E2E_CHROMIUM points at a Chromium of the machine when the one Playwright expects
+    // is not installed (a CI image or a sandbox with its own browser).
+    launchOptions: process.env.KITTIES_E2E_CHROMIUM
+      ? { executablePath: process.env.KITTIES_E2E_CHROMIUM }
+      : {},
   },
   webServer: [
     {
