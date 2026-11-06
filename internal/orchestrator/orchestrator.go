@@ -638,8 +638,9 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 		m.restoreSessions(ctx, k)
 	}
 	m.applyTheme(ctx, k, false)
-	// A machine just turned on has not been idle yet.
+	// A machine just turned on has not been idle yet, and its desktop is still coming up.
 	m.use.touch(k.ID, m.now())
+	m.use.boot(k.ID, m.now())
 	return m.setStatus(k.ID, kitty.StatusRunning, "")
 }
 
