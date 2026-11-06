@@ -1978,3 +1978,164 @@ html.mac-inset .live-head {
   padding-left: 0.5rem;
   padding-right: 0.5rem;
 }
+
+/* An artifact read as a document (the reader), and the link to one inside a message. */
+.md {
+  font-size: 0.875rem;
+  line-height: 1.6;
+  color: var(--t2);
+  overflow-wrap: anywhere;
+}
+.md h2,
+.md h3,
+.md h4,
+.md h5,
+.md h6 {
+  color: var(--t1);
+  font-weight: 600;
+  margin: 1.1em 0 0.4em;
+  line-height: 1.3;
+}
+.md h2 {
+  font-size: 1.25rem;
+}
+.md h3 {
+  font-size: 1.1rem;
+}
+.md p,
+.md ul,
+.md ol,
+.md pre,
+.md blockquote,
+.md table {
+  margin: 0.6em 0;
+}
+.md ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+}
+.md ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+}
+.md pre {
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  padding: 0.625rem;
+  background: rgb(0 0 0 / calc(var(--well-k) * 0.22));
+  border-radius: var(--radius-cut);
+}
+.md code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  padding: 1px 0.3125rem;
+  background: rgb(var(--ov-rgb) / 0.08);
+  border-radius: var(--radius-cut);
+}
+.md pre code {
+  padding: 0;
+  background: none;
+}
+.md blockquote {
+  padding-left: 0.75rem;
+  border-left: 2px solid rgb(var(--neon-rgb) / 0.4);
+  color: var(--t3);
+}
+.md hr {
+  border: 0;
+  border-top: 1px solid rgb(var(--ov-rgb) / 0.12);
+  margin: 1em 0;
+}
+.md table {
+  border-collapse: collapse;
+  display: block;
+  overflow-x: auto;
+}
+.md th,
+.md td {
+  border: 1px solid rgb(var(--ov-rgb) / 0.12);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}
+.md a,
+.artifact-link {
+  color: var(--neon-cyan);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.msg .text .artifact-link {
+  font: inherit;
+}
+
+/* A kitty's answer drawn as markdown: it keeps its line breaks and sits in the bubble flush. */
+.msg .text.text-md {
+  white-space: normal;
+}
+.md-chat {
+  font-size: inherit;
+  color: inherit;
+}
+.md-chat p {
+  white-space: pre-wrap;
+}
+.md-chat > :first-child {
+  margin-top: 0;
+}
+.md-chat > :last-child {
+  margin-bottom: 0;
+}
+.md-chat h2 {
+  font-size: 1.05rem;
+}
+.md-chat h3,
+.md-chat h4 {
+  font-size: 0.975rem;
+}
+
+/* The colours of a code block: a keyword, a string, a comment, a number. */
+.hl-kw {
+  color: var(--neon-magenta, #e879f9);
+}
+.hl-str {
+  color: var(--c-green, #4ade80);
+}
+.hl-com {
+  color: var(--t4);
+  font-style: italic;
+}
+.hl-num {
+  color: var(--c-amber, #fbbf24);
+}
+
+/* The table of contents of a long document in the reader. */
+.md-toc {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(var(--ov-rgb) / 0.1);
+  border-radius: var(--radius-cut);
+  background: rgb(var(--ov-rgb) / 0.03);
+  font-size: 0.8125rem;
+}
+.md-toc-title {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--t3);
+  margin-bottom: 0.25rem;
+}
+.md .md-toc ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+.md-toc .artifact-link {
+  text-decoration: none;
+  text-align: left;
+}
+.md h2,
+.md h3,
+.md h4 {
+  scroll-margin-top: 0.5rem;
+}

@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/madkoding/kitties/internal/agenda"
@@ -61,6 +62,9 @@ func (s *Service) warnTokens(k *kitty.Kitty) {
 	}
 }
 
+// ErrDayTokens is what a kitty out of its day's tokens is stopped with.
+var ErrDayTokens = errors.New("the daily token budget")
+
 // overTokens is an error when the kitty has spent its day's tokens; the first time in a day it
 // also tells the person.
 func (s *Service) overTokens(k *kitty.Kitty) error {
@@ -72,7 +76,13 @@ func (s *Service) overTokens(k *kitty.Kitty) error {
 		s.note(k, agenda.KindBlocked, "", "", fmt.Sprintf("spent its day's tokens (%d); stopped until tomorrow", sp.DayTokens))
 		s.tell(notify.Budget, k, "spent its day's tokens", fmt.Sprintf("%d of %d. It rests until tomorrow; raise its daily limit in Settings → Limits (or set 0 for no limit) and it continues right away.", sp.Tokens, sp.DayTokens), "")
 	}
-	return fmt.Errorf("the daily token budget (%d) is spent; it resumes tomorrow, or raise it in Settings → Limits", sp.DayTokens)
+	return fmt.Errorf("%w (%d) is spent; it resumes tomorrow, or raise it in Settings → Limits", ErrDayTokens, sp.DayTokens)
+}
+
+// overDay reports, without telling anyone, whether the kitty has spent its day's tokens.
+func (s *Service) overDay(k *kitty.Kitty) bool {
+	sp := s.SpentBy(k)
+	return s.budget != nil && sp.DayTokens > 0 && sp.Tokens >= sp.DayTokens
 }
 
 // overActions reports whether the kitty has used its day's actions.

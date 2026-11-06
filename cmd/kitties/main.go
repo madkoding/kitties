@@ -303,6 +303,10 @@ func (a *app) open(cmd string) error {
 		return err
 	}
 	chats.SetAgenda(ag.Journal, ag)
+	// How long a kitty keeps at a task on its own follows the settings as they change.
+	ag.Scheduler.SetFollowUps(func() []time.Duration { return fleet.Autonomy().FollowUpWaits(agenda.DefaultFollowUps) })
+	chats.SetBrainWait(func() time.Duration { return fleet.Autonomy().BrainWaitOr(chat.DefaultBrainWait) })
+	chats.SetStandIns(func() int { return fleet.Autonomy().StandInsOr(chat.DefaultStandIns) })
 	a.agenda = ag
 	dataDir := a.cfg.DataDirOr()
 	if a.approvals, err = approvals.Open(filepath.Join(dataDir, "approvals.json")); err != nil {
@@ -599,6 +603,8 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	a.notifier.SetLog(logf)
 	go a.agenda.Run(ctx)
 	go a.digest.Run(ctx, logf)
+	// A kitty that stopped on its day's tokens goes on by itself once they are back.
+	go a.chats.RunResumer(ctx, time.Minute)
 	// What is in the middle of a task is neither updated nor turned off: set before the watchdog
 	// starts, which looks at it. A machine that turns itself off after a time without use is
 	// noted in the kitty's journal and told to the person.

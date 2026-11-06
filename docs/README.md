@@ -6,6 +6,7 @@
 | [APPS.md](APPS.md) | The desktop app (Wails) and the Android app |
 | [DEPLOY.md](DEPLOY.md) | Run the gateway on a server: Compose with Caddy, systemd, nginx, backups |
 | [CONFIGURATION.md](CONFIGURATION.md) | The YAML file, the connector catalogue, signing in, subscriptions instead of keys |
+| [GOOGLE.md](GOOGLE.md) · [es](GOOGLE.es.md) | Connect personal Google accounts: the OAuth client, scopes, several accounts |
 | [AUTONOMY.md](AUTONOMY.md) | Goals, events, limits, recovery, memory, approvals, notifications |
 | [DESKTOP.md](DESKTOP.md) · [es](DESKTOP.es.md) | How a kitty sees and uses its desktop |
 | [KITTY-DESKTOP.md](KITTY-DESKTOP.md) | What the desktop is: Lumen shelf, Numix theme, Lucide icons, what is installed |

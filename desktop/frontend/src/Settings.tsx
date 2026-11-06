@@ -176,6 +176,8 @@ function ModelForm({
   const [key, setKey] = useState("");
   const [base, setBase] = useState(view?.base_url || "");
   const [maxTokens, setMaxTokens] = useState(view?.max_tokens ? String(view.max_tokens) : "");
+  // fallback is the model thought with while this one is down.
+  const [fallback, setFallback] = useState(view?.fallback || "");
   const [name, setName] = useState(view?.name || "");
   const [err, setErr] = useState("");
   const [phase, setPhase] = useState<"edit" | "saving" | "testing" | "failed">("edit");
@@ -261,6 +263,9 @@ function ModelForm({
       }
       if (maxTokens.trim()) {
         body.max_tokens = Number(maxTokens);
+      }
+      if (fallback) {
+        body.fallback = fallback;
       }
       const s = await api.setProvider(finalName, body);
       setSaved(s);
@@ -521,6 +526,31 @@ function ModelForm({
           onInput={(e) => setMaxTokens((e.target as HTMLInputElement).value.replace(/\D/g, ""))}
           placeholder="4096"
         />
+        {taken.filter((n) => n !== finalName).length > 0 && (
+          <>
+            <label class={LABEL} for="model-fallback">
+              {t("If it is down, think with")}
+            </label>
+            <select
+              id="model-fallback"
+              class={INPUT}
+              value={fallback}
+              onChange={(e) => setFallback((e.target as HTMLSelectElement).value)}
+            >
+              <option value="">{t("nothing else (wait for it)")}</option>
+              {taken
+                .filter((n) => n !== finalName)
+                .map((n) => (
+                  <option value={n}>{n}</option>
+                ))}
+            </select>
+            <p class={HELP}>
+              {t(
+                "While this model is busy or unreachable, the kitties go on with this one instead of waiting.",
+              )}
+            </p>
+          </>
+        )}
       </More>
       {phase === "failed" ? (
         <div class="callout callout-warn mt-3">
@@ -763,13 +793,16 @@ const OAUTH_LABEL: Record<string, string> = {
   google: "Google",
   microsoft: "Microsoft",
   slack: "Slack",
+  discord: "Discord",
   github: "GitHub",
   gitlab: "GitLab",
+  gitea: "Gitea",
   spotify: "Spotify",
   tidal: "TIDAL",
   dropbox: "Dropbox",
   notion: "Notion",
   todoist: "Todoist",
+  trello: "Trello",
   linear: "Linear",
   airtable: "Airtable",
   figma: "Figma",
@@ -780,7 +813,12 @@ const OAUTH_LABEL: Record<string, string> = {
   facebook: "Facebook",
   mastodon: "Mastodon",
   "home-assistant": "Home Assistant",
+  nextcloud: "Nextcloud",
 };
+
+// SIGN_IN_LAST are the kinds whose sign-in is the less usual way in: CalDAV and CardDAV sign in
+// only to a Nextcloud, and are mostly iCloud or Fastmail with an app password.
+const SIGN_IN_LAST = ["caldav", "carddav"];
 
 // A connection that signs in keeps a key or a token as the other way in, and an app of the
 // person's own as a third; these are their fields.
@@ -798,6 +836,8 @@ function wayLabel(kind: string, way: string, service: string): string {
       return t("App keys");
     case "webhook":
       return t("Webhook");
+    case "password":
+      return t("App password");
   }
   if (kind === "slack") {
     return t("Bot token");
@@ -817,6 +857,8 @@ function wayHint(way: string, builtin: boolean): string {
       return t("Four keys from your app's page; they do not expire");
     case "webhook":
       return t("Posts to one channel, nothing to sign in");
+    case "password":
+      return t("A user and an app password of the account");
   }
   return t("Created in the service's settings");
 }
@@ -828,6 +870,65 @@ function gatewayBase(): string {
     return saved.replace(/\/$/, "");
   }
   return inWails() ? "http://127.0.0.1:7488" : location.origin;
+}
+
+// OPTION_LABEL names the options of a field that picks several (Google's services).
+const OPTION_LABEL: Record<string, string> = {
+  gmail: "Gmail",
+  calendar: "Calendar",
+  drive: "Drive",
+  sheets: "Sheets",
+  docs: "Docs",
+  contacts: "Contacts",
+  tasks: "Tasks",
+};
+
+// OptionsInput is a field that picks several options: a box each, saved joined by commas. An
+// empty value means all of them, so a connection saved before the field existed keeps working;
+// the last box ticked stays ticked.
+function OptionsInput({
+  f,
+  value,
+  onInput,
+}: {
+  f: ConnectorKind["fields"][number];
+  value: string;
+  onInput: (v: string) => void;
+}) {
+  const options = f.options || [];
+  const picked = new Set(
+    value
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v) => options.includes(v)),
+  );
+  const on = (o: string) => picked.size === 0 || picked.has(o);
+  const toggle = (o: string) => {
+    const next = new Set(picked.size === 0 ? options : picked);
+    next.has(o) ? next.delete(o) : next.add(o);
+    // The whole list, not an empty value, so ticking every box again replaces a saved choice.
+    onInput(options.filter((x) => next.has(x)).join(","));
+  };
+  return (
+    <>
+      <label class={LABEL}>{t(f.label)}</label>
+      <div class="flex flex-wrap gap-2" data-testid={`options-${f.name}`}>
+        {options.map((o) => (
+          <label key={o} class={`chip ${on(o) ? "on" : ""}`}>
+            <input
+              type="checkbox"
+              class="sr-only"
+              checked={on(o)}
+              disabled={on(o) && (picked.size === 1 || options.length === 1)}
+              onChange={() => toggle(o)}
+            />
+            {OPTION_LABEL[o] ? t(OPTION_LABEL[o]) : o}
+          </label>
+        ))}
+      </div>
+      {f.help && <div class="text-xs text-[var(--t3)] mt-1">{t(f.help)}</div>}
+    </>
+  );
 }
 
 function FieldInput({
@@ -969,8 +1070,10 @@ function ConnectionForm({
   const keyFields = signs ? def.fields.filter((f) => f.key) : [];
   const appFields = signs ? def.fields.filter((f) => APP_FIELDS.includes(f.name)) : [];
   const required = def.fields.filter((f) => f.required);
+  // choices are the fields that pick several options (Google's services): shown open, as boxes.
+  const choices = def.fields.filter((f) => !f.required && f.options?.length);
   const optional = def.fields.filter(
-    (f) => !f.required && !keyFields.includes(f) && !appFields.includes(f),
+    (f) => !f.required && !keyFields.includes(f) && !appFields.includes(f) && !choices.includes(f),
   );
   const [signedIn, setSignedIn] = useState(Boolean(view?.signed_in));
   const [account, setAccount] = useState(view?.account || "");
@@ -999,7 +1102,9 @@ function ConnectionForm({
   const groups = [...new Set(keyFields.map((f) => f.key as string))]
     .map((id) => ({ id, fields: keyFields.filter((f) => f.key === id) }))
     .filter((g) => !g.fields.every((f) => f.lifetime) || g.fields.some((f) => had(f.name)));
-  const ways = [...(signs ? ["signin"] : []), ...groups.map((g) => g.id)];
+  const ways = SIGN_IN_LAST.includes(def.name)
+    ? [...groups.map((g) => g.id), ...(signs ? ["signin"] : [])]
+    : [...(signs ? ["signin"] : []), ...groups.map((g) => g.id)];
   const [way, setWay] = useState(
     () =>
       (signedIn && "signin") ||
@@ -1149,6 +1254,14 @@ function ConnectionForm({
         </div>
       </div>
       {required.map((f) => field(f))}
+      {choices.map((f) => (
+        <OptionsInput
+          key={f.name}
+          f={f}
+          value={values[f.name] || ""}
+          onInput={(v) => set(f.name, v)}
+        />
+      ))}
       {ways.length > 1 && (
         <>
           <label class={LABEL}>
@@ -1371,6 +1484,7 @@ const AUTH_LABEL: Record<string, string> = {
   keys: t("uses the OAuth 1.0 keys"),
   token: t("uses a token"),
   webhook: t("uses a webhook"),
+  password: t("uses an app password"),
 };
 
 // expiresIn says how long a token has left, or that it is gone.
@@ -1724,6 +1838,94 @@ function NotifyForm({
   );
 }
 
+// AutonomyForm sets how long the kitties keep at a task on their own: when a goal that did not
+// finish runs again, and how long a task waits for a model that is down.
+function AutonomyForm({
+  view,
+  onSaved,
+}: {
+  view: SettingsView;
+  onSaved: (s: SettingsView) => void;
+}) {
+  const [followUps, setFollowUps] = useState(view.autonomy?.follow_ups || "");
+  const [brainWait, setBrainWait] = useState(view.autonomy?.brain_wait || "");
+  const [standIns, setStandIns] = useState(view.autonomy?.stand_ins || "");
+  const [msg, flash] = useFlash();
+  const [err, setErr] = useState("");
+  const save = async () => {
+    setErr("");
+    try {
+      onSaved(
+        await api.setAutonomy({
+          follow_ups: followUps.trim(),
+          brain_wait: brainWait.trim(),
+          stand_ins: standIns.trim(),
+        }),
+      );
+      flash(t("Saved."));
+    } catch (e) {
+      setErr(errText(e));
+    }
+  };
+  return (
+    <div class="mt-6 pt-4 border-t border-white/5" data-testid="autonomy">
+      <div class="section-title !mx-0">{t("Working on their own")}</div>
+      <label class={LABEL} for="auto-follow-ups">
+        {t("Try an unfinished goal again after")}
+      </label>
+      <input
+        id="auto-follow-ups"
+        class={`${INPUT} !w-56 font-mono`}
+        value={followUps}
+        onInput={(e) => setFollowUps((e.target as HTMLInputElement).value)}
+        placeholder="10m 30m 2h"
+      />
+      <p class={HELP}>
+        {t(
+          "A goal that ended blocked or waiting for you runs again by itself after each of these waits. Write off to never try again on its own.",
+        )}
+      </p>
+      <label class={LABEL} for="auto-brain-wait">
+        {t("Wait for a model that is down")}
+      </label>
+      <input
+        id="auto-brain-wait"
+        class={`${INPUT} !w-56 font-mono`}
+        value={brainWait}
+        onInput={(e) => setBrainWait((e.target as HTMLInputElement).value)}
+        placeholder="30m"
+      />
+      <p class={HELP}>
+        {t(
+          "How long a task waits for its model to answer again (busy, failing, unreachable) before giving up. Write off to not wait.",
+        )}
+      </p>
+      <label class={LABEL} for="auto-stand-ins">
+        {t("Tasks a day another kitty may take over")}
+      </label>
+      <input
+        id="auto-stand-ins"
+        class={`${INPUT} !w-56 font-mono`}
+        value={standIns}
+        onInput={(e) => setStandIns((e.target as HTMLInputElement).value)}
+        placeholder="3"
+      />
+      <p class={HELP}>
+        {t(
+          "When a kitty with no backup gives up, the free kitty most like it takes the task over, up to this many times a day. Write off to be asked instead.",
+        )}
+      </p>
+      <div class="flex items-center gap-2 mt-4 flex-wrap">
+        <button class="btn-accent px-4 py-2 text-sm" onClick={save} data-testid="autonomy-save">
+          {t("Save")}
+        </button>
+        {msg && <span class="tag tag-green">{msg}</span>}
+      </div>
+      <Err text={err} />
+    </div>
+  );
+}
+
 // Preferences are this browser's: whether the technical details show.
 function Preferences() {
   const tech = useTechDetails();
@@ -2046,6 +2248,7 @@ export default function SettingsModal({
         {tab === "preferences" && (
           <>
             <Preferences />
+            {view && <AutonomyForm view={view} onSaved={setView} />}
             <Exposure />
             <McpConnector />
             <Updates />

@@ -261,7 +261,79 @@ test("the library: skills with a proposal, and the artifacts", async ({ page }) 
   await shot(page, "15-library-skills");
   await open(page, "#new-artifacts");
   await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
+  // The filters: a kind narrows the list, a search finds a file by its name.
+  const filters = page.getByTestId("artifact-filters");
+  await expect(filters).toBeVisible();
+  await filters.getByTestId("kind-data").click();
+  await expect(page.getByText("prices.csv").first()).toBeVisible();
+  await expect(page.getByText("competitor-notes.md")).toHaveCount(0);
+  await filters.getByTestId("kind-data").click();
+  await filters.getByRole("searchbox").fill("nothing-like-this");
+  await expect(page.getByTestId("artifacts-none")).toBeVisible();
+  await filters.getByRole("searchbox").fill("");
+  await filters.getByRole("searchbox").blur();
   await shot(page, "16-library-artifacts");
+  // A markdown file opens in a reader that draws it as a document.
+  await page.getByRole("button", { name: "competitor-notes.md", exact: true }).click();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.locator("h2", { hasText: "Competitor notes" })).toBeVisible();
+  await expect(reader.locator("table td", { hasText: "Acme" })).toBeVisible();
+  // Three headings or more: a table of contents that scrolls to each.
+  const toc = reader.getByTestId("md-toc");
+  await expect(toc.getByRole("button", { name: "Sources" })).toBeVisible();
+  await toc.getByRole("button", { name: "Sources" }).click();
+  await expect(reader.locator("#md-sources")).toBeInViewport();
+  await reader.locator("h2").first().scrollIntoViewIfNeeded();
+  await shot(page, "60-artifact-reader");
+  // Escape closes the reader and leaves the library open under it.
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+  await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
+});
+
+test("#artifact/<name> opens the reader, with the code in colour", async ({ page }) => {
+  await open(page, "#artifact/competitor-notes.md");
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.locator("h2", { hasText: "Competitor notes" })).toBeVisible();
+  await expect(reader.locator('pre[data-lang="sh"] .hl-com')).toHaveText(
+    "# the prices, once a week",
+  );
+  await expect(reader.getByTestId("artifact-share")).toBeVisible();
+  await reader.locator("pre[data-lang]").scrollIntoViewIfNeeded();
+  await shot(page, "61-artifact-code");
+  // Closing it takes the reader out of the address.
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+  expect(await page.evaluate(() => location.hash)).not.toContain("artifact");
+});
+
+test("an artifact tag in a chat opens the reader", async ({ page }) => {
+  await open(page, `#chat/${ids.single}`);
+  await page.getByTestId("artifact-tag").first().click();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader).toBeVisible();
+  await expect(reader.getByTestId("markdown")).toBeVisible();
+  // The source of the file, and back.
+  await reader.getByTestId("artifact-raw").click();
+  await expect(reader.locator("pre", { hasText: "# Launch plan" })).toBeVisible();
+  await reader.getByTestId("artifact-raw").click();
+  await expect(reader.locator("h2", { hasText: "Launch plan" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+});
+
+test("a kitty's answer reads as markdown, and its link to an artifact opens the reader", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.single}`);
+  const answer = page
+    .locator(".msg.agent .md-chat")
+    .filter({ hasText: "Here is how I would split it" });
+  await expect(answer.locator("ol li")).toHaveCount(3);
+  await answer.getByTestId("artifact-link").click();
+  await expect(
+    page.getByTestId("artifact-reader").locator("h2", { hasText: "Launch plan" }),
+  ).toBeVisible();
 });
 
 test("picking a service opens its form; an OAuth kind offers the sign-in", async ({ page }) => {
@@ -278,6 +350,13 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   await expect(page.locator(".service-btn", { hasText: "Slack" })).toHaveCount(0);
   await page.locator(".service-btn", { hasText: "Google Workspace" }).click();
   await expect(page.getByText("Gmail, Calendar, Drive, Sheets and Docs").first()).toBeVisible();
+  // The services to reach are boxes, all ticked: the sign-in asks Google only for those.
+  const services = page.getByTestId("options-services");
+  await expect(services.locator(".chip.on")).toHaveCount(7);
+  await services.locator(".chip", { hasText: "Contacts" }).click();
+  await expect(services.locator(".chip.on")).toHaveCount(6);
+  await services.locator(".chip", { hasText: "Contacts" }).click();
+  await expect(services.locator(".chip.on")).toHaveCount(7);
   // Without an app built into Kitties, signing in asks for the person's own, and says where.
   const signInBox = page.getByTestId("connection-sign-in");
   await expect(signInBox).toContainText("needs an app of your own");
@@ -304,6 +383,33 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   await gh.locator("#field-token").fill("ghp_demo");
   await expect(save).toBeEnabled();
   await expect(gh.getByTestId("missing")).toHaveCount(0);
+  // Discord signs in to make a webhook on the channel picked, or takes one pasted.
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("discord");
+  await page.locator(".service-btn", { hasText: "Discord" }).click();
+  const dc = page.getByTestId("connection-form");
+  await expect(dc.getByTestId("way-signin")).toHaveAttribute("aria-checked", "true");
+  await expect(dc.getByTestId("way-webhook")).toBeVisible();
+  await expect(page.getByTestId("connection-sign-in")).toContainText("/v1/oauth/callback");
+  await shot(page, "60-connector-discord");
+  await dc.getByTestId("way-webhook").click();
+  await expect(dc.locator("#field-url")).toBeVisible();
+  await expect(dc.getByTestId("connection-sign-in")).toHaveCount(0);
+  // Nextcloud signs in with its login flow (no app to make); CalDAV offers it after the password.
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("nextcloud");
+  await page.locator(".service-btn", { hasText: "Nextcloud" }).click();
+  const nc = page.getByTestId("connection-form");
+  await expect(nc.getByTestId("way-signin")).toHaveAttribute("aria-checked", "true");
+  await expect(nc.getByTestId("connection-sign-in")).not.toContainText("needs an app of your own");
+  await nc.locator("#field-url").fill("https://cloud.example.com");
+  await shot(page, "61-connector-nextcloud");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("caldav");
+  await page.locator(".service-btn", { hasText: "CalDAV" }).click();
+  const cal = page.getByTestId("connection-form");
+  await expect(cal.getByTestId("way-password")).toHaveAttribute("aria-checked", "true");
+  await expect(cal.getByTestId("way-signin")).toContainText("Nextcloud");
   // The saved Google connector shows the sign-in button, which asks the gateway for a consent URL.
   await open(page, "#connector/workspace");
   const signIn = page.getByRole("button", { name: "Sign in with Google" });
@@ -313,7 +419,16 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
     headers: { Authorization: "Bearer e2e-token" },
   });
   expect(res.ok()).toBeTruthy();
-  expect(((await res.json()) as { url: string }).url).toContain("accounts.google.com");
+  const consent = new URL(((await res.json()) as { url: string }).url);
+  expect(consent.host).toBe("accounts.google.com");
+  // Back to this computer's loopback IP, with PKCE, a refresh token and the account chooser.
+  expect(consent.searchParams.get("redirect_uri")).toMatch(
+    /^http:\/\/127\.0\.0\.1:\d+\/v1\/oauth\/callback$/,
+  );
+  expect(consent.searchParams.get("code_challenge_method")).toBe("S256");
+  expect(consent.searchParams.get("access_type")).toBe("offline");
+  expect(consent.searchParams.get("prompt")).toBe("consent select_account");
+  expect(consent.searchParams.get("scope")).toContain("gmail.send");
 });
 
 // hooked is what the outside world (the Slack webhook, the ntfy topic) has received so far.
@@ -1874,6 +1989,38 @@ test("a gateway that cannot replace itself says how it is updated, and one that 
   await expect(box.getByTestId("update-skipped")).toContainText("v1.2.0 did not hold here");
   await expect(box).toContainText("does not look for new versions");
   await expect(box.getByTestId("update-check")).toBeDisabled();
+});
+
+test("how long the kitties keep at a task on their own: checked, saved and kept", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("autonomy");
+  await expect(box).toContainText("Working on their own");
+  // A wait that is not one is refused with the reason.
+  await box.locator("#auto-brain-wait").fill("soon");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box).toContainText("autonomy.brain_wait");
+  await box.locator("#auto-follow-ups").fill("15m 1h 4h");
+  await box.locator("#auto-brain-wait").fill("45m");
+  await box.locator("#auto-stand-ins").fill("2");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box.getByText("Saved.")).toBeVisible();
+  await box.scrollIntoViewIfNeeded();
+  await shot(page, "60-autonomy");
+  // It is the gateway's: it stays after a reload. Empty fields take the defaults again.
+  await page.reload();
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  await expect(box.locator("#auto-follow-ups")).toHaveValue("15m 1h 4h");
+  await expect(box.locator("#auto-stand-ins")).toHaveValue("2");
+  await box.locator("#auto-follow-ups").fill("");
+  await box.locator("#auto-brain-wait").fill("");
+  await box.locator("#auto-stand-ins").fill("");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box.getByText("Saved.")).toBeVisible();
 });
 
 test("the secrets a kitty may type: saved with who may use them, changed and removed, never shown", async ({

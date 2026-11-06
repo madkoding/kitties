@@ -612,16 +612,23 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	if err != nil {
 		return m.fail(k.ID, err)
 	}
+	// A desktop in another time zone than the host's (the host moved, or the gateway could not
+	// tell its zone when it made it) is made anew, so its clock shows the host's hour; a running
+	// one only while no one uses it (a gateway that starts finds them all idle).
+	moved := exists && m.zoneMoved(ctx, k)
 	switch {
-	case running:
-	case exists && !m.staleForAutoUpdate(ctx, k):
+	case running && (!moved || m.Held(k.ID) || m.busy(k.ID)):
+	case exists && !running && !moved && !m.staleForAutoUpdate(ctx, k):
 		if err := m.ctr().Start(ctx, k.Container); err != nil {
 			return m.fail(k.ID, err)
 		}
 	default:
 		// A stopped container of an older image is made anew with the newest (its sessions were
-		// backed up when it stopped, and are put back below).
+		// backed up when it stopped, and are put back below); a running one keeps them first.
 		if exists {
+			if running {
+				m.saveSessions(ctx, k)
+			}
 			if err := m.ctr().Remove(ctx, k.Container); err != nil {
 				return m.fail(k.ID, err)
 			}
@@ -642,6 +649,22 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	m.use.touch(k.ID, m.now())
 	m.use.boot(k.ID, m.now())
 	return m.setStatus(k.ID, kitty.StatusRunning, "")
+}
+
+// zoneChecker is what a runtime answers when it can tell a container's time zone.
+type zoneChecker interface {
+	ZoneStale(ctx context.Context, name, zone string) (bool, error)
+}
+
+// zoneMoved tells whether the kitty's container runs in another time zone than the one a new
+// container would get. A runtime that cannot tell, or a failed look, is taken for no move.
+func (m *Manager) zoneMoved(ctx context.Context, k *kitty.Kitty) bool {
+	z, ok := m.ctr().(zoneChecker)
+	if !ok {
+		return false
+	}
+	moved, err := z.ZoneStale(ctx, k.Container, container.Spec{Env: m.cfg.Containers.Env}.Zone())
+	return err == nil && moved
 }
 
 // startTimeout is how long a desktop may take to come up in the background: the first start
@@ -1051,9 +1074,24 @@ func (m *Manager) InboundSecret(name string) (string, error) {
 	return c.ConnectorSettings()["inbound_secret"], nil
 }
 
-// Brain returns the provider client the kitty thinks with.
+// Brain returns the provider client the kitty thinks with: its profile's, backed by the
+// profile's fallback when it names one that works.
 func (m *Manager) Brain(k *kitty.Kitty) (provider.Client, error) {
-	return m.providers.Get(k.Provider)
+	c, err := m.providers.Get(k.Provider)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.RLock()
+	fallback := m.cfg.Providers[k.Provider].Fallback
+	m.mu.RUnlock()
+	if fallback == "" {
+		return c, nil
+	}
+	fb, err := m.providers.Get(fallback)
+	if err != nil {
+		return c, nil
+	}
+	return provider.WithFallback(c, fb), nil
 }
 
 // Exec runs a command in the kitty's container.
