@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -243,5 +244,69 @@ func TestChallengeHeader(t *testing.T) {
 func TestHostOf(t *testing.T) {
 	if hostOf("https://claude.ai/cb") != "claude.ai" || hostOf("%zz") != "%zz" {
 		t.Error("hostOf")
+	}
+}
+
+func TestOAuthRevokeAndPersistence(t *testing.T) {
+	path := t.TempDir() + "/clients.json"
+	o, mux := newOAuth()
+	o.Path = path
+	id := register(t, mux)
+	if len(o.Connections()) != 0 {
+		t.Fatal("nobody signed in yet")
+	}
+	code := approve(t, mux, id)
+	var tok map[string]any
+	_ = json.Unmarshal(exchange(mux, id, code, verifier).Body.Bytes(), &tok)
+	access, refresh := tok["access_token"].(string), tok["refresh_token"].(string)
+	list := o.Connections()
+	if len(list) != 1 || list[0].Name != "Claude" || list[0].Host != "claude.ai" || list[0].LastToken.IsZero() || list[0].Revoked {
+		t.Fatalf("connections: %+v", list)
+	}
+	// The list is kept on disk (0600) and a new server reads it.
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("file: %v %v", info, err)
+	}
+	o2 := NewOAuth("connector-token", func(*http.Request) string { return "" })
+	o2.Path = path
+	if got := o2.Connections(); len(got) != 1 || got[0].ID != list[0].ID {
+		t.Errorf("reload: %+v", got)
+	}
+	// Revoking cuts the access token and the refresh token at once, and survives a restart.
+	if found, err := o.Revoke("nope"); found || err != nil {
+		t.Errorf("unknown: %v %v", found, err)
+	}
+	if found, err := o.Revoke(list[0].ID); !found || err != nil {
+		t.Fatalf("revoke: %v %v", found, err)
+	}
+	if o.ValidAccess(access) {
+		t.Error("a revoked client's access token must stop working")
+	}
+	rec := send(mux, "POST", PathToken, url.Values{"grant_type": {"refresh_token"}, "client_id": {id}, "refresh_token": {refresh}}, "")
+	if rec.Code != 400 || !strings.Contains(rec.Body.String(), "revoked") {
+		t.Errorf("refresh after revoke: %d %s", rec.Code, rec.Body)
+	}
+	o3 := NewOAuth("connector-token", func(*http.Request) string { return "" })
+	o3.Path = path
+	if o3.ValidAccess(access) {
+		t.Error("revocation survives a restart")
+	}
+	// Signing in again lets the client back in.
+	code = approve(t, mux, id)
+	if rec = exchange(mux, id, code, verifier); rec.Code != 200 || o.Connections()[0].Revoked {
+		t.Errorf("signing in again: %d %+v", rec.Code, o.Connections())
+	}
+	// A damaged file is an empty list; a file that cannot be written fails the revoke.
+	_ = os.WriteFile(path, []byte("not json"), 0o600)
+	o4 := NewOAuth("connector-token", func(*http.Request) string { return "" })
+	o4.Path = path
+	if len(o4.Connections()) != 0 {
+		t.Error("a damaged file is an empty list")
+	}
+	o5 := NewOAuth("connector-token", func(*http.Request) string { return "" })
+	o5.Path = t.TempDir() + "/missing/dir/clients.json"
+	o5.admit("client", "x", "h")
+	if _, err := o5.Revoke(shortID("client")); err == nil {
+		t.Error("a revoke that cannot be kept must say so")
 	}
 }

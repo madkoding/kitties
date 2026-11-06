@@ -13,9 +13,10 @@ gateway:
     enabled: true      # off by default
     # token: ...       # optional; else one is made once and kept in <data>/mcp.token
     allow_exec: false  # true adds kitty_exec (commands inside a kitty's container)
+    allow_approve: false  # true adds approval_approve (Claude may say yes, once, to a held action)
 ```
 
-Or by environment: `KITTIES_MCP=true`, `KITTIES_MCP_TOKEN`, `KITTIES_MCP_EXEC=true`, `KITTIES_MCP_OAUTH=true`. The gateway
+Or by environment: `KITTIES_MCP=true`, `KITTIES_MCP_TOKEN`, `KITTIES_MCP_EXEC=true`, `KITTIES_MCP_OAUTH=true`, `KITTIES_MCP_APPROVE=true`. The gateway
 prints the address and where the token is when it starts (`MCP connector: http://127.0.0.1:7488/mcp`).
 
 ## Connect Claude
@@ -49,7 +50,16 @@ gateway:
 Add `https://kitties.example.com/mcp` as a custom connector in claude.ai. It registers itself,
 opens the gateway's consent page and you type the contents of `mcp.token` once. The gateway
 issues one-hour access tokens and 30-day refresh tokens, signed with a key derived from
-`mcp.token` (nothing is stored), so replacing that token revokes every connection.
+`mcp.token`, so replacing that token revokes every connection. To cut off one client only, with
+the gateway's own token:
+
+```sh
+curl -H "Authorization: Bearer $(kitties token)" http://127.0.0.1:7488/v1/mcp/clients          # who signed in
+curl -X DELETE -H "Authorization: Bearer $(kitties token)" http://127.0.0.1:7488/v1/mcp/clients/<id>
+```
+
+Its tokens stop working at once (the list is kept in `<data>/mcp-clients.json`); to come back it
+signs in again.
 
 ## Tools
 
@@ -65,7 +75,8 @@ issues one-hour access tokens and 30-day refresh tokens, signed with a key deriv
 | `chat_send`, `chat_cancel` | give a task and read the answer; stop it |
 | `kitty_power`, `kitty_compute` | turn a machine on or off; where it runs (local or cloud) and its state |
 | `goal_list`, `goal_add`, `goal_run`, `goal_remove`, `kitty_journal` | goals on a schedule or event, run one now, read the journal |
-| `approval_list`, `approval_reject` | see and reject actions held for a yes; **approving is not offered**: it stays with you |
+| `approval_list`, `approval_reject` | see and reject actions held for a yes |
+| `approval_approve` | say yes, this once, to a held action; **only with `allow_approve`** (by default approving stays with you) |
 
 A desktop task goes on after `chat_send` returns: follow it with `chat_get`.
 

@@ -223,6 +223,8 @@ type MCP struct {
 	// OAuth lets a remote client (claude.ai) sign in to the connector. It needs https: set
 	// public_url or put a proxy in front.
 	OAuth bool `yaml:"oauth"`
+	// AllowApprove adds the tool that approves an action held for the person. Off unless asked.
+	AllowApprove bool `yaml:"allow_approve"`
 }
 
 // LocalTokenAllowed reports whether /v1/local-token may answer: the setting when given, else
@@ -274,6 +276,10 @@ func (c *Config) ApplyEnv(getenv func(string) string) error {
 	switch strings.ToLower(getenv("KITTIES_MCP")) {
 	case "1", "true", "yes":
 		c.Gateway.MCP.Enabled = true
+	}
+	switch strings.ToLower(getenv("KITTIES_MCP_APPROVE")) {
+	case "1", "true", "yes":
+		c.Gateway.MCP.AllowApprove = true
 	}
 	switch strings.ToLower(getenv("KITTIES_MCP_OAUTH")) {
 	case "1", "true", "yes":

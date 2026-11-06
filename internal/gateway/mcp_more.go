@@ -16,8 +16,8 @@ type Computer interface {
 }
 
 // mcpMoreTools are the tools for the machine, the approvals and the goals. They are looked up
-// when called, so the order in which the gateway is wired does not matter. Approving an action
-// is not among them: what reaches other people is the person's yes, not Claude's.
+// when called, so the order in which the gateway is wired does not matter. Approving is not among
+// them unless the person allows it (mcpApproveTool).
 func (s *Server) mcpMoreTools() []mcp.Tool {
 	read := mcp.Annotations{ReadOnly: true}
 	write := mcp.Annotations{}
@@ -234,4 +234,28 @@ func (s *Server) mcpMoreTools() []mcp.Tool {
 				return jsonResult(map[string]any{"journal": entries})
 			}},
 	}
+}
+
+// mcpApproveTool lets Claude say yes to one held action. It is added only when the person turned
+// on gateway.mcp.allow_approve; it never makes the approval permanent ("always").
+func (s *Server) mcpApproveTool() mcp.Tool {
+	return mcp.Tool{Name: "approval_approve", Description: "Approve one action held for the person's yes (this time only). Read it with approval_list first.",
+		InputSchema: obj([]string{"id"}, map[string]any{"id": str("the approval's id")}), Annotations: mcp.Annotations{Destructive: true},
+		Call: func(ctx context.Context, raw json.RawMessage) (mcp.Result, error) {
+			var a idArgs
+			if err := args(raw, &a); err != nil {
+				return mcp.Result{}, err
+			}
+			if err := need("id", a.ID); err != nil {
+				return mcp.Result{}, err
+			}
+			if s.approver == nil {
+				return mcp.Result{}, errNoApprovals
+			}
+			ap, err := s.approver.DecideApproval(ctx, a.ID, true, "", false)
+			if err != nil {
+				return mcp.Result{}, err
+			}
+			return jsonResult(map[string]any{"approval": ap})
+		}}
 }

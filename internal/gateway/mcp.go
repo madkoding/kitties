@@ -28,25 +28,62 @@ const defaultTurns = 10
 // an empty token leaves the connector off. exec lets it run commands inside a kitty's container,
 // which is off unless the person turned it on.
 func (s *Server) WithMCP(token string, exec bool) *Server {
-	return s.WithMCPOAuth(token, exec, false)
+	return s.WithMCPOptions(token, MCPOptions{Exec: exec})
 }
 
 // WithMCPOAuth is WithMCP that, with oauth, also lets a remote client such as claude.ai sign in
 // (docs/MCP.md): the person types the connector's token once on a consent page of the gateway and
 // the client gets tokens of its own. Put https in front first (public_url).
 func (s *Server) WithMCPOAuth(token string, exec, oauth bool) *Server {
+	return s.WithMCPOptions(token, MCPOptions{Exec: exec, OAuth: oauth})
+}
+
+// MCPOptions say what the connector offers beyond reading and driving the fleet.
+type MCPOptions struct {
+	// Exec adds kitty_exec, a command in a kitty's container.
+	Exec bool
+	// OAuth lets remote clients sign in (claude.ai).
+	OAuth bool
+	// Approve adds approval_approve: Claude may say yes to an action held for the person.
+	Approve bool
+	// ClientsFile remembers the OAuth clients and the ones revoked (empty: in memory only).
+	ClientsFile string
+}
+
+// WithMCPOptions serves the connector with these options; an empty token leaves it off.
+func (s *Server) WithMCPOptions(token string, opt MCPOptions) *Server {
 	if token == "" {
 		return s
 	}
 	var o *mcp.OAuth
-	if oauth {
+	if opt.OAuth {
 		o = mcp.NewOAuth(token, s.issuer)
+		o.Path = opt.ClientsFile
 		o.Allow = func(r *http.Request) bool { return s.limit.wait(s.clientIP(r)) == 0 }
 		o.Failed = func(r *http.Request) { s.limit.fail(s.clientIP(r)) }
 		o.Register(s.mux)
+		// The person lists and cuts off the clients from the gateway's own API, with its own token.
+		s.mux.Handle("GET /v1/mcp/clients", s.auth(func(w http.ResponseWriter, _ *http.Request) {
+			reply(w, http.StatusOK, map[string]any{"clients": o.Connections()})
+		}))
+		s.mux.Handle("DELETE /v1/mcp/clients/{id}", s.auth(func(w http.ResponseWriter, r *http.Request) {
+			found, err := o.Revoke(r.PathValue("id"))
+			switch {
+			case err != nil:
+				fail(w, http.StatusInternalServerError, err)
+			case !found:
+				fail(w, http.StatusNotFound, errors.New("no such client"))
+			default:
+				reply(w, http.StatusOK, map[string]any{"revoked": r.PathValue("id")})
+			}
+		}))
 	}
 	srv := mcp.New("kitties", s.version)
-	for _, t := range append(s.mcpTools(exec), s.mcpMoreTools()...) {
+	tools := append(s.mcpTools(opt.Exec), s.mcpMoreTools()...)
+	if opt.Approve {
+		tools = append(tools, s.mcpApproveTool())
+	}
+	for _, t := range tools {
 		srv.Add(t)
 	}
 	// Methods are named so the page's "GET /" does not swallow them; GET and DELETE are answered 405.

@@ -467,3 +467,87 @@ func TestMCPOAuth(t *testing.T) {
 		t.Errorf("plain http issuer: %s", rec.Body)
 	}
 }
+
+func TestMCPClientsAndApprove(t *testing.T) {
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": {ID: "a1", Name: "ana", Status: kitty.StatusRunning}}}
+	c := &fakeChats{sessions: map[string]*chat.Session{}}
+	ap := &fakeApprover{list: []approvals.Approval{{ID: "p1", Status: approvals.Pending}, {ID: "p2", Status: approvals.Pending}}}
+	s := New(f, c, "gw", "test").WithApprovals(ap).WithMCPOptions(mcpToken, MCPOptions{OAuth: true, Approve: true, ClientsFile: t.TempDir() + "/c.json"})
+	// Approving is offered only when the person allowed it, and only this once.
+	if text, isErr, _ := tool(t, s, "approval_approve", map[string]any{"id": "p1"}); isErr || !strings.Contains(text, "approved") || ap.list[0].Always {
+		t.Errorf("approve: %q %v", text, isErr)
+	}
+	if _, isErr, _ := tool(t, s, "approval_approve", map[string]any{"id": "p1"}); !isErr {
+		t.Error("approving twice fails")
+	}
+	if _, _, resp := tool(t, s, "approval_approve", map[string]any{}); resp["error"] == nil {
+		t.Error("an id is required")
+	}
+	bare := New(f, c, "gw", "test").WithMCPOptions(mcpToken, MCPOptions{Approve: true})
+	if _, isErr, _ := tool(t, bare, "approval_approve", map[string]any{"id": "p2"}); !isErr {
+		t.Error("without an approver")
+	}
+	// The clients are listed and revoked with the gateway's token, never the connector's.
+	if rec := do(s, "GET", "/v1/mcp/clients", "", func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+mcpToken) }); rec.Code != 401 {
+		t.Errorf("connector token on the clients list: %d", rec.Code)
+	}
+	gw := func(r *http.Request) { r.Header.Set("Authorization", "Bearer gw") }
+	if rec := do(s, "GET", "/v1/mcp/clients", "", gw); rec.Code != 200 || !strings.Contains(rec.Body.String(), `"clients":[]`) {
+		t.Errorf("empty list: %d %s", rec.Code, rec.Body)
+	}
+	if rec := do(s, "DELETE", "/v1/mcp/clients/zzz", "", gw); rec.Code != 404 {
+		t.Errorf("unknown client: %d", rec.Code)
+	}
+	// Sign a client in, revoke it, and its token stops opening /mcp.
+	rec := do(s, "POST", "/oauth/register", `{"client_name":"Claude","redirect_uris":["https://claude.ai/cb"]}`, nil)
+	var reg map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &reg)
+	id := reg["client_id"].(string)
+	verifier := "verifier-verifier-verifier-verifier-1234"
+	sum := sha256.Sum256([]byte(verifier))
+	form := url.Values{"client_id": {id}, "redirect_uri": {"https://claude.ai/cb"}, "response_type": {"code"}, "code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])},
+		"code_challenge_method": {"S256"}, "token": {mcpToken}}
+	formPost := func(path string, v url.Values) *httptest.ResponseRecorder {
+		return do(s, "POST", path, v.Encode(), func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") })
+	}
+	loc, _ := url.Parse(formPost("/oauth/authorize", form).Header().Get("Location"))
+	rec = formPost("/oauth/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {id}, "code": {loc.Query().Get("code")},
+		"redirect_uri": {"https://claude.ai/cb"}, "code_verifier": {verifier}})
+	var tok map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &tok)
+	access := tok["access_token"].(string)
+	rec = do(s, "GET", "/v1/mcp/clients", "", gw)
+	var list struct {
+		Clients []struct {
+			ID string `json:"id"`
+		} `json:"clients"`
+	}
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list.Clients) != 1 {
+		t.Fatalf("clients: %s", rec.Body)
+	}
+	ping := func() int {
+		return do(s, "POST", "/mcp", `{"jsonrpc":"2.0","id":1,"method":"ping"}`, func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+access) }).Code
+	}
+	if ping() != 200 {
+		t.Fatal("the client's token works")
+	}
+	if rec = do(s, "DELETE", "/v1/mcp/clients/"+list.Clients[0].ID, "", gw); rec.Code != 200 || ping() != 401 {
+		t.Errorf("revoke: %d, ping %d", rec.Code, ping())
+	}
+	// A revoke that cannot be kept (the file cannot be written) is an error, not a silent success.
+	bad := New(f, c, "gw", "test").WithMCPOptions(mcpToken, MCPOptions{OAuth: true, ClientsFile: t.TempDir() + "/no/dir/c.json"})
+	rec = do(bad, "POST", "/oauth/register", `{"redirect_uris":["https://claude.ai/cb"]}`, nil)
+	_ = json.Unmarshal(rec.Body.Bytes(), &reg)
+	badForm := url.Values{"client_id": {reg["client_id"].(string)}, "redirect_uri": {"https://claude.ai/cb"}, "response_type": {"code"},
+		"code_challenge": {"x"}, "code_challenge_method": {"S256"}, "token": {mcpToken}}
+	do(bad, "POST", "/oauth/authorize", badForm.Encode(), func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") })
+	rec = do(bad, "GET", "/v1/mcp/clients", "", gw)
+	_ = json.Unmarshal(rec.Body.Bytes(), &list)
+	if len(list.Clients) != 1 {
+		t.Fatalf("bad store clients: %s", rec.Body)
+	}
+	if rec = do(bad, "DELETE", "/v1/mcp/clients/"+list.Clients[0].ID, "", func(r *http.Request) { r.Header.Set("Authorization", "Bearer gw") }); rec.Code != 500 {
+		t.Errorf("unwritable store: %d", rec.Code)
+	}
+}

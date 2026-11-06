@@ -11,6 +11,8 @@ import (
 	"html"
 	"net/http"
 	"net/url"
+	"os"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -33,9 +35,31 @@ type OAuth struct {
 	// Failed is told of a wrong token on the consent page.
 	Failed func(r *http.Request)
 
-	mu   sync.Mutex
-	used map[string]time.Time
-	now  func() time.Time
+	// Path, when set, is the file that remembers who signed in and who was revoked, so both
+	// survive a restart.
+	Path string
+
+	mu      sync.Mutex
+	used    map[string]time.Time
+	now     func() time.Time
+	clients map[string]*Connection
+	loaded  bool
+}
+
+// Connection is a client the person let in: who it said it was, where it sends the person
+// back, when, and whether it was cut off. ID is a short name for it (not a secret).
+type Connection struct {
+	ID        string    `json:"id"`
+	Name      string    `json:"name"`
+	Host      string    `json:"host"`
+	Since     time.Time `json:"since"`
+	LastToken time.Time `json:"last_token,omitempty"`
+	Revoked   bool      `json:"revoked,omitempty"`
+}
+
+func shortID(clientID string) string {
+	sum := sha256.Sum256([]byte(clientID))
+	return base64.RawURLEncoding.EncodeToString(sum[:])[:10]
 }
 
 // NewOAuth makes the server for a connector with this token.
@@ -78,7 +102,118 @@ func (o *OAuth) Challenge(r *http.Request) string {
 // ValidAccess reports whether a bearer value is an access token this server issued.
 func (o *OAuth) ValidAccess(tok string) bool {
 	var p claims
-	return o.open(tok, "access", &p)
+	return o.open(tok, "access", &p) && !o.revoked(p.ClientID)
+}
+
+// load reads the file once; a missing or damaged file is an empty list.
+func (o *OAuth) load() {
+	if o.loaded {
+		return
+	}
+	o.loaded = true
+	o.clients = map[string]*Connection{}
+	if o.Path == "" {
+		return
+	}
+	data, err := os.ReadFile(o.Path)
+	if err != nil {
+		return
+	}
+	var list []*Connection
+	if json.Unmarshal(data, &list) != nil {
+		return
+	}
+	for _, c := range list {
+		o.clients[c.ID] = c
+	}
+}
+
+// save writes the list; it fails closed in the caller (a revoke that cannot be kept is an error).
+func (o *OAuth) save() error {
+	if o.Path == "" {
+		return nil
+	}
+	list := o.listLocked()
+	data, _ := json.MarshalIndent(list, "", "  ")
+	tmp := o.Path + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, o.Path)
+}
+
+func (o *OAuth) listLocked() []*Connection {
+	list := make([]*Connection, 0, len(o.clients))
+	for _, c := range o.clients {
+		list = append(list, c)
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Since.Before(list[j].Since) })
+	return list
+}
+
+func (o *OAuth) revoked(clientID string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.load()
+	c, ok := o.clients[shortID(clientID)]
+	return ok && c.Revoked
+}
+
+// Connections lists the clients that signed in, oldest first.
+func (o *OAuth) Connections() []Connection {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.load()
+	out := []Connection{}
+	for _, c := range o.listLocked() {
+		out = append(out, *c)
+	}
+	return out
+}
+
+// Revoke cuts a client off: its access and refresh tokens stop working at once. It must sign in
+// again (the person types the token again) to be let back in.
+func (o *OAuth) Revoke(id string) (bool, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.load()
+	c, ok := o.clients[id]
+	if !ok {
+		return false, nil
+	}
+	c.Revoked = true
+	return true, o.save()
+}
+
+// admit records a client the person approved (and lifts an earlier revoke: it was let in anew).
+func (o *OAuth) admit(clientID, name, host string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.load()
+	id := shortID(clientID)
+	c, ok := o.clients[id]
+	if !ok {
+		c = &Connection{ID: id}
+		o.clients[id] = c
+	}
+	c.Name, c.Host, c.Since, c.Revoked = name, host, o.now(), false
+	_ = o.save()
+}
+
+// seen notes that a client got tokens; it does nothing for a revoked one.
+func (o *OAuth) seen(clientID string) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.load()
+	c, ok := o.clients[shortID(clientID)]
+	if ok && c.Revoked {
+		return false
+	}
+	if ok {
+		c.LastToken = o.now()
+		_ = o.save()
+	}
+	return true
 }
 
 // --- signed values -----------------------------------------------------------------------------
@@ -308,6 +443,7 @@ func (o *OAuth) authorizeSubmit(w http.ResponseWriter, r *http.Request) {
 		o.consent(w, r, a, "", "", "That is not the connector's token.")
 		return
 	}
+	o.admit(a.clientID, a.name, hostOf(a.redirect))
 	code := o.seal(claims{Typ: "code", Exp: o.now().Add(codeTTL).Unix(), ClientID: a.clientID, Redirect: a.redirect, Challenge: a.challenge, Nonce: o.nonce()})
 	redirectTo(w, r, a.redirect, map[string]string{"code": code, "state": a.state})
 }
@@ -373,8 +509,12 @@ func (o *OAuth) tokenEndpoint(w http.ResponseWriter, r *http.Request) {
 		tokenError(w, "unsupported_grant_type", "use authorization_code or refresh_token")
 		return
 	}
-	now := o.now()
 	id := f.Get("client_id")
+	if !o.seen(id) {
+		tokenError(w, "invalid_grant", "this client was revoked; sign in again")
+		return
+	}
+	now := o.now()
 	writeJSON(w, http.StatusOK, map[string]any{
 		"access_token":  o.seal(claims{Typ: "access", Exp: now.Add(accessTTL).Unix(), ClientID: id, Nonce: o.nonce()}),
 		"token_type":    "Bearer",
