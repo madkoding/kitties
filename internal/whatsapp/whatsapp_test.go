@@ -71,6 +71,16 @@ func (f *fakeClient) Send(_ context.Context, phone, text string) error {
 	return nil
 }
 
+func (f *fakeClient) SendFile(_ context.Context, to string, file File, caption string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.sent = append(f.sent, to+": ["+file.Name+"|"+file.MIME+"|"+string(file.Data)+"] "+caption)
+	return nil
+}
+
 func (f *fakeClient) Typing(_ context.Context, to string, on bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -830,29 +840,51 @@ func TestLanguageOf(t *testing.T) {
 func TestGroups(t *testing.T) {
 	r := newRig(t)
 	f := r.linked(t)
-	group := Event{Kind: EvMessage, From: "56912345678", Name: "Mad", Group: true, Chat: "120363@g.us"}
-	// Groups are off: nothing.
+	group := Event{Kind: EvMessage, From: "56912345678", Name: "Mad", Group: true, Chat: "120363@g.us", ChatName: "Familia"}
+	// Groups are off: nothing, and the group is not even kept.
 	g := group
 	g.Text = "mimi, hola"
 	f.push(g)
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Groups: true, Allow: []string{"+56912345678"}}); err != nil {
+	if st := r.b.Status(); len(st.SeenGroups) != 0 {
+		t.Fatalf("seen while off = %+v", st.SeenGroups)
+	}
+	set := Settings{Enabled: true, Kitty: "mimi", Groups: true, Allow: []string{"+56912345678"}}
+	if err := r.b.Apply(set); err != nil {
 		t.Fatal(err)
 	}
-	// On, but nobody names the kitty, or someone off the list does: nothing.
-	g.Text = "hola a todos, mimimi"
+	// On, but the group is not on the list: it is offered in Settings and the mention is ignored.
 	f.push(g)
 	o := group
-	o.From, o.Text = "4411112222", "mimi?"
+	o.Chat, o.ChatName, o.Text = "999@g.us", "", "hola"
 	f.push(o)
-	if st := r.b.Status(); st.Ignored != 1 || !st.Groups {
+	st := r.b.Status()
+	if st.Ignored != 1 || len(st.SeenGroups) != 2 || st.SeenGroups[0].ID != "999@g.us" || st.SeenGroups[1].Name != "Familia" {
 		t.Fatalf("status = %+v", st)
 	}
-	// Named, or @mentioned: answered in the group, with who wrote.
+	// The same group again, without its name, keeps the name it had.
+	f.push(g)
+	g2 := group
+	g2.ChatName, g2.Text = "", "nada"
+	f.push(g2)
+	if st := r.b.Status(); st.SeenGroups[0] != (Group{ID: "120363@g.us", Name: "Familia"}) {
+		t.Fatalf("seen = %+v", st.SeenGroups)
+	}
+	set.AllowGroups = []string{"120363@g.us", "120363@g.us"}
+	if err := r.b.Apply(set); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.b.Status(); len(st.AllowGroups) != 1 {
+		t.Fatalf("allow groups = %v", st.AllowGroups)
+	}
+	// Nobody names the kitty: nothing.
+	g.Text = "hola a todos, mimimi"
+	f.push(g)
+	// Named, or @mentioned, by anyone in the group: answered in the group, with who wrote.
 	g.Text = "¿Qué opinas, Mimi?"
 	f.push(g)
 	eventually(t, "the group reply", func() bool { return len(f.messages()) == 1 })
 	m := group
-	m.Text, m.Mentioned = "@15550001 dime", true
+	m.From, m.Text, m.Mentioned = "4411112222", "@15550001 dime", true
 	f.push(m)
 	eventually(t, "the mention reply", func() bool { return len(f.messages()) == 2 })
 	if got := f.messages()[0]; !strings.HasPrefix(got, "120363@g.us: ") {
@@ -865,7 +897,7 @@ func TestGroups(t *testing.T) {
 		t.Fatalf("texts = %q, chats = %d", texts, r.chats.created)
 	}
 	s, _ := r.chats.Get("c1")
-	if s.Title != "WhatsApp group 120363" {
+	if s.Title != "WhatsApp group: Familia" {
 		t.Fatalf("title = %q", s.Title)
 	}
 	// A group message without a name still says who.
@@ -874,9 +906,154 @@ func TestGroups(t *testing.T) {
 	f.push(n)
 	eventually(t, "the third reply", func() bool { return len(f.messages()) == 3 })
 	r.chats.mu.Lock()
-	defer r.chats.mu.Unlock()
 	if r.chats.texts[2] != "+56912345678: hey" {
 		t.Fatalf("text = %q", r.chats.texts[2])
+	}
+	r.chats.mu.Unlock()
+	// A group without a name has its id in the title.
+	r.b.Stop()
+	b2, err := New(Options{Dir: r.dir, Box: box{}, Chats: newChats(), Kitty: kittyOf})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id, err := b2.chatFor(inbound{group: true, to: "77@g.us", key: "g:77@g.us"}); err != nil || b2.opt.Chats.(*fakeChats).sessions[id].Title != "WhatsApp group 77" {
+		t.Fatalf("untitled = %v", err)
+	}
+	// The groups seen are kept.
+	if st := b2.Status(); len(st.SeenGroups) != 2 || len(st.AllowGroups) != 1 {
+		t.Fatalf("kept = %+v", st)
+	}
+}
+
+func TestGroupList(t *testing.T) {
+	r := newRig(t)
+	for _, bad := range []string{"120363", "abc@g.us", "@g.us", "1@s.whatsapp.net", strings.Repeat("1", 41) + "@g.us"} {
+		if err := r.b.Apply(Settings{Kitty: "mimi", AllowGroups: []string{bad}}); err == nil {
+			t.Fatalf("%q was taken", bad)
+		}
+	}
+	many := make([]string, MaxAllow+1)
+	for i := range many {
+		many[i] = fmt.Sprintf("%d@g.us", i+1)
+	}
+	if err := r.b.Apply(Settings{Kitty: "mimi", AllowGroups: many}); err == nil {
+		t.Fatal("too many groups")
+	}
+	if err := r.b.Apply(Settings{Kitty: "mimi", AllowGroups: []string{" 1203-63@g.us "}}); err != nil {
+		t.Fatal(err)
+	}
+	// Only the last maxSeen groups are kept.
+	for i := 0; i < maxSeen+5; i++ {
+		r.b.mu.Lock()
+		r.b.sawLocked(fmt.Sprintf("%d@g.us", i), "")
+		r.b.mu.Unlock()
+	}
+	if st := r.b.Status(); len(st.SeenGroups) != maxSeen || st.SeenGroups[0].ID != fmt.Sprintf("%d@g.us", maxSeen+4) {
+		t.Fatalf("seen = %d", len(st.SeenGroups))
+	}
+	if _, err := New(Options{Dir: t.TempDir(), Defaults: &Settings{AllowGroups: []string{"x"}}}); err == nil {
+		t.Fatal("a bad group in the file was taken")
+	}
+}
+
+func TestSendToGroupsAndFiles(t *testing.T) {
+	r := newRig(t)
+	lib := map[string]File{
+		"report.pdf": {MIME: "application/pdf", Data: []byte("%PDF")},
+		"empty.txt":  {},
+		"huge.bin":   {Name: "huge.bin", Data: make([]byte, MaxFile+1)},
+	}
+	r.b.opt.File = func(name string) (File, error) {
+		f, ok := lib[name]
+		if !ok {
+			return File{}, errors.New("no such file")
+		}
+		return f, nil
+	}
+	f := r.linked(t)
+	r.b.mu.Lock()
+	r.b.sawLocked("120363@g.us", "Familia")
+	r.b.sawLocked("555@g.us", "Trabajo")
+	r.b.mu.Unlock()
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, Groups: true, AllowGroups: []string{"120363@g.us"}}); err != nil {
+		t.Fatal(err)
+	}
+	c := connectorOf{r.b}
+	ctx := context.Background()
+	if d := c.Describe(); !strings.Contains(d, "group Familia (120363@g.us)") || !strings.Contains(d, `"file"`) {
+		t.Fatalf("describe = %s", d)
+	}
+	if out, _ := c.Call(ctx, map[string]any{"action": "status"}); !strings.Contains(out, "group Familia") {
+		t.Fatalf("status = %s", out)
+	}
+	for to, want := range map[string]string{"120363@g.us": "120363@g.us", "familia": "120363@g.us", "group:Familia": "120363@g.us"} {
+		if _, err := c.Call(ctx, map[string]any{"to": to, "text": "hola"}); err != nil {
+			t.Fatalf("%s: %v", to, err)
+		}
+		if got := f.messages()[len(f.messages())-1]; got != want+": hola" {
+			t.Fatalf("%s: sent = %q", to, got)
+		}
+	}
+	for to, want := range map[string]error{"555@g.us": ErrNotAllowGroup, "+4411112222": ErrNotAllow} {
+		if _, err := c.Call(ctx, map[string]any{"to": to, "text": "x"}); !errors.Is(err, want) {
+			t.Fatalf("%s: %v", to, err)
+		}
+	}
+	if _, err := c.Call(ctx, map[string]any{"to": "Trabajo", "text": "x"}); err == nil {
+		t.Fatal("wrote to a group off the list by its name")
+	}
+	// A file, with its caption; a long text goes before it.
+	n := len(f.messages())
+	if _, err := c.Call(ctx, map[string]any{"to": "+56912345678", "text": "El **informe**", "file": "report.pdf"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.messages()[n]; got != "56912345678: [report.pdf|application/pdf|%PDF] El *informe*" {
+		t.Fatalf("file = %q", got)
+	}
+	if _, err := c.Call(ctx, map[string]any{"to": "+56912345678", "text": strings.Repeat("a ", maxCaption), "file": "report.pdf"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.messages()[n+2]; !strings.HasSuffix(got, "%PDF] ") {
+		t.Fatalf("long caption = %q", got)
+	}
+	if _, err := c.Call(ctx, map[string]any{"to": "+56912345678", "file": "report.pdf"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, bad := range []string{"nope.pdf", "empty.txt", "huge.bin"} {
+		if _, err := c.Call(ctx, map[string]any{"to": "+56912345678", "file": bad}); err == nil {
+			t.Fatalf("%s was sent", bad)
+		}
+	}
+	r.b.opt.File = nil
+	if _, err := c.Call(ctx, map[string]any{"to": "+56912345678", "file": "report.pdf"}); err == nil {
+		t.Fatal("sent without a library")
+	}
+}
+
+func TestRepliesCarryTheirFiles(t *testing.T) {
+	r := newRig(t)
+	r.b.opt.File = func(name string) (File, error) {
+		if name == "gone.png" {
+			return File{}, errors.New("deleted")
+		}
+		return File{Name: name, MIME: "image/png", Data: []byte("png")}, nil
+	}
+	f := r.linked(t)
+	r.chats.reply = func(string) ([]chat.Turn, error) {
+		return []chat.Turn{{From: "mimi", Text: "Here.", Artifacts: []string{"chart.png", "gone.png"}, Working: true}}, nil
+	}
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "a chart please"})
+	eventually(t, "the reply and its file", func() bool { return len(f.messages()) == 2 })
+	if got := f.messages()[1]; got != "56912345678: [chart.png|image/png|png] " {
+		t.Fatalf("file = %q", got)
+	}
+	r.chats.emit("c1", chat.Event{Type: "done", Index: 1, Turn: &chat.Turn{Text: "Here.\n\nAnd the table.", Artifacts: []string{"table.png"}}})
+	eventually(t, "the final file", func() bool { return len(f.messages()) == 4 })
+	if got := f.messages()[3]; got != "56912345678: [table.png|image/png|png] " {
+		t.Fatalf("final file = %q", got)
+	}
+	if !strings.Contains(r.logString(), "gone.png") {
+		t.Fatal("the missing file was not logged")
 	}
 }
 

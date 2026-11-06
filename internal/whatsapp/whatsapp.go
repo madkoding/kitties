@@ -25,6 +25,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/chat"
@@ -87,6 +88,8 @@ type Event struct {
 	Group     bool
 	Chat      string
 	Mentioned bool
+	// ChatName is the group's name, when WhatsApp gave it.
+	ChatName string
 	// Files are the pictures, documents and audios of the message (Text is their caption).
 	Files []File
 	// Session is the whole state of the linked device, to keep sealed (EvSession).
@@ -110,6 +113,8 @@ type Client interface {
 	Run(ctx context.Context, session []byte, emit func(Event)) error
 	// Send writes text to a number (digits with the country code) or a group (its JID).
 	Send(ctx context.Context, to, text string) error
+	// SendFile sends a picture, video, audio or document, with text as its caption.
+	SendFile(ctx context.Context, to string, f File, caption string) error
 	// Typing shows (on) or stops showing that the number is writing to to.
 	Typing(ctx context.Context, to string, on bool) error
 	// Logout removes this device from the phone.
@@ -144,9 +149,20 @@ type Settings struct {
 	Allow []string `json:"allow"`
 	// Kitty answers the messages (id or name).
 	Kitty string `json:"kitty"`
-	// Groups lets the kitty answer in groups, when someone on the list mentions it.
+	// Groups lets the kitty answer in the groups of AllowGroups, when someone mentions it.
 	Groups bool `json:"groups"`
+	// AllowGroups are the groups (their JIDs, "…@g.us") the kitty answers in and may write to.
+	AllowGroups []string `json:"allow_groups"`
 }
+
+// Group is a group the linked number is in, as Settings lists it.
+type Group struct {
+	ID   string `json:"id"`
+	Name string `json:"name,omitempty"`
+}
+
+// maxSeen is how many groups that wrote are kept for Settings to offer.
+const maxSeen = 30
 
 // Status is the link as Settings shows it.
 type Status struct {
@@ -166,6 +182,8 @@ type Status struct {
 	Ignored int `json:"ignored"`
 	// LastMessage is when the last allowed message came.
 	LastMessage time.Time `json:"last_message,omitzero"`
+	// SeenGroups are the groups that wrote lately, newest first, to choose from.
+	SeenGroups []Group `json:"seen_groups"`
 	// CanChange is false when there is no vault to seal the session with; Why says so.
 	CanChange bool   `json:"can_change"`
 	Why       string `json:"why,omitempty"`
@@ -188,6 +206,8 @@ type Options struct {
 	QRImage func(code string) (string, error)
 	// Transcribe turns a voice note into text (optional: without it the audio is attached as it is).
 	Transcribe func(ctx context.Context, f File) (string, error)
+	// File reads a file of the library by its name, for the kitties to send (optional).
+	File func(name string) (File, error)
 	// Defaults are the settings while none were saved from Settings (the configuration file's).
 	Defaults *Settings
 	// Log reports what happens (optional).
@@ -203,6 +223,8 @@ var (
 	ErrNotOn    = errors.New("WhatsApp is off: turn it on in Settings first")
 	ErrNotReady = errors.New("WhatsApp is not connected yet: scan the QR code in Settings")
 	ErrNotAllow = errors.New("that number is not on the allow list")
+	// ErrNotAllowGroup is returned for a group not on the list.
+	ErrNotAllowGroup = errors.New("that group is not on the allow list")
 )
 
 // Bridge links WhatsApp with the kitties.
@@ -213,7 +235,8 @@ type Bridge struct {
 	ops     sync.Mutex
 	mu      sync.Mutex
 	set     Settings
-	chats   map[string]string // number -> chat id
+	chats   map[string]string // number (or "g:" and a group) -> chat id
+	seen    []Group
 	status  Status
 	client  Client
 	cancel  context.CancelFunc
@@ -229,6 +252,7 @@ type Bridge struct {
 type saved struct {
 	Settings
 	Chats map[string]string `json:"chats,omitempty"`
+	Seen  []Group           `json:"seen_groups,omitempty"`
 }
 
 // New reads the saved settings. Nothing connects before Start.
@@ -250,6 +274,9 @@ func New(opt Options) (*Bridge, error) {
 				}
 				b.set.Allow = append(b.set.Allow, d)
 			}
+			if b.set.AllowGroups, err = groupList(opt.Defaults.AllowGroups); err != nil {
+				return nil, err
+			}
 			if b.set.Enabled && !b.usable() {
 				b.set.Enabled = false
 				opt.Log("whatsapp: %v", ErrNoVault)
@@ -266,6 +293,7 @@ func New(opt Options) (*Bridge, error) {
 		if s.Chats != nil {
 			b.chats = s.Chats
 		}
+		b.seen = s.Seen
 	}
 	b.status.State = StateOff
 	return b, nil
@@ -305,6 +333,8 @@ func (b *Bridge) Status() Status {
 	st := b.status
 	st.Settings = b.set
 	st.Allow = append([]string{}, b.set.Allow...)
+	st.AllowGroups = append([]string{}, b.set.AllowGroups...)
+	st.SeenGroups = append([]Group{}, b.seen...)
 	st.CanChange = b.usable()
 	if b.opt.Box == nil {
 		st.Why = ErrNoVault.Error()
@@ -352,6 +382,11 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 		return Settings{}, fmt.Errorf("the allow list holds at most %d numbers", MaxAllow)
 	}
 	out := Settings{Enabled: s.Enabled, Kitty: strings.TrimSpace(s.Kitty), Groups: s.Groups, Allow: []string{}}
+	groups, err := groupList(s.AllowGroups)
+	if err != nil {
+		return Settings{}, err
+	}
+	out.AllowGroups = groups
 	seen := map[string]bool{}
 	for _, n := range s.Allow {
 		d, err := Normalize(n)
@@ -374,6 +409,40 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 		out.Kitty = k.ID
 	}
 	return out, nil
+}
+
+// groupList checks and dedupes a list of group JIDs.
+func groupList(in []string) ([]string, error) {
+	if len(in) > MaxAllow {
+		return nil, fmt.Errorf("the group list holds at most %d groups", MaxAllow)
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, g := range in {
+		g = strings.TrimSpace(g)
+		if !IsGroup(g) {
+			return nil, fmt.Errorf("%q is not a WhatsApp group (like 120363012345678901@g.us)", g)
+		}
+		if !seen[g] {
+			seen[g] = true
+			out = append(out, g)
+		}
+	}
+	return out, nil
+}
+
+// IsGroup reports whether s is a group's JID: digits (and a dash in old groups) and "@g.us".
+func IsGroup(s string) bool {
+	id, ok := strings.CutSuffix(s, "@g.us")
+	if !ok || id == "" || len(id) > 40 {
+		return false
+	}
+	for _, r := range id {
+		if (r < '0' || r > '9') && r != '-' {
+			return false
+		}
+	}
+	return true
 }
 
 // Link asks for new QR codes (after they expired, or the phone logged the device out).
@@ -430,7 +499,7 @@ func (b *Bridge) saveLocked() error {
 	if err := os.MkdirAll(b.opt.Dir, 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(saved{Settings: b.set, Chats: b.chats}, "", "  ")
+	data, err := json.MarshalIndent(saved{Settings: b.set, Chats: b.chats, Seen: b.seen}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -583,26 +652,31 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 	if (text == "" && len(ev.Files) == 0) || ev.From == "" {
 		return
 	}
-	if ev.Group && (!b.set.Groups || ev.Chat == "") {
-		return
-	}
-	if !b.allowedLocked(ev.From) {
-		b.status.Ignored++
+	if ev.Group && (!b.set.Groups || !IsGroup(ev.Chat)) {
 		return
 	}
 	in := inbound{from: ev.From, name: ev.Name, text: text, files: ev.Files, key: ev.From, to: ev.From}
 	if ev.Group {
-		name := b.kittyNameLocked()
-		if !ev.Mentioned && !mentions(text, name) {
+		// In a group on the list anyone may talk to the kitty, by naming it.
+		b.sawLocked(ev.Chat, ev.ChatName)
+		if !ev.Mentioned && !mentions(text, b.kittyNameLocked()) {
+			return
+		}
+		if !b.groupAllowedLocked(ev.Chat) {
+			b.status.Ignored++
 			return
 		}
 		who := ev.Name
 		if who == "" {
 			who = "+" + ev.From
 		}
-		in.key, in.to, in.group = "g:"+ev.Chat, ev.Chat, true
+		in.key, in.to, in.group, in.groupName = "g:"+ev.Chat, ev.Chat, true, ev.ChatName
 		in.text = who + ": " + text
 	} else {
+		if !b.allowedLocked(ev.From) {
+			b.status.Ignored++
+			return
+		}
 		b.last = ev.From
 	}
 	b.status.LastMessage = time.Now()
@@ -629,6 +703,41 @@ type inbound struct {
 	files            []File
 	key, to          string
 	group            bool
+	groupName        string
+}
+
+// groupAllowedLocked reports whether a group is on the list.
+func (b *Bridge) groupAllowedLocked(g string) bool {
+	for _, a := range b.set.AllowGroups {
+		if a == g {
+			return true
+		}
+	}
+	return false
+}
+
+// sawLocked keeps a group that wrote at the top of the ones Settings offers.
+func (b *Bridge) sawLocked(id, name string) {
+	if len(b.seen) > 0 && b.seen[0].ID == id && (name == "" || b.seen[0].Name == name) {
+		return
+	}
+	g := Group{ID: id, Name: name}
+	out := []Group{g}
+	for _, s := range b.seen {
+		if s.ID == id {
+			if g.Name == "" {
+				out[0].Name = s.Name
+			}
+			continue
+		}
+		if len(out) < maxSeen {
+			out = append(out, s)
+		}
+	}
+	b.seen = out
+	if err := b.saveLocked(); err != nil {
+		b.opt.Log("whatsapp: keep the groups: %v", err)
+	}
 }
 
 func (b *Bridge) kittyNameLocked() string {
@@ -679,6 +788,8 @@ func (b *Bridge) chatFor(in inbound) (string, error) {
 	}
 	title := "WhatsApp +" + in.from
 	switch {
+	case in.group && in.groupName != "":
+		title = "WhatsApp group: " + in.groupName
 	case in.group:
 		title = "WhatsApp group " + strings.TrimSuffix(in.to, "@g.us")
 	case in.name != "":
@@ -780,6 +891,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 	working := map[int]string{}
 	for i, t := range turns {
 		b.reply(ctx, c, in.to, t.Text)
+		b.replyFiles(ctx, c, in.to, t.Artifacts)
 		if t.Working {
 			working[first+i] = t.Text
 		}
@@ -799,6 +911,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 			}
 			delete(working, ev.Index)
 			b.reply(ctx, c, in.to, strings.TrimSpace(strings.TrimPrefix(ev.Turn.Text, sent)))
+			b.replyFiles(ctx, c, in.to, ev.Turn.Artifacts)
 		}
 	}
 }
@@ -876,9 +989,50 @@ func (b *Bridge) reply(ctx context.Context, c Client, to, text string) {
 
 const maxPart = 4000
 
-// send is a message the person or a kitty asked for: only to a number on the list, while
-// connected.
+// maxCaption is the longest text sent as a file's caption; a longer one goes before it.
+const maxCaption = 1000
+
+// replyFiles sends the files a kitty saved to the library while it answered.
+func (b *Bridge) replyFiles(ctx context.Context, c Client, to string, names []string) {
+	for _, name := range names {
+		if err := b.sendFile(ctx, c, to, name, ""); err != nil {
+			b.opt.Log("whatsapp: send %s to %s: %v", name, to, err)
+		}
+	}
+}
+
+// sendFile sends a file of the library, with its caption.
+func (b *Bridge) sendFile(ctx context.Context, c Client, to, name, caption string) error {
+	if b.opt.File == nil {
+		return errors.New("there is no library to send files from here")
+	}
+	f, err := b.opt.File(name)
+	if err != nil {
+		return err
+	}
+	if len(f.Data) == 0 {
+		return fmt.Errorf("%s is empty", name)
+	}
+	if len(f.Data) > MaxFile {
+		return fmt.Errorf("%s is larger than %d MB", name, MaxFile>>20)
+	}
+	if f.Name == "" {
+		f.Name = name
+	}
+	return c.SendFile(ctx, to, f, caption)
+}
+
+// MaxFile is the largest file the kitties send (WhatsApp takes 100 MB of a document, less of
+// the rest; this keeps it to what a phone downloads without asking).
+const MaxFile = 16 << 20
+
+// send is a message the person or a kitty asked for: only to a number or a group on the list,
+// while connected. file is a file of the library to send with text as its caption.
 func (b *Bridge) send(ctx context.Context, to, text string) error {
+	return b.sendWith(ctx, to, text, "")
+}
+
+func (b *Bridge) sendWith(ctx context.Context, to, text, file string) error {
 	b.mu.Lock()
 	c, state, enabled, last := b.client, b.status.State, b.set.Enabled, b.last
 	allow := append([]string(nil), b.set.Allow...)
@@ -899,26 +1053,59 @@ func (b *Bridge) send(ctx context.Context, to, text string) error {
 			return errors.New(`say who to write to: "to" is a number on the allow list`)
 		}
 	}
-	n, err := Normalize(to)
+	b.mu.Lock()
+	n, err := b.destLocked(to)
+	b.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	b.mu.Lock()
-	ok := b.allowedLocked(n)
-	b.mu.Unlock()
-	if !ok {
-		return ErrNotAllow
-	}
 	text = strings.TrimSpace(text)
-	if text == "" {
+	if text == "" && file == "" {
 		return errors.New("the message is empty")
 	}
-	for _, part := range Split(Plain(text), maxPart) {
+	parts := Split(Plain(text), maxPart)
+	caption := ""
+	if file != "" && len(parts) == 1 && len(parts[0]) <= maxCaption {
+		caption, parts = parts[0], nil
+	}
+	for _, part := range parts {
 		if err := c.Send(ctx, n, part); err != nil {
 			return err
 		}
 	}
+	if file != "" {
+		return b.sendFile(ctx, c, n, file, caption)
+	}
 	return nil
+}
+
+// destLocked is where a message for to goes: a number on the list, or a group on it (its JID or
+// its name).
+func (b *Bridge) destLocked(to string) (string, error) {
+	to = strings.TrimSpace(to)
+	if IsGroup(to) {
+		if !b.groupAllowedLocked(to) {
+			return "", ErrNotAllowGroup
+		}
+		return to, nil
+	}
+	n, err := Normalize(to)
+	if err == nil {
+		if !b.allowedLocked(n) {
+			return "", ErrNotAllow
+		}
+		return n, nil
+	}
+	if !strings.ContainsFunc(to, unicode.IsLetter) {
+		return "", err
+	}
+	name := strings.ToLower(strings.TrimPrefix(to, "group:"))
+	for _, g := range b.seen {
+		if g.Name != "" && strings.ToLower(g.Name) == strings.TrimSpace(name) && b.groupAllowedLocked(g.ID) {
+			return g.ID, nil
+		}
+	}
+	return "", fmt.Errorf("%q is not a number or a group on the allow list", to)
 }
 
 // Normalize is a phone number as digits with the country code: "+56 9 1234-5678" and
@@ -1008,11 +1195,28 @@ func (connectorOf) Kind() string { return Kind }
 // Describe implements connector.Connector.
 func (c connectorOf) Describe() string {
 	c.b.mu.Lock()
-	allow := strings.Join(prefixed(c.b.set.Allow), ", ")
+	allow := strings.Join(append(prefixed(c.b.set.Allow), c.b.groupNamesLocked()...), ", ")
 	c.b.mu.Unlock()
 	return `WhatsApp from your own linked number: {"action": "send", "to": "+56912345678", "text": "..."} ` +
-		`writes to a number on the allow list (` + allow + `; "to" left out writes to whoever wrote last). ` +
+		`writes to a number or a group on the allow list (` + allow + `; "to" left out writes to whoever wrote last). ` +
+		`Add "file": "<name of a file in the library>" to send a picture, video, audio or document, with "text" as its caption. ` +
+		`Files you save to the library while answering someone on WhatsApp are sent to them by themselves. ` +
 		`{"action": "status"} says whether it is connected. The people on the list also write to you here.`
+}
+
+// groupNamesLocked are the groups on the list as the kitties name them.
+func (b *Bridge) groupNamesLocked() []string {
+	var out []string
+	for _, id := range b.set.AllowGroups {
+		name := id
+		for _, g := range b.seen {
+			if g.ID == id && g.Name != "" {
+				name = g.Name + " (" + id + ")"
+			}
+		}
+		out = append(out, "group "+name)
+	}
+	return out
 }
 
 func prefixed(list []string) []string {
@@ -1028,8 +1232,7 @@ func (c connectorOf) Call(ctx context.Context, args map[string]any) (string, err
 	str := func(k string) string { s, _ := args[k].(string); return s }
 	switch action := strings.ToLower(str("action")); action {
 	case "", "send":
-		to := str("to")
-		if err := c.b.send(ctx, to, str("text")); err != nil {
+		if err := c.b.sendWith(ctx, str("to"), str("text"), str("file")); err != nil {
 			return "", err
 		}
 		return "sent", nil
@@ -1039,7 +1242,10 @@ func (c connectorOf) Call(ctx context.Context, args map[string]any) (string, err
 		if st.Phone != "" {
 			out += " as +" + st.Phone
 		}
-		return out + "; it may write to " + strings.Join(prefixed(st.Allow), ", "), nil
+		c.b.mu.Lock()
+		to := append(prefixed(st.Allow), c.b.groupNamesLocked()...)
+		c.b.mu.Unlock()
+		return out + "; it may write to " + strings.Join(to, ", "), nil
 	default:
 		return "", fmt.Errorf("unknown action %q (send, status)", action)
 	}
