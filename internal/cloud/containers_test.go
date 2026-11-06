@@ -100,7 +100,7 @@ func TestContainersExecQuotesAndReportsFailures(t *testing.T) {
 	if err != nil || !strings.Contains(out, `'it'\''s; rm -rf /'`) {
 		t.Fatalf("exec = %q %v", out, err)
 	}
-	cmd := f.Commands[0]
+	cmd := f.Commands[len(f.Commands)-1]
 	if !strings.HasPrefix(cmd, "cd /home/kitty/work && sudo -n -H -u kitty env DISPLAY=:99 'echo' ") {
 		t.Errorf("command = %q", cmd)
 	}
@@ -134,8 +134,8 @@ func TestContainersScreenshotDecodesTheGuestPicture(t *testing.T) {
 	if err != nil || string(pic) != "PNGdata" {
 		t.Fatalf("screenshot = %q %v", pic, err)
 	}
-	if !strings.Contains(f.Commands[0], "kitty-shot | base64 -w0") {
-		t.Errorf("command = %q", f.Commands[0])
+	if last := f.Commands[len(f.Commands)-1]; !strings.Contains(last, "kitty-shot | base64 -w0") {
+		t.Errorf("command = %q", last)
 	}
 	for name, res := range map[string]ExecResult{
 		"fails":     {ExitCode: 1, Stderr: "no display"},
@@ -329,5 +329,64 @@ func TestRouterAsksTheLocalSideForZones(t *testing.T) {
 	}
 	if s, _ := (&Router{}).ZoneStale(ctx, "home", "UTC"); s {
 		t.Error("no local side")
+	}
+}
+
+// A machine is put in the spec's zone, or the host's, when it is made and each time it wakes.
+func TestContainersPutTheMachineInTheHostsZone(t *testing.T) {
+	ctx := context.Background()
+	t.Setenv("TZ", "America/Santiago")
+	f := NewFake(5)
+	c := &Containers{P: f}
+	zoneCmds := func() []string {
+		var out []string
+		for _, cmd := range f.Commands {
+			if strings.Contains(cmd, "/etc/localtime") {
+				out = append(out, cmd)
+			}
+		}
+		return out
+	}
+	if _, err := c.Up(ctx, container.Spec{Name: "kitty-a"}); err != nil {
+		t.Fatal(err)
+	}
+	got := zoneCmds()
+	if len(got) != 1 || !strings.HasPrefix(got[0], "z='America/Santiago';") || !strings.Contains(got[0], "sudo -n ln -sf") {
+		t.Fatalf("made: %q", got)
+	}
+	// The spec's own zone wins, and a woken machine gets it again.
+	_ = c.Stop(ctx, "kitty-a")
+	if _, err := c.Up(ctx, container.Spec{Name: "kitty-a", Env: map[string]string{"TZ": "Asia/Tokyo"}}); err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Stop(ctx, "kitty-a")
+	if err := c.Start(ctx, "kitty-a"); err != nil {
+		t.Fatal(err)
+	}
+	got = zoneCmds()
+	if len(got) != 3 || !strings.HasPrefix(got[1], "z='Asia/Tokyo';") || !strings.HasPrefix(got[2], "z='Asia/Tokyo';") {
+		t.Errorf("woken: %q", got)
+	}
+	// A machine the gateway never made here takes the host's zone; quotes stay quoted.
+	f2 := NewFake(5)
+	m, _ := Ensure(ctx, f2, CreateRequest{Key: "k", Name: "kitty-b"})
+	_, _ = f2.Sleep(ctx, m.ID)
+	c2 := &Containers{P: f2}
+	t.Setenv("TZ", "Europe/Madrid")
+	if err := c2.Start(ctx, "kitty-b"); err != nil {
+		t.Fatal(err)
+	}
+	if len(f2.Commands) != 1 || !strings.HasPrefix(f2.Commands[0], "z='Europe/Madrid';") {
+		t.Errorf("unknown machine: %q", f2.Commands)
+	}
+	// No zone at all: nothing is run.
+	c3 := &Containers{P: NewFake(5)}
+	c3.setZone(ctx, "kitty-c", "id", "")
+	if _, ok := c3.zones.Load("kitty-c"); ok {
+		t.Error("an empty zone was remembered")
+	}
+	// A failed wake fails the start before any zone.
+	if err := c2.Start(ctx, "kitty-none"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("unknown: %v", err)
 	}
 }
