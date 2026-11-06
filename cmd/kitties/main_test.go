@@ -447,6 +447,23 @@ func TestDemoMode(t *testing.T) {
 	}
 }
 
+// cancelOnWrite calls cancel once the marker has been written through it.
+type cancelOnWrite struct {
+	w      io.Writer
+	marker string
+	cancel func()
+	seen   bytes.Buffer
+}
+
+func (c *cancelOnWrite) Write(p []byte) (int, error) {
+	n, err := c.w.Write(p)
+	c.seen.Write(p)
+	if strings.Contains(c.seen.String(), c.marker) {
+		c.cancel()
+	}
+	return n, err
+}
+
 func TestFollowTaskHelpers(t *testing.T) {
 	if firstLine("  a\nb ") != "a…" || firstLine(strings.Repeat("x", 120)) != strings.Repeat("x", 100)+"…" || firstLine("ok") != "ok" {
 		t.Error("firstLine")
@@ -461,11 +478,12 @@ func TestFollowTaskHelpers(t *testing.T) {
 	notifyContext = func() (context.Context, context.CancelFunc) { return ctx, func() {} }
 	pollEvery = 5 * time.Millisecond
 	defer func() { pollEvery = 500 * time.Millisecond }()
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		cancel()
-	}()
-	code, out, _ := exec(t, "wait for it\n", "-config", cfg, "chat", "desk")
+	// Cancel only once the chat reports it is following the task: a fixed delay raced with a slow
+	// start on busy CI machines and stopped the task before it was followed.
+	var buf bytes.Buffer
+	w := &cancelOnWrite{w: &buf, marker: "working on the desktop", cancel: cancel}
+	code := run([]string{"-config", cfg, "chat", "desk"}, strings.NewReader("wait for it\n"), w, io.Discard)
+	out := buf.String()
 	if code != 0 || !strings.Contains(out, "working on the desktop") || strings.Contains(out, "late") {
 		t.Errorf("cancel: %d %s", code, out)
 	}
