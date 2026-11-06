@@ -30,6 +30,10 @@ a desktop app and an Android app.
   them onto the page, by pasting, or with `/attach` in the CLI. The model sees pictures and PDFs where its provider reads
   them, gets the text of the rest, and a kitty with a machine finds the file in
   `/home/kitty/work/uploads`.
+- **Work that survives updates.** Each kitty's home, settings and the programs it installed live on
+  your computer, so a new desktop image changes nothing it built. What it makes for you lands in its
+  `~/Shared` folder (`kitty-share`), which the app shows in **Library > Shared** to preview, download or
+  keep; a kitty's files export to one `.tar.gz` without its secrets ([details](docs/DESKTOP.md#what-outlives-the-desktop-home-programs-and-shared)).
 - **Autonomy.** Goals on a schedule or triggered by events, limits and a daily budget, retries, a
   backup kitty, delegation between kitties and a journal of everything.
 - **Trust and memory.** Notes that persist, thumbs that teach it your standards, action limits and
@@ -103,7 +107,7 @@ Or download the app (it carries its own gateway), from the
 Everything is in [docs/](docs/README.md):
 
 - [Install and first steps](docs/INSTALL.md) · [Desktop and Android apps](docs/APPS.md) · [Run it on a server](docs/DEPLOY.md)
-- [Configuration and connectors](docs/CONFIGURATION.md) · [Autonomy, trust and notifications](docs/AUTONOMY.md)
+- [Claude as the orchestrator (MCP)](docs/MCP.md) · [WhatsApp with a number of their own](docs/WHATSAPP.md) ([español](docs/WHATSAPP.es.md)) · [Configuration and connectors](docs/CONFIGURATION.md) · [Autonomy, trust and notifications](docs/AUTONOMY.md)
 - [How a kitty uses its desktop](docs/DESKTOP.md) ([español](docs/DESKTOP.es.md)) · [The desktop's look and contents](docs/KITTY-DESKTOP.md)
 - [The API](docs/API.md) · [Architecture](docs/ARCHITECTURE.md) · [Development](docs/DEVELOPMENT.md) · [Releases and signing](docs/RELEASING.md)
 

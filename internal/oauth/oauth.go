@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -38,6 +39,15 @@ type Provider struct {
 	AuthURL  string   `json:"auth_url"`
 	TokenURL string   `json:"token_url"`
 	Scopes   []string `json:"scopes"`
+	// ScopesFor picks the scopes from the connection's settings instead of Scopes (Google asks
+	// only for the services the person ticked).
+	ScopesFor func(settings map[string]string) []string `json:"-"`
+	// LoginHint sends the account signed in before as login_hint, so signing in again lands on
+	// the same account while a new connection gets the account chooser.
+	LoginHint bool `json:"-"`
+	// LoopbackOrHTTPS refuses, before the consent page does, a redirect address the service does
+	// not take: only http://127.0.0.1 (or localhost) and https (Google's rule for its clients).
+	LoopbackOrHTTPS bool `json:"-"`
 	// Extra are query parameters the consent page needs (Google's offline access).
 	Extra map[string]string `json:"-"`
 	// ScopeSep joins the scopes in the consent URL; a space unless the service wants commas.
@@ -60,6 +70,15 @@ type Provider struct {
 	SelfClient bool `json:"-"`
 	// Register makes an app on the service when there is none (Mastodon lets anyone).
 	Register func(ctx context.Context, do HTTPDo, app App, redirect string) (id, secret string, err error) `json:"-"`
+	// LoginFlow marks Nextcloud's Login Flow v2: a login page and a poll instead of a code and a
+	// callback, and an app password instead of a token.
+	LoginFlow bool `json:"-"`
+	// Implicit marks an authorize page that returns the token itself in the return address's
+	// fragment (Trello) instead of a code: see implicit.go.
+	Implicit bool `json:"-"`
+	// AppKey names the setting that holds the person's own app id when it is not client_id
+	// (Trello's API key).
+	AppKey string `json:"-"`
 	// Finish turns the service's answer into the token the connector uses, and says what it
 	// learned for the settings (the page, the account id, the site).
 	Finish func(ctx context.Context, do HTTPDo, app App, c Credentials) (Credentials, map[string]string, error) `json:"-"`
@@ -68,7 +87,7 @@ type Provider struct {
 // Ready reports whether a person can sign in to the service without an app of their own.
 func (p Provider) Ready() bool {
 	id, _ := Builtin(p.Name)
-	return id != "" || p.SelfClient || p.Register != nil
+	return id != "" || p.SelfClient || p.Register != nil || p.LoginFlow
 }
 
 // address fills a provider address's {url} and {subdomain} from the settings.
@@ -123,6 +142,13 @@ type Credentials struct {
 	Expiry       time.Time `json:"expiry"`
 	// Account is who signed in, when the service said.
 	Account string `json:"account,omitempty"`
+	// IDToken and Scope are what the token answer said besides the token (OpenID's identity,
+	// the scopes granted): read by a provider's Finish, not kept.
+	IDToken string `json:"-"`
+	Scope   string `json:"-"`
+	// Answer is the token answer as the service sent it, for a Finish that reads more of it
+	// (Discord's webhook); never saved.
+	Answer json.RawMessage `json:"-"`
 }
 
 // Keys of the connector settings the credentials live in.
@@ -186,6 +212,10 @@ type Manager struct {
 	now     func() time.Time
 	httpDo  HTTPDo
 	rand    func(n int) string
+	// sleep and loginEvery pace a login flow's poll; warn reports one that failed.
+	sleep      func(time.Duration)
+	loginEvery time.Duration
+	warn       func(format string, args ...any)
 }
 
 type flow struct {
@@ -201,7 +231,7 @@ type flow struct {
 // New creates the manager over the store.
 func New(store Store) *Manager {
 	return &Manager{store: store, pending: map[string]flow{}, now: time.Now,
-		httpDo: (&http.Client{Timeout: 30 * time.Second}).Do, rand: randomText}
+		httpDo: (&http.Client{Timeout: 30 * time.Second}).Do, rand: randomText, sleep: time.Sleep, loginEvery: 2 * time.Second, warn: log.Printf}
 }
 
 func randomText(n int) string {
@@ -225,6 +255,8 @@ func (m *Manager) client(ctx context.Context, connector string, p Provider, app 
 	switch {
 	case app.ClientID != "":
 		return app.ClientID, app.ClientSecret, nil
+	case p.AppKey != "" && strings.TrimSpace(app.Settings[p.AppKey]) != "":
+		return strings.TrimSpace(app.Settings[p.AppKey]), "", nil
 	case p.SelfClient:
 		return origin(redirect), "", nil
 	}
@@ -265,6 +297,23 @@ func RedirectFor(provider, redirect string) string {
 	return u.String()
 }
 
+// loopbackOrHTTPS says why the service would refuse redirect: it takes https, or plain http
+// back to this computer only (a desktop client's loopback), not a LAN address or a name.
+func loopbackOrHTTPS(p Provider, redirect string) error {
+	u, err := url.Parse(redirect)
+	if err != nil {
+		return fmt.Errorf("bad redirect address %q: %w", redirect, err)
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "127.0.0.1", "::1", "localhost":
+		return nil
+	}
+	return fmt.Errorf("%s only signs in back to http://127.0.0.1 or an https address, not %s: open Settings on the computer that runs the gateway, or give the gateway a public https address", p.Label, u.Scheme+"://"+u.Host)
+}
+
 // Redirect is the redirect address a connector's sign-in sends for a gateway reached at
 // redirect, or redirect itself when the connector has no sign-in.
 func (m *Manager) Redirect(connector, redirect string) string {
@@ -285,7 +334,15 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%q has no OAuth flow", app.Provider)
 	}
+	if p.LoginFlow {
+		return m.startLoginFlow(connector, p, app)
+	}
 	redirect = RedirectFor(app.Provider, redirect)
+	if p.LoopbackOrHTTPS {
+		if err := loopbackOrHTTPS(p, redirect); err != nil {
+			return "", err
+		}
+	}
 	authURL, err := p.address(p.AuthURL, app.Settings)
 	if err != nil {
 		return "", err
@@ -296,17 +353,13 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if p.Implicit {
+		return m.startImplicit(connector, p, app, redirect, authURL, clientID), nil
+	}
 	state := m.rand(24)
 	verifier := m.rand(48)
 	sum := sha256.Sum256([]byte(verifier))
-	m.mu.Lock()
-	for k, f := range m.pending {
-		if m.now().Sub(f.started) > 15*time.Minute {
-			delete(m.pending, k)
-		}
-	}
-	m.pending[state] = flow{connector: connector, provider: p, verifier: verifier, redirect: redirect, started: m.now(), clientID: clientID, secret: secret}
-	m.mu.Unlock()
+	m.remember(state, flow{connector: connector, provider: p, verifier: verifier, redirect: redirect, started: m.now(), clientID: clientID, secret: secret})
 	sep := p.ScopeSep
 	if sep == "" {
 		sep = " "
@@ -315,13 +368,32 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 		"client_id": {clientID}, "redirect_uri": {redirect}, "response_type": {"code"},
 		"state": {state}, "code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "code_challenge_method": {"S256"},
 	}
-	if len(p.Scopes) > 0 {
-		q.Set("scope", strings.Join(p.Scopes, sep))
+	scopes := p.Scopes
+	if p.ScopesFor != nil {
+		scopes = p.ScopesFor(app.Settings)
+	}
+	if len(scopes) > 0 {
+		q.Set("scope", strings.Join(scopes, sep))
 	}
 	for k, v := range p.Extra {
 		q.Set(k, v)
 	}
+	if hint := strings.TrimSpace(app.Settings[KeyAccount]); p.LoginHint && hint != "" {
+		q.Set("login_hint", hint)
+	}
 	return authURL + "?" + q.Encode(), nil
+}
+
+// remember keeps a flow until its callback, dropping the ones left for more than 15 minutes.
+func (m *Manager) remember(state string, f flow) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, old := range m.pending {
+		if m.now().Sub(old.started) > 15*time.Minute {
+			delete(m.pending, k)
+		}
+	}
+	m.pending[state] = f
 }
 
 // Exchange finishes a sign-in with the code the callback received, and saves the credentials.
@@ -421,6 +493,8 @@ func (m *Manager) token(ctx context.Context, p Provider, app App, secret string,
 			Name string `json:"name"`
 		} `json:"team"`
 		WorkspaceName string `json:"workspace_name"`
+		IDToken       string `json:"id_token"`
+		Scope         string `json:"scope"`
 	}
 	_ = json.Unmarshal(data, &answer)
 	if resp.StatusCode >= 400 || (answer.Error != nil && answer.Error != false && answer.Error != "") {
@@ -431,7 +505,8 @@ func (m *Manager) token(ctx context.Context, p Provider, app App, secret string,
 		if msg == "" {
 			msg = strings.TrimSpace(string(data))
 		}
-		return Credentials{}, fmt.Errorf("%s refused: %s", p.Label, msg)
+		code, _ := answer.Error.(string)
+		return Credentials{}, &RefusedError{Service: p.Label, Code: code, Message: msg}
 	}
 	if answer.AccessToken == "" {
 		return Credentials{}, fmt.Errorf("%s returned no token", p.Label)
@@ -448,8 +523,23 @@ func (m *Manager) token(ctx context.Context, p Provider, app App, secret string,
 	if account == "" {
 		account = answer.WorkspaceName
 	}
-	return Credentials{AccessToken: answer.AccessToken, RefreshToken: answer.RefreshToken, Expiry: m.now().Add(ttl), Account: account}, nil
+	return Credentials{AccessToken: answer.AccessToken, RefreshToken: answer.RefreshToken, Expiry: m.now().Add(ttl), Account: account,
+		IDToken: answer.IDToken, Scope: answer.Scope, Answer: data}, nil
 }
+
+// RefusedError is a token request the service answered with an error.
+type RefusedError struct {
+	Service string
+	// Code is the OAuth error code ("invalid_grant"), when the service gave one.
+	Code    string
+	Message string
+}
+
+func (e *RefusedError) Error() string { return e.Service + " refused: " + e.Message }
+
+// ErrSignedOut is a refresh token the service no longer takes (revoked, expired, or a Google
+// app still in Testing, whose sign-ins last seven days): the person has to sign in again.
+var ErrSignedOut = errors.New("not signed in any more: the sign-in expired or was revoked; sign in again from Settings")
 
 // refreshAhead is how long before expiry a token is refreshed: before it fails, not after.
 const refreshAhead = 10 * time.Minute
@@ -522,6 +612,15 @@ func (m *Manager) refresh(ctx context.Context, connector string, creds Credentia
 		clientID, secret = Builtin(p.Name)
 	}
 	fresh, err := m.token(ctx, p, app, secret, map[string]string{"grant_type": "refresh_token", "refresh_token": creds.RefreshToken, "client_id": clientID})
+	var refused *RefusedError
+	if errors.As(err, &refused) && refused.Code == "invalid_grant" {
+		// The refresh token is dead: forget it, so Settings asks for a sign-in instead of
+		// failing on every use.
+		if serr := m.store.SaveOAuthCredentials(connector, Credentials{Account: creds.Account}); serr != nil {
+			return "", serr
+		}
+		return "", fmt.Errorf("%s: %w (%s)", p.Label, ErrSignedOut, refused.Message)
+	}
 	if err != nil {
 		return "", err
 	}

@@ -261,7 +261,115 @@ test("the library: skills with a proposal, and the artifacts", async ({ page }) 
   await shot(page, "15-library-skills");
   await open(page, "#new-artifacts");
   await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
+  // The filters: a kind narrows the list, a search finds a file by its name.
+  const filters = page.getByTestId("artifact-filters");
+  await expect(filters).toBeVisible();
+  await filters.getByTestId("kind-data").click();
+  await expect(page.getByText("prices.csv").first()).toBeVisible();
+  await expect(page.getByText("competitor-notes.md")).toHaveCount(0);
+  await filters.getByTestId("kind-data").click();
+  await filters.getByRole("searchbox").fill("nothing-like-this");
+  await expect(page.getByTestId("artifacts-none")).toBeVisible();
+  await filters.getByRole("searchbox").fill("");
+  await filters.getByRole("searchbox").blur();
   await shot(page, "16-library-artifacts");
+  // A markdown file opens in a reader that draws it as a document.
+  await page.getByRole("button", { name: "competitor-notes.md", exact: true }).click();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.locator("h2", { hasText: "Competitor notes" })).toBeVisible();
+  await expect(reader.locator("table td", { hasText: "Acme" })).toBeVisible();
+  // Three headings or more: a table of contents that scrolls to each.
+  const toc = reader.getByTestId("md-toc");
+  await expect(toc.getByRole("button", { name: "Sources" })).toBeVisible();
+  await toc.getByRole("button", { name: "Sources" }).click();
+  await expect(reader.locator("#md-sources")).toBeInViewport();
+  await reader.locator("h2").first().scrollIntoViewIfNeeded();
+  await shot(page, "60-artifact-reader");
+  // Escape closes the reader and leaves the library open under it.
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+  await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
+});
+
+test("the library's Shared tab: what the kitties made, previewed, kept and deleted", async ({
+  page,
+}) => {
+  await open(page, "#new-shared");
+  const list = page.getByTestId("shared-files");
+  await expect(list.getByTestId("shared-row")).toHaveCount(4);
+  await expect(list.getByText("by tom").first()).toBeVisible();
+  await shot(page, "62-library-shared");
+  // A picture opens as a picture, a text as a document, a PDF offers its download.
+  await list.getByRole("button", { name: "screens/app-icon.png", exact: true }).click();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.getByTestId("shared-picture")).toBeVisible();
+  await expect(reader.getByTestId("artifact-share")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await list.getByRole("button", { name: "launch-checklist.md", exact: true }).click();
+  await expect(reader.locator("h2", { hasText: "Launch checklist" })).toBeVisible();
+  await shot(page, "63-shared-reader");
+  await page.keyboard.press("Escape");
+  await list.getByRole("button", { name: "press-kit.pdf", exact: true }).click();
+  await expect(reader).toContainText("There is no preview");
+  await expect(reader.getByRole("link", { name: "download" })).toHaveAttribute(
+    "href",
+    /shared\/press-kit\.pdf\?download=1/,
+  );
+  await page.keyboard.press("Escape");
+  // Kept in the library, where every kitty reads it, as saved by its kitty.
+  const row = list.getByTestId("shared-row").filter({ hasText: "budget.csv" });
+  await row.hover();
+  await row.getByTestId("keep-shared").click();
+  await expect(page.getByText("budget.csv").first()).toBeVisible();
+  const arts = await page.request.get(`${GATEWAY}/v1/artifacts`, {
+    headers: { Authorization: "Bearer e2e-token" },
+  });
+  expect(await arts.text()).toContain('"by":"luna"');
+});
+
+test("#artifact/<name> opens the reader, with the code in colour", async ({ page }) => {
+  await open(page, "#artifact/competitor-notes.md");
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.locator("h2", { hasText: "Competitor notes" })).toBeVisible();
+  await expect(reader.locator('pre[data-lang="sh"] .hl-com')).toHaveText(
+    "# the prices, once a week",
+  );
+  await expect(reader.getByTestId("artifact-share")).toBeVisible();
+  await reader.locator("pre[data-lang]").scrollIntoViewIfNeeded();
+  await shot(page, "61-artifact-code");
+  // Closing it takes the reader out of the address.
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+  expect(await page.evaluate(() => location.hash)).not.toContain("artifact");
+});
+
+test("an artifact tag in a chat opens the reader", async ({ page }) => {
+  await open(page, `#chat/${ids.single}`);
+  await page.getByTestId("artifact-tag").first().click();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader).toBeVisible();
+  await expect(reader.getByTestId("markdown")).toBeVisible();
+  // The source of the file, and back.
+  await reader.getByTestId("artifact-raw").click();
+  await expect(reader.locator("pre", { hasText: "# Launch plan" })).toBeVisible();
+  await reader.getByTestId("artifact-raw").click();
+  await expect(reader.locator("h2", { hasText: "Launch plan" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+});
+
+test("a kitty's answer reads as markdown, and its link to an artifact opens the reader", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.single}`);
+  const answer = page
+    .locator(".msg.agent .md-chat")
+    .filter({ hasText: "Here is how I would split it" });
+  await expect(answer.locator("ol li")).toHaveCount(3);
+  await answer.getByTestId("artifact-link").click();
+  await expect(
+    page.getByTestId("artifact-reader").locator("h2", { hasText: "Launch plan" }),
+  ).toBeVisible();
 });
 
 test("picking a service opens its form; an OAuth kind offers the sign-in", async ({ page }) => {
@@ -278,6 +386,13 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   await expect(page.locator(".service-btn", { hasText: "Slack" })).toHaveCount(0);
   await page.locator(".service-btn", { hasText: "Google Workspace" }).click();
   await expect(page.getByText("Gmail, Calendar, Drive, Sheets and Docs").first()).toBeVisible();
+  // The services to reach are boxes, all ticked: the sign-in asks Google only for those.
+  const services = page.getByTestId("options-services");
+  await expect(services.locator(".chip.on")).toHaveCount(7);
+  await services.locator(".chip", { hasText: "Contacts" }).click();
+  await expect(services.locator(".chip.on")).toHaveCount(6);
+  await services.locator(".chip", { hasText: "Contacts" }).click();
+  await expect(services.locator(".chip.on")).toHaveCount(7);
   // Without an app built into Kitties, signing in asks for the person's own, and says where.
   const signInBox = page.getByTestId("connection-sign-in");
   await expect(signInBox).toContainText("needs an app of your own");
@@ -304,6 +419,33 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   await gh.locator("#field-token").fill("ghp_demo");
   await expect(save).toBeEnabled();
   await expect(gh.getByTestId("missing")).toHaveCount(0);
+  // Discord signs in to make a webhook on the channel picked, or takes one pasted.
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("discord");
+  await page.locator(".service-btn", { hasText: "Discord" }).click();
+  const dc = page.getByTestId("connection-form");
+  await expect(dc.getByTestId("way-signin")).toHaveAttribute("aria-checked", "true");
+  await expect(dc.getByTestId("way-webhook")).toBeVisible();
+  await expect(page.getByTestId("connection-sign-in")).toContainText("/v1/oauth/callback");
+  await shot(page, "60-connector-discord");
+  await dc.getByTestId("way-webhook").click();
+  await expect(dc.locator("#field-url")).toBeVisible();
+  await expect(dc.getByTestId("connection-sign-in")).toHaveCount(0);
+  // Nextcloud signs in with its login flow (no app to make); CalDAV offers it after the password.
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("nextcloud");
+  await page.locator(".service-btn", { hasText: "Nextcloud" }).click();
+  const nc = page.getByTestId("connection-form");
+  await expect(nc.getByTestId("way-signin")).toHaveAttribute("aria-checked", "true");
+  await expect(nc.getByTestId("connection-sign-in")).not.toContainText("needs an app of your own");
+  await nc.locator("#field-url").fill("https://cloud.example.com");
+  await shot(page, "61-connector-nextcloud");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("caldav");
+  await page.locator(".service-btn", { hasText: "CalDAV" }).click();
+  const cal = page.getByTestId("connection-form");
+  await expect(cal.getByTestId("way-password")).toHaveAttribute("aria-checked", "true");
+  await expect(cal.getByTestId("way-signin")).toContainText("Nextcloud");
   // The saved Google connector shows the sign-in button, which asks the gateway for a consent URL.
   await open(page, "#connector/workspace");
   const signIn = page.getByRole("button", { name: "Sign in with Google" });
@@ -313,7 +455,16 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
     headers: { Authorization: "Bearer e2e-token" },
   });
   expect(res.ok()).toBeTruthy();
-  expect(((await res.json()) as { url: string }).url).toContain("accounts.google.com");
+  const consent = new URL(((await res.json()) as { url: string }).url);
+  expect(consent.host).toBe("accounts.google.com");
+  // Back to this computer's loopback IP, with PKCE, a refresh token and the account chooser.
+  expect(consent.searchParams.get("redirect_uri")).toMatch(
+    /^http:\/\/127\.0\.0\.1:\d+\/v1\/oauth\/callback$/,
+  );
+  expect(consent.searchParams.get("code_challenge_method")).toBe("S256");
+  expect(consent.searchParams.get("access_type")).toBe("offline");
+  expect(consent.searchParams.get("prompt")).toBe("consent select_account");
+  expect(consent.searchParams.get("scope")).toContain("gmail.send");
 });
 
 // hooked is what the outside world (the Slack webhook, the ntfy topic) has received so far.
@@ -405,7 +556,11 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   await expect(page.getByTestId("level")).toContainText("They are demanding");
   const notes = page.getByTestId("notes");
   await expect(notes).toContainText("Answer in Spanish when I write in Spanish");
-  await expect(notes.locator(".tag", { hasText: "yours" })).toHaveCount(1);
+  await expect(notes.locator(".tag", { hasText: "yours" })).toHaveCount(2);
+  // The shared note is every kitty's: tom sees it too.
+  await expect(notes.locator(".tag", { hasText: "shared" })).toHaveCount(2);
+  await expect(notes.locator(".tag", { hasText: "proposed" })).toHaveCount(1);
+  await expect(notes).toContainText("My name is Mad and I work from Santiago");
   await expect(notes).toContainText("Correction: Too long: two lines at most");
   await expect(notes).toContainText("I prefer short answers");
   // The yes it gave to Slack is on its way to being trusted: twelve in a row for a demanding person.
@@ -428,6 +583,101 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   await expect(page.getByTestId("level")).toContainText("They are easygoing");
   await memory.getByRole("button", { name: "4 · demanding" }).click();
   await expect(page.getByTestId("level")).toContainText("They are demanding");
+  // The notes can be searched and narrowed to a scope.
+  await memory.getByLabel("Search the notes").fill("two lines");
+  await expect(notes).toContainText("Too long: two lines at most");
+  await expect(notes).not.toContainText("Answer in Spanish");
+  await memory.getByLabel("Search the notes").fill("zzz");
+  await expect(notes).toContainText("No note matches.");
+  await memory.getByLabel("Search the notes").fill("");
+  await memory.getByLabel("Show the notes of").selectOption("shared");
+  await expect(notes).toContainText("My name is Mad");
+  await expect(notes).not.toContainText("Answer in Spanish");
+  await memory.getByLabel("Show the notes of").selectOption("");
+  // A note is corrected in place, and becomes the person's.
+  await memory.getByRole("button", { name: "Edit: I prefer short answers." }).click();
+  const box = memory.getByLabel("Correct: I prefer short answers.");
+  await box.fill("I prefer answers of two lines");
+  await box.press("Enter");
+  await expect(notes).toContainText("I prefer answers of two lines");
+  await expect(notes).not.toContainText("I prefer short answers.");
+  // The notes go to a file and come back from one.
+  const download = page.waitForEvent("download");
+  await memory.getByRole("button", { name: "Export" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("mimi-memory.json");
+  const saved = JSON.parse(fs.readFileSync(await file.path(), "utf8"));
+  expect(
+    saved.notes.some((n: { text: string }) => n.text === "I prefer answers of two lines"),
+  ).toBe(true);
+  await memory.getByLabel("Import notes from a file").setInputFiles({
+    name: "luna-memory.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({
+        kitties_memory: 1,
+        kitty: "luna",
+        notes: [
+          { scope: "work", text: "Invoices go out on the 1st" },
+          { scope: "user", text: " " },
+        ],
+      }),
+    ),
+  });
+  await expect(memory).toContainText("Notes imported: 1.");
+  await expect(notes).toContainText("Invoices go out on the 1st");
+  await memory.getByLabel("Import notes from a file").setInputFiles({
+    name: "nope.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("not json"),
+  });
+  await expect(memory).toContainText("That file is not a kitty's memory.");
+  await memory.getByRole("button", { name: "Forget: Invoices go out on the 1st" }).click();
+  await expect(notes).not.toContainText("Invoices go out on the 1st");
+  await open(page, `#kitty/${ids.tom}`);
+  await openConfig(page);
+  await expect(page.getByTestId("notes")).toContainText("My name is Mad and I work from Santiago");
+});
+
+test("the memory every kitty shares is tended in Settings", async ({ page }) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Shared memory" }).click();
+  const shared = page.getByTestId("shared-memory");
+  const notes = shared.getByTestId("shared-notes");
+  await expect(notes).toContainText("My name is Mad and I work from Santiago");
+  // What a kitty proposed for everyone waits for a yes.
+  await expect(notes).toContainText("I write dates day first");
+  await expect(notes.locator(".tag", { hasText: "proposed" })).toHaveCount(1);
+  await shared.getByLabel("A note for every kitty").fill("Dates are written day/month/year");
+  await shared.getByRole("button", { name: "Add note" }).click();
+  await expect(notes).toContainText("Dates are written day/month/year");
+  await shot(page, "60-shared-memory");
+  await shared.getByRole("button", { name: "Accept: I write dates day first" }).click();
+  await expect(notes.locator(".tag", { hasText: "proposed" })).toHaveCount(0);
+  await shared.getByRole("button", { name: "Edit: Dates are written day/month/year" }).click();
+  const box = shared.getByLabel("Correct: Dates are written day/month/year");
+  await box.fill("Dates are written day-month-year");
+  await box.press("Escape");
+  await expect(notes).toContainText("Dates are written day/month/year");
+  await shared.getByRole("button", { name: "Edit: Dates are written day/month/year" }).click();
+  await shared
+    .getByLabel("Correct: Dates are written day/month/year")
+    .fill("Dates go day-month-year");
+  await shared.getByLabel("Correct: Dates are written day/month/year").press("Enter");
+  await expect(notes).toContainText("Dates go day-month-year");
+  // What is written here, every kitty knows.
+  await open(page, `#kitty/${ids.tom}`);
+  await openConfig(page);
+  await expect(page.getByTestId("notes")).toContainText("Dates go day-month-year");
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Shared memory" }).click();
+  await page
+    .getByTestId("shared-memory")
+    .getByRole("button", { name: "Forget: Dates go day-month-year" })
+    .click();
+  await expect(page.getByTestId("shared-notes")).not.toContainText("Dates go day-month-year");
 });
 
 test("notifications: pick a channel, send a test and be told when something waits", async ({
@@ -608,6 +858,13 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   const basics = page.getByTestId("kitty-basics");
   await expect(basics.getByLabel("Brain")).toHaveValue("strong");
   await expect(basics.getByLabel("Who is it?")).toHaveValue(/patient researcher/);
+  // The voice of its WhatsApp voice notes: one of its own, and back to the gateway's.
+  const voice = basics.getByTestId("drawer-voice");
+  await expect(voice).toHaveValue("");
+  await voice.selectOption("nova");
+  await expect(voice).toHaveValue("nova");
+  await voice.selectOption("");
+  await expect(voice).toHaveValue("");
   await expect(page.getByTestId("kitty-connections").locator(".chip.on").first()).toContainText(
     "All, new ones too",
   );
@@ -1694,6 +1951,13 @@ test("a kitty's cookies, sessions and passwords are backed up, and a newer deskt
   const care = page.getByTestId("desktop-care");
   await expect(care).toBeVisible();
   await expect(care.getByTestId("backup-state")).toContainText("are not backed up yet");
+  // What it keeps on this computer, safe from updates, and its export.
+  const kept = care.getByTestId("kept-files");
+  await expect(kept).toContainText("safe from updates");
+  await expect(kept.getByTestId("export-files")).toHaveAttribute("href", /\/export/);
+  await kept.scrollIntoViewIfNeeded();
+  await shot(page, "64-desktop-kept-files");
+  await care.getByTestId("backup-state").scrollIntoViewIfNeeded();
   await expect(care.getByTestId("update-callout")).toHaveCount(0);
   await expect(care.getByTestId("auto-update")).toContainText(
     "downloaded and installed by themselves",
@@ -1794,6 +2058,38 @@ test("a gateway that cannot replace itself says how it is updated, and one that 
   await expect(box.getByTestId("update-check")).toBeDisabled();
 });
 
+test("how long the kitties keep at a task on their own: checked, saved and kept", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("autonomy");
+  await expect(box).toContainText("Working on their own");
+  // A wait that is not one is refused with the reason.
+  await box.locator("#auto-brain-wait").fill("soon");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box).toContainText("autonomy.brain_wait");
+  await box.locator("#auto-follow-ups").fill("15m 1h 4h");
+  await box.locator("#auto-brain-wait").fill("45m");
+  await box.locator("#auto-stand-ins").fill("2");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box.getByText("Saved.")).toBeVisible();
+  await box.scrollIntoViewIfNeeded();
+  await shot(page, "60-autonomy");
+  // It is the gateway's: it stays after a reload. Empty fields take the defaults again.
+  await page.reload();
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  await expect(box.locator("#auto-follow-ups")).toHaveValue("15m 1h 4h");
+  await expect(box.locator("#auto-stand-ins")).toHaveValue("2");
+  await box.locator("#auto-follow-ups").fill("");
+  await box.locator("#auto-brain-wait").fill("");
+  await box.locator("#auto-stand-ins").fill("");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box.getByText("Saved.")).toBeVisible();
+});
+
 test("the secrets a kitty may type: saved with who may use them, changed and removed, never shown", async ({
   page,
 }) => {
@@ -1878,6 +2174,330 @@ test("Settings: the gateway is exposed local, LAN or WAN, WAN after accepting th
   await box.getByTestId("exposure-apply").click();
   await expect(box.getByTestId("exposure-restarting")).toBeVisible();
   expect(put).toEqual([{ mode: "wan", accept_risk: true }]);
+});
+
+test("Settings: the Claude connector shows its switches, the command and the signed-in clients", async ({
+  page,
+}) => {
+  let mcp = {
+    enabled: true,
+    allow_exec: false,
+    allow_approve: false,
+    oauth: true,
+    url: "https://kitties.example.com/mcp",
+    token_file: "/home/me/.kitties/mcp.token",
+    command:
+      'claude mcp add --transport http kitties https://kitties.example.com/mcp --header "Authorization: Bearer $(cat /home/me/.kitties/mcp.token)"',
+    token_managed: false,
+    can_change: true,
+  };
+  const put: unknown[] = [];
+  const revoked: string[] = [];
+  let tokenRead = 0;
+  await page.route("**/v1/mcp", (route) => {
+    if (route.request().method() === "PUT") {
+      put.push(route.request().postDataJSON());
+      return route.fulfill({ status: 202, json: { restarting: true } });
+    }
+    return route.fulfill({ json: mcp });
+  });
+  await page.route("**/v1/mcp/token", (route) => {
+    tokenRead++;
+    return route.fulfill({ json: { token: "the-secret-token-value" } });
+  });
+  await page.route("**/v1/mcp/clients", (route) =>
+    route.fulfill({
+      json: {
+        clients: [
+          { id: "c1", name: "claude.ai", host: "claude.ai", since: "2026-11-01T10:00:00Z" },
+        ],
+      },
+    }),
+  );
+  await page.route("**/v1/mcp/clients/c1", (route) => {
+    revoked.push(route.request().method());
+    return route.fulfill({ json: { revoked: "c1" } });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("mcp");
+  await expect(box.getByTestId("mcp-command")).toContainText("claude mcp add --transport http");
+  // The token is never drawn on the page.
+  await expect(box).not.toContainText("the-secret-token-value");
+  await expect(box.getByTestId("mcp-apply")).toBeDisabled();
+  await expect(box.getByTestId("mcp-client-c1")).toContainText("claude.ai");
+  // The section from its title down: switches, the command and the clients.
+  await box.evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await shot(page, "59-settings-mcp");
+  // Exec gives Claude power: it warns and waits for the risk to be accepted.
+  await box.getByTestId("mcp-allow_exec").click();
+  await expect(box.getByTestId("mcp-warning")).toContainText("more power");
+  await expect(box.getByTestId("mcp-apply")).toBeDisabled();
+  await box.getByTestId("mcp-accept").check();
+  mcp = { ...mcp, allow_exec: true };
+  await box.getByTestId("mcp-apply").click();
+  await expect(box.getByTestId("mcp-restarting")).toBeVisible();
+  expect(put).toEqual([
+    { enabled: true, allow_exec: true, allow_approve: false, oauth: true, accept_risk: true },
+  ]);
+  expect(tokenRead).toBe(0);
+});
+
+test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps the list", async ({
+  page,
+}) => {
+  const qr = fs
+    .readFileSync(path.join(path.dirname(STATE), "fixtures", "whatsapp-qr.txt"), "utf8")
+    .trim();
+  let wa: Record<string, unknown> = {
+    enabled: false,
+    allow: [],
+    kitty: "",
+    state: "off",
+    linked: false,
+    ignored: 0,
+    seen_groups: [
+      { id: "120363012345678901@g.us", name: "Familia" },
+      { id: "120363098765432109@g.us", name: "Trabajo" },
+    ],
+    can_change: true,
+    can_speak: true,
+    risk_accepted: false,
+  };
+  const put: Record<string, unknown>[] = [];
+  const tests: unknown[] = [];
+  const cleared: string[] = [];
+  await page.route("**/v1/whatsapp", (route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      put.push(body);
+      const { accept_risk: risk, ...settings } = body;
+      wa = {
+        ...wa,
+        ...settings,
+        risk_accepted: wa.risk_accepted || !!risk,
+        kitty_name: "mimi",
+        state: "qr",
+        qr: "2@demo",
+        qr_png: qr,
+      };
+    }
+    return route.fulfill({ json: wa });
+  });
+  await page.route("**/v1/whatsapp/held", (route) => {
+    cleared.push(route.request().method());
+    wa = { ...wa, held: 0, held_log: [] };
+    return route.fulfill({ json: wa });
+  });
+  const resent: string[] = [];
+  await page.route("**/v1/whatsapp/held/*/resend", (route) => {
+    const id = route.request().url().split("/").slice(-2)[0];
+    resent.push(id);
+    const log = (wa.held_log as { id: string }[]).filter((h) => h.id !== id);
+    wa = { ...wa, held: log.length, held_log: log };
+    return route.fulfill({ json: wa });
+  });
+  await page.route("**/v1/whatsapp/test", (route) => {
+    tests.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true } });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Connections" }).click();
+  const box = page.getByTestId("whatsapp");
+  await expect(box.getByTestId("whatsapp-tos")).toContainText("Cloud API");
+  await expect(box.getByTestId("whatsapp-allow")).toContainText("every message is ignored");
+  await expect(box.getByTestId("whatsapp-save")).toBeDisabled();
+  // A number without its country code is refused; one with it joins the list.
+  await box.getByTestId("whatsapp-number").fill("1234");
+  await box.getByTestId("whatsapp-add").click();
+  await expect(box.getByRole("alert")).toContainText("country code");
+  await box.getByTestId("whatsapp-number").fill("+56 9 1234 5678");
+  await box.getByTestId("whatsapp-add").click();
+  await expect(box.getByTestId("whatsapp-allowed")).toHaveText("+56912345678");
+  await box.getByTestId("whatsapp-kitty").selectOption(ids.mimi);
+  await box.getByTestId("whatsapp-groups").locator("input").check();
+  await expect(box.getByTestId("whatsapp-group")).toHaveText(["Familia", "Trabajo"]);
+  await box.getByTestId("whatsapp-group").first().click();
+  await expect(box.getByTestId("whatsapp-group").first()).toHaveAttribute("aria-pressed", "true");
+  // The group gets a kitty of its own, and the hourly limit goes down.
+  await expect(box.getByTestId("whatsapp-who")).toContainText("Familia");
+  await box.getByTestId("whatsapp-who-kitty").nth(1).selectOption(ids.tom);
+  await box.getByTestId("whatsapp-limit").locator("input").fill("30");
+  await box.getByLabel("Quiet hours start").fill("22:00");
+  await box.getByLabel("Quiet hours end").fill("08:00");
+  await box.getByTestId("whatsapp-voice").locator("select").selectOption("mirror");
+  // Turning it on the first time shows the welcome: cancelling it leaves it off.
+  await box.getByTestId("whatsapp-enabled").click();
+  const welcome = page.getByTestId("whatsapp-welcome");
+  await expect(welcome).toContainText("Before you turn on WhatsApp");
+  await expect(welcome).toContainText("Cloud API");
+  await page.keyboard.press("Escape");
+  await expect(welcome).toHaveCount(0);
+  await expect(box.getByTestId("whatsapp-enabled").locator("input")).not.toBeChecked();
+  await box.getByTestId("whatsapp-enabled").click();
+  await expect(welcome.getByTestId("whatsapp-welcome-accept")).toBeDisabled();
+  await welcome.getByTestId("whatsapp-accept").check();
+  await shot(page, "65-whatsapp-welcome");
+  await welcome.getByTestId("whatsapp-welcome-accept").click();
+  await expect(welcome).toHaveCount(0);
+  await expect(box.getByTestId("whatsapp-enabled").locator("input")).toBeChecked();
+  await box.getByTestId("whatsapp-save").click();
+  await expect(box.getByTestId("whatsapp-qr")).toBeVisible();
+  await expect(box.getByTestId("whatsapp-state")).toContainText("Waiting for the QR code");
+  expect(put).toEqual([
+    {
+      enabled: true,
+      allow: ["56912345678"],
+      kitty: ids.mimi,
+      groups: true,
+      allow_groups: ["120363012345678901@g.us"],
+      kitties: { "120363012345678901@g.us": ids.tom },
+      max_per_hour: 30,
+      quiet_from: "22:00",
+      quiet_to: "08:00",
+      voice: "mirror",
+      accept_risk: true,
+    },
+  ]);
+  await box.evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await shot(page, "60-settings-whatsapp");
+  // The phone scans it: connected, with a test message and the unlink button.
+  wa = {
+    ...wa,
+    state: "connected",
+    qr: "",
+    qr_png: "",
+    phone: "15550001234",
+    linked: true,
+    ignored: 2,
+  };
+  await expect(box.getByTestId("whatsapp-state")).toContainText("Connected · +15550001234", {
+    timeout: 10_000,
+  });
+  await expect(box).toContainText("2 messages from other numbers were ignored");
+  // The hourly limit held some: Settings lists them, newest first, and clears the list.
+  wa = {
+    ...wa,
+    held: 2,
+    held_log: [
+      {
+        id: "2",
+        at: "2026-11-06T18:42:00Z",
+        to: "120363012345678901@g.us",
+        name: "Familia",
+        kind: "voice",
+        text: "¡Listo! Ya reservé la mesa para el sábado a las nueve.",
+      },
+      {
+        id: "1",
+        at: "2026-11-06T18:40:00Z",
+        to: "56912345678",
+        kind: "text",
+        text: "Te dejo el resumen de la reunión en la biblioteca.",
+      },
+    ],
+  };
+  const held = box.getByTestId("whatsapp-held");
+  await expect(held).toContainText("Held by the hourly limit (2)", { timeout: 20_000 });
+  await held.locator("summary").click();
+  await expect(held.getByTestId("whatsapp-held-item")).toHaveCount(2);
+  await expect(held.getByTestId("whatsapp-held-item").first()).toContainText("Familia");
+  await expect(held.getByTestId("whatsapp-held-item").first()).toContainText("Voice note");
+  await expect(held.getByTestId("whatsapp-held-item").nth(1)).toContainText("+56912345678");
+  await held.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await shot(page, "66-whatsapp-held");
+  // One is sent again and leaves the list; the rest are cleared.
+  await held.getByTestId("whatsapp-held-resend").nth(1).click();
+  await expect(box.getByTestId("whatsapp-note")).toContainText("Sent again");
+  await expect(held.getByTestId("whatsapp-held-item")).toHaveCount(1);
+  expect(resent).toEqual(["1"]);
+  await held.getByTestId("whatsapp-held-clear").click();
+  await expect(held).toHaveCount(0);
+  expect(cleared).toEqual(["DELETE"]);
+  await box.getByTestId("whatsapp-test").click();
+  await expect(box.getByTestId("whatsapp-note")).toContainText("Sent");
+  expect(tests).toEqual([{ to: "56912345678" }]);
+  await expect(box.getByTestId("whatsapp-unlink")).toBeVisible();
+  // The connection drops: it reconnects with the kept session, without a new code.
+  const reconnects: string[] = [];
+  await page.route("**/v1/whatsapp/reconnect", (route) => {
+    reconnects.push(route.request().method());
+    wa = { ...wa, state: "starting" };
+    return route.fulfill({ json: wa });
+  });
+  wa = { ...wa, state: "disconnected" };
+  await expect(box.getByTestId("whatsapp-reconnect")).toBeVisible({ timeout: 20_000 });
+  await expect(box.getByTestId("whatsapp-relink")).toHaveCount(0);
+  await box.getByTestId("whatsapp-reconnect").click();
+  expect(reconnects).toEqual(["POST"]);
+  // Once accepted, turning it off and on again does not ask again.
+  await box.getByTestId("whatsapp-enabled").click();
+  await box.getByTestId("whatsapp-enabled").click();
+  await expect(box.getByTestId("whatsapp-enabled").locator("input")).toBeChecked();
+  await expect(page.getByTestId("whatsapp-welcome")).toHaveCount(0);
+});
+
+test("Settings: the MCP clients can be revoked and the token is read only on request", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const mcp = {
+    enabled: true,
+    allow_exec: false,
+    allow_approve: false,
+    oauth: true,
+    url: "http://127.0.0.1:7488/mcp",
+    token_file: "/home/me/.kitties/mcp.token",
+    command: "claude mcp add kitties",
+    token_managed: false,
+    can_change: true,
+  };
+  const calls: string[] = [];
+  await page.route("**/v1/mcp", (route) => route.fulfill({ json: mcp }));
+  await page.route("**/v1/mcp/test", (route) => route.fulfill({ json: { ok: true, tools: 23 } }));
+  await page.route("**/v1/mcp/token", (route) => {
+    calls.push(route.request().method());
+    return route.fulfill({
+      status: route.request().method() === "POST" ? 202 : 200,
+      json: { token: "the-secret-token-value", restarting: true },
+    });
+  });
+  await page.route("**/v1/mcp/clients", (route) =>
+    route.fulfill({
+      json: {
+        clients: [
+          {
+            id: "c1",
+            name: "claude.ai",
+            host: "claude.ai",
+            since: "2026-11-01T10:00:00Z",
+            last_token: "2026-11-05T09:30:00Z",
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/v1/mcp/clients/c1", (route) => {
+    calls.push("DELETE client");
+    return route.fulfill({ json: { revoked: "c1" } });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("mcp");
+  await box.getByTestId("mcp-copy-token").click();
+  await expect(box.getByTestId("mcp-note")).toBeVisible();
+  expect(calls).toEqual(["GET"]);
+  await box.getByTestId("mcp-test").click();
+  await expect(box.getByTestId("mcp-note")).toContainText("23 tools");
+  await expect(box.getByTestId("mcp-client-c1")).toContainText("last used");
+  await box.getByTestId("mcp-revoke").click();
+  await page.getByTestId("confirm").getByRole("button", { name: "Revoke", exact: true }).click();
+  await expect(box.getByTestId("mcp-client-c1")).toContainText("Revoked");
+  expect(calls).toEqual(["GET", "DELETE client"]);
 });
 
 // A kitty that starts working while the person types must not take the focus (or the text).

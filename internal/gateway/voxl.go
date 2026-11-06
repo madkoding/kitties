@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -154,16 +155,16 @@ func (s *Server) voxlFor(ctx context.Context, ref string) (*httputil.ReverseProx
 				out.Header.Set("Origin", "http://"+voxlHost)
 			}
 		},
-		Transport: &http.Transport{
+		Transport: retryUntilUp{next: &http.Transport{
 			DialContext:         func(ctx context.Context, _, _ string) (net.Conn, error) { return dial(ctx) },
 			IdleConnTimeout:     10 * time.Second,
 			MaxIdleConnsPerHost: 2,
-		},
+		}},
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
 			s.voxl.mu.Lock()
 			delete(s.voxl.m, r.PathValue("ref"))
 			s.voxl.mu.Unlock()
-			fail(w, http.StatusBadGateway, errors.New("the live view did not answer"))
+			notUpYet(w, r)
 		},
 	}
 	if s.voxl.m == nil {
@@ -195,6 +196,75 @@ func (s *Server) handleVoxl(w http.ResponseWriter, r *http.Request) {
 	h.Set("Content-Security-Policy", "frame-ancestors 'self' "+AppOrigin+" "+WailsOrigins)
 	h.Set("Cache-Control", "no-store")
 	proxy.ServeHTTP(w, r)
+}
+
+// A desktop just turned on is marked running as soon as its container is, a few seconds before
+// voxl listens: a request in between would find nobody. It is tried again until voxl answers or
+// voxlUpWait passes, every voxlUpPoll.
+var (
+	voxlUpWait = 20 * time.Second
+	voxlUpPoll = 500 * time.Millisecond
+)
+
+// retryUntilUp sends a request again while voxl cannot be reached. Only requests without a body
+// (the page, its files, the WebSocket's upgrade) are sent again: nothing of them was taken yet.
+type retryUntilUp struct{ next http.RoundTripper }
+
+func (t retryUntilUp) RoundTrip(r *http.Request) (*http.Response, error) {
+	deadline := time.Now().Add(voxlUpWait)
+	for {
+		res, err := t.next.RoundTrip(r)
+		if err == nil || (r.Body != nil && r.Body != http.NoBody) || time.Now().Add(voxlUpPoll).After(deadline) {
+			return res, err
+		}
+		select {
+		case <-r.Context().Done():
+			return nil, r.Context().Err()
+		case <-time.After(voxlUpPoll):
+		}
+	}
+}
+
+// notUpYet answers for a voxl that did not answer in time: 503 with Retry-After, so the page
+// and the apps know to try again. The frame (a page asked for as HTML) gets a page that says so
+// in the person's language and loads itself again; everything else, the JSON error.
+func notUpYet(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Retry-After", "3")
+	if !strings.Contains(r.Header.Get("Accept"), "text/html") {
+		fail(w, http.StatusServiceUnavailable, errors.New("the live view is not answering yet: the desktop may still be starting, try again in a few seconds"))
+		return
+	}
+	lang := notUpLang(r)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_, _ = io.WriteString(w, `<!doctype html><html lang="`+lang+`"><head><meta charset="utf-8"><meta http-equiv="refresh" content="3">`+
+		`<meta name="viewport" content="width=device-width,initial-scale=1"><title>Kitty desktop</title>`+
+		`<style>body{margin:0;height:100vh;display:grid;place-items:center;background:#111;color:#ccc;font:14px system-ui,sans-serif;text-align:center}</style>`+
+		`</head><body><p>`+notUpText[lang]+`</p></body></html>`)
+}
+
+// notUpText is what the waiting page says, by language.
+var notUpText = map[string]string{
+	"en": "The desktop is still starting. Trying again…",
+	"es": "El escritorio aún está arrancando. Reintentando…",
+	"pt": "A área de trabalho ainda está iniciando. Tentando de novo…",
+}
+
+// notUpLang is the first of the person's languages the waiting page has, else English. It is
+// always one of the constant tags (never text of the request), as it goes into the page.
+func notUpLang(r *http.Request) string {
+	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
+		tag := strings.ToLower(strings.TrimSpace(strings.SplitN(part, ";", 2)[0]))
+		switch {
+		case strings.HasPrefix(tag, "es"):
+			return "es"
+		case strings.HasPrefix(tag, "pt"):
+			return "pt"
+		case strings.HasPrefix(tag, "en"):
+			return "en"
+		}
+	}
+	return "en"
 }
 
 // withoutToken is a query string without its token parameter, the rest untouched.

@@ -11,6 +11,7 @@ import (
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/memory"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
 )
 
@@ -53,7 +54,7 @@ func (s *Service) memoryPrompt(k *kitty.Kitty, sess *Session) string {
 	}
 	return "\n" + s.memory.Prompt(k.ID, s.userName(), project) +
 		"When you notice something lasting about how this person likes things done, or learn a lesson about the work, keep it with " +
-		"@memory remember {\"text\": \"...\", \"scope\": \"user\"} (user, work or project): short, one thing each, never secrets. " +
+		"@memory remember {\"text\": \"...\", \"scope\": \"user\"} (user, work, project, or shared when every kitty should know it): short, one thing each, never secrets. " +
 		"Drop a note that turned out wrong with @memory forget {\"id\": \"...\"}.\n"
 }
 
@@ -90,6 +91,11 @@ func (s *Service) runMemory(id string, a action, k *kitty.Kitty) outcome {
 		n, err := s.memory.Remember(k.ID, scope, text, "kitty", false)
 		if err != nil {
 			return outcome{action: a, err: err.Error()}
+		}
+		if n.Proposed {
+			s.note(k, agenda.KindLearned, s.goalOf(id), id, "proposed for every kitty: "+n.Text)
+			s.tell(notify.Approval, k, "proposes a note for every kitty", n.Text, id)
+			return outcome{action: a, text: fmt.Sprintf("proposed to every kitty (id %s): it reaches them once the person says yes; until then keep it in mind yourself", n.ID)}
 		}
 		s.note(k, agenda.KindLearned, s.goalOf(id), id, "noted ("+n.Scope+"): "+n.Text)
 		return outcome{action: a, text: fmt.Sprintf("noted (%s, id %s)", n.Scope, n.ID)}
@@ -179,6 +185,58 @@ func (s *Service) ForgetNote(ref, id string) error {
 		return err
 	}
 	return s.memory.Forget(k.ID, id)
+}
+
+// EditNote rewrites one of a kitty's notes (or a shared one) in the person's words.
+func (s *Service) EditNote(ref, id, text string) (*memory.Note, error) {
+	if s.memory == nil {
+		return nil, ErrNoMemory
+	}
+	k, err := s.fleet.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	n, err := s.memory.Edit(k.ID, id, text)
+	if err == nil {
+		s.note(k, agenda.KindLearned, "", "", "corrected ("+n.Scope+"): "+n.Text)
+	}
+	return n, err
+}
+
+// SharedNotes are the notes every kitty knows.
+func (s *Service) SharedNotes() ([]memory.Note, error) {
+	if s.memory == nil {
+		return nil, ErrNoMemory
+	}
+	notes := s.memory.Shared()
+	if notes == nil {
+		notes = []memory.Note{}
+	}
+	return notes, nil
+}
+
+// RememberShared keeps a note for every kitty, in the person's words.
+func (s *Service) RememberShared(text string) (*memory.Note, error) {
+	if s.memory == nil {
+		return nil, ErrNoMemory
+	}
+	return s.memory.Remember("", memory.ScopeShared, text, "person", true)
+}
+
+// EditShared rewrites a shared note.
+func (s *Service) EditShared(id, text string) (*memory.Note, error) {
+	if s.memory == nil {
+		return nil, ErrNoMemory
+	}
+	return s.memory.Edit("", id, text)
+}
+
+// ForgetShared drops a shared note.
+func (s *Service) ForgetShared(id string) error {
+	if s.memory == nil {
+		return ErrNoMemory
+	}
+	return s.memory.Forget("", id)
 }
 
 // SetProfile sets how demanding the person is, and whether the level keeps following the feedback.
@@ -321,9 +379,19 @@ func (s *Service) distill(ctx context.Context, k *kitty.Kitty) ([]memory.Note, e
 	}
 	var b strings.Builder
 	b.WriteString("Current notes:\n")
-	notes := s.memory.Notes(k.ID, "")
+	// The shared notes are every kitty's: one kitty's distillation does not rework them.
+	var notes []memory.Note
+	for _, n := range s.memory.Notes(k.ID, "") {
+		if n.Scope != memory.ScopeShared {
+			notes = append(notes, n)
+		}
+	}
 	for _, n := range notes {
-		fmt.Fprintf(&b, "[%s] %s\n", n.Scope, n.Text)
+		mark := ""
+		if memory.Stale(n, s.now()) {
+			mark = " (unused: never in your prompt for two weeks; drop it unless it still matters)"
+		}
+		fmt.Fprintf(&b, "[%s] %s%s\n", n.Scope, n.Text, mark)
 	}
 	if len(notes) == 0 {
 		b.WriteString("(none)\n")
@@ -347,7 +415,7 @@ func (s *Service) distill(ctx context.Context, k *kitty.Kitty) ([]memory.Note, e
 		{Role: "system", Content: "You keep the memory of a kitty, an AI assistant, about the person it works for and about the work. " +
 			"From its current notes and the person's latest feedback, write the consolidated list of notes. Rules: durable preferences " +
 			"and lessons only; short imperative sentences (160 characters at most); merge duplicates; drop what the latest feedback " +
-			"contradicts; keep corrections; never invent; at most 15 notes; a scope is user (how the person likes things done), " +
+			"contradicts; drop the notes marked unused unless they still matter; keep corrections; never invent; at most 15 notes; a scope is user (how the person likes things done), " +
 			"work (a lesson about the work) or project:<name>. Answer with ONLY a JSON array like [{\"scope\":\"user\",\"text\":\"Answer in Spanish\"}]."},
 		{Role: "user", Content: b.String()},
 	})

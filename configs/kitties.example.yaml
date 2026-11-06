@@ -82,6 +82,7 @@ containers:
   cpus: 2
   workspace: ""                  # host folder with one subfolder per kitty; empty is data_dir/work
   auto_update: true              # new desktop image: download it and make idle desktops anew (sessions kept)
+  shared_quota_mb: 5120          # most each kitty's ~/Shared holds (shown in Library > Shared); negative: no limit
   update_check_hours: 6          # how often to look for one
   auto_off_minutes: 15           # a kitty's machine turns itself off after this long without use (0 = never); per kitty in its window
 
@@ -106,6 +107,20 @@ notify:
   connector: phone
   on: [help, approval]           # help | approval | goal_done | goal_blocked | recovered | budget
   digest: "08:30"                # a summary of the last day, every day at this time (empty: none)
+
+# A WhatsApp number of the kitties' own, linked as a device from Settings (docs/WHATSAPP.md).
+# Not an official API: WhatsApp may ban the number, so use a spare one. Used while nothing was
+# saved from Settings; Settings then keeps its own.
+whatsapp:
+  enabled: false                 # true accepts the risk
+  allow: []                      # numbers that may write, with their country code: ["+56 9 1234 5678"]
+  kitty: ""                      # the kitty that answers (empty: the first)
+  groups: false                  # answer in the groups below when someone mentions the kitty
+  allow_groups: []               # group ids as Settings lists them: ["120363012345678901@g.us"]
+  kitties: {}                    # a kitty of its own for a number or a group: {"+56 9 1234 5678": luna}
+  max_per_hour: 0                # messages sent in an hour at most (0: 60), so the number does not look like a bot
+  quiet: {from: "", to: ""}      # quiet hours in the gateway's time, like {from: "22:00", to: "08:00"}
+  transcribe: ""                 # openai or groq profile for voice notes (empty: the first; off: none)
 
 # External services. A kitty calls one by writing `@connector <name> {...}` in a reply.
 connectors:

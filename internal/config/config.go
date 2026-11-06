@@ -50,6 +50,49 @@ type Config struct {
 	Connectors map[string]Connector `yaml:"connectors"`
 	// Notify says where the person is told, outside the interface, when a kitty needs them.
 	Notify notify.Config `yaml:"notify"`
+	// WhatsApp is the link to a number of the kitties' own (docs/WHATSAPP.md), used while
+	// nothing was saved from Settings.
+	WhatsApp WhatsApp `yaml:"whatsapp"`
+	// Autonomy tunes how long a kitty keeps at a task on its own (autonomy.go).
+	Autonomy Autonomy `yaml:"autonomy"`
+}
+
+// WhatsApp is the WhatsApp link as the file sets it. Turning it on here is accepting its risk: it
+// is not an official API and WhatsApp may ban the number.
+type WhatsApp struct {
+	Enabled bool `yaml:"enabled"`
+	// Allow are the numbers that may write, with their country code.
+	Allow []string `yaml:"allow"`
+	// Kitty answers the messages (its name).
+	Kitty string `yaml:"kitty"`
+	// Groups lets the kitty answer in the groups of AllowGroups when someone mentions it.
+	Groups bool `yaml:"groups"`
+	// AllowGroups are the groups it answers in (their ids, "…@g.us", as Settings lists them).
+	AllowGroups []string `yaml:"allow_groups"`
+	// Kitties gives a number or a group a kitty of its own: {"+56912345678": luna}.
+	Kitties map[string]string `yaml:"kitties"`
+	// MaxPerHour is the most messages sent in an hour (0: 60).
+	MaxPerHour int `yaml:"max_per_hour"`
+	// Quiet are the quiet hours, {from: "22:00", to: "08:00"} in the gateway's time.
+	Quiet struct {
+		From string `yaml:"from"`
+		To   string `yaml:"to"`
+	} `yaml:"quiet"`
+	// Transcribe is the profile (openai or groq) whose speech API turns voice notes into text;
+	// empty takes the first such profile, "off" none.
+	Transcribe string `yaml:"transcribe"`
+	// Voice is when the kitties answer with a voice note: mirror (a voice note gets one),
+	// always, or off (the default).
+	Voice string `yaml:"voice"`
+	// Speak is the openai profile whose speech API reads the answers aloud; empty takes the first
+	// such profile, "off" none. SpeakVoice is its voice (alloy, nova, …; empty: alloy).
+	Speak      string `yaml:"speak"`
+	SpeakVoice string `yaml:"speak_voice"`
+}
+
+// Set reports whether the file says anything about WhatsApp.
+func (w WhatsApp) Set() bool {
+	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != "" || w.Voice != ""
 }
 
 // Provider is one AI profile.
@@ -80,6 +123,9 @@ type Provider struct {
 	// Auth is empty for a key, or login for an account signed in from Settings (a ChatGPT plan
 	// for codex, GitHub Copilot, a Google login for gemini).
 	Auth string `yaml:"auth" json:"auth,omitempty"`
+	// Fallback names another profile to think with while this one is down (busy, failing or
+	// unreachable once its own retries are spent). Empty: none.
+	Fallback string `yaml:"fallback" json:"fallback,omitempty"`
 }
 
 // Options converts the profile into what the provider package takes.
@@ -177,6 +223,9 @@ type Containers struct {
 	Workspace string `yaml:"workspace"`
 	// Env is extra environment for every container.
 	Env map[string]string `yaml:"env"`
+	// SharedQuotaMB is the most each kitty's Shared folder (~/Shared, what it shares with its
+	// person) may hold: 5120 (5 GB) by default, a negative value is no limit.
+	SharedQuotaMB int `yaml:"shared_quota_mb"`
 	// AutoUpdate keeps the desktops on the newest image: the gateway looks for a new one every
 	// UpdateCheckHours, downloads it, and makes a desktop anew (its sessions backed up and put back)
 	// when its kitty is idle, or when a stopped one is started.
@@ -209,6 +258,22 @@ type Gateway struct {
 	// listens on this machine alone and no public_url or proxy is configured: a server never
 	// hands its token out.
 	LocalToken *bool `yaml:"local_token"`
+	// MCP is the connector that lets Claude run the fleet (docs/MCP.md). Off by default.
+	MCP MCP `yaml:"mcp"`
+}
+
+// MCP configures the connector at /mcp. It has a token of its own, kept in the data directory
+// (mcp.token) when Token is empty, so it can be revoked without touching the gateway's.
+type MCP struct {
+	Enabled bool   `yaml:"enabled"`
+	Token   string `yaml:"token"`
+	// AllowExec adds the tool that runs commands inside a kitty's container. Off unless asked.
+	AllowExec bool `yaml:"allow_exec"`
+	// OAuth lets a remote client (claude.ai) sign in to the connector. It needs https: set
+	// public_url or put a proxy in front.
+	OAuth bool `yaml:"oauth"`
+	// AllowApprove adds the tool that approves an action held for the person. Off unless asked.
+	AllowApprove bool `yaml:"allow_approve"`
 }
 
 // LocalTokenAllowed reports whether /v1/local-token may answer: the setting when given, else
@@ -254,6 +319,27 @@ func (c *Config) ApplyEnv(getenv func(string) string) error {
 	switch strings.ToLower(getenv("KITTIES_TRUST_PROXY")) {
 	case "1", "true", "yes":
 		c.Gateway.TrustProxy = true
+	}
+	// The MCP connector: KITTIES_MCP (true) turns it on, KITTIES_MCP_TOKEN sets its token and
+	// KITTIES_MCP_EXEC (true) adds the exec tool.
+	switch strings.ToLower(getenv("KITTIES_MCP")) {
+	case "1", "true", "yes":
+		c.Gateway.MCP.Enabled = true
+	}
+	switch strings.ToLower(getenv("KITTIES_MCP_APPROVE")) {
+	case "1", "true", "yes":
+		c.Gateway.MCP.AllowApprove = true
+	}
+	switch strings.ToLower(getenv("KITTIES_MCP_OAUTH")) {
+	case "1", "true", "yes":
+		c.Gateway.MCP.OAuth = true
+	}
+	if v := getenv("KITTIES_MCP_TOKEN"); v != "" {
+		c.Gateway.MCP.Token = v
+	}
+	switch strings.ToLower(getenv("KITTIES_MCP_EXEC")) {
+	case "1", "true", "yes":
+		c.Gateway.MCP.AllowExec = true
 	}
 	return c.Validate()
 }
@@ -334,6 +420,9 @@ func ValidateProvider(name string, p Provider) error {
 	if p.Tools != "" && p.Tools != "native" && p.Tools != "text" {
 		return fmt.Errorf("providers.%s.tools: %q is not native or text", name, p.Tools)
 	}
+	if p.Fallback == name {
+		return fmt.Errorf("providers.%s.fallback: a profile cannot be its own fallback", name)
+	}
 	return nil
 }
 
@@ -409,6 +498,9 @@ func (c *Config) Validate() error {
 	for name, p := range c.Providers {
 		if err := ValidateProvider(name, p); err != nil {
 			return err
+		}
+		if _, ok := c.Providers[p.Fallback]; p.Fallback != "" && !ok {
+			return fmt.Errorf("providers.%s.fallback: %q is not a configured profile", name, p.Fallback)
 		}
 	}
 	if c.DefaultProvider != "" {
@@ -503,6 +595,9 @@ func (c *Config) Validate() error {
 		return errors.New("gateway.listen cannot be empty")
 	}
 	if err := c.Notify.Validate(nil); err != nil {
+		return err
+	}
+	if err := c.Autonomy.Validate(); err != nil {
 		return err
 	}
 	if c.Notify.Connector != "" {

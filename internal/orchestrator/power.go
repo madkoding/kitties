@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/kitty"
 )
 
@@ -26,12 +27,54 @@ type useTracker struct {
 	last    map[string]time.Time
 	execs   map[string]int
 	streams map[string]int
+	// booted is when each machine was last brought up: its desktop needs a few seconds more.
+	booted map[string]time.Time
+	// steps is what a starting machine is doing now (kitty.StepDesktop), by machine.
+	steps map[string]string
 }
 
 func (u *useTracker) init() {
 	if u.last == nil {
 		u.last, u.execs, u.streams = map[string]time.Time{}, map[string]int{}, map[string]int{}
+		u.booted, u.steps = map[string]time.Time{}, map[string]string{}
 	}
+}
+
+// boot marks the machine as just brought up.
+func (u *useTracker) boot(id string, at time.Time) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.init()
+	u.booted[id] = at
+}
+
+// setStep says what the machine is doing while it starts ("" when nothing in particular).
+func (u *useTracker) setStep(id, step string) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.init()
+	if step == "" {
+		delete(u.steps, id)
+		return
+	}
+	u.steps[id] = step
+}
+
+// step is what the starting machine is doing.
+func (u *useTracker) step(id string) string {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.init()
+	return u.steps[id]
+}
+
+// booting tells whether the machine was brought up less than within ago.
+func (u *useTracker) booting(id string, now time.Time, within time.Duration) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.init()
+	at, ok := u.booted[id]
+	return ok && now.Sub(at) < within
 }
 
 func (u *useTracker) touch(id string, at time.Time) {
@@ -143,7 +186,7 @@ func (m *Manager) Power(ref string) (kitty.Power, error) {
 	case kitty.StatusRunning:
 		p.State = kitty.PowerOn
 	case kitty.StatusStarting:
-		p.State = kitty.PowerStarting
+		p.State, p.Step = kitty.PowerStarting, m.use.step(k.ID)
 	case kitty.StatusError:
 		p.State, p.Error = kitty.PowerError, k.Error
 	default:
@@ -303,4 +346,21 @@ func (w watchedConn) Close() error {
 	err := w.Conn.Close()
 	w.once.Do(w.done)
 	return err
+}
+
+// Compute is where a kitty's desktop runs: "local" (a container on this machine) or "cloud". It
+// follows the configuration (the kitty's own compute, else the deployment's); a kitty without a
+// desktop has none.
+func (m *Manager) Compute(ref string) (string, error) {
+	k, err := m.Get(ref)
+	if err != nil {
+		return "", err
+	}
+	if !k.Desktop {
+		return "", kitty.ErrNoMachine
+	}
+	if m.cfg.IsCloudContainer(kitty.ContainerName(k.Name)) {
+		return config.ComputeCloud, nil
+	}
+	return config.ComputeLocal, nil
 }

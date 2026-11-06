@@ -39,7 +39,7 @@ turns itself off (15 by default, `0` never, at most a week). Each kitty can have
 
 | Category | Services |
 | --- | --- |
-| Messaging | Slack (webhook, bot token or OAuth sign-in; reads and replies), Discord, Telegram, WhatsApp (Cloud API), Email (SMTP), Matrix, Google Chat, Microsoft Teams, ntfy (push to your phone) |
+| Messaging | Slack (webhook, bot token or OAuth sign-in; reads and replies), Discord, Telegram, WhatsApp (Cloud API, official; or [a linked device](WHATSAPP.md) with a number of their own, unofficial), Email (SMTP), Matrix, Google Chat, Microsoft Teams, ntfy (push to your phone) |
 | Social media | Facebook Pages (post, posts, comments, reply, like, Messenger inbox and answers), Instagram professional accounts (pictures and reels, posts, comments, replies), Mastodon and Bluesky (post, timeline, mentions, reply, like), X, LinkedIn |
 | Calendar, reminders & contacts | CalDAV (iCloud, Fastmail, Nextcloud, Synology…: events, new events, reminders, ticking them off), CardDAV (find and add people), the Mac's own Calendar, Reminders and Contacts (when the gateway runs on the Mac), Google Contacts and Tasks, Outlook contacts and Microsoft To Do |
 | Git | GitHub (issues, comments, pull requests, files; a token or OAuth sign-in), GitLab, Gitea/Forgejo, motita (coding tasks) |
@@ -75,6 +75,19 @@ its keys or its token. A full URL may only name the service's own hosts. Reading
 its own; other methods ask first only if you or a kitty set a limit for them. Sign-ins ask for
 the broad permissions of each service (Dropbox gets whatever the app has enabled in its
 console), so accounts signed in before need to sign in once more to get them.
+
+### A spare brain
+
+A profile can name another as its `fallback`. While the first is busy, failing (429, 5xx) or
+unreachable after its own retries, the kitties that think with it go on with the fallback instead
+of waiting; anything else (a refused key, a bad request) is still the first one's answer. In
+*Settings → Models → More*, it is *If it is down, think with*.
+
+```yaml
+providers:
+  main:  { kind: anthropic, model: claude-sonnet-5-5, fallback: spare }
+  spare: { kind: openai, model: gpt-5.5 }
+```
 
 ### Prompt caching
 
@@ -125,7 +138,10 @@ required.
 | Signs in | How |
 | --- | --- |
 | Mastodon, Home Assistant | nothing to set up: Kitties registers itself on the instance, or uses the gateway's own address as its app |
-| Google, Microsoft, Slack, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
+| Nextcloud, and CalDAV / CardDAV on a Nextcloud | nothing to set up: Nextcloud's Login Flow v2 opens its page, you allow Kitties, and the app password it hands back becomes the connection's password (revoke it in Nextcloud → Security) |
+| Trello | through Kitties' own API key when the build has one, else the API key of a Power-Up of yours (trello.com/power-ups/admin) with this gateway's address allowed as an origin; Trello hands the token back in the page's address, which the callback page posts to the gateway |
+| Gitea, Forgejo (Codeberg) | an OAuth2 app made on your instance (Settings → Applications), with this gateway's `/v1/oauth/callback` as its redirect |
+| Google, Microsoft, Slack, Discord, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
 
 **The redirect address.** The service matches it to the letter, so register exactly the one Settings shows
 in the connection (a copy-ready box under "needs an app of your own"): this gateway's `/v1/oauth/callback`,
@@ -136,10 +152,19 @@ means the dashboard has another address (for example `http://127.0.0.1:8888/call
 Spotify's own docs): add the one from Settings. Behind a proxy or Docker, set `gateway.public_url` (and
 `trust_proxy`) so the address is the one you reach from the browser.
 
+**Google** sends the browser back to `127.0.0.1` (so a *Desktop app* client needs no redirect
+registered) or to an `https` address only, asks only for the scopes of the services ticked in the
+connection, shows the account's email, and lets each connection be another account. Step by step:
+[GOOGLE.md](GOOGLE.md).
+
 Signing in also fills what you would otherwise look up: your Facebook Page and its token (one
 that does not expire), the Instagram account linked to it, your LinkedIn author URN, your X user
-id, your Jira site. Telegram, WhatsApp, email, Stripe, Discord and the webhooks keep their keys:
-those services have no sign-in for this.
+id, your Jira site, your Discord webhook (Discord asks for the server and channel and makes the
+webhook there; a pasted webhook URL still works). Telegram, WhatsApp, email, Stripe and the webhooks
+keep their keys: those services have no sign-in for this.
+
+![Discord: sign in, or paste a webhook](screenshots/60-connector-discord.png)
+![Nextcloud: sign in, nothing to set up](screenshots/61-connector-nextcloud.png)
 
 **X** takes the sign-in (its OAuth 2.0 Client ID and Secret, with this gateway's callback under
 *User authentication settings*), or, without a sign-in, the four **OAuth 1.0 keys** of *Keys and

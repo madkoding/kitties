@@ -612,24 +612,28 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	if err != nil {
 		return m.fail(k.ID, err)
 	}
+	spec, err := m.desktopSpec(ctx, k)
+	if err != nil {
+		return m.fail(k.ID, err)
+	}
+	// A desktop in another time zone than the host's (the host moved, or the gateway could not
+	// tell its zone when it made it) is made anew, so its clock shows the host's hour; a running
+	// one only while no one uses it (a gateway that starts finds them all idle).
+	moved := exists && m.zoneMoved(ctx, k)
 	switch {
-	case running:
-	case exists && !m.staleForAutoUpdate(ctx, k):
+	case running && (!moved || m.Held(k.ID) || m.busy(k.ID)):
+	case exists && !running && !moved && !m.staleForAutoUpdate(ctx, k):
 		if err := m.ctr().Start(ctx, k.Container); err != nil {
 			return m.fail(k.ID, err)
 		}
 	default:
 		// A stopped container of an older image is made anew with the newest (its sessions were
-		// backed up when it stopped, and are put back below).
+		// backed up when it stopped, and are put back below); a running one keeps them first. Its
+		// home, its workspace and its Shared folder are on the host and stay (home.go).
 		if exists {
-			if err := m.ctr().Remove(ctx, k.Container); err != nil {
+			if err := m.dropContainer(ctx, k, running); err != nil {
 				return m.fail(k.ID, err)
 			}
-		}
-		c := m.cfg.Containers
-		spec := container.Spec{
-			Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: c.MemoryMB, CPUs: c.CPUs,
-			Network: c.Network, Workspace: k.Workspace, Env: c.Env,
 		}
 		if _, err := m.ctr().Up(ctx, spec); err != nil {
 			return m.fail(k.ID, err)
@@ -637,10 +641,62 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 		// A container made anew gets back what its kitty's browser knew.
 		m.restoreSessions(ctx, k)
 	}
+	// An older desktop's home, copied out when it was removed, goes into the new one.
+	m.finishMove(ctx, k, spec)
 	m.applyTheme(ctx, k, false)
-	// A machine just turned on has not been idle yet.
+	// A machine just turned on has not been idle yet, and its desktop is still coming up.
 	m.use.touch(k.ID, m.now())
+	m.use.boot(k.ID, m.now())
+	if err := m.waitDesktop(ctx, k); err != nil {
+		return m.fail(k.ID, err)
+	}
 	return m.setStatus(k.ID, kitty.StatusRunning, "")
+}
+
+// How long a start waits for the desktop to come up (its live view answering), and how often it
+// asks. Past the wait the machine is called on anyway: the live view waits for itself too.
+var (
+	desktopReadyWait = 60 * time.Second
+	desktopReadyPoll = 500 * time.Millisecond
+)
+
+// waitDesktop waits, after the container is up, until its desktop says it is ready (kitty-ready),
+// with the kitty shown as starting its desktop meanwhile. An image without kitty-ready (an older
+// one, a demo) answers something else and is not waited for.
+func (m *Manager) waitDesktop(ctx context.Context, k *kitty.Kitty) error {
+	defer m.use.setStep(k.ID, "")
+	deadline := time.Now().Add(desktopReadyWait)
+	for first := true; ; first = false {
+		out, err := m.ctr().Exec(ctx, k.Container, "kitty-ready")
+		if err != nil || strings.TrimSpace(out) != "booting" || time.Now().After(deadline) {
+			return nil
+		}
+		if first {
+			m.use.setStep(k.ID, kitty.StepDesktop)
+			_ = m.setStatus(k.ID, kitty.StatusStarting, "")
+		}
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("the desktop did not come up: %w", ctx.Err())
+		case <-time.After(desktopReadyPoll):
+		}
+	}
+}
+
+// zoneChecker is what a runtime answers when it can tell a container's time zone.
+type zoneChecker interface {
+	ZoneStale(ctx context.Context, name, zone string) (bool, error)
+}
+
+// zoneMoved tells whether the kitty's container runs in another time zone than the one a new
+// container would get. A runtime that cannot tell, or a failed look, is taken for no move.
+func (m *Manager) zoneMoved(ctx context.Context, k *kitty.Kitty) bool {
+	z, ok := m.ctr().(zoneChecker)
+	if !ok {
+		return false
+	}
+	moved, err := z.ZoneStale(ctx, k.Container, container.Spec{Env: m.cfg.Containers.Env}.Zone())
+	return err == nil && moved
 }
 
 // startTimeout is how long a desktop may take to come up in the background: the first start
@@ -713,7 +769,7 @@ func (m *Manager) Stop(ctx context.Context, ref string) error {
 	return m.setStatus(k.ID, kitty.StatusStopped, "")
 }
 
-// Remove deletes the kitty and its container. The workspace stays on disk.
+// Remove deletes the kitty and its container. Its workspace, home and Shared folder stay on disk.
 func (m *Manager) Remove(ctx context.Context, ref string) error {
 	k, err := m.Get(ref)
 	if err != nil {
@@ -1050,9 +1106,24 @@ func (m *Manager) InboundSecret(name string) (string, error) {
 	return c.ConnectorSettings()["inbound_secret"], nil
 }
 
-// Brain returns the provider client the kitty thinks with.
+// Brain returns the provider client the kitty thinks with: its profile's, backed by the
+// profile's fallback when it names one that works.
 func (m *Manager) Brain(k *kitty.Kitty) (provider.Client, error) {
-	return m.providers.Get(k.Provider)
+	c, err := m.providers.Get(k.Provider)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.RLock()
+	fallback := m.cfg.Providers[k.Provider].Fallback
+	m.mu.RUnlock()
+	if fallback == "" {
+		return c, nil
+	}
+	fb, err := m.providers.Get(fallback)
+	if err != nil {
+		return c, nil
+	}
+	return provider.WithFallback(c, fb), nil
 }
 
 // Exec runs a command in the kitty's container.

@@ -67,10 +67,33 @@ func (s *Service) RunGoal(ctx context.Context, g agenda.Goal, t agenda.Trigger) 
 	}
 	text := "Goal: " + g.Title + "\n" + g.Text + "\n\nWhy now: " + t.Text() +
 		"\n\nWork on it now. When you are done, say what you did and what is left. If you are stuck, say what you need."
+	if t.Kind == "follow_up" {
+		text += s.todoNote(ctx, k)
+	}
 	if _, err := s.send(ctx, id, "scheduler", "", text); err != nil {
 		return id, err
 	}
 	return id, nil
+}
+
+// maxTodo is how much of a kitty's TODO.md goes with a follow-up.
+const maxTodo = 4000
+
+// todoNote is the kitty's own list of what is done and left (TODO.md in its workspace), for a
+// run that goes on with unfinished work; empty when it keeps none or its desktop cannot be read.
+func (s *Service) todoNote(ctx context.Context, k *kitty.Kitty) string {
+	runner := s.runner()
+	if runner == nil || !k.Desktop {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := runner.Exec(ctx, k.ID, "cat", workspaceOf(k)+"/TODO.md")
+	if out = strings.TrimSpace(out); err != nil || out == "" {
+		return ""
+	}
+	return "\n\nYour TODO.md (what you wrote down as done and left) says:\n" + clip(out, maxTodo) +
+		"\nStart from the first item left; keep the file up to date as you go."
 }
 
 // goalChat finds the thread a goal is worked in, or opens one.
@@ -239,12 +262,20 @@ func (s *Service) askKitty(ctx context.Context, did string, from, to *kitty.Kitt
 }
 
 // giveUp is what happens when a task is given up on: the backup kitty takes it over when
-// there is one and the thread is not too deep already, else the person is asked. It returns
+// there is one (unattended without one, a free kitty of the fleet: standIn) and the thread is
+// not too deep already, else the person is asked. It returns
 // the goal result, whether the person is needed, and what to add to the turn.
 func (s *Service) giveUp(id string, index int, k *kitty.Kitty, fail string) (result string, needsHelp bool, text string) {
 	request := s.lastRequest(id, index)
-	if k.Backup != "" && s.depthOf(id) < s.MaxDepth {
-		if target, err := s.fleet.Get(k.Backup); err == nil && target.ID != k.ID {
+	backup := k.Backup
+	if backup == "" && !k.Limits.Or(s.DefaultLimits).Attended {
+		// No backup named: a kitty of the fleet that is free and can do the same takes it.
+		if other := s.standIn(k); other != nil {
+			backup = other.Name
+		}
+	}
+	if backup != "" && s.depthOf(id) < s.MaxDepth {
+		if target, err := s.fleet.Get(backup); err == nil && target.ID != k.ID {
 			task := fmt.Sprintf("I am %s and I could not finish a task: %s.\nThe task: %s\nPlease take it over and tell me what you achieve.", k.Name, fail, request)
 			var turn Turn
 			o := s.delegate(context.Background(), id, action{kind: "delegate", name: target.Name, args: map[string]any{"task": task}, raw: "@delegate " + target.Name}, k, &turn)
@@ -257,6 +288,77 @@ func (s *Service) giveUp(id string, index int, k *kitty.Kitty, fail string) (res
 	}
 	s.note(k, agenda.KindEscalated, "", id, fail)
 	return "escalated", true, "(" + k.Name + " needs help: " + Plain(fail) + ")"
+}
+
+// standIn is the kitty that takes over a task k gave up on when k names no backup: another one
+// with a desktop as k has, not in error and not at work on something else, the most like k
+// (the connectors k uses, the skills of its soul); nil when none is free, or when k has handed
+// over as many tasks today as its stand-ins allow.
+func (s *Service) standIn(k *kitty.Kitty) *kitty.Kitty {
+	var best *kitty.Kitty
+	bestScore := -1
+	for _, other := range s.fleet.List() {
+		if other.ID == k.ID || other.Desktop != k.Desktop || other.Status == kitty.StatusError || s.KittyBusy(other.ID) {
+			continue
+		}
+		if score := likeness(k, other); score > bestScore {
+			best, bestScore = other, score
+		}
+	}
+	if best == nil || !s.standInLeft(k.ID) {
+		return nil
+	}
+	return best
+}
+
+// likeness is how well other can do k's work: two points for each connector of k it may use
+// too (a kitty with no list may use every one), one for each skill their souls share, and one
+// for a machine that is on.
+func likeness(k, other *kitty.Kitty) int {
+	score := 0
+	for _, c := range k.Connectors {
+		if len(other.Connectors) == 0 || contains(other.Connectors, c) {
+			score += 2
+		}
+	}
+	for _, a := range k.Soul.Skills {
+		for _, b := range other.Soul.Skills {
+			if strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b)) {
+				score++
+				break
+			}
+		}
+	}
+	if other.Status == kitty.StatusRunning {
+		score++
+	}
+	return score
+}
+
+// DefaultStandIns is how many tasks a day a kitty without a backup may hand to a stand-in.
+const DefaultStandIns = 3
+
+// SetStandIns has the stand-ins a kitty may use a day read from fn (the settings); zero: none.
+func (s *Service) SetStandIns(fn func() int) { s.standInsFrom = fn }
+
+// standInLeft takes one of the kitty's stand-ins for today, and reports whether there was one.
+// The count starts again each day, so a task nobody can do does not go round the whole fleet.
+func (s *Service) standInLeft(kittyID string) bool {
+	limit := DefaultStandIns
+	if s.standInsFrom != nil {
+		limit = s.standInsFrom()
+	}
+	day := s.now().Format("2006-01-02")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.standIns == nil || s.standInsDay != day {
+		s.standIns, s.standInsDay = map[string]int{}, day
+	}
+	if s.standIns[kittyID] >= limit {
+		return false
+	}
+	s.standIns[kittyID]++
+	return true
 }
 
 // lastRequest is what the thread asked for before the turn at index: the last message that

@@ -2,6 +2,7 @@ package oauth
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,8 +17,13 @@ import (
 var Providers = map[string]Provider{
 	"google": {
 		Name: "google", Label: "Google", AuthURL: "https://accounts.google.com/o/oauth2/v2/auth", TokenURL: "https://oauth2.googleapis.com/token",
-		Scopes: []string{"https://www.googleapis.com/auth/gmail.modify", "https://www.googleapis.com/auth/gmail.send", "https://www.googleapis.com/auth/gmail.settings.basic", "https://www.googleapis.com/auth/calendar", "https://www.googleapis.com/auth/drive", "https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/documents", "https://www.googleapis.com/auth/presentations", "https://www.googleapis.com/auth/forms.body", "https://www.googleapis.com/auth/contacts", "https://www.googleapis.com/auth/tasks", "https://www.googleapis.com/auth/youtube"},
-		Extra:  map[string]string{"access_type": "offline", "prompt": "consent"},
+		// A desktop client takes any port on 127.0.0.1 without registering it; "localhost" is
+		// accepted too, but Google recommends the IP.
+		LoopbackIP: true, LoopbackOrHTTPS: true, LoginHint: true, ScopesFor: googleScopes, Finish: googleFinish,
+		// offline: a refresh token; consent: a new one on each sign-in (Google gives it only on
+		// the first consent otherwise); select_account: the chooser, so a second connection can be
+		// another account; include_granted_scopes: a service added later keeps the others.
+		Extra: map[string]string{"access_type": "offline", "prompt": "consent select_account", "include_granted_scopes": "true"},
 	},
 	"microsoft": {
 		Name: "microsoft", Label: "Microsoft", AuthURL: "https://login.microsoftonline.com/common/oauth2/v2.0/authorize", TokenURL: "https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -101,9 +107,130 @@ var Providers = map[string]Provider{
 		Name: "mastodon", Label: "Mastodon", AuthURL: "{url}/oauth/authorize", TokenURL: "{url}/oauth/token",
 		Scopes: []string{"read", "write"}, NoExpiry: true, Register: mastodonRegister, Finish: mastodonFinish,
 	},
+	"discord": {
+		// webhook.incoming makes Discord ask for the server and channel, and hand back a webhook
+		// for it: the connector posts there, so the token itself is not kept alive.
+		Name: "discord", Label: "Discord", AuthURL: "https://discord.com/oauth2/authorize", TokenURL: "https://discord.com/api/oauth2/token",
+		Scopes: []string{"webhook.incoming"}, Finish: discordFinish,
+	},
+	"gitea": {
+		// Gitea and Forgejo (Codeberg too) are their own identity service: the app is made on the
+		// instance, under Settings → Applications.
+		Name: "gitea", Label: "Gitea", AuthURL: "{url}/login/oauth/authorize", TokenURL: "{url}/login/oauth/access_token",
+		Scopes: []string{"write:repository", "write:issue", "read:user"},
+	},
+	"nextcloud": {
+		// Nextcloud's Login Flow v2 (loginflow.go): nothing to register, an app password back.
+		Name: "nextcloud", Label: "Nextcloud", LoginFlow: true,
+	},
+	"trello": {
+		// The app is an API key (Power-Up admin → API key, with this gateway's origin allowed);
+		// the token never expires.
+		Name: "trello", Label: "Trello", AuthURL: "https://trello.com/1/authorize", Implicit: true, AppKey: "key",
+		Scopes: []string{"read", "write"},
+		Extra:  map[string]string{"expiration": "never", "name": "Kitties", "response_type": "token", "callback_method": "fragment"},
+	},
 	"home-assistant": {
 		Name: "home-assistant", Label: "Home Assistant", AuthURL: "{url}/auth/authorize", TokenURL: "{url}/auth/token", SelfClient: true,
 	},
+}
+
+// GoogleServices are the parts of a Google account a connection may reach, by the name its
+// "services" setting lists, with the narrowest scopes their actions need: Gmail reads and sends
+// (no deleting), Calendar touches events only, Drive only the files Kitties makes.
+var GoogleServices = map[string][]string{
+	"gmail":    {"https://www.googleapis.com/auth/gmail.readonly", "https://www.googleapis.com/auth/gmail.send"},
+	"calendar": {"https://www.googleapis.com/auth/calendar.events"},
+	"drive":    {"https://www.googleapis.com/auth/drive.file"},
+	"sheets":   {"https://www.googleapis.com/auth/spreadsheets"},
+	"docs":     {"https://www.googleapis.com/auth/documents"},
+	"contacts": {"https://www.googleapis.com/auth/contacts"},
+	"tasks":    {"https://www.googleapis.com/auth/tasks"},
+}
+
+// GoogleServiceOrder is the order the services are listed and asked in.
+var GoogleServiceOrder = []string{"gmail", "calendar", "drive", "sheets", "docs", "contacts", "tasks"}
+
+// googleIdentity are asked always: who signed in (the account shown, and the next login_hint).
+var googleIdentity = []string{"openid", "email"}
+
+// googleChosen are the services a connection's settings tick, in order; all of them when the
+// setting is empty (a connection saved before it existed). Unknown names are left out.
+func googleChosen(settings map[string]string) []string {
+	raw := strings.TrimSpace(settings["services"])
+	if raw == "" {
+		return GoogleServiceOrder
+	}
+	want := map[string]bool{}
+	for _, n := range strings.Split(raw, ",") {
+		want[strings.ToLower(strings.TrimSpace(n))] = true
+	}
+	var out []string
+	for _, n := range GoogleServiceOrder {
+		if want[n] {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// googleScopes are the scopes of the services ticked, after the identity ones.
+func googleScopes(settings map[string]string) []string {
+	out := append([]string{}, googleIdentity...)
+	for _, n := range googleChosen(settings) {
+		out = append(out, GoogleServices[n]...)
+	}
+	return out
+}
+
+// googleFinish names the account from the OpenID token and keeps, as the connection's services,
+// the ones whose scopes the person left ticked on the consent page (Google lets them untick).
+func googleFinish(_ context.Context, _ HTTPDo, app App, c Credentials) (Credentials, map[string]string, error) {
+	if email := idTokenEmail(c.IDToken); email != "" {
+		c.Account = email
+	}
+	if c.Scope == "" {
+		// No list of what was granted: what was asked stands.
+		return c, nil, nil
+	}
+	granted := map[string]bool{}
+	for _, sc := range strings.Fields(c.Scope) {
+		granted[sc] = true
+	}
+	var kept []string
+	for _, n := range googleChosen(app.Settings) {
+		all := true
+		for _, sc := range GoogleServices[n] {
+			all = all && granted[sc]
+		}
+		if all {
+			kept = append(kept, n)
+		}
+	}
+	if len(kept) == 0 {
+		return Credentials{}, nil, errors.New("Google signed in, but no service was allowed: sign in again and leave Gmail, Calendar or the others ticked")
+	}
+	return c, map[string]string{"services": strings.Join(kept, ",")}, nil
+}
+
+// idTokenEmail reads the email of an OpenID token. The token comes straight from Google's token
+// endpoint over TLS, so its signature is not checked again.
+func idTokenEmail(token string) string {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return ""
+	}
+	data, err := base64.RawURLEncoding.DecodeString(strings.TrimRight(parts[1], "="))
+	if err != nil {
+		return ""
+	}
+	var claims struct {
+		Email string `json:"email"`
+	}
+	if json.Unmarshal(data, &claims) != nil {
+		return ""
+	}
+	return claims.Email
 }
 
 const (
@@ -171,6 +298,27 @@ func mastodonFinish(ctx context.Context, do HTTPDo, app App, c Credentials) (Cre
 		c.Account = "@" + me.Acct
 	}
 	return c, nil, nil
+}
+
+// discordFinish keeps the webhook the person made while consenting: the connector posts to it,
+// and it lasts until it is deleted in Discord, so nothing has to be refreshed.
+func discordFinish(ctx context.Context, do HTTPDo, app App, c Credentials) (Credentials, map[string]string, error) {
+	var answer struct {
+		Webhook struct {
+			URL       string `json:"url"`
+			Name      string `json:"name"`
+			ChannelID string `json:"channel_id"`
+		} `json:"webhook"`
+	}
+	if err := json.Unmarshal(c.Answer, &answer); err != nil || answer.Webhook.URL == "" {
+		return c, nil, errors.New("Discord returned no webhook: pick a server and a channel when it asks")
+	}
+	c.Account = answer.Webhook.Name
+	if c.Account == "" {
+		c.Account = "#" + answer.Webhook.ChannelID
+	}
+	c.RefreshToken, c.Expiry = "", time.Now().Add(forever)
+	return c, map[string]string{"url": answer.Webhook.URL}, nil
 }
 
 // xFinish learns the account's id, which mentions and likes need.

@@ -114,9 +114,28 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await api(
     "PUT",
     "/v1/artifacts/competitor-notes.md",
-    "# Competitor notes\n\n| Name | Price | Notes |\n| --- | --- | --- |\n| Acme | 12 | fast |",
+    "# Competitor notes\n\nWhat the **three** closest tools charge, and where we win. Sources in `notes/`.\n\n| Name | Price | Notes |\n| --- | --- | --- |\n| Acme | 12 | fast |\n| Globex | 20 | no desktop |\n\n## Next steps\n\n- Ask Luna for the launch plan: /v1/artifacts/launch-plan.md\n- Keep the price under *15*\n\n> Draft: check the prices again on Friday.\n\n```sh\n# the prices, once a week\ncurl -s https://acme.example/pricing | grep 12\n```\n\n## Sources\n\n- The pricing pages, read on Monday.",
     "text/markdown",
   );
+  await api("PUT", "/v1/artifacts/prices.csv", "name,price\nAcme,12\nGlobex,20\n", "text/csv");
+  // What the kitties left in the Shared folders of their computers (a folder of the host each).
+  const shared = (kitty: string, file: string, data: string | Buffer) => {
+    const p = path.join(dataDir, "shared", kitty, file);
+    fs.mkdirSync(path.dirname(p), { recursive: true });
+    fs.writeFileSync(p, data);
+  };
+  shared(
+    "tom",
+    "launch-checklist.md",
+    "# Launch checklist\n\n- [x] Landing page copy\n- [x] Pricing table\n- [ ] Announcement post\n\nDrafted on the desktop, in LibreOffice and Mousepad.",
+  );
+  shared(
+    "tom",
+    "screens/app-icon.png",
+    fs.readFileSync(path.join(ROOT, "desktop/build/appicon.png")),
+  );
+  shared("luna", "budget.csv", "item,cost\nAds,120\nDomain,12\n");
+  shared("luna", "press-kit.pdf", "%PDF-1.4\n% a demo file\n");
   fs.mkdirSync(path.join(dataDir, "skills/proposed"), { recursive: true });
   fs.writeFileSync(
     path.join(dataDir, "skills/proposed/close-a-cookie-banner.md"),
@@ -153,8 +172,15 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
     text: "Answer in Spanish when I write in Spanish",
     scope: "user",
   });
+  // And one every kitty knows.
+  await api("POST", "/v1/kitties/mimi/memory", {
+    text: "My name is Mad and I work from Santiago",
+    scope: "shared",
+  });
   const memo = await newChat(["mimi"], "Preferences");
   await say(memo, "Mimi, remember that I prefer short answers.");
+  // A note mimi proposes for every kitty: it waits for the person's yes.
+  await say(memo, "Mimi, tell every kitty that I write dates day first");
   await api("POST", `/v1/chats/${single}/turns/1/feedback`, {
     rating: "down",
     note: "Too long: two lines at most",

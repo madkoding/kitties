@@ -40,8 +40,12 @@ loc=
 if [ -z "$place" ]; then
     # Where the address is; the container leaves through the host's, so it is the host's place.
     loc="$(get "https://ipwho.is/" | jq -r 'select(.success != false) | "\(.latitude) \(.longitude)"' 2>/dev/null)"
-    # Else the city of the time zone: America/Santiago, Santiago.
-    place="$(printf '%s' "${TZ:-}" | sed 's|.*/||; s/_/ /g' | tr -cd 'A-Za-z0-9 ,._-' | sed 's/ /%20/g')"
+    # Else the city of the time zone: America/Santiago, Santiago. A zone that is only an offset
+    # (Etc/GMT+3, UTC, <+0530>-5:30: the host's when its name cannot be told) names no city.
+    case "${TZ:-}" in
+        Etc/*|*/*/*|'<'*) ;;
+        */*) place="$(printf '%s' "$TZ" | sed 's|.*/||; s/_/ /g' | tr -cd 'A-Za-z0-9 ,._-' | sed 's/ /%20/g')" ;;
+    esac
 fi
 if [ -z "$loc" ] || [ "$loc" = "null null" ]; then
     [ -n "$place" ] || exit 0

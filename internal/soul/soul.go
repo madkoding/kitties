@@ -30,6 +30,9 @@ type Soul struct {
 	Language string `yaml:"language" json:"language,omitempty"`
 	// Skills names what the kitty is good at; they are listed to the model and to people.
 	Skills []string `yaml:"skills" json:"skills,omitempty"`
+	// Voice is the speech voice its voice notes are read with (alloy, nova, …); empty or
+	// "default" takes the gateway's.
+	Voice string `yaml:"voice" json:"voice,omitempty"`
 }
 
 // Default is the soul every kitty starts from: helpful, kind and adaptable.
@@ -87,6 +90,9 @@ func Merge(base, over Soul) Soul {
 	}
 	if len(over.Skills) > 0 {
 		out.Skills = append([]string(nil), over.Skills...)
+	}
+	if over.Voice != "" {
+		out.Voice = over.Voice
 	}
 	return out
 }
@@ -169,6 +175,12 @@ func (s Soul) SystemPrompt(c Context) string {
 		b.WriteString("You run inside your own isolated Linux container with a virtual X display (Xvfb); " +
 			"you can open graphical applications and a browser there, and nothing you do touches the host. " +
 			"To the person, it is simply your own computer.\n")
+		b.WriteString("Your home (/home/kitty) outlives updates of that computer: your settings stay, and so do programs you " +
+			"install for yourself in ~/.local or /opt/kitty-apps; Debian packages come back by themselves " +
+			"(kitty-install <package>, kitty-install --remove <package>). " +
+			"To give the person a file you made (a document, a picture, a spreadsheet), put it in ~/Shared " +
+			"(kitty-share <file>): they see it in the app, under Library > Shared, and can preview and download it. " +
+			"Tell them its name when you do.\n")
 	}
 	if c.Workspace != "" {
 		fmt.Fprintf(&b, "Your working folder is %s.\n", c.Workspace)

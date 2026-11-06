@@ -71,6 +71,11 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	case strings.Contains(lower, "ask me before posting"):
 		// Asked to hold back, the kitty limits itself.
 		return provider.Reply{Content: "Sure.\n@limit set {\"connector\": \"team-slack\", \"action\": \"send\", \"mode\": \"ask\"}", Usage: usage}, nil
+	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "proposed to every kitty"):
+		return provider.Reply{Content: "I proposed it for every kitty: it reaches them once you say yes in the memory.", Usage: usage}, nil
+	case strings.Contains(lower, "tell every kitty that "):
+		text := strings.TrimSpace(last[strings.Index(lower, "tell every kitty that ")+len("tell every kitty that "):])
+		return provider.Reply{Content: fmt.Sprintf("Sure.\n@memory remember {\"text\": %q, \"scope\": \"shared\"}", text), Usage: usage}, nil
 	case strings.Contains(lower, "remember that "):
 		text := strings.TrimSpace(last[strings.Index(lower, "remember that ")+len("remember that "):])
 		return provider.Reply{Content: fmt.Sprintf("Noted.\n@memory remember {\"text\": %q}", text), Usage: usage}, nil
@@ -129,7 +134,7 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	case strings.Contains(lower, "@") && !strings.Contains(lower, "@connector"):
 		return provider.Reply{Content: fmt.Sprintf("%s here. I agree with the point above and I would add one check: let's confirm the numbers before we commit.", name), Usage: usage}, nil
 	case strings.Contains(lower, "plan"):
-		return provider.Reply{Content: "Here is how I would split it:\n\n1. Research the options and note the trade-offs.\n2. Draft the proposal with the numbers behind each choice.\n3. Review it together before sending.\n\nI can take the first step on my desktop if you want.\n" +
+		return provider.Reply{Content: "Here is how I would split it:\n\n1. Research the options and note the trade-offs.\n2. Draft the proposal with the numbers behind each choice.\n3. Review it together before sending.\n\nThe plan is saved in [launch-plan.md](/v1/artifacts/launch-plan.md). I can take the first step on my desktop if you want.\n" +
 			"@skill read report-findings\n@artifact save {\"name\": \"launch-plan.md\", \"content\": \"# Launch plan\\n\\n1. Research the options and note the trade-offs.\\n2. Draft the proposal with the numbers behind each choice.\\n3. Review it together before sending.\"}", Usage: usage}, nil
 	default:
 		return provider.Reply{Content: fmt.Sprintf("Good question. In short: %s. Tell me if you want me to dig deeper or try it on my desktop.", summarise(last)), Usage: usage}, nil

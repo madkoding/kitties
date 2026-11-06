@@ -63,6 +63,20 @@ const dict: Dictionary = {
   "Only to reach it through a proxy or a compatible service.":
     "Solo para llegar a él a través de un proxy o un servicio compatible.",
   "Longest answer (tokens)": "Respuesta más larga (tokens)",
+  "Tasks a day another kitty may take over": "Tareas al día que otro kitty puede tomar",
+  "When a kitty with no backup gives up, the free kitty most like it takes the task over, up to this many times a day. Write off to be asked instead.":
+    "Cuando un kitty sin respaldo se rinde, el kitty libre más parecido toma la tarea, hasta esta cantidad de veces al día. Escribe off para que te pregunten a ti.",
+  "Working on their own": "Trabajo por su cuenta",
+  "Try an unfinished goal again after": "Reintentar un objetivo sin terminar tras",
+  "A goal that ended blocked or waiting for you runs again by itself after each of these waits. Write off to never try again on its own.":
+    "Un objetivo que terminó bloqueado o esperándote vuelve a ejecutarse solo tras cada una de estas esperas. Escribe off para que nunca lo reintente solo.",
+  "Wait for a model that is down": "Esperar a un modelo caído",
+  "How long a task waits for its model to answer again (busy, failing, unreachable) before giving up. Write off to not wait.":
+    "Cuánto espera una tarea a que su modelo vuelva a responder (ocupado, con fallas, sin conexión) antes de rendirse. Escribe off para no esperar.",
+  "If it is down, think with": "Si está caído, pensar con",
+  "nothing else (wait for it)": "nada más (esperarlo)",
+  "While this model is busy or unreachable, the kitties go on with this one instead of waiting.":
+    "Mientras este modelo esté ocupado o sin conexión, los kitties siguen con este otro en vez de esperar.",
   "Saved, but the test did not pass: ": "Se guardó, pero la prueba no pasó: ",
   "Change something": "Cambiar algo",
   "Saved without a passing test.": "Se guardó sin pasar la prueba.",
@@ -146,6 +160,8 @@ const dict: Dictionary = {
   "What the kitties are told it is for": "Para qué les dices a los kitties que sirve",
   "uses the OAuth 1.0 keys": "usa las claves OAuth 1.0",
   "uses a token": "usa un token",
+  "uses an app password": "usa una contraseña de app",
+  "A user and an app password of the account": "Un usuario y una contraseña de app de la cuenta",
   "uses a webhook": "usa un webhook",
   "token expired": "token vencido",
   "token expires in {time}": "el token vence en {time}",
@@ -248,6 +264,150 @@ const dict: Dictionary = {
   "I understand the risk": "Entiendo el riesgo",
   "Saved: restarting Kitties…": "Guardado: reiniciando Kitties…",
   "Apply and restart": "Aplicar y reiniciar",
+  // Claude connector (MCP)
+  "Kitties did not come back after the change: reload this page.":
+    "Kitties no volvió tras el cambio: recarga esta página.",
+  "Copied: {what}.": "Copiado: {what}.",
+  "the token": "el token",
+  "the command": "el comando",
+  "This page cannot reach the clipboard: select the text and copy it by hand.":
+    "Esta página no accede al portapapeles: selecciona el texto y cópialo a mano.",
+  "A new token replaces the old one and every connection that used it stops working, claude.ai sign-ins too. Continue?":
+    "Un token nuevo reemplaza al anterior y toda conexión que lo usaba deja de funcionar, también los accesos de claude.ai. ¿Continuar?",
+  "Rotate token": "Rotar token",
+  "{name} will lose access at once and has to sign in again. Revoke?":
+    "{name} perderá el acceso al instante y tendrá que iniciar sesión de nuevo. ¿Revocar?",
+  Revoke: "Revocar",
+  "Claude connector": "Conector de Claude",
+  "Lets Claude list, create and drive your kitties through {url}.":
+    "Permite que Claude liste, cree y maneje tus kitties mediante {url}.",
+  "Allow commands in a kitty": "Permitir comandos en un kitty",
+  "Adds kitty_exec: Claude may run commands inside a kitty's container.":
+    "Agrega kitty_exec: Claude puede ejecutar comandos dentro del contenedor de un kitty.",
+  "Allow Claude to approve": "Permitir que Claude apruebe",
+  "Adds approval_approve: Claude may say yes, once, to an action held for you.":
+    "Agrega approval_approve: Claude puede decir que sí, una vez, a una acción retenida para ti.",
+  "Sign-in for claude.ai": "Acceso para claude.ai",
+  "Remote clients sign in with OAuth. It needs https in front (public address).":
+    "Los clientes remotos entran con OAuth. Necesita https delante (dirección pública).",
+  "Claude (MCP)": "Claude (MCP)",
+  "Let Claude run the fleet as an orchestrator. Off until you turn it on.":
+    "Deja que Claude maneje la flota como orquestador. Apagado hasta que lo actives.",
+  "This gives Claude more power": "Esto le da más poder a Claude",
+  "Commands run inside the kitty and an approval lets a held action go ahead without you. Turn it on only if you trust the client that holds the token.":
+    "Los comandos corren dentro del kitty y una aprobación deja seguir una acción retenida sin ti. Actívalo solo si confías en el cliente que tiene el token.",
+  "Connect Claude Code": "Conectar Claude Code",
+  "Run this where Claude Code is. It reads the token from its file; the token is not shown here.":
+    "Ejecútalo donde está Claude Code. Lee el token de su archivo; aquí no se muestra.",
+  "Copy command": "Copiar comando",
+  "Copy token": "Copiar token",
+  "Signed-in clients": "Clientes con sesión",
+  "Nobody has signed in yet.": "Nadie ha iniciado sesión aún.",
+  "since {when}": "desde {when}",
+  Revoked: "Revocado",
+  "The connector answers: {n} tools for Claude.":
+    "El conector responde: {n} herramientas para Claude.",
+  "The connector does not answer: {why}": "El conector no responde: {why}",
+  "Test connection": "Probar conexión",
+  "last used {when}": "último uso {when}",
+
+  // WhatsApp as a linked device
+  "Write the number with its country code, like +56 9 1234 5678.":
+    "Escribe el número con su código de país, como +56 9 1234 5678.",
+  "The phone forgets this device and the kitties stop reading and writing on WhatsApp until you scan a new code. Unlink?":
+    "El teléfono olvida este dispositivo y los kitties dejan de leer y escribir en WhatsApp hasta que escanees un código nuevo. ¿Desvincular?",
+  Unlink: "Desvincular",
+  "Unlinked.": "Desvinculado.",
+  "Sending…": "Enviando…",
+  "Sent: look at that phone.": "Enviado: mira ese teléfono.",
+  "Not sent: {why}": "No se envió: {why}",
+  "Connecting…": "Conectando…",
+  "Waiting for the QR code to be scanned": "Esperando que escanees el código QR",
+  "The code expired": "El código expiró",
+  Connected: "Conectado",
+  "Reconnecting…": "Reconectando…",
+  "The phone removed this device": "El teléfono quitó este dispositivo",
+  "It could not connect": "No se pudo conectar",
+  "WhatsApp (linked device)": "WhatsApp (dispositivo vinculado)",
+  "A number of their own: link a phone as on WhatsApp Web, and the people on the list talk to a kitty from WhatsApp. Off until you turn it on.":
+    "Un número propio: vincula un teléfono como en WhatsApp Web y las personas de la lista conversan con un kitty desde WhatsApp. Apagado hasta que lo actives.",
+  "Not an official WhatsApp API": "No es una API oficial de WhatsApp",
+  "WhatsApp's terms do not allow unofficial clients, and it may ban the number. Use a spare number, not your own. The official way is the WhatsApp Cloud API connection (Meta Business).":
+    "Los términos de WhatsApp no permiten clientes no oficiales y puede bloquear el número. Usa un número de repuesto, no el tuyo. La vía oficial es la conexión WhatsApp Cloud API (Meta Business).",
+  "Turn on WhatsApp": "Activar WhatsApp",
+  "Messages from numbers not on the list are ignored, and the kitties write only to them.":
+    "Los mensajes de números que no están en la lista se ignoran, y los kitties solo escriben a los de la lista.",
+  "The kitty that answers": "El kitty que responde",
+  "Choose a kitty": "Elige un kitty",
+  "Numbers that may write": "Números que pueden escribir",
+  Add: "Agregar",
+  "Nobody yet: every message is ignored until you add a number.":
+    "Nadie todavía: se ignora todo mensaje hasta que agregues un número.",
+  "Answer in groups when someone mentions the kitty":
+    "Responder en grupos cuando alguien nombra al kitty",
+  "No group has written yet: write in a group with the kitties' number and it shows up here.":
+    "Ningún grupo ha escrito todavía: escribe en un grupo con el número de los kitties y aparece aquí.",
+  "Groups that wrote lately. The kitty answers only in the ones you pick.":
+    "Grupos que escribieron hace poco. El kitty responde solo en los que elijas.",
+  "Messages sent per hour, at most": "Mensajes enviados por hora, como máximo",
+  "{n} messages sent in the last hour.": "{n} mensajes enviados en la última hora.",
+  "{n} were held by the hourly limit.": "{n} quedaron retenidos por el límite por hora.",
+  "Who answers each one": "Quién responde a cada uno",
+  "Quiet hours": "Horario de silencio",
+  to: "a",
+  "Quiet hours start": "Inicio del silencio",
+  "Quiet hours end": "Fin del silencio",
+  "Messages then are answered when they end.": "Los mensajes de ese rato se responden al terminar.",
+  Reconnect: "Reconectar",
+  "Quiet hours until {until}: {n} messages wait.":
+    "Silencio hasta las {until}: {n} mensajes esperan.",
+  "Remove {number}": "Quitar {number}",
+  Message: "Mensaje",
+  File: "Archivo",
+  "Sent again.": "Enviado de nuevo.",
+  Resend: "Reenviar",
+  "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.":
+    "No se enviaron: salieron más de {limit} mensajes en una hora. Reenvía uno cuando haya espacio, o sube el límite arriba. La lista queda sellada, así que un reinicio no la pierde.",
+  "Voice notes": "Notas de voz",
+  "Never: the kitties write": "Nunca: los kitties escriben",
+  "Answer a voice note with one": "Responder una nota de voz con otra",
+  "Every answer": "Todas las respuestas",
+  "Short answers are read aloud; long ones and code still go as text.":
+    "Las respuestas cortas se leen en voz alta; las largas y el código siguen yendo como texto.",
+  "Needs an OpenAI profile with a key, for its speech.":
+    "Necesita un perfil de OpenAI con clave, por su voz.",
+  "Not an official API": "No es una API oficial",
+  "Kitties links as WhatsApp Web does. WhatsApp's terms do not allow it, and it may ban the number without warning.":
+    "Kitties se vincula como lo hace WhatsApp Web. Las condiciones de WhatsApp no lo permiten, y puede bloquear el número sin aviso.",
+  "A spare number, and a short list": "Un número de repuesto y una lista corta",
+  "Use a number that is not your own. Only the numbers and groups you add can talk to the kitties, and the kitties write only to them, a few messages an hour.":
+    "Usa un número que no sea el tuyo. Solo los números y grupos que agregues pueden hablar con los kitties, y los kitties solo les escriben a ellos, pocos mensajes por hora.",
+  "The session stays here": "La sesión se queda aquí",
+  "The linked device is sealed in this gateway's vault. Unlink it here or from the phone at any time.":
+    "El dispositivo vinculado queda sellado en la bóveda de este gateway. Desvincúlalo aquí o desde el teléfono cuando quieras.",
+  "Before you turn on WhatsApp": "Antes de activar WhatsApp",
+  "The kitties get a WhatsApp number of their own: the people on your list write to them, and they answer from here.":
+    "Los kitties tienen un número de WhatsApp propio: las personas de tu lista les escriben y ellos responden desde aquí.",
+  "For a business, the official way is the WhatsApp Cloud API connection (Meta Business), in Connections.":
+    "Para una empresa, la vía oficial es la conexión WhatsApp Cloud API (Meta Business), en Conexiones.",
+  "Accept and continue": "Aceptar y continuar",
+  "Voice note": "Nota de voz",
+  Reaction: "Reacción",
+  "Held by the hourly limit ({n})": "Retenidos por el límite por hora ({n})",
+  "Clear the list": "Vaciar la lista",
+  "I understand that WhatsApp may ban this number":
+    "Entiendo que WhatsApp puede bloquear este número",
+  "QR code to link WhatsApp": "Código QR para vincular WhatsApp",
+  "Open WhatsApp on the phone of the kitties' number.":
+    "Abre WhatsApp en el teléfono del número de los kitties.",
+  "Go to Settings, Linked devices, Link a device.":
+    "Ve a Ajustes, Dispositivos vinculados, Vincular un dispositivo.",
+  "Point the phone at this code. It changes every few seconds.":
+    "Apunta el teléfono a este código. Cambia cada pocos segundos.",
+  "Show a new code": "Mostrar un código nuevo",
+  "{kitty} answers on WhatsApp; each number has its own chat here.":
+    "{kitty} responde en WhatsApp; cada número tiene su propio chat aquí.",
+  "{n} messages from other numbers were ignored.": "Se ignoraron {n} mensajes de otros números.",
 };
 
 export default dict;

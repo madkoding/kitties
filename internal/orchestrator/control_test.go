@@ -2,11 +2,13 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/madkoding/kitties/internal/desktop"
+	"github.com/madkoding/kitties/internal/kitty"
 )
 
 func TestHoldAndInput(t *testing.T) {
@@ -115,7 +117,7 @@ func TestStreamClipboardAndTheme(t *testing.T) {
 		t.Fatalf("theme = %+v %v %v", got, err, f.execs)
 	}
 	f.execs = nil
-	if err := m.Start(ctx, "mimi"); err != nil || len(f.execs) != 1 || f.execs[0] != k.Container+":kitty-theme Greybird-dark" {
+	if err := m.Start(ctx, "mimi"); err != nil || len(f.execs) != 2 || f.execs[0] != k.Container+":kitty-theme Greybird-dark" || f.execs[1] != k.Container+":kitty-ready" {
 		t.Errorf("start = %v %v", err, f.execs)
 	}
 	// Back to the image's own theme: Numix goes on the running desktop again.
@@ -126,12 +128,12 @@ func TestStreamClipboardAndTheme(t *testing.T) {
 	}
 }
 
-// A start with the image's own theme runs nothing more.
+// A start with the image's own theme runs nothing more than the look at whether its desktop is up.
 func TestStartWithoutTheme(t *testing.T) {
 	f := newFake()
 	m, _ := New(testConfig(t), WithContainers(f, nil))
 	_, _ = m.Create(context.Background(), Spec{Name: "mimi"})
-	if err := m.Start(context.Background(), "mimi"); err != nil || len(f.execs) != 0 {
+	if err := m.Start(context.Background(), "mimi"); err != nil || len(f.execs) != 1 || f.execs[0] != "kitty-mimi:kitty-ready" {
 		t.Errorf("start = %v %v", err, f.execs)
 	}
 }
@@ -207,4 +209,153 @@ func TestVoxl(t *testing.T) {
 func watching(m *Manager, id string) bool {
 	_, streams := m.use.running(id)
 	return streams > 0
+}
+
+// bootingContainers is a desktop whose voxl writes its password only after a few looks.
+type bootingContainers struct {
+	*fakeContainers
+	looks, ready int
+}
+
+func (b *bootingContainers) Exec(ctx context.Context, n string, argv ...string) (string, error) {
+	if argv[0] == "cat" {
+		b.looks++
+		if b.looks <= b.ready {
+			return "", errors.New("cat: /tmp/voxl.pw: No such file")
+		}
+		return "0123456789abcdef0123456789abcdef\n", nil
+	}
+	return b.fakeContainers.Exec(ctx, n, argv...)
+}
+
+// A machine just brought up has not written its voxl password yet: the live view waits for it,
+// instead of taking the desktop for one without voxl. Long after the start, it does not wait.
+func TestVoxlWaitsForABootingDesktop(t *testing.T) {
+	defer func(w, p, win time.Duration) { voxlBootWait, voxlBootPoll, voxlBootWindow = w, p, win }(voxlBootWait, voxlBootPoll, voxlBootWindow)
+	voxlBootWait, voxlBootPoll = 50*time.Millisecond, time.Millisecond
+	ctx := context.Background()
+	b := &bootingContainers{fakeContainers: newFake(), ready: 3}
+	m, err := New(testConfig(t), WithContainers(b, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	m.now = func() time.Time { return now }
+	_, _ = m.Create(ctx, Spec{Name: "mimi"})
+
+	// Not started by this gateway: one look, and no live view.
+	if _, err := m.Voxl(ctx, "mimi"); err == nil || b.looks != 1 {
+		t.Fatalf("not booting: %v after %d looks", err, b.looks)
+	}
+	// Just started: it waits until the password is there.
+	if err := m.Start(ctx, "mimi"); err != nil {
+		t.Fatal(err)
+	}
+	b.looks = 0
+	v, err := m.Voxl(ctx, "mimi")
+	if err != nil || v.Password == "" || b.looks != 4 {
+		t.Fatalf("booting: %+v %v after %d looks", v, err, b.looks)
+	}
+	// It gives up after voxlBootWait.
+	b.looks, b.ready = 0, 1000
+	if _, err := m.Voxl(ctx, "mimi"); err == nil || b.looks != int(voxlBootWait/voxlBootPoll)+1 {
+		t.Fatalf("never ready: %v after %d looks", err, b.looks)
+	}
+	// A cancelled request stops waiting.
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := m.Voxl(cctx, "mimi"); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled: %v", err)
+	}
+	// Long after the start, a missing password is an image without voxl again.
+	now = now.Add(voxlBootWindow + time.Second)
+	b.looks = 0
+	if _, err := m.Voxl(ctx, "mimi"); err == nil || b.looks != 1 {
+		t.Errorf("long after the start: %v after %d looks", err, b.looks)
+	}
+}
+
+// readyContainers is a desktop whose kitty-ready says booting a few times, then ready.
+type readyContainers struct {
+	*fakeContainers
+	asks, booting int
+	err           error
+	// during is called on each ask while it is booting.
+	during func()
+}
+
+func (r *readyContainers) Exec(ctx context.Context, n string, argv ...string) (string, error) {
+	if argv[0] == "kitty-ready" {
+		r.asks++
+		if r.err != nil {
+			return "", r.err
+		}
+		if r.asks <= r.booting {
+			if r.during != nil && r.asks > 1 {
+				r.during()
+			}
+			return "booting\n", nil
+		}
+		return "ready\n", nil
+	}
+	return r.fakeContainers.Exec(ctx, n, argv...)
+}
+
+// A start calls the machine on only once its desktop is up, and shows it as starting its desktop
+// meanwhile; an image without kitty-ready is not waited for, nor is one that never comes up for
+// longer than desktopReadyWait.
+func TestStartWaitsForTheDesktop(t *testing.T) {
+	defer func(w, p time.Duration) { desktopReadyWait, desktopReadyPoll = w, p }(desktopReadyWait, desktopReadyPoll)
+	desktopReadyWait, desktopReadyPoll = time.Second, time.Millisecond
+	ctx := context.Background()
+	r := &readyContainers{fakeContainers: newFake(), booting: 3}
+	m, err := New(testConfig(t), WithContainers(r, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = m.Create(ctx, Spec{Name: "mimi"})
+
+	// While it waits, the machine is starting its desktop.
+	var seen []string
+	r.during = func() {
+		got, _ := m.Get("mimi")
+		p, _ := m.Power("mimi")
+		seen = append(seen, got.Status+"/"+p.Step)
+	}
+	if err := m.Start(ctx, "mimi"); err != nil || r.asks != 4 {
+		t.Fatalf("start = %v after %d asks", err, r.asks)
+	}
+	if got, _ := m.Get("mimi"); got.Status != kitty.StatusRunning {
+		t.Errorf("after the wait: %s", got.Status)
+	}
+	if p, _ := m.Power("mimi"); p.State != kitty.PowerOn || p.Step != "" {
+		t.Errorf("power after the wait = %+v", p)
+	}
+	if strings.Join(seen, ",") != "starting/desktop,starting/desktop" {
+		t.Errorf("while booting: %v", seen)
+	}
+	r.during = nil
+
+	// Never ready: called on anyway after the wait.
+	r.asks, r.booting = 0, 1<<30
+	desktopReadyWait = 20 * time.Millisecond
+	if err := m.Start(ctx, "mimi"); err != nil || r.asks < 2 {
+		t.Errorf("never ready = %v after %d asks", err, r.asks)
+	}
+	// No kitty-ready (an older image): one ask, no wait.
+	r.asks, r.err = 0, errors.New("kitty-ready: not found")
+	if err := m.Start(ctx, "mimi"); err != nil || r.asks != 1 {
+		t.Errorf("older image = %v after %d asks", err, r.asks)
+	}
+	// A start that is given up while it waits fails, with the reason on the kitty.
+	r.asks, r.err, r.booting = 0, nil, 1<<30
+	desktopReadyWait = time.Minute
+	cctx, cancel := context.WithTimeout(ctx, 20*time.Millisecond)
+	defer cancel()
+	if err := m.Start(cctx, "mimi"); err == nil || !strings.Contains(err.Error(), "did not come up") {
+		t.Errorf("given up = %v", err)
+	}
+	if got, _ := m.Get("mimi"); got.Status != kitty.StatusError {
+		t.Errorf("given up: %s", got.Status)
+	}
 }

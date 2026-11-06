@@ -55,6 +55,8 @@ func TestValidation(t *testing.T) {
 		{base + "kitties:\n  - name: a\n    replicas: 1000\n", "between 0 and 999"},
 		{base + "kitties:\n  - name: a\n    avatar:\n      breed: lion\n", "avatar.breed"},
 		{"providers:\n  p:\n    kind: ollama\n    tools: magic\n", "not native or text"},
+		{"providers:\n  p:\n    kind: ollama\n    fallback: p\n", "its own fallback"},
+		{"providers:\n  p:\n    kind: ollama\n    fallback: q\n", "fallback: \"q\" is not a configured profile"},
 		{"providers:\n  p:\n    kind: codex\n    auth: oauth\n", "is not login"},
 		{"providers:\n  p:\n    kind: openai\n    auth: login\n", "takes an API key"},
 		{base + "kitties:\n  - name: a\n    connectors: [x]\n", "not a configured connector"},
@@ -445,5 +447,42 @@ func TestCloudNeededAndIsCloudContainer(t *testing.T) {
 	}
 	if _, err := Parse([]byte(base + "cloud: { provider: boat, api_key_env: 'no good' }\n")); err == nil {
 		t.Error("a bad variable name must fail")
+	}
+}
+
+func TestApplyEnvMCP(t *testing.T) {
+	cfg := Defaults()
+	if cfg.Gateway.MCP.Enabled || cfg.Gateway.MCP.AllowExec {
+		t.Fatal("the MCP connector is off by default")
+	}
+	env := map[string]string{"KITTIES_MCP": "true", "KITTIES_MCP_TOKEN": "t0ken", "KITTIES_MCP_EXEC": "1", "KITTIES_MCP_OAUTH": "yes", "KITTIES_MCP_APPROVE": "true"}
+	if err := cfg.ApplyEnv(func(k string) string { return env[k] }); err != nil {
+		t.Fatal(err)
+	}
+	if m := cfg.Gateway.MCP; !m.Enabled || m.Token != "t0ken" || !m.AllowExec || !m.OAuth || !m.AllowApprove {
+		t.Errorf("env not applied: %+v", m)
+	}
+}
+
+func TestWhatsAppSection(t *testing.T) {
+	base := "providers:\n  p:\n    kind: ollama\n"
+	cfg, err := Parse([]byte(base + "whatsapp:\n  enabled: true\n  allow: [\"+56 9 1234 5678\"]\n  kitty: ana\n  groups: true\n  allow_groups: [\"1@g.us\"]\n  kitties: {\"+1 555\": luna}\n  max_per_hour: 20\n  quiet: {from: \"22:00\", to: \"08:00\"}\n  transcribe: off\n  voice: mirror\n  speak: p\n  speak_voice: nova\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := cfg.WhatsApp; !w.Set() || !w.Enabled || w.Allow[0] != "+56 9 1234 5678" || w.Kitty != "ana" || !w.Groups || w.Transcribe != "off" || w.AllowGroups[0] != "1@g.us" || w.Kitties["+1 555"] != "luna" || w.MaxPerHour != 20 || w.Quiet.To != "08:00" || w.Voice != "mirror" || w.Speak != "p" || w.SpeakVoice != "nova" {
+		t.Fatalf("whatsapp = %+v", w)
+	}
+	if !(WhatsApp{AllowGroups: []string{"1@g.us"}}).Set() {
+		t.Fatal("a group list sets WhatsApp")
+	}
+	if !(WhatsApp{MaxPerHour: 5}).Set() || !(WhatsApp{Kitties: map[string]string{"1": "a"}}).Set() {
+		t.Fatal("a limit or a kitty map sets WhatsApp")
+	}
+	if !(WhatsApp{Voice: "always"}).Set() {
+		t.Fatal("a voice mode sets WhatsApp")
+	}
+	if (WhatsApp{Transcribe: "p", Speak: "p", SpeakVoice: "nova"}).Set() {
+		t.Fatal("only the transcriber says the file sets WhatsApp")
 	}
 }

@@ -569,3 +569,104 @@ func TestInboundKinds(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestDiscordSignsInForAWebhook(t *testing.T) {
+	k, _ := LookupKind("discord")
+	if k.OAuth != "discord" || !k.KeySet(Settings{"url": "https://d/w"}) || k.KeySet(Settings{}) {
+		t.Errorf("discord = %+v", k)
+	}
+	// Saved before the sign-in made its webhook: it says what to do instead of posting nowhere.
+	c, err := Build("discord", Settings{}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Call(context.Background(), map[string]any{"text": "hi"}); err == nil || !strings.Contains(err.Error(), "sign in to Discord") {
+		t.Errorf("no webhook = %v", err)
+	}
+	// The webhook is posted to as is: the account's token never goes with it.
+	var cp capture
+	cp.install(t)
+	src := TokenSource(func(context.Context) (string, error) { return "secret", nil })
+	c, _ = Build("discord", WithTokenSource(Settings{"url": "https://d/w"}, src), "")
+	if _, err := c.Call(context.Background(), map[string]any{"text": "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(cp.reqs) != 1 || cp.reqs[0].Header.Get("Authorization") != "" || cp.reqs[0].URL.String() != "https://d/w" {
+		t.Errorf("sent = %v", cp.reqs)
+	}
+}
+
+func TestGiteaTakesATokenOrTheSignIn(t *testing.T) {
+	k, _ := LookupKind("gitea")
+	if k.OAuth != "gitea" || k.Validate(Settings{}) == nil || !k.KeySet(Settings{"token": "t"}) || k.KeySet(Settings{"url": "u"}) {
+		t.Errorf("gitea = %+v", k)
+	}
+	var cp capture
+	cp.install(t)
+	args := map[string]any{"repo": "o/r", "title": "T"}
+	c, _ := Build("gitea", Settings{"url": "https://g", "token": "pat"}, "")
+	if _, err := c.Call(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+	src := TokenSource(func(context.Context) (string, error) { return "oauth", nil })
+	c, _ = Build("gitea", WithTokenSource(Settings{"url": "https://g"}, src), "")
+	if _, err := c.Call(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+	if got := []string{cp.reqs[0].Header.Get("Authorization"), cp.reqs[1].Header.Get("Authorization")}; got[0] != "token pat" || got[1] != "Bearer oauth" {
+		t.Errorf("auth = %v", got)
+	}
+	if cp.reqs[1].URL.String() != "https://g/api/v1/repos/o/r/issues" {
+		t.Errorf("url = %s", cp.reqs[1].URL)
+	}
+}
+
+func TestNextcloudKindsSignIn(t *testing.T) {
+	for _, name := range []string{"nextcloud", "caldav", "carddav"} {
+		k, _ := LookupKind(name)
+		if k.OAuth != "nextcloud" || !k.KeySet(Settings{"user": "a", "password": "p"}) || k.KeySet(Settings{"user": "a"}) || k.Validate(Settings{"url": "https://c"}) != nil {
+			t.Errorf("%s = %+v", name, k)
+		}
+	}
+	// Its user and app password go as basic auth, never a bearer token.
+	var cp capture
+	cp.install(t)
+	src := TokenSource(func(context.Context) (string, error) { return "", errors.New("must not be asked") })
+	c, _ := Build("nextcloud", WithTokenSource(Settings{"url": "https://c", "user": "ana", "password": "pw"}, src), "")
+	if _, err := c.Call(context.Background(), map[string]any{"action": "upload", "name": "a.txt", "content": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if u, p, ok := cp.reqs[0].BasicAuth(); !ok || u != "ana" || p != "pw" {
+		t.Errorf("auth = %v %v %v", u, p, ok)
+	}
+}
+
+func TestTrelloTakesKeysOrTheSignIn(t *testing.T) {
+	k, _ := LookupKind("trello")
+	if k.OAuth != "trello" || !k.KeySet(Settings{"key": "k", "token": "t"}) || k.KeySet(Settings{"key": "k"}) || k.Validate(Settings{}) != nil {
+		t.Errorf("trello = %+v", k)
+	}
+	var cp capture
+	cp.install(t)
+	args := map[string]any{"name": "Card", "list": "L1"}
+	c, _ := Build("trello", Settings{"key": "k", "token": "typed"}, "")
+	if _, err := c.Call(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+	src := TokenSource(func(context.Context) (string, error) { return "signed", nil })
+	c, _ = Build("trello", WithTokenSource(Settings{"key": "k"}, src), "")
+	if _, err := c.Call(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{"typed", "signed"} {
+		q := cp.reqs[i].URL.Query()
+		if q.Get("token") != want || q.Get("key") != "k" || cp.reqs[i].Header.Get("Authorization") != "" {
+			t.Errorf("request %d = %s %v", i, cp.reqs[i].URL, cp.reqs[i].Header)
+		}
+	}
+	r := request{url: "https://x/a"}
+	tokenInQuery(&r, "t t")
+	if r.url != "https://x/a?token=t+t" {
+		t.Errorf("first param = %s", r.url)
+	}
+}

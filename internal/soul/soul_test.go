@@ -25,7 +25,7 @@ func TestSystemPromptRendersEveryPart(t *testing.T) {
 	p := s.SystemPrompt(Context{KittyName: "Tom", Desktop: true, Workspace: "/work", Group: []string{"Ana", "Bo"},
 		Connectors: map[string]string{"slack": "posts to Slack", "mail": "sends mail"}, User: "Pat"})
 	for _, want := range []string{"You are Tom", "You are a tester.", "Your tone is dry.", "careful", "good at: go",
-		"answer in Spanish", "kind to Pat", "Speak to Pat as to a friend", "simply your own computer", "virtual X display", "/work", "Ana, Bo", "@name", "- mail: sends mail\n- slack: posts to Slack", "Never guess."} {
+		"answer in Spanish", "kind to Pat", "Speak to Pat as to a friend", "simply your own computer", "virtual X display", "~/Shared", "kitty-share", "outlives updates", "/work", "Ana, Bo", "@name", "- mail: sends mail\n- slack: posts to Slack", "Never guess."} {
 		if !strings.Contains(p, want) {
 			t.Errorf("prompt lacks %q:\n%s", want, p)
 		}
@@ -54,8 +54,8 @@ func TestLoadParseMerge(t *testing.T) {
 	if _, err := Parse([]byte("mood: happy\n")); err == nil {
 		t.Error("an unknown field must fail")
 	}
-	m := Merge(Default("x"), Soul{Name: "Y", Persona: "p", Tone: "t", Traits: []string{"a"}, Instructions: "i", Language: "l", Skills: []string{"s"}})
-	if m.Name != "Y" || m.Persona != "p" || m.Tone != "t" || m.Traits[0] != "a" || m.Instructions != "i" || m.Language != "l" || m.Skills[0] != "s" {
+	m := Merge(Default("x"), Soul{Name: "Y", Persona: "p", Tone: "t", Traits: []string{"a"}, Instructions: "i", Language: "l", Skills: []string{"s"}, Voice: "nova"})
+	if m.Name != "Y" || m.Persona != "p" || m.Tone != "t" || m.Traits[0] != "a" || m.Instructions != "i" || m.Language != "l" || m.Skills[0] != "s" || m.Voice != "nova" {
 		t.Errorf("Merge = %+v", m)
 	}
 	keep := Merge(Default("x"), Soul{})

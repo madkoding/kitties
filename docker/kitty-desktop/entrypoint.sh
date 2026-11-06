@@ -2,8 +2,14 @@
 # Starts the virtual display and keeps the container alive. Everything else happens through
 # `docker exec` from the orchestrator.
 set -eu
+# The home may be a folder of the host (it outlives the container): it gets what the image brings.
+kitty-home || echo "kitty-home: the home could not be seeded" >&2
 : "${DISPLAY:=:99}"
 : "${SCREEN:=1280x800x24}"
+# The mark of a desktop that has come up (see kitty-ready): /dev/shm is new on every start, and it
+# is removed anyway, so a mark of the start before is never taken for this one's.
+READY=/dev/shm/kitty-desktop.ready
+rm -f "$READY" 2>/dev/null || true
 # -noreset: without it the display forgets the resources (xrdb) when its last client leaves.
 Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp -ac -noreset -shmem +extension RANDR >/tmp/xvfb.log 2>&1 &
 XVFB=$!
@@ -84,6 +90,18 @@ if [ -s "$HOME/work/.desktop/packages" ]; then
     # shellcheck disable=SC2046 # one package name per line, checked by kitty-apt
     nohup sudo -n /usr/local/sbin/kitty-apt $(cat "$HOME/work/.desktop/packages") >/tmp/install.log 2>&1 &
 fi
+# Ready once the live view answers (any HTTP answer: it listens), at most 30 s after this point;
+# without voxl, now. Until then the gateway shows the machine as starting its desktop.
+(
+    if command -v voxl >/dev/null 2>&1; then
+        for _ in $(seq 1 60); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' --max-time 1 http://127.0.0.1:6901/healthz || true)"
+            [ "$code" != 000 ] && [ -n "$code" ] && break
+            sleep 0.5
+        done
+    fi
+    date +%s >"$READY"
+) &
 echo "kitty ${KITTY_NAME:-?} ready on display $DISPLAY ($SCREEN)"
 if [ "$#" -gt 0 ]; then
     exec "$@"

@@ -83,6 +83,7 @@ const dict: Dictionary = {
   paused: "en pausa",
   "on events from {names}": "con eventos de {names}",
   "next {time}": "próxima vez: {time}",
+  "tries again {time}": "vuelve a intentarlo: {time}",
   "{n} run": "{n} ejecución",
   "{n} runs": "{n} ejecuciones",
   "run now": "ejecutar ahora",
@@ -228,6 +229,9 @@ const dict: Dictionary = {
   "Scope of the note": "Alcance de la nota",
   "about me": "sobre mí",
   "about the work": "sobre el trabajo",
+  shared: "compartida",
+  "for every kitty": "para todos los kitties",
+  "Every kitty knows it": "Todos los kitties la conocen",
   "Always answer in Spanish": "Responde siempre en español",
   "A note for it to keep": "Una nota para que la guarde",
   "Add note": "Agregar nota",
@@ -265,7 +269,27 @@ const dict: Dictionary = {
   "Delete {name}?": "¿Borrar {name}?",
   "Nothing saved yet. A kitty saves one with @artifact save, or a connector such as the diagram renderer does.":
     "Todavía no hay nada guardado. Un kitty guarda uno con @artifact save, o lo hace una conexión como el generador de diagramas.",
+  formatted: "formateado",
+  source: "fuente",
+  copied: "copiado",
+  copy: "copiar",
+  "Copy a link that opens this file in Kitties": "Copiar un link que abre este archivo en Kitties",
+  "link copied": "link copiado",
+  "copy link": "copiar link",
+  Data: "Datos",
+  Images: "Imágenes",
+  Documents: "Documentos",
+  Contents: "Contenido",
+  Order: "Orden",
+  "Search the files": "Buscar archivos",
+  "Saved by": "Guardado por",
+  "Every kitty": "Todos los kitties",
+  "Newest first": "Más recientes primero",
+  "By name": "Por nombre",
+  "Biggest first": "Más grandes primero",
+  "No file matches these filters.": "Ningún archivo coincide con estos filtros.",
   "Close the artifact": "Cerrar el archivo",
+  "This file is not in the library.": "Este archivo no está en la biblioteca.",
 
   // Signing in with a subscription
   Copied: "Copiado",
@@ -428,6 +452,36 @@ const dict: Dictionary = {
     "Cookies, sesiones y contraseñas respaldadas {when}.",
   "Cookies, sessions and passwords are not backed up yet.":
     "Las cookies, sesiones y contraseñas aún no están respaldadas.",
+  "This file is not there any more.": "Este archivo ya no está.",
+  "There is no preview for this kind of file: download it.":
+    "No hay vista previa para este tipo de archivo: descárgalo.",
+  "Update {name}'s desktop? It restarts. Its files, settings and programs stay; its cookies, sessions and saved passwords are backed up first and put back in the new one.":
+    "¿Actualizar el escritorio de {name}? Se reinicia. Sus archivos, configuraciones y programas se mantienen; antes se respaldan sus cookies, sesiones y contraseñas guardadas, y se ponen en el nuevo.",
+  "Put {file} back into {name}'s computer? Files it has that are newer stay as they are.":
+    "¿Restaurar {file} en la computadora de {name}? Los archivos suyos que sean más nuevos se quedan como están.",
+  Restore: "Restaurar",
+  "Kept on this computer, safe from updates: home and programs {home}, work {work}, Shared {shared}.":
+    "Guardado en esta computadora, a salvo de las actualizaciones: inicio y programas {home}, trabajo {work}, Compartido {shared}.",
+  "Kept on this computer, safe from updates: work {work}, Shared {shared}. Its settings and programs join them at its next update.":
+    "Guardado en esta computadora, a salvo de las actualizaciones: trabajo {work}, Compartido {shared}. Sus configuraciones y programas se suman en su próxima actualización.",
+  "Shared holds up to {quota}.": "Compartido admite hasta {quota}.",
+  "Its settings and programs are moving to this computer: they will be there after its next start.":
+    "Sus configuraciones y programas se están moviendo a esta computadora: estarán ahí tras su próximo inicio.",
+  "Export files": "Exportar archivos",
+  "Restore from an export": "Restaurar desde una exportación",
+  "The export leaves out keys, passwords and the browser's sessions; those stay in the sealed backup.":
+    "La exportación deja fuera llaves, contraseñas y las sesiones del navegador; esas quedan en el respaldo cifrado.",
+  "What the kitties made for you, from the Shared folder of their computers: documents, pictures, files. It stays there through updates.":
+    "Lo que los kitties hicieron para ti, desde la carpeta Compartido de sus computadoras: documentos, imágenes, archivos. Se mantiene a través de las actualizaciones.",
+  "Each kitty's folder holds up to {quota}.": "La carpeta de cada kitty admite hasta {quota}.",
+  "Copy it into the library, where every kitty can read it":
+    "Copiarlo a la biblioteca, donde todos los kitties pueden leerlo",
+  "keep in library": "guardar en biblioteca",
+  "Delete {name} from {kitty}'s Shared folder?":
+    "¿Eliminar {name} de la carpeta Compartido de {kitty}?",
+  "Nothing shared yet. Ask a kitty to share a file with you: it leaves it in ~/Shared on its computer and it shows up here.":
+    "Aún no hay nada compartido. Pídele a un kitty que te comparta un archivo: lo deja en ~/Shared en su computadora y aparece aquí.",
+  "Shared files": "Compartido",
   "Back up now": "Respaldar ahora",
   "The backup is sealed and kept away from the desktop, and goes back into it when it is made anew. It is also made when the desktop stops.":
     "El respaldo está cifrado y guardado lejos del escritorio, y vuelve a él cuando se rehace. También se hace cuando el escritorio se detiene.",
@@ -508,6 +562,7 @@ const dict: Dictionary = {
   "you are watching its desktop": "estás viendo su escritorio",
   "running a command": "ejecutando un comando",
   "in use": "en uso",
+  "Starting the desktop…": "Iniciando el escritorio…",
   "Starting…": "Iniciando…",
   "Failed to start: {error}": "No pudo iniciar: {error}",
   "Failed to start": "No pudo iniciar",
@@ -526,6 +581,38 @@ const dict: Dictionary = {
   "{name}'s machine turns itself off after this time without use, never in the middle of a task or while you watch its desktop. {name} knows whether it is on, and turns it on by itself when it needs it.":
     "La máquina de {name} se apaga sola tras este tiempo sin uso, nunca en medio de una tarea ni mientras ves su escritorio. {name} sabe si está encendida y la enciende sola cuando la necesita.",
   off: "apagada",
+  "Correct: {note}": "Corregir: {note}",
+  "Edit: {note}": "Editar: {note}",
+  "What every kitty knows about you: your name, your language, how you like to work. It goes into each kitty's prompt; what one kitty learns alone stays in its own memory, in its drawer.":
+    "Lo que todos los kitties saben de ti: tu nombre, tu idioma, cómo te gusta trabajar. Va en las instrucciones de cada kitty; lo que un kitty aprende solo queda en su propia memoria, en su panel.",
+  "Nothing shared yet.": "Aún no hay nada compartido.",
+  "My name is Ana and I work from Madrid": "Me llamo Ana y trabajo desde Madrid",
+  "A note for every kitty": "Una nota para todos los kitties",
+  "That file is not a kitty's memory.": "Ese archivo no es la memoria de un kitty.",
+  "Save the notes in a file, to keep or to give to another kitty":
+    "Guarda las notas en un archivo, para conservarlas o dárselas a otro kitty",
+  Export: "Exportar",
+  Import: "Importar",
+  "Import notes from a file": "Importar notas desde un archivo",
+  "Notes imported: {n}.": "Notas importadas: {n}.",
+  "Shared memory": "Memoria compartida",
+  "It was in the kitty's prompt for {n} answers":
+    "Estuvo en las instrucciones del kitty en {n} respuestas",
+  "A kitty proposed it: it reaches every kitty once you say yes":
+    "La propuso un kitty: llega a todos cuando digas que sí",
+  "Accept: {note}": "Aceptar: {note}",
+  Accept: "Aceptar",
+  "Search the notes": "Buscar en las notas",
+  "Show the notes of": "Mostrar las notas de",
+  "every scope": "todos los ámbitos",
+  "No note matches.": "Ninguna nota coincide.",
+  unused: "sin uso",
+  "Never in its prompt for two weeks: the next consolidation may drop it":
+    "Dos semanas sin entrar en sus instrucciones: la próxima condensación puede quitarla",
+  "Voice for WhatsApp voice notes": "Voz para las notas de voz de WhatsApp",
+  "{name} now speaks with the voice {voice}.": "{name} ahora habla con la voz {voice}.",
+  "{name} speaks with the gateway's voice.": "{name} habla con la voz del gateway.",
+  "The gateway's voice": "La voz del gateway",
 };
 
 export default dict;

@@ -8,19 +8,20 @@
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit -p .",
+    "test": "node --experimental-strip-types --no-warnings --test --experimental-test-coverage test/*.test.ts",
     "format": "prettier --write src",
     "format:check": "prettier --check src",
     "e2e": "playwright test -c e2e/playwright.config.ts",
     "icon": "node scripts/appicon.mjs"
   },
   "dependencies": {
-    "preact": "^11.0.2",
+    "preact": "^11.1.1",
     "simple-icons": "^16.36.0"
   },
   "devDependencies": {
     "@playwright/test": "1.64.1",
     "@preact/preset-vite": "^2.9.0",
-    "@tailwindcss/postcss": "^4.3.3",
+    "@tailwindcss/postcss": "^4.3.4",
     "esbuild": "^0.28.2",
     "prettier": "^3.6.2",
     "tailwindcss": "^4.3.3",

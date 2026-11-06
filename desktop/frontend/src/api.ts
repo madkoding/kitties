@@ -14,7 +14,15 @@ export interface Kitty {
   status: "created" | "starting" | "running" | "stopped" | "error";
   error?: string;
   connectors?: string[];
-  soul: { name?: string; persona?: string; tone?: string; traits?: string[]; skills?: string[] };
+  soul: {
+    name?: string;
+    persona?: string;
+    tone?: string;
+    traits?: string[];
+    skills?: string[];
+    // voice reads its WhatsApp voice notes (alloy, nova, …); empty or "default": the gateway's.
+    voice?: string;
+  };
   avatar: { breed: string; color: string };
   // Limits bound one task; zero fields take the defaults. Backup takes over a task this kitty gives up on.
   limits?: Limits;
@@ -34,6 +42,8 @@ export interface Kitty {
 // on and when it turns itself off.
 export interface Power {
   state: "on" | "starting" | "off" | "error";
+  // step: what a starting machine is doing ("desktop": its container is up, its desktop coming up).
+  step?: "desktop";
   error?: string;
   off_reason?: "idle" | "manual" | "kitty" | "";
   auto_off_minutes: number;
@@ -89,6 +99,9 @@ export interface MemoryNote {
   strength: number;
   source: string;
   pinned?: boolean;
+  proposed?: boolean;
+  at?: string;
+  uses?: number;
   updated: string;
 }
 
@@ -139,6 +152,9 @@ export interface Goal {
   runs: number;
   last_result?: string;
   from_file?: boolean;
+  // A run that did not finish is picked up again by itself: how many in a row, and the next one.
+  follow_ups?: number;
+  follow_up_at?: string;
 }
 
 // JournalEntry is one line of a kitty's journal: what it did and where it got stuck.
@@ -286,6 +302,8 @@ export interface ProviderView {
   describe: string;
   from_file: boolean;
   error?: string;
+  // fallback is the model thought with while this one is down.
+  fallback?: string;
 }
 
 export interface ConnectorView {
@@ -342,6 +360,8 @@ export interface ConnectorField {
   key?: string;
   // lifetime is how long, in seconds, a token typed in the field lasts.
   lifetime?: number;
+  // options are the values the field picks several of, saved joined by commas.
+  options?: string[];
 }
 
 export interface ConnectorKind {
@@ -367,6 +387,8 @@ export interface SettingsView {
   // day starts the summary with the person's day: calendar, reminders and weather.
   notify: { connector: string; on: string[]; digest?: string; day?: boolean };
   notify_events: string[];
+  // autonomy is how long the kitties keep at a task on their own: empty takes the defaults.
+  autonomy?: { follow_ups: string; brain_wait: string; stand_ins?: string };
   accounts: Account[];
   // oauth_ready are the services a connection signs in to without an app of the person's own.
   oauth_ready?: string[];
@@ -520,6 +542,11 @@ function fixSettings<T>(path: string, data: T): T {
 // request performs one API call and returns its JSON.
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const app = window.go?.main?.App;
+  // A file (a Blob) goes as it is, never as JSON; the app's bridge only carries text.
+  const raw = body instanceof Blob;
+  if (app && raw) {
+    throw new ApiError(0, "Restoring a file works from the browser: open Kitties at its address.");
+  }
   if (app) {
     // A reading that gets no answer from the app fails with a message instead of leaving the
     // screen waiting for good (a message that never comes back through the webview's bridge).
@@ -556,14 +583,14 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   if (!conn.token) {
     conn = await fetchLocalToken(conn);
   }
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = raw ? {} : { "Content-Type": "application/json" };
   if (conn.token) {
     headers.Authorization = "Bearer " + conn.token;
   }
   const res = await fetch(safeGatewayBase(conn.url) + path, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : raw ? (body as Blob) : JSON.stringify(body),
   });
   if (res.status === 401 && conn.token) {
     // The gateway may have restarted with a new token: the local one is tried once more.
@@ -755,11 +782,45 @@ export const api = {
   exposure: () => request<Exposure>("GET", "/v1/exposure"),
   setExposure: (mode: ExposureMode, acceptRisk = false) =>
     request<{ restarting: boolean }>("PUT", "/v1/exposure", { mode, accept_risk: acceptRisk }),
+  // mcp is the MCP connector for Claude; setMcp keeps the switches and the gateway restarts
+  // (exec and approve need acceptRisk); mcpToken is the explicit way to read its token;
+  // rotateMcpToken replaces it (and restarts); the clients are the OAuth sign-ins, revocable.
+  mcp: () => request<McpInfo>("GET", "/v1/mcp"),
+  setMcp: (s: McpSettings, acceptRisk = false) =>
+    request<{ restarting: boolean }>("PUT", "/v1/mcp", { ...s, accept_risk: acceptRisk }),
+  mcpToken: () => request<{ token: string }>("GET", "/v1/mcp/token"),
+  rotateMcpToken: () => request<{ restarting: boolean }>("POST", "/v1/mcp/token"),
+  mcpTest: () => request<{ ok: boolean; tools?: number; error?: string }>("POST", "/v1/mcp/test"),
+  mcpClients: () => request<{ clients: McpClient[] }>("GET", "/v1/mcp/clients"),
+  // whatsapp is the WhatsApp number linked as a device (docs/WHATSAPP.md): turning it on needs
+  // acceptRisk (an unofficial API); link asks for new QR codes, unlink forgets the session.
+  whatsapp: () => request<WhatsAppStatus>("GET", "/v1/whatsapp"),
+  setWhatsApp: (s: WhatsAppSettings, acceptRisk = false) =>
+    request<WhatsAppStatus>("PUT", "/v1/whatsapp", { ...s, accept_risk: acceptRisk }),
+  linkWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/link"),
+  reconnectWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/reconnect"),
+  unlinkWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/unlink"),
+  testWhatsApp: (to: string) =>
+    request<{ ok: boolean; error?: string }>("POST", "/v1/whatsapp/test", { to }),
+  clearWhatsAppHeld: () => request<WhatsAppStatus>("DELETE", "/v1/whatsapp/held"),
+  resendWhatsAppHeld: (id: string) =>
+    request<WhatsAppStatus>("POST", `/v1/whatsapp/held/${encodeURIComponent(id)}/resend`),
+  revokeMcpClient: (id: string) =>
+    request<{ revoked: string }>("DELETE", `/v1/mcp/clients/${encodeURIComponent(id)}`),
   // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
   // up; backupKitty backs them up now; updateKitty moves the desktop to the newest image.
   desktopInfo: (ref: string) => request<DesktopInfo>("GET", `/v1/kitties/${ref}/desktop`),
   backupKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/backup`),
   updateKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/update`),
+  // shared lists what every kitty left in its Shared folder; keepShared copies one into the
+  // library; deleteShared deletes it.
+  shared: () =>
+    request<{ files: SharedFile[]; quota_mb: number }>("GET", "/v1/shared").then((r) => ({
+      files: r.files || [],
+      quota_mb: r.quota_mb || 0,
+    })),
+  keepShared: (kitty: string, path: string) => request("POST", sharedPath(kitty, path, "keep")),
+  deleteShared: (kitty: string, path: string) => request("DELETE", sharedPath(kitty, path)),
   // vault lists the secrets a kitty may type (names and kitties, never values); saveSecret saves
   // one (with a value) or changes who may use it (without).
   vault: () => request<{ secrets: Secret[] }>("GET", "/v1/vault").then((r) => r.secrets || []),
@@ -908,6 +969,17 @@ export const api = {
       (r) => r.note,
     ),
   forgetNote: (kitty: string, id: string) => request("DELETE", `/v1/kitties/${kitty}/memory/${id}`),
+  editNote: (kitty: string, id: string, text: string) =>
+    request<{ note: MemoryNote }>("PUT", `/v1/kitties/${kitty}/memory/${id}`, { text }).then(
+      (r) => r.note,
+    ),
+  sharedNotes: () =>
+    request<{ notes: MemoryNote[] }>("GET", "/v1/memory/shared").then((r) => r.notes),
+  rememberShared: (text: string) =>
+    request<{ note: MemoryNote }>("POST", "/v1/memory/shared", { text }).then((r) => r.note),
+  editShared: (id: string, text: string) =>
+    request<{ note: MemoryNote }>("PUT", `/v1/memory/shared/${id}`, { text }).then((r) => r.note),
+  forgetShared: (id: string) => request("DELETE", `/v1/memory/shared/${id}`),
   setProfile: (kitty: string, demand: number, auto: boolean) =>
     request<{ profile: MemoryProfile }>("PUT", `/v1/kitties/${kitty}/memory/profile`, {
       demand,
@@ -921,6 +993,8 @@ export const api = {
     request("POST", `/v1/chats/${chat}/turns/${index}/feedback`, { rating, note }),
   setNotify: (c: { connector: string; on: string[]; digest?: string }) =>
     request<SettingsView>("PUT", "/v1/settings/notify", c),
+  setAutonomy: (a: { follow_ups: string; brain_wait: string; stand_ins: string }) =>
+    request<SettingsView>("PUT", "/v1/settings/autonomy", a),
   testNotify: (connector = "") =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),
   // The browser session of a gateway served on a network: who is signed in, and the way in and out.
@@ -1143,7 +1217,46 @@ export type DesktopInfo = {
   update_available: boolean;
   auto_update?: boolean;
   backup?: { saved: string; bytes: number };
+  // storage is what the kitty keeps on this computer, which no update deletes.
+  storage?: Storage;
 };
+
+// Storage is what a kitty keeps on the gateway's computer, by folder: its home (settings and the
+// programs it installed for itself, when its desktop keeps it there), its workspace and its
+// Shared folder.
+export type Storage = {
+  home: boolean;
+  home_bytes: number;
+  work_bytes: number;
+  shared_bytes: number;
+  // shared_quota_mb is the most Shared holds; 0 is no limit.
+  shared_quota_mb: number;
+  // moving is true while an older desktop's home waits to go into the new one.
+  moving?: boolean;
+};
+
+// SharedFile is a file a kitty left in its Shared folder for its person.
+export interface SharedFile {
+  kitty: string;
+  path: string;
+  type: string;
+  size: number;
+  updated_at: string;
+}
+
+// sharedPath is where the gateway serves a kitty's shared file.
+export const sharedPath = (kitty: string, path: string, verb = "shared") =>
+  `/v1/kitties/${encodeURIComponent(kitty)}/${verb}/${path.split("/").map(encodeURIComponent).join("/")}`;
+
+// importKitty puts a kitty's files back from an export (.tar.gz), straight to the gateway: the
+// file can be big, and binary.
+export async function importKitty(ref: string, file: Blob): Promise<void> {
+  // A kitty's id is letters, digits, dashes and underscores: nothing else goes into an address.
+  if (!/^[\w-]+$/.test(ref)) {
+    throw new ApiError(400, "not a kitty");
+  }
+  await request("POST", `/v1/kitties/${ref}/import`, file);
+}
 
 export type ExposureMode = "local" | "lan" | "wan";
 
@@ -1155,6 +1268,101 @@ export type Exposure = {
   lan_ip?: string;
   can_change: boolean;
   why?: string;
+};
+
+// McpInfo is the MCP connector (docs/MCP.md) as Settings shows it. It never carries the token:
+// the command reads it from token_file, and mcpToken is the explicit way to get it.
+export type McpInfo = {
+  enabled: boolean;
+  allow_exec: boolean;
+  allow_approve: boolean;
+  oauth: boolean;
+  url: string;
+  token_file: string;
+  command: string;
+  token_managed: boolean;
+  can_change: boolean;
+  why?: string;
+};
+
+export type McpSettings = Pick<McpInfo, "enabled" | "allow_exec" | "allow_approve" | "oauth">;
+
+// WhatsAppSettings are what the person chooses: on or off, who may write (numbers with their
+// country code, digits only once kept), the kitty that answers, and whether it answers in groups:
+// only in the groups of allow_groups (their ids, "…@g.us"), when someone there mentions it.
+export type WhatsAppSettings = {
+  enabled: boolean;
+  allow: string[];
+  kitty: string;
+  groups: boolean;
+  allow_groups: string[];
+  // kitties gives a number (digits) or a group (its id) a kitty of its own.
+  kitties?: Record<string, string>;
+  // max_per_hour is the most messages sent in an hour (0: 60).
+  max_per_hour?: number;
+  // quiet_from and quiet_to ("22:00", "08:00") are the quiet hours; empty: none.
+  quiet_from?: string;
+  quiet_to?: string;
+  // voice is when the kitties answer with a voice note: "" never, "mirror" a voice note gets
+  // one, "always" every answer.
+  voice?: "" | "mirror" | "always";
+};
+
+// WhatsAppHeld is a message the hourly limit did not send: to is a number (digits) or a group
+// (its id, with its name).
+export type WhatsAppHeld = {
+  id: string;
+  at: string;
+  to: string;
+  name?: string;
+  kind: "text" | "voice" | "file" | "reaction";
+  text?: string;
+};
+
+// WhatsAppGroup is a group that wrote lately, to put on the list.
+export type WhatsAppGroup = { id: string; name?: string };
+
+// WhatsAppStatus is the link: qr_png is the code to scan while state is "qr".
+export type WhatsAppStatus = WhatsAppSettings & {
+  kitty_name?: string;
+  state:
+    | "off"
+    | "starting"
+    | "qr"
+    | "qr_expired"
+    | "connected"
+    | "disconnected"
+    | "logged_out"
+    | "error";
+  qr?: string;
+  qr_png?: string;
+  phone?: string;
+  linked: boolean;
+  error?: string;
+  ignored: number;
+  last_message?: string;
+  seen_groups?: WhatsAppGroup[];
+  sent_last_hour?: number;
+  held?: number;
+  held_log?: WhatsAppHeld[];
+  // can_speak is true when there is a speech service for voice notes; risk_accepted once the
+  // person accepted, the first time, that WhatsApp may ban the number.
+  can_speak?: boolean;
+  risk_accepted?: boolean;
+  quiet?: boolean;
+  waiting?: number;
+  can_change: boolean;
+  why?: string;
+};
+
+// McpClient is a remote client (claude.ai) that signed in to the connector with OAuth.
+export type McpClient = {
+  id: string;
+  name: string;
+  host: string;
+  since: string;
+  last_token?: string;
+  revoked?: boolean;
 };
 
 // UpdateStatus says which version of Kitties runs, whether a newer one is out, and whether this
@@ -1332,9 +1540,13 @@ export function watchChat(id: string, onEvent: (e: ChatEvent) => void): () => vo
 }
 
 // artifactText loads a text artifact for reading in the page.
-export async function artifactText(name: string): Promise<string> {
+export function artifactText(name: string): Promise<string> {
+  return fileText(`/v1/artifacts/${encodeURIComponent(name)}`);
+}
+
+// fileText loads a text file the gateway serves (an artifact, a shared file) for reading in the page.
+export async function fileText(path: string): Promise<string> {
   const app = window.go?.main?.App;
-  const path = `/v1/artifacts/${encodeURIComponent(name)}`;
   if (app) {
     const raw = await app.Request("GET", path, "");
     const parsed = JSON.parse(raw) as { status: number; body: string; base64?: string };
@@ -1342,6 +1554,12 @@ export async function artifactText(name: string): Promise<string> {
       throw new ApiError(parsed.status, "no artifact");
     }
     return parsed.base64 ? "(binary file)" : parsed.body;
+  }
+  // A link opened on a first visit (#artifact/<name>) can come before the token: it is fetched
+  // first, or the gateway refuses the file.
+  const conn = savedConnection();
+  if (!conn.token) {
+    await fetchLocalToken(conn);
   }
   const res = await fetch(shotURL(path));
   if (!res.ok) {

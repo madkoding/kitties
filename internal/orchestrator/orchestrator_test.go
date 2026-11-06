@@ -288,7 +288,8 @@ func TestLifecycle(t *testing.T) {
 	if got, _ := m.Get("mimi"); got.Status != kitty.StatusStopped {
 		t.Error("status stopped")
 	}
-	if err := m.Start(ctx, "mimi"); err != nil || !f.running["kitty-mimi"] || f.calls[len(f.calls)-1] != "start" {
+	// The container is started, then its desktop is asked whether it is up.
+	if err := m.Start(ctx, "mimi"); err != nil || !f.running["kitty-mimi"] || strings.Join(f.calls[len(f.calls)-2:], ",") != "start,exec" {
 		t.Errorf("Start of a stopped container: %v %v", err, f.calls)
 	}
 	if out, err := m.Exec(ctx, "mimi", "ls"); err != nil || out != "kitty-mimi:ls" {
