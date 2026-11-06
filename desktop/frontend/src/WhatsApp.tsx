@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import type { Kitty, WhatsAppSettings, WhatsAppStatus } from "./api";
+import type { Kitty, WhatsAppGroup, WhatsAppSettings, WhatsAppStatus } from "./api";
 import { api, errText } from "./api";
 import { ask } from "./Confirm";
 import ConnectorLogo from "./ConnectorLogo";
@@ -22,6 +22,7 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     allow: [...(s.allow || [])],
     kitty: s.kitty || "",
     groups: !!s.groups,
+    allow_groups: [...(s.allow_groups || [])],
   };
 }
 
@@ -30,6 +31,7 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     a.enabled === b.enabled &&
     a.kitty === b.kitty &&
     a.groups === b.groups &&
+    a.allow_groups.join(",") === b.allow_groups.join(",") &&
     a.allow.join(",") === b.allow.join(",")
   );
 }
@@ -253,8 +255,16 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           disabled={disabled}
           onChange={() => setWant({ ...want, groups: !want.groups })}
         />
-        {t("Answer in groups when someone on the list mentions the kitty")}
+        {t("Answer in groups when someone mentions the kitty")}
       </label>
+      {want.groups && (
+        <GroupPicker
+          want={want.allow_groups}
+          seen={cur.seen_groups || []}
+          disabled={disabled}
+          onChange={(allow_groups) => setWant({ ...want, allow_groups })}
+        />
+      )}
       {turningOn && changed && (
         <label class="flex items-center gap-2 mt-3 text-sm cursor-pointer">
           <input
@@ -382,6 +392,53 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           {err}
         </p>
       )}
+    </div>
+  );
+}
+
+// GroupPicker chooses the groups the kitty answers in, from the ones that wrote lately (WhatsApp
+// gives a linked device no list of its groups until they write).
+function GroupPicker(props: {
+  want: string[];
+  seen: WhatsAppGroup[];
+  disabled: boolean;
+  onChange: (groups: string[]) => void;
+}) {
+  const all = [...props.seen];
+  for (const id of props.want) {
+    if (!all.some((g) => g.id === id)) all.push({ id });
+  }
+  const toggle = (id: string) =>
+    props.onChange(
+      props.want.includes(id) ? props.want.filter((x) => x !== id) : [...props.want, id],
+    );
+  return (
+    <div class="mt-2 ml-6" data-testid="whatsapp-group-list">
+      <p class="text-xs text-[var(--t3)] mb-2">
+        {all.length === 0
+          ? t(
+              "No group has written yet: write in a group with the kitties' number and it shows up here.",
+            )
+          : t("Groups that wrote lately. The kitty answers only in the ones you pick.")}
+      </p>
+      <div class="flex flex-wrap gap-2">
+        {all.map((g) => {
+          const on = props.want.includes(g.id);
+          return (
+            <button
+              key={g.id}
+              class={"chip" + (on ? " on" : "")}
+              aria-pressed={on}
+              disabled={props.disabled}
+              title={g.id}
+              onClick={() => toggle(g.id)}
+              data-testid="whatsapp-group"
+            >
+              {g.name || g.id.replace(/@g\.us$/, "")}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

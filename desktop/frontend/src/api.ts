@@ -1196,14 +1196,18 @@ export type McpInfo = {
 export type McpSettings = Pick<McpInfo, "enabled" | "allow_exec" | "allow_approve" | "oauth">;
 
 // WhatsAppSettings are what the person chooses: on or off, who may write (numbers with their
-// country code, digits only once kept), the kitty that answers and whether it answers in groups
-// (only when someone on the list mentions it).
+// country code, digits only once kept), the kitty that answers, and whether it answers in groups:
+// only in the groups of allow_groups (their ids, "…@g.us"), when someone there mentions it.
 export type WhatsAppSettings = {
   enabled: boolean;
   allow: string[];
   kitty: string;
   groups: boolean;
+  allow_groups: string[];
 };
+
+// WhatsAppGroup is a group that wrote lately, to put on the list.
+export type WhatsAppGroup = { id: string; name?: string };
 
 // WhatsAppStatus is the link: qr_png is the code to scan while state is "qr".
 export type WhatsAppStatus = WhatsAppSettings & {
@@ -1224,6 +1228,7 @@ export type WhatsAppStatus = WhatsAppSettings & {
   error?: string;
   ignored: number;
   last_message?: string;
+  seen_groups?: WhatsAppGroup[];
   can_change: boolean;
   why?: string;
 };
