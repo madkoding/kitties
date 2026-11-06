@@ -10,6 +10,15 @@ import { IconPencil, IconTrash } from "./icons";
 // forgotten. The shared notes are every kitty's: they are tended here, in Settings, as well as
 // from any kitty's memory.
 
+// STALE_MS is how long a note may go without reaching a prompt before it shows as unused; the
+// gateway's consolidation then offers to drop it (memory.StaleAfter).
+const STALE_MS = 14 * 24 * 60 * 60 * 1000;
+
+// stale reports whether a note never reached a prompt in two weeks; the person's own never is.
+export function stale(n: MemoryNote, now = Date.now()): boolean {
+  return !n.pinned && !n.uses && !!n.at && now - Date.parse(n.at) > STALE_MS;
+}
+
 export const SCOPE_TAG: Record<string, string> = {
   user: "tag-accent",
   work: "tag-amber",
@@ -78,6 +87,14 @@ export function NoteRow({
           title={t("It was in the kitty's prompt for {n} answers", { n: n.uses })}
         >
           ×{n.uses}
+        </span>
+      )}
+      {stale(n) && draft === null && (
+        <span
+          class="tag"
+          title={t("Never in its prompt for two weeks: the next consolidation may drop it")}
+        >
+          {t("unused")}
         </span>
       )}
       {n.proposed && draft === null && (

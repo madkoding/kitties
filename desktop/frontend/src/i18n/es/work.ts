@@ -576,6 +576,9 @@ const dict: Dictionary = {
   "Show the notes of": "Mostrar las notas de",
   "every scope": "todos los ámbitos",
   "No note matches.": "Ninguna nota coincide.",
+  unused: "sin uso",
+  "Never in its prompt for two weeks: the next consolidation may drop it":
+    "Dos semanas sin entrar en sus instrucciones: la próxima condensación puede quitarla",
 };
 
 export default dict;

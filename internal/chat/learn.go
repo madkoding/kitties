@@ -11,6 +11,7 @@ import (
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/memory"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
 )
 
@@ -93,6 +94,7 @@ func (s *Service) runMemory(id string, a action, k *kitty.Kitty) outcome {
 		}
 		if n.Proposed {
 			s.note(k, agenda.KindLearned, s.goalOf(id), id, "proposed for every kitty: "+n.Text)
+			s.tell(notify.Approval, k, "proposes a note for every kitty", n.Text, id)
 			return outcome{action: a, text: fmt.Sprintf("proposed to every kitty (id %s): it reaches them once the person says yes; until then keep it in mind yourself", n.ID)}
 		}
 		s.note(k, agenda.KindLearned, s.goalOf(id), id, "noted ("+n.Scope+"): "+n.Text)
@@ -385,7 +387,11 @@ func (s *Service) distill(ctx context.Context, k *kitty.Kitty) ([]memory.Note, e
 		}
 	}
 	for _, n := range notes {
-		fmt.Fprintf(&b, "[%s] %s\n", n.Scope, n.Text)
+		mark := ""
+		if memory.Stale(n, s.now()) {
+			mark = " (unused: never in your prompt for two weeks; drop it unless it still matters)"
+		}
+		fmt.Fprintf(&b, "[%s] %s%s\n", n.Scope, n.Text, mark)
 	}
 	if len(notes) == 0 {
 		b.WriteString("(none)\n")
@@ -409,7 +415,7 @@ func (s *Service) distill(ctx context.Context, k *kitty.Kitty) ([]memory.Note, e
 		{Role: "system", Content: "You keep the memory of a kitty, an AI assistant, about the person it works for and about the work. " +
 			"From its current notes and the person's latest feedback, write the consolidated list of notes. Rules: durable preferences " +
 			"and lessons only; short imperative sentences (160 characters at most); merge duplicates; drop what the latest feedback " +
-			"contradicts; keep corrections; never invent; at most 15 notes; a scope is user (how the person likes things done), " +
+			"contradicts; drop the notes marked unused unless they still matter; keep corrections; never invent; at most 15 notes; a scope is user (how the person likes things done), " +
 			"work (a lesson about the work) or project:<name>. Answer with ONLY a JSON array like [{\"scope\":\"user\",\"text\":\"Answer in Spanish\"}]."},
 		{Role: "user", Content: b.String()},
 	})

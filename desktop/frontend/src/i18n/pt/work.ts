@@ -570,6 +570,9 @@ const dict: Dictionary = {
   "Show the notes of": "Mostrar as notas de",
   "every scope": "todos os escopos",
   "No note matches.": "Nenhuma nota corresponde.",
+  unused: "sem uso",
+  "Never in its prompt for two weeks: the next consolidation may drop it":
+    "Duas semanas sem entrar nas instruções: a próxima consolidação pode removê-la",
 };
 
 export default dict;

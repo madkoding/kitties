@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/kitty"
@@ -106,6 +107,8 @@ func TestMemoryInThePromptAndActions(t *testing.T) {
 		t.Errorf("no project = %q", fed)
 	}
 	// A shared note from a kitty is only proposed: it waits for the person's yes.
+	b := &bell{}
+	s.SetNotifier(b)
 	sa.replies = []string{"@memory remember {\"text\": \"Pat lives in Lima\", \"scope\": \"shared\"}", "ok"}
 	_, _ = s.Send(context.Background(), sess.ID, "share it")
 	if fed := sa.seen[len(sa.seen)-1][len(sa.seen[len(sa.seen)-1])-1].Content; !strings.Contains(fed, "proposed to every kitty") {
@@ -116,6 +119,9 @@ func TestMemoryInThePromptAndActions(t *testing.T) {
 	}
 	if !strings.Contains(kinds(j, "a1"), "learned") {
 		t.Error("the proposal is in the journal")
+	}
+	if b.events() != "approval" || b.seen[0].Body != "Pat lives in Lima" {
+		t.Errorf("the person is told a proposal waits: %+v", b.seen)
 	}
 	sa.replies = []string{"ok"}
 	_, _ = s.Send(context.Background(), sess.ID, "next")
@@ -240,9 +246,14 @@ func TestDistillation(t *testing.T) {
 	m.Record(ana.ID, memory.Feedback{Rating: "down", Note: "too long", Request: "summarise", Excerpt: "a very long summary"})
 	// The brain is asked with the notes and the verdicts, and its list replaces what is not pinned.
 	sa.replies = []string{"Here you go:\n[{\"scope\": \"user\", \"text\": \"Keep answers to two lines\"}, {\"scope\": \"WORK\", \"text\": \"Summaries first\"}, {\"text\": \"No scope means user\"}]\nDone."}
+	// Two weeks on, a note that never reached a prompt is marked for the brain to drop.
+	s.now = func() time.Time { return time.Now().Add(memory.StaleAfter + time.Hour) }
 	notes, err := s.Distill(context.Background(), "ana")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if asked := sa.seen[0][1].Content; !strings.Contains(asked, "Correction: too long (unused") || strings.Contains(asked, "Pat wrote this one (unused") {
+		t.Errorf("stale notes = %q", asked)
 	}
 	asked := sa.seen[0][1].Content
 	if strings.Contains(asked, "Every kitty answers in Spanish") {

@@ -453,6 +453,15 @@ var levels = map[int]string{
 	5: "They are strict: be exacting. Verify everything twice, show your evidence, never assume, and ask before anything that cannot be undone.",
 }
 
+// StaleAfter is how long a note may go without reaching a prompt before it counts as unused.
+const StaleAfter = 14 * 24 * time.Hour
+
+// Stale reports whether a note has never been in a prompt for StaleAfter: a distillation may
+// drop it. The person's own notes are never stale.
+func Stale(n Note, now time.Time) bool {
+	return !n.Pinned && n.Uses == 0 && now.Sub(n.At) > StaleAfter
+}
+
 // use counts one more answer for the notes that went into a kitty's prompt.
 func (s *Store) use(kitty string, ids map[string]bool) {
 	if len(ids) == 0 {

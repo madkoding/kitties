@@ -354,3 +354,21 @@ func TestProposedSharedNotesAndUses(t *testing.T) {
 	empty := open(t)
 	_ = empty.Prompt("k1", "", "")
 }
+
+func TestStale(t *testing.T) {
+	now := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	old := now.Add(-StaleAfter - time.Hour)
+	for _, c := range []struct {
+		n    Note
+		want bool
+	}{
+		{Note{At: old}, true},
+		{Note{At: old, Uses: 1}, false},
+		{Note{At: old, Pinned: true}, false},
+		{Note{At: now.Add(-time.Hour)}, false},
+	} {
+		if got := Stale(c.n, now); got != c.want {
+			t.Errorf("Stale(%+v) = %v", c.n, got)
+		}
+	}
+}

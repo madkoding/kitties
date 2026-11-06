@@ -87,8 +87,9 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   (it becomes yours), and a kitty's notes go to a JSON file and come back from one (Export and
   Import in its memory), to keep them or hand them to another kitty. A shared note a kitty writes
   is only *proposed*: it stays out of every prompt until you accept it (or write or correct it
-  yourself). Each note counts the answers it was in the prompt for (×N), and the notes can be
-  searched and narrowed to a scope.
+  yourself), and you are notified as for an action that waits for a yes. Each note counts the answers it was in the prompt for (×N), and the notes can be
+  searched and narrowed to a scope. A note of the kitty's that has not reached a prompt in two
+  weeks shows as *unused*, and the next consolidation drops it unless it still matters.
 - **Action limits.** Nothing is limited by default: a kitty does on a connection what the account
   allows, since that is the service's to limit (the scopes of the sign-in, the permissions of the
   key). Tell a kitty "ask me before posting" or "never delete anything" and it adds the limit to

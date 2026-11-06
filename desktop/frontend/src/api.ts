@@ -92,6 +92,7 @@ export interface MemoryNote {
   source: string;
   pinned?: boolean;
   proposed?: boolean;
+  at?: string;
   uses?: number;
   updated: string;
 }
