@@ -194,7 +194,7 @@ The same can be done by hand: the kitty's window says **a newer desktop is avail
 on this machine is not the one the container runs) and **Update the desktop** does it, when the
 kitty is not in the middle of a task and you do not hold its desktop. Either way it pulls the image, closes the
 browser in an orderly way (`kitty-page quit`, so everything is written to disk), backs up, makes the
-container anew and puts the backup back. The work folder is on your computer and is never touched.
+container anew and puts the backup back. The work, home and Shared folders are on your computer and are never touched (see below).
 
 What the kitty's browser knows lives in that folder already (cookies, saved passwords, local
 storage), and now two things keep it from being lost: the browser closes in an orderly way before
@@ -211,6 +211,38 @@ when the desktop stops, before an update, and with **Back up now**. `kitty-resto
 a container that is made anew (it never overwrites a file that is there: a workspace that kept its
 profile is newer than any backup). A removed kitty's backup is deleted with it.
 
+## What outlives the desktop: home, programs and Shared
+
+Three folders of your computer are mounted into each kitty's desktop, and nothing deletes them: not
+an update, not a stop, not removing the kitty.
+
+| On your computer | In the desktop | What it holds |
+| --- | --- | --- |
+| `<data_dir>/work/<name>` | `~/work` | its files, the browser's profile, its theme and the Debian packages it installed |
+| `<data_dir>/homes/<name>` | `/home/kitty` | its settings (`~/.config`), the programs it installed for itself (`~/.local`: pipx, `pip --user`, `npm install -g`; `/opt/kitty-apps`) |
+| `<data_dir>/shared/<name>` | `~/Shared` | what it made for you: the app shows it in **Library > Shared** |
+
+- **Programs.** A Debian package comes back by itself in a desktop made anew, however it was installed
+  (`kitty-install`, `sudo apt install`: a dpkg hook remembers it); `kitty-install --remove <package>`
+  forgets it. Programs in `~/.local` or `/opt/kitty-apps` are simply there.
+- **Settings.** The home is seeded from the image (`kitty-home`): a file it lacks is copied, and only
+  the desktop's own look (Lumen's menus, picom, PCManFM, GTK) is renewed when the image changes.
+- **Shared.** `kitty-share <file>` copies a file there (`-d folder`, `--list`); the kitty is told so.
+  The page lists every kitty's files together, previews pictures and text, downloads anything, copies
+  a file into the library (**keep in library**) and deletes. Each folder holds up to
+  `containers.shared_quota_mb` (5120, 5 GB; negative: no limit), which `kitty-share` enforces.
+- **Moving an older desktop.** A desktop made before homes lived on your computer has its home inside
+  its container: before that container is removed, its home is copied out (`homes/.moving/<name>.tar`,
+  without `~/.cache`) and put into the new one, which restarts once. If the copy fails, the old
+  desktop is kept as it was and the update says why.
+- **Export and restore.** The kitty's window shows what it keeps and its size, **Export files**
+  downloads a `.tar.gz` of its home, work and Shared folders without keys, passwords or the browser's
+  sessions (those stay in the sealed backup), and **Restore from an export** puts one back into the
+  running desktop (a newer file of the kitty's stays).
+
+![What a kitty keeps on your computer](screenshots/64-desktop-kept-files.png)
+![The library: what the kitties shared](screenshots/62-library-shared.png)
+
 ## Where it lives in the code
 
 | What | Where |
@@ -223,6 +255,7 @@ profile is newer than any backup). A removed kitty's backup is deleted with it.
 | What the kitty knows of its machine, the `machine` tool, the auto turn-on | [`internal/chat/machine.go`](../internal/chat/machine.go) |
 | Taking over: holds, the person's input, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
 | The sealed backups of a kitty's sessions, and the update of a desktop | [`internal/keep`](../internal/keep), [`internal/orchestrator/sessions.go`](../internal/orchestrator/sessions.go) |
+| Home, Shared, the move of an older home, export and restore | [`internal/orchestrator/home.go`](../internal/orchestrator/home.go), [`internal/shared`](../internal/shared), [`internal/gateway/shared.go`](../internal/gateway/shared.go) |
 | The saved secrets a kitty may type, sealed | [`internal/vault`](../internal/vault) |
 | The live view's proxy (voxl) and its tunnel into the container | [`internal/gateway/voxl.go`](../internal/gateway/voxl.go), [`internal/container/tunnel.go`](../internal/container/tunnel.go) |
 | What changed on the display, as rectangles to draw over the last picture | [`internal/rects`](../internal/rects) |

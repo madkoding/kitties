@@ -35,6 +35,7 @@ import (
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/replay"
+	"github.com/madkoding/kitties/internal/shared"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
 )
@@ -141,6 +142,9 @@ type Server struct {
 	updater Updating
 	// maintainer looks after the desktops (update, backup of sessions), nil when nothing does.
 	maintainer Maintainer
+	// shared reads the kitties' Shared folders (shared.go), nil when there are none.
+	shared      *shared.Store
+	sharedQuota int
 	// vault holds the secrets the kitties may type, nil when there is none.
 	vault Vault
 	// memories is what the kitties know about the person, nil when they keep none.
@@ -263,6 +267,7 @@ func (s *Server) routes() {
 	s.memoryRoutes()
 	s.vaultRoutes()
 	s.desktopRoutes()
+	s.sharedRoutes()
 	s.updateRoutes()
 	s.exposureRoutes()
 	s.mcpControlRoutes()

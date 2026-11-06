@@ -75,3 +75,34 @@ export function facets(list: ArtifactRow[]): { kinds: Kind[]; by: string[] } {
   const order: Kind[] = ["doc", "data", "image", "code", "other"];
   return { kinds: order.filter((k) => kinds.has(k)), by: [...by].sort() };
 }
+
+// previewOf is how the reader shows a file of a Shared folder: as a picture, as text, or not at
+// all (a binary document it cannot draw).
+export function previewOf(name: string): "image" | "text" | "none" {
+  const lower = name.toLowerCase();
+  if (/\.(png|jpe?g|gif|webp|bmp)$/.test(lower)) {
+    return "image";
+  }
+  if (
+    /\.(md|markdown|txt|csv|tsv|json|ya?ml|xml|toml|svg|log|ini|conf|html?|css|go|py|js|ts|tsx|jsx|sh|rb|rs|java|c|cpp|h|sql|lua)$/.test(
+      lower,
+    ) ||
+    !/\.[a-z0-9]+$/.test(lower)
+  ) {
+    return "text";
+  }
+  return "none";
+}
+
+// bytes says a size the way a person reads it: 0 B, 812 B, 4.2 KB, 13 MB, 1.5 GB.
+export function bytes(n: number): string {
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let i = 0;
+  let v = Math.max(0, n);
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  const shown = i === 0 || v >= 10 ? Math.round(v).toString() : v.toFixed(1).replace(/\.0$/, "");
+  return `${shown} ${units[i]}`;
+}

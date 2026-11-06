@@ -390,3 +390,70 @@ func TestContainersPutTheMachineInTheHostsZone(t *testing.T) {
 		t.Errorf("unknown: %v", err)
 	}
 }
+
+// homedRecorder is a local side that keeps homes on the host.
+type homedRecorder struct {
+	recorder
+	asked []string
+}
+
+func (h *homedRecorder) ImageHasHome(_ context.Context, image string) (bool, error) {
+	h.asked = append(h.asked, "image "+image)
+	return true, nil
+}
+func (h *homedRecorder) HasHome(_ context.Context, n string) (bool, error) {
+	h.asked = append(h.asked, "has "+n)
+	return false, nil
+}
+func (h *homedRecorder) ExecOut(_ context.Context, n string, _ io.Writer, _ ...string) error {
+	h.asked = append(h.asked, "out "+n)
+	return nil
+}
+func (h *homedRecorder) ExecIn(_ context.Context, n string, _ io.Reader, _ ...string) (string, error) {
+	h.asked = append(h.asked, "in "+n)
+	return "ok", nil
+}
+func (h *homedRecorder) Restart(_ context.Context, n string) error {
+	h.asked = append(h.asked, "restart "+n)
+	return nil
+}
+
+func TestRouterKeepsHomesOnlyForLocalDesktops(t *testing.T) {
+	ctx := context.Background()
+	local := &homedRecorder{}
+	r := &Router{Local: local, Cloud: &recorder{}, IsCloud: func(n string) bool { return strings.HasPrefix(n, "far-") }}
+	if yes, _ := r.ImageHasHome(ctx, "img"); !yes {
+		t.Error("the local image")
+	}
+	if has, _ := r.HasHome(ctx, "home"); has {
+		t.Error("a local desktop asks its side")
+	}
+	if has, _ := r.HasHome(ctx, "far-1"); !has {
+		t.Error("a cloud machine has nothing to move")
+	}
+	if err := r.ExecOut(ctx, "home", io.Discard, "tar"); err != nil {
+		t.Error(err)
+	}
+	if out, err := r.ExecIn(ctx, "home", strings.NewReader(""), "kitty-import"); err != nil || out != "ok" {
+		t.Error(out, err)
+	}
+	if err := r.Restart(ctx, "home"); err != nil {
+		t.Error(err)
+	}
+	if got := strings.Join(local.asked, ","); got != "image img,has home,out home,in home,restart home" {
+		t.Errorf("asked = %s", got)
+	}
+	for _, err := range []error{
+		r.ExecOut(ctx, "far-1", io.Discard, "tar"),
+		func() error { _, e := r.ExecIn(ctx, "far-1", nil, "x"); return e }(),
+		r.Restart(ctx, "far-1"),
+	} {
+		if !errors.Is(err, errNoHomes) {
+			t.Errorf("a cloud machine: %v", err)
+		}
+	}
+	plain := &Router{Local: &recorder{}}
+	if yes, _ := plain.ImageHasHome(ctx, "img"); yes {
+		t.Error("a side without homes")
+	}
+}

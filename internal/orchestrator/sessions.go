@@ -110,6 +110,8 @@ type DesktopInfo struct {
 	AutoUpdate bool `json:"auto_update"`
 	// Backup says when its sessions were last backed up, when they were.
 	Backup *keep.Info `json:"backup,omitempty"`
+	// Storage is what it keeps on the host, which no update deletes.
+	Storage Storage `json:"storage"`
 }
 
 func (m *Manager) desktopKitty(ref string) (*kitty.Kitty, error) {
@@ -129,7 +131,7 @@ func (m *Manager) DesktopInfo(ctx context.Context, ref string) (DesktopInfo, err
 	if err != nil {
 		return DesktopInfo{}, err
 	}
-	info := DesktopInfo{Image: m.cfg.Containers.Image, AutoUpdate: m.cfg.Containers.AutoUpdate}
+	info := DesktopInfo{Image: m.cfg.Containers.Image, AutoUpdate: m.cfg.Containers.AutoUpdate, Storage: m.storage(k)}
 	if exists, _, err := m.containerState(ctx, k.Container); err == nil && exists {
 		info.UpdateAvailable, _ = m.ctr().ImageStale(ctx, k.Container, info.Image)
 	}
@@ -267,10 +269,7 @@ func (m *Manager) renew(ctx context.Context, k *kitty.Kitty, auto bool) error {
 				return err
 			}
 		}
-		if running {
-			m.saveSessions(ctx, k)
-		}
-		if err := m.ctr().Remove(ctx, k.Container); err != nil {
+		if err := m.dropContainer(ctx, k, running); err != nil {
 			return m.fail(k.ID, err)
 		}
 	}

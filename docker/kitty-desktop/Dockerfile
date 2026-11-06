@@ -8,7 +8,9 @@
 # from the chat. Chromium for the web, LibreOffice for office documents (also headless: `soffice
 # --headless --convert-to pdf file.docx`), Inkscape, ImageMagick and mtPaint for drawing;
 # kitty-install adds more from Debian, and they are installed again when the container is made
-# anew. No port is published (the browser's DevTools listens on the container's own loopback only): the
+# anew. The home (/home/kitty: settings, ~/.local, /opt/kitty-apps) and ~/Shared are folders of
+# the host when the gateway mounts them (label kitties.home): they outlive updates. No port is
+# published (the browser's DevTools listens on the container's own loopback only): the
 # orchestrator reaches the container through `docker exec`.
 #
 #   docker build -t ghcr.io/madkoding/kitty-desktop:latest docker/kitty-desktop
@@ -100,7 +102,11 @@ RUN curl -fsSL -o /tmp/voxl.tar.gz "https://github.com/tembo/voxl/archive/${VOXL
 FROM debian:trixie-slim
 
 # Dark everywhere: GTK 3 programs (LibreOffice among them) in Adwaita's dark variant.
+# Programs the kitty installs for itself go to its home, which outlives the container: pipx, pip
+# --user and `npm install -g` into ~/.local, anything else into /opt/kitty-apps (~/.local/opt).
 ENV DEBIAN_FRONTEND=noninteractive \
+    PATH=/home/kitty/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    NPM_CONFIG_PREFIX=/home/kitty/.local \
     DISPLAY=:99 \
     SCREEN=1280x800x24 \
     LANG=C.UTF-8 \
@@ -157,6 +163,10 @@ COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch
 COPY --chmod=755 kitty-install.sh /usr/local/bin/kitty-install
 COPY --chmod=755 kitty-apt.sh /usr/local/sbin/kitty-apt
+COPY --chmod=755 kitty-packages.sh /usr/local/sbin/kitty-packages
+COPY --chmod=755 kitty-home.sh /usr/local/bin/kitty-home
+COPY --chmod=755 kitty-import.sh /usr/local/bin/kitty-import
+COPY --chmod=755 kitty-share.sh /usr/local/bin/kitty-share
 COPY --chmod=755 kitty-stream.sh /usr/local/bin/kitty-stream
 COPY --from=grab --chmod=755 /kitty-grab /usr/local/bin/kitty-grab
 COPY --chmod=755 kitty-clip.sh /usr/local/bin/kitty-clip
@@ -176,6 +186,24 @@ COPY --chown=kitty:kitty picom.conf /home/kitty/.config/picom/picom.conf
 # Sound: PulseAudio with one virtual output ("output", started by the entrypoint); every program
 # finds it through this socket, and voxl streams its monitor as Opus.
 RUN printf 'default-server = unix:/tmp/kitty-pulse/native\nautospawn = no\n' >> /etc/pulse/client.conf
+
+# What outlives the container. The packages the image comes with (any other the kitty installs is
+# remembered by dpkg's hook, kitty-packages); /opt/kitty-apps in its home; the Shared folder,
+# bookmarked in the file manager and the file dialogs; and a copy of the home the image made,
+# which kitty-home seeds a home of the host from (skel.managed: what an update renews).
+RUN apt-mark showmanual | sort -u >/usr/share/kitties-base-packages \
+    && mkdir -p /usr/share/kitties && mv /usr/share/kitties-base-packages /usr/share/kitties/base-packages \
+    && printf 'DPkg::Post-Invoke { "/usr/local/sbin/kitty-packages || true"; };\n' >/etc/apt/apt.conf.d/99kitties \
+    && mkdir -p /home/kitty/.local/opt /home/kitty/.local/bin /home/kitty/Shared \
+    && ln -s /home/kitty/.local/opt /opt/kitty-apps \
+    && printf 'file:///home/kitty/Shared Shared\nfile:///home/kitty/work work\n' >/home/kitty/.config/gtk-3.0/bookmarks \
+    && chown -R kitty:kitty /home/kitty \
+    && cp -a /home/kitty /usr/share/kitties/skel && rm -rf /usr/share/kitties/skel/work /usr/share/kitties/skel/Shared \
+    && printf '%s\n' .config/lumen .config/picom .config/pcmanfm .config/libfm .config/gtk-3.0/settings.ini \
+        .Xresources .gtkrc-2.0 >/usr/share/kitties/skel.managed \
+    && (cd /usr/share/kitties/skel && find . -type f -exec sha256sum {} + | sort | sha256sum | cut -c1-16) \
+        >/usr/share/kitties/skel.id
+LABEL kitties.home="1"
 
 # The lumen-wm commit inside (empty on a local build that did not pass it: see the file).
 ARG LUMEN_COMMIT=
