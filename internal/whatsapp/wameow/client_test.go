@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"testing"
@@ -34,6 +35,11 @@ type fakeConn struct {
 	presences  []string
 	files      map[string][]byte // by media type
 	downErr    error
+	upErr      error
+	uploads    []whatsmeow.MediaType
+	groups     map[string]string
+	groupAsks  int
+	msgs       []*waE2E.Message
 }
 
 func (f *fakeConn) AddEventHandler(h whatsmeow.EventHandler) uint32 {
@@ -64,6 +70,7 @@ func (f *fakeConn) SendMessage(_ context.Context, to types.JID, m *waE2E.Message
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.sent = append(f.sent, to.String()+" "+m.GetConversation())
+	f.msgs = append(f.msgs, m)
 	return whatsmeow.SendResponse{}, f.sendErr
 }
 
@@ -82,6 +89,24 @@ func (f *fakeConn) Download(_ context.Context, m whatsmeow.DownloadableMessage) 
 	}
 	type typed interface{ GetMimetype() string }
 	return f.files[m.(typed).GetMimetype()], nil
+}
+
+func (f *fakeConn) Upload(_ context.Context, data []byte, kind whatsmeow.MediaType) (whatsmeow.UploadResponse, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.uploads = append(f.uploads, kind)
+	return whatsmeow.UploadResponse{URL: "https://mmg/x", DirectPath: "/x", FileLength: uint64(len(data))}, f.upErr
+}
+
+func (f *fakeConn) GetGroupInfo(_ context.Context, jid types.JID) (*types.GroupInfo, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.groupAsks++
+	name, ok := f.groups[jid.String()]
+	if !ok {
+		return nil, errors.New("not a member")
+	}
+	return &types.GroupInfo{GroupName: types.GroupName{Name: name}}, nil
 }
 
 func (f *fakeConn) Logout(context.Context) error {
@@ -486,5 +511,134 @@ func TestMediaThroughRun(t *testing.T) {
 	ev, ok := rec.last(whatsapp.EvMessage)
 	if !ok || ev.Text != "mira" || len(ev.Files) != 1 || ev.Files[0].Name != "picture.jpg" {
 		t.Fatalf("message = %+v", ev)
+	}
+}
+
+func TestSendFile(t *testing.T) {
+	s, _ := paired(t)
+	blob, _ := s.Export()
+	f := &fakeConn{}
+	c := clientWith(f)
+	if err := c.SendFile(context.Background(), "1", whatsapp.File{}, ""); !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("before the start = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx, blob, func(whatsapp.Event) {}) }()
+	wait(t, "the connection", func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.connected })
+	files := []whatsapp.File{
+		{Name: "a.png", MIME: "image/png", Data: []byte("png")},
+		{Name: "b.mp4", MIME: "video/mp4", Data: []byte("mp4")},
+		{Name: "c.ogg", MIME: "audio/ogg", Data: []byte("ogg")},
+		{Name: "d.pdf", MIME: "application/pdf", Data: []byte("pdf")},
+		{Name: "e.bin", Data: []byte("bin")},
+	}
+	for _, file := range files {
+		if err := c.SendFile(context.Background(), "120363@g.us", file, "mira"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := c.SendFile(context.Background(), "56912345678", files[2], ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SendFile(context.Background(), "a:x@s.whatsapp.net", files[0], ""); err == nil {
+		t.Fatal("sent to a bad JID")
+	}
+	f.mu.Lock()
+	f.upErr = errors.New("upload failed")
+	f.mu.Unlock()
+	if err := c.SendFile(context.Background(), "1", files[0], ""); err == nil {
+		t.Fatal("a failed upload was sent")
+	}
+	f.mu.Lock()
+	f.upErr, f.sendErr = nil, errors.New("socket closed")
+	f.mu.Unlock()
+	if err := c.SendFile(context.Background(), "1", files[0], ""); err == nil {
+		t.Fatal("a failed send said sent")
+	}
+	cancel()
+	<-done
+	want := []whatsmeow.MediaType{whatsmeow.MediaImage, whatsmeow.MediaVideo, whatsmeow.MediaAudio, whatsmeow.MediaDocument, whatsmeow.MediaDocument, whatsmeow.MediaAudio, whatsmeow.MediaImage, whatsmeow.MediaImage}
+	if fmt.Sprint(f.uploads) != fmt.Sprint(want) {
+		t.Fatalf("uploads = %v", f.uploads)
+	}
+	m := f.msgs
+	if m[0].GetImageMessage().GetCaption() != "mira" || m[0].GetImageMessage().GetFileLength() != 3 ||
+		m[1].GetVideoMessage().GetCaption() != "mira" ||
+		m[2].GetAudioMessage() == nil || m[3].GetConversation() != "mira" ||
+		m[4].GetDocumentMessage().GetFileName() != "d.pdf" || m[4].GetDocumentMessage().GetCaption() != "mira" ||
+		m[5].GetDocumentMessage().GetMimetype() != "application/octet-stream" ||
+		m[6].GetAudioMessage() == nil || len(m) != 8 {
+		t.Fatalf("messages = %v", m)
+	}
+	if m[7].GetImageMessage().Caption != nil {
+		t.Fatal("an empty caption was set")
+	}
+}
+
+func TestStickersPlacesAndContacts(t *testing.T) {
+	s, dev := paired(t)
+	pn := types.NewJID("56912345678", types.DefaultUserServer)
+	text := func(m *waE2E.Message) string {
+		return translate(s, dev, &events.Message{Info: types.MessageInfo{MessageSource: types.MessageSource{Sender: pn}}, Message: m})[0].Text
+	}
+	cases := map[string]*waE2E.Message{
+		"(sticker) 😀": {StickerMessage: &waE2E.StickerMessage{Emojis: proto.String("😀")}},
+		"(sticker)":   {StickerMessage: &waE2E.StickerMessage{}},
+		"(location) Casa Av. Siempre Viva 742 https://maps.google.com/?q=-33.450000,-70.660000": {LocationMessage: &waE2E.LocationMessage{
+			DegreesLatitude: proto.Float64(-33.45), DegreesLongitude: proto.Float64(-70.66), Name: proto.String("Casa"), Address: proto.String("Av. Siempre Viva 742")}},
+		"(live location) aquí voy https://maps.google.com/?q=1.000000,2.000000": {LiveLocationMessage: &waE2E.LiveLocationMessage{
+			DegreesLatitude: proto.Float64(1), DegreesLongitude: proto.Float64(2), Caption: proto.String("aquí voy")}},
+		"(contact) Ana: +56 9 8765 4321, +1 555 0100": {ContactMessage: &waE2E.ContactMessage{DisplayName: proto.String("Ana"),
+			Vcard: proto.String("BEGIN:VCARD\nVERSION:3.0\nFN:Ana\nitem1.TEL;waid=56987654321:+56 9 8765 4321\nTEL;type=CELL:+1 555 0100\nTEL:\nEND:VCARD")}},
+		"(contact) +1 555": {ContactMessage: &waE2E.ContactMessage{Vcard: proto.String("TEL:+1 555")}},
+		"(contact) Bob":    {ContactMessage: &waE2E.ContactMessage{DisplayName: proto.String("Bob")}},
+		"(contacts) Ana: 1; Bob": {ContactsArrayMessage: &waE2E.ContactsArrayMessage{Contacts: []*waE2E.ContactMessage{
+			{DisplayName: proto.String("Ana"), Vcard: proto.String("TEL:1")}, {DisplayName: proto.String("Bob")}}}},
+	}
+	for want, m := range cases {
+		if got := text(m); got != want {
+			t.Fatalf("got %q, want %q", got, want)
+		}
+	}
+	// A sticker comes as its picture too.
+	f := &fakeConn{files: map[string][]byte{"image/webp": []byte("webp")}}
+	got := media(context.Background(), f, &waE2E.Message{StickerMessage: &waE2E.StickerMessage{Mimetype: proto.String("image/webp")}})
+	if len(got) != 1 || got[0].Name != "sticker.webp" || got[0].MIME != "image/webp" {
+		t.Fatalf("sticker = %+v", got)
+	}
+}
+
+func TestGroupNames(t *testing.T) {
+	s, _ := paired(t)
+	blob, _ := s.Export()
+	f := &fakeConn{groups: map[string]string{"120363@g.us": "Familia"}}
+	c := clientWith(f)
+	rec := &recorder{}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx, blob, rec.emit) }()
+	wait(t, "the handler", func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.handler != nil && f.connected })
+	msg := func(chat string) {
+		f.fire(&events.Message{Info: types.MessageInfo{MessageSource: types.MessageSource{
+			Sender: types.NewJID("56912345678", types.DefaultUserServer), Chat: types.NewJID(chat, types.GroupServer), IsGroup: true}},
+			Message: &waE2E.Message{Conversation: proto.String("hola")}})
+	}
+	msg("120363")
+	msg("120363")
+	msg("999")
+	msg("999")
+	cancel()
+	<-done
+	var names []string
+	rec.mu.Lock()
+	for _, ev := range rec.evs {
+		if ev.Kind == whatsapp.EvMessage {
+			names = append(names, ev.ChatName)
+		}
+	}
+	rec.mu.Unlock()
+	if strings.Join(names, ",") != "Familia,Familia,," || f.groupAsks != 2 {
+		t.Fatalf("names = %q, asked %d", names, f.groupAsks)
 	}
 }

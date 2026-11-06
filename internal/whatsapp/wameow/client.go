@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -34,6 +35,8 @@ type conn interface {
 	Logout(ctx context.Context) error
 	SendChatPresence(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error
 	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
+	Upload(ctx context.Context, plaintext []byte, appInfo whatsmeow.MediaType) (whatsmeow.UploadResponse, error)
+	GetGroupInfo(ctx context.Context, jid types.JID) (*types.GroupInfo, error)
 }
 
 // Client is a whatsapp.Client over whatsmeow.
@@ -74,10 +77,14 @@ func (c *Client) Run(ctx context.Context, session []byte, emit func(whatsapp.Eve
 		c.mu.Unlock()
 	}()
 	over := make(chan struct{}, 1)
+	names := groupNames{names: map[types.JID]string{}}
 	cn.AddEventHandler(func(evt any) {
 		evs := translate(st, dev, evt)
 		if m, ok := evt.(*events.Message); ok && len(evs) == 1 {
 			evs[0].Files = media(ctx, cn, m.Message)
+			if m.Info.IsGroup {
+				evs[0].ChatName = names.of(ctx, cn, m.Info.Chat.ToNonAD())
+			}
 		}
 		for _, ev := range evs {
 			if ev.Kind == whatsapp.EvConnected {
@@ -138,6 +145,30 @@ func (c *Client) Run(ctx context.Context, session []byte, emit func(whatsapp.Eve
 	}
 }
 
+// groupNames are the names of the groups that wrote, asked once each.
+type groupNames struct {
+	mu    sync.Mutex
+	names map[types.JID]string
+}
+
+func (g *groupNames) of(ctx context.Context, cn conn, jid types.JID) string {
+	g.mu.Lock()
+	name, ok := g.names[jid]
+	g.mu.Unlock()
+	if ok {
+		return name
+	}
+	gctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if info, err := cn.GetGroupInfo(gctx, jid); err == nil && info != nil {
+		name = info.Name
+	}
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.names[jid] = name
+	return name
+}
+
 // flush hands out the session when it changed.
 func flush(st *Store, emit func(whatsapp.Event)) {
 	if !st.Dirty() {
@@ -173,7 +204,7 @@ func translate(st *Store, dev *store.Device, evt any) []whatsapp.Event {
 		}
 		m := e.Message
 		text := firstOf(m.GetConversation(), m.GetExtendedTextMessage().GetText(), m.GetImageMessage().GetCaption(),
-			m.GetVideoMessage().GetCaption(), m.GetDocumentMessage().GetCaption())
+			m.GetVideoMessage().GetCaption(), m.GetDocumentMessage().GetCaption(), described(m))
 		ev := whatsapp.Event{
 			Kind: whatsapp.EvMessage, From: phoneOf(st, e.Info.Sender, e.Info.SenderAlt),
 			Name: e.Info.PushName, Text: text, ID: e.Info.ID, Group: e.Info.IsGroup,
@@ -185,6 +216,69 @@ func translate(st *Store, dev *store.Device, evt any) []whatsapp.Event {
 		return []whatsapp.Event{ev}
 	}
 	return nil
+}
+
+// described is the text of a sticker, a location or a contact, which carry none of their own.
+func described(m *waE2E.Message) string {
+	if x := m.GetStickerMessage(); x != nil {
+		return strings.TrimSpace("(sticker) " + x.GetEmojis())
+	}
+	if x := m.GetLocationMessage(); x != nil {
+		return place("(location)", x.GetDegreesLatitude(), x.GetDegreesLongitude(), x.GetName(), x.GetAddress(), x.GetComment())
+	}
+	if x := m.GetLiveLocationMessage(); x != nil {
+		return place("(live location)", x.GetDegreesLatitude(), x.GetDegreesLongitude(), x.GetCaption())
+	}
+	if x := m.GetContactMessage(); x != nil {
+		return "(contact) " + contact(x)
+	}
+	if x := m.GetContactsArrayMessage(); x != nil {
+		var out []string
+		for _, c := range x.GetContacts() {
+			out = append(out, contact(c))
+		}
+		return "(contacts) " + strings.Join(out, "; ")
+	}
+	return ""
+}
+
+// place is a location as a line with a map link.
+func place(kind string, lat, lng float64, words ...string) string {
+	parts := []string{kind}
+	for _, w := range words {
+		if w = strings.TrimSpace(w); w != "" {
+			parts = append(parts, w)
+		}
+	}
+	return strings.Join(parts, " ") + fmt.Sprintf(" https://maps.google.com/?q=%.6f,%.6f", lat, lng)
+}
+
+// contact is a shared contact as "Name: +number, +number", its numbers read from its vCard.
+func contact(c *waE2E.ContactMessage) string {
+	name := strings.TrimSpace(c.GetDisplayName())
+	var tels []string
+	for _, l := range strings.Split(c.GetVcard(), "\n") {
+		l = strings.TrimSpace(l)
+		key, _, ok := strings.Cut(l, ":")
+		key, _, _ = strings.Cut(key, ";")
+		if i := strings.LastIndex(key, "."); i >= 0 {
+			key = key[i+1:] // item1.TEL
+		}
+		if !ok || !strings.EqualFold(key, "TEL") {
+			continue
+		}
+		// TEL;waid=569…:+56 9 … keeps the number after the last colon.
+		if val := strings.TrimSpace(l[strings.LastIndex(l, ":")+1:]); val != "" {
+			tels = append(tels, val)
+		}
+	}
+	if len(tels) == 0 {
+		return name
+	}
+	if name == "" {
+		return strings.Join(tels, ", ")
+	}
+	return name + ": " + strings.Join(tels, ", ")
 }
 
 func firstOf(texts ...string) string {
@@ -253,6 +347,9 @@ func media(ctx context.Context, cn conn, m *waE2E.Message) []whatsapp.File {
 	}
 	if x := m.GetAudioMessage(); x != nil {
 		items = append(items, item{x, x.GetFileLength(), "audio" + ext(x.GetMimetype(), ".ogg"), x.GetMimetype(), x.GetPTT()})
+	}
+	if x := m.GetStickerMessage(); x != nil {
+		items = append(items, item{x, x.GetFileLength(), "sticker" + ext(x.GetMimetype(), ".webp"), firstOf(x.GetMimetype(), "image/webp"), false})
 	}
 	var out []whatsapp.File
 	for _, it := range items {
@@ -337,6 +434,61 @@ func (c *Client) Send(ctx context.Context, to, text string) error {
 		return err
 	}
 	_, err = cn.SendMessage(ctx, jid, &waE2E.Message{Conversation: proto.String(text)})
+	return err
+}
+
+// SendFile implements whatsapp.Client: a picture, video or audio goes as one, anything else as
+// a document.
+func (c *Client) SendFile(ctx context.Context, to string, f whatsapp.File, caption string) error {
+	cn, err := c.current()
+	if err != nil {
+		return err
+	}
+	jid, err := jidOf(to)
+	if err != nil {
+		return err
+	}
+	mime := firstOf(f.MIME, "application/octet-stream")
+	kind := whatsmeow.MediaDocument
+	switch {
+	case mime == "image/jpeg" || mime == "image/png":
+		kind = whatsmeow.MediaImage
+	case mime == "video/mp4":
+		kind = whatsmeow.MediaVideo
+	case strings.HasPrefix(mime, "audio/"):
+		kind = whatsmeow.MediaAudio
+	}
+	up, err := cn.Upload(ctx, f.Data, kind)
+	if err != nil {
+		return err
+	}
+	var capt *string
+	if caption != "" {
+		capt = proto.String(caption)
+	}
+	size := proto.Uint64(up.FileLength)
+	var msg *waE2E.Message
+	switch kind {
+	case whatsmeow.MediaImage:
+		msg = &waE2E.Message{ImageMessage: &waE2E.ImageMessage{Caption: capt, Mimetype: proto.String(mime),
+			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: size}}
+	case whatsmeow.MediaVideo:
+		msg = &waE2E.Message{VideoMessage: &waE2E.VideoMessage{Caption: capt, Mimetype: proto.String(mime),
+			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: size}}
+	case whatsmeow.MediaAudio:
+		msg = &waE2E.Message{AudioMessage: &waE2E.AudioMessage{Mimetype: proto.String(mime),
+			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: size}}
+	default:
+		msg = &waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{Caption: capt, Mimetype: proto.String(mime), FileName: proto.String(f.Name), Title: proto.String(f.Name),
+			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: size}}
+	}
+	if _, err := cn.SendMessage(ctx, jid, msg); err != nil {
+		return err
+	}
+	// An audio has no caption: its words go after it.
+	if kind == whatsmeow.MediaAudio && caption != "" {
+		_, err = cn.SendMessage(ctx, jid, &waE2E.Message{Conversation: proto.String(caption)})
+	}
 	return err
 }
 
