@@ -1,0 +1,251 @@
+package gateway
+
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+	"testing"
+
+	"github.com/madkoding/kitties/internal/chat"
+	"github.com/madkoding/kitties/internal/kitty"
+)
+
+const mcpToken = "mcp-secret-token"
+
+func mcpServer(exec bool) (*Server, *fakeFleet, *fakeChats) {
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": {ID: "a1", Name: "ana", Status: kitty.StatusRunning}}}
+	c := &fakeChats{sessions: map[string]*chat.Session{}}
+	return New(f, c, "gw-token", "test").WithMCP(mcpToken, exec), f, c
+}
+
+func rpc(s *Server, method string, params any) (map[string]any, int) {
+	body, _ := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 1, "method": method, "params": params})
+	rec := do(s, "POST", "/mcp", string(body), func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+mcpToken) })
+	var out map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &out)
+	return out, rec.Code
+}
+
+// tool calls one tool and returns the first text of its answer and whether it failed.
+func tool(t *testing.T, s *Server, name string, args any) (text string, isErr bool, resp map[string]any) {
+	t.Helper()
+	resp, code := rpc(s, "tools/call", map[string]any{"name": name, "arguments": args})
+	if code != 200 {
+		t.Fatalf("%s: status %d", name, code)
+	}
+	res, ok := resp["result"].(map[string]any)
+	if !ok {
+		return "", true, resp
+	}
+	isErr, _ = res["isError"].(bool)
+	if c, _ := res["content"].([]any); len(c) > 0 {
+		text, _ = c[0].(map[string]any)["text"].(string)
+	}
+	return text, isErr, resp
+}
+
+func TestMCPOffByDefault(t *testing.T) {
+	s := newServer("gw-token")
+	if rec := do(s, "POST", "/mcp", `{}`, nil); rec.Code == 200 {
+		t.Fatalf("mcp answered while off: %d", rec.Code)
+	}
+	if New(nil, nil, "t", "v").WithMCP("", true).mux == nil {
+		t.Fatal("unreachable")
+	}
+}
+
+func TestMCPAuth(t *testing.T) {
+	s, _, _ := mcpServer(false)
+	body := `{"jsonrpc":"2.0","id":1,"method":"ping"}`
+	for name, mod := range map[string]func(*http.Request){
+		"no token":      nil,
+		"gateway token": func(r *http.Request) { r.Header.Set("Authorization", "Bearer gw-token") },
+		"query token":   func(r *http.Request) { r.URL.RawQuery = "token=" + mcpToken },
+		"wrong":         func(r *http.Request) { r.Header.Set("Authorization", "Bearer nope") },
+	} {
+		if rec := do(s, "POST", "/mcp", body, mod); rec.Code != 401 {
+			t.Errorf("%s: status %d, want 401", name, rec.Code)
+		}
+	}
+	// A web page of another origin is refused even with the token; the same origin is let in.
+	rec := do(s, "POST", "/mcp", body, func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+mcpToken)
+		r.Header.Set("Origin", "http://evil.example")
+	})
+	if rec.Code != 403 {
+		t.Errorf("foreign origin: %d", rec.Code)
+	}
+	rec = do(s, "POST", "/mcp", body, func(r *http.Request) {
+		r.Header.Set("Authorization", "Bearer "+mcpToken)
+		r.Header.Set("Origin", "http://"+r.Host)
+	})
+	if rec.Code != 200 {
+		t.Errorf("same origin: %d", rec.Code)
+	}
+}
+
+func TestMCPRateLimit(t *testing.T) {
+	s, _, _ := mcpServer(false)
+	var last int
+	for i := 0; i < 15; i++ {
+		last = do(s, "POST", "/mcp", `{}`, func(r *http.Request) { r.Header.Set("Authorization", "Bearer bad") }).Code
+	}
+	if last != http.StatusTooManyRequests {
+		t.Errorf("guessing the token is not limited: %d", last)
+	}
+}
+
+func TestMCPProtocol(t *testing.T) {
+	s, _, _ := mcpServer(false)
+	resp, _ := rpc(s, "initialize", map[string]any{"protocolVersion": "2025-03-26"})
+	if resp["result"].(map[string]any)["protocolVersion"] != "2025-03-26" {
+		t.Errorf("initialize: %v", resp)
+	}
+	resp, _ = rpc(s, "tools/list", nil)
+	names := map[string]bool{}
+	for _, x := range resp["result"].(map[string]any)["tools"].([]any) {
+		names[x.(map[string]any)["name"].(string)] = true
+	}
+	for _, n := range []string{"kitty_list", "kitty_create", "chat_send", "kitty_screenshot", "fleet_status"} {
+		if !names[n] {
+			t.Errorf("tool %s missing", n)
+		}
+	}
+	if names["kitty_exec"] {
+		t.Error("exec is off by default")
+	}
+	if s, _, _ := mcpServer(true); true {
+		resp, _ = rpc(s, "tools/list", nil)
+		if !strings.Contains(string(mustJSON(resp)), "kitty_exec") {
+			t.Error("exec missing when allowed")
+		}
+	}
+}
+
+func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
+
+func TestMCPFleetTools(t *testing.T) {
+	s, f, _ := mcpServer(false)
+	if text, isErr, _ := tool(t, s, "kitty_list", map[string]any{}); isErr || !strings.Contains(text, "ana") {
+		t.Errorf("kitty_list: %q", text)
+	}
+	if text, _, _ := tool(t, s, "fleet_status", map[string]any{}); !strings.Contains(text, `"version": "test"`) {
+		t.Errorf("fleet_status: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "provider_list", map[string]any{}); isErr {
+		t.Error("provider_list failed")
+	}
+	if text, _, _ := tool(t, s, "kitty_get", map[string]any{"ref": "ana"}); !strings.Contains(text, "a1") {
+		t.Errorf("kitty_get: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "kitty_get", map[string]any{"ref": "ghost"}); !isErr {
+		t.Error("a missing kitty is an error result")
+	}
+	text, _, _ := tool(t, s, "kitty_create", map[string]any{"name": "bob", "soul": map[string]any{"persona": "calm"}})
+	if !strings.Contains(text, "id-bob") || !strings.Contains(text, kitty.StatusRunning) {
+		t.Errorf("kitty_create: %q", text)
+	}
+	if text, _, _ = tool(t, s, "kitty_create", map[string]any{"name": "cy", "start": false}); !strings.Contains(text, kitty.StatusCreated) {
+		t.Errorf("create without start: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "kitty_create", map[string]any{"name": "ana"}); !isErr {
+		t.Error("a duplicate name fails")
+	}
+	if text, _, _ = tool(t, s, "kitty_stop", map[string]any{"ref": "ana"}); !strings.Contains(text, kitty.StatusStopped) {
+		t.Errorf("stop: %q", text)
+	}
+	if text, _, _ = tool(t, s, "kitty_start", map[string]any{"ref": "ana"}); !strings.Contains(text, kitty.StatusRunning) {
+		t.Errorf("start: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "kitty_start", map[string]any{"ref": "ghost"}); !isErr {
+		t.Error("starting a missing kitty fails")
+	}
+	// Removing needs the confirmation.
+	if _, isErr, _ := tool(t, s, "kitty_remove", map[string]any{"ref": "ana"}); !isErr || len(f.kitties) != 3 {
+		t.Error("remove without confirm must refuse")
+	}
+	if _, isErr, _ := tool(t, s, "kitty_remove", map[string]any{"ref": "ana", "confirm": true}); isErr || len(f.kitties) != 2 {
+		t.Error("remove with confirm")
+	}
+	if _, isErr, _ := tool(t, s, "kitty_remove", map[string]any{"ref": "ana", "confirm": true}); !isErr {
+		t.Error("removing twice fails")
+	}
+	// A lifecycle that works but whose kitty is gone afterwards still says ok.
+	f.kitties["z"] = &kitty.Kitty{ID: "z", Name: "zed"}
+	f.fail = errors.New("boom")
+	if _, isErr, _ := tool(t, s, "kitty_stop", map[string]any{"ref": "zed"}); !isErr {
+		t.Error("a failing fleet is an error result")
+	}
+}
+
+func TestMCPScreenshotAndExec(t *testing.T) {
+	s, f, _ := mcpServer(true)
+	_, _, resp := tool(t, s, "kitty_screenshot", map[string]any{"ref": "ana"})
+	c := resp["result"].(map[string]any)["content"].([]any)[0].(map[string]any)
+	if c["type"] != "image" || c["mimeType"] != "image/png" || c["data"] == "" {
+		t.Errorf("screenshot: %v", c)
+	}
+	if _, isErr, _ := tool(t, s, "kitty_screenshot", map[string]any{"ref": "ghost"}); !isErr {
+		t.Error("screenshot of a missing kitty fails")
+	}
+	if text, isErr, _ := tool(t, s, "kitty_exec", map[string]any{"ref": "ana", "argv": []string{"echo", "hi"}}); isErr || text != "echo hi" {
+		t.Errorf("exec: %q %v", text, isErr)
+	}
+	if _, _, resp := tool(t, s, "kitty_exec", map[string]any{"ref": "ana"}); resp["error"] == nil {
+		t.Error("exec without argv is a protocol error")
+	}
+	f.fail = errors.New("exit 1")
+	if text, isErr, _ := tool(t, s, "kitty_exec", map[string]any{"ref": "ana", "argv": []string{"false"}}); !isErr || !strings.Contains(text, "exit 1") {
+		t.Errorf("failing exec: %q", text)
+	}
+}
+
+func TestMCPChatTools(t *testing.T) {
+	s, _, c := mcpServer(false)
+	if _, _, resp := tool(t, s, "chat_create", map[string]any{"title": "x"}); resp["error"] == nil {
+		t.Error("chat_create needs members")
+	}
+	if text, _, _ := tool(t, s, "chat_create", map[string]any{"title": "plan", "members": []string{"ana"}}); !strings.Contains(text, `"id": "c1"`) {
+		t.Errorf("chat_create: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "chat_send", map[string]any{"id": "c1", "text": "hello"}); isErr {
+		t.Error("chat_send failed")
+	}
+	if text, _, _ := tool(t, s, "chat_send", map[string]any{"id": "c1", "text": "hello"}); !strings.Contains(text, "re: hello") {
+		t.Errorf("chat_send: %q", text)
+	}
+	if _, _, resp := tool(t, s, "chat_send", map[string]any{"id": "c1", "text": " "}); resp["error"] == nil {
+		t.Error("empty text is a protocol error")
+	}
+	if _, isErr, _ := tool(t, s, "chat_send", map[string]any{"id": "nope", "text": "x"}); !isErr {
+		t.Error("send to a missing chat fails")
+	}
+	if text, _, _ := tool(t, s, "chat_list", map[string]any{}); !strings.Contains(text, "plan") {
+		t.Errorf("chat_list: %q", text)
+	}
+	// chat_get trims to the last turns.
+	sess := c.sessions["c1"]
+	sess.Turns = nil
+	for i := 0; i < 15; i++ {
+		sess.Turns = append(sess.Turns, chat.Turn{From: "ana", Text: "t"})
+	}
+	text, _, _ := tool(t, s, "chat_get", map[string]any{"id": "c1"})
+	if !strings.Contains(text, `"total_turns": 15`) || strings.Count(text, `"from": "ana"`) != defaultTurns {
+		t.Errorf("chat_get default: %q", text)
+	}
+	text, _, _ = tool(t, s, "chat_get", map[string]any{"id": "c1", "last": 20})
+	if strings.Count(text, `"from": "ana"`) != 15 {
+		t.Errorf("chat_get last 20: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "chat_get", map[string]any{"id": "nope"}); !isErr {
+		t.Error("missing chat fails")
+	}
+	if text, _, _ := tool(t, s, "chat_cancel", map[string]any{"id": "c1"}); !strings.Contains(text, "cancelled") {
+		t.Errorf("chat_cancel: %q", text)
+	}
+	// Wrong argument shapes are protocol errors.
+	if _, _, resp := tool(t, s, "kitty_get", "not an object"); resp["error"] == nil {
+		t.Error("bad arguments")
+	}
+}

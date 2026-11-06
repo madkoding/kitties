@@ -440,6 +440,29 @@ func gatewayToken(cfg config.Config) (token, path string, fresh bool) {
 	return gateway.NewToken(), path, true
 }
 
+// mcpToken is the token of the MCP connector, "" when it is off: the configured one, else the one
+// kept in the data directory (made on the first run), so a restart keeps the connection.
+func mcpToken(cfg config.Config) (token, path string, err error) {
+	m := cfg.Gateway.MCP
+	if !m.Enabled {
+		return "", "", nil
+	}
+	path = filepath.Join(cfg.DataDirOr(), "mcp.token")
+	if m.Token != "" {
+		return m.Token, path, nil
+	}
+	if data, rerr := os.ReadFile(path); rerr == nil {
+		if t := strings.TrimSpace(string(data)); len(t) >= 16 {
+			return t, path, nil
+		}
+	}
+	token = gateway.NewToken()
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err == nil {
+		err = os.WriteFile(path, []byte(token+"\n"), 0o600)
+	}
+	return token, path, err
+}
+
 // cmdToken prints the token a gateway of this configuration uses, for signing in to the web page.
 func cmdToken(cfg config.Config, out, errOut io.Writer) int {
 	token, path, fresh := gatewayToken(cfg)
@@ -499,6 +522,16 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 		WithExposure(exposureOf(a.cfg, g.Listen)).WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
 	if a.vault != nil {
 		srv.WithVault(a.vault)
+	}
+	if mt, mpath, err := mcpToken(a.cfg); err != nil {
+		fmt.Fprintf(a.err, "kitties: the MCP connector stays off, its token cannot be kept: %v\n", err)
+	} else if mt != "" {
+		srv.WithMCP(mt, g.MCP.AllowExec)
+		base := "http://" + g.Listen
+		if g.PublicURL != "" {
+			base = g.PublicURL
+		}
+		fmt.Fprintf(a.out, "MCP connector: %s%s (token in %s)\n", base, gateway.MCPPath, mpath)
 	}
 	if site, ok := webFS(); ok {
 		srv.WithWeb(site)

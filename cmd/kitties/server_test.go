@@ -299,3 +299,81 @@ func TestGatewayServesApprovalsMemoryAndNotifications(t *testing.T) {
 	}
 	stop()
 }
+
+func TestMCPToken(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Defaults()
+	cfg.DataDir = dir
+	// Off by default: no token, nothing written.
+	if tok, _, err := mcpToken(cfg); tok != "" || err != nil {
+		t.Fatalf("off: %q %v", tok, err)
+	}
+	cfg.Gateway.MCP.Enabled = true
+	tok, path, err := mcpToken(cfg)
+	if err != nil || len(tok) != 32 || path != filepath.Join(dir, "mcp.token") {
+		t.Fatalf("first run: %q %q %v", tok, path, err)
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("token file: %v %v", info, err)
+	}
+	// A restart keeps it.
+	if again, _, _ := mcpToken(cfg); again != tok {
+		t.Errorf("not kept: %q vs %q", again, tok)
+	}
+	// A damaged file is replaced; the configured token wins and is not written.
+	_ = os.WriteFile(path, []byte("abc"), 0o600)
+	if fresh, _, _ := mcpToken(cfg); fresh == tok || len(fresh) != 32 {
+		t.Errorf("damaged: %q", fresh)
+	}
+	cfg.Gateway.MCP.Token = "configured-token-1234"
+	if got, _, _ := mcpToken(cfg); got != "configured-token-1234" {
+		t.Errorf("configured: %q", got)
+	}
+	// A data directory that cannot be written is an error, not a silent open door.
+	file := filepath.Join(dir, "afile")
+	_ = os.WriteFile(file, nil, 0o600)
+	cfg.Gateway.MCP.Token = ""
+	cfg.DataDir = file
+	if _, _, err := mcpToken(cfg); err == nil {
+		t.Error("an unwritable data dir must fail")
+	}
+}
+
+func TestGatewayServesMCP(t *testing.T) {
+	withRuntime(t, true)
+	cfg := writeConfig(t, chatServer(t, "ok"))
+	t.Setenv("KITTIES_MCP", "true")
+	addr, out, _, stop := serve(t, "-config", cfg, "gateway")
+	defer stop()
+	line := strings.SplitN(strings.SplitN(out.String(), "MCP connector: ", 2)[1], "\n", 2)[0]
+	if !strings.Contains(line, "/mcp") || !strings.Contains(line, "mcp.token") {
+		t.Fatalf("announcement: %q", line)
+	}
+	post := func(token string) int {
+		req, _ := http.NewRequest("POST", "http://"+addr+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if post("") != 401 {
+		t.Error("no token must be refused")
+	}
+	gw := strings.TrimSpace(strings.SplitN(strings.SplitN(out.String(), "gateway token: ", 2)[1], " ", 2)[0])
+	if post(gw) != 401 {
+		t.Error("the gateway token must not open the connector")
+	}
+	path := strings.TrimSuffix(strings.SplitN(strings.SplitN(line, "(token in ", 2)[1], ")", 2)[0], "")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if post(strings.TrimSpace(string(data))) != 200 {
+		t.Error("the connector's own token must open it")
+	}
+}

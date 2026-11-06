@@ -40,4 +40,6 @@
 | `GET /v1/update` (`?refresh=1`) · `POST /v1/update/apply` | the version of Kitties and whether a newer one is out; install it and restart |
 | `POST /v1/settings/accounts/{kind}/login` · `GET/DELETE /v1/settings/logins/{id}` · `POST …/paste` · `DELETE /v1/settings/accounts/{kind}` | sign a model in with a subscription, follow it, paste the browser's address, sign out |
 
+`POST /mcp` is the [MCP connector](MCP.md) (off by default, its own bearer token).
+
 Every other call needs `Authorization: Bearer <token>`; `/` and `/v1/health` are open.
