@@ -14,6 +14,8 @@ const (
 	AuthKeys    = "keys"
 	AuthToken   = "token"
 	AuthWebhook = "webhook"
+	// AuthPassword is a user and an app password typed in (Nextcloud, CalDAV, CardDAV).
+	AuthPassword = "password"
 )
 
 // AuthOf says how a connector that signs in reaches its account, in the order its requests
@@ -31,6 +33,8 @@ func (k Kind) AuthOf(s Settings, signedIn bool) string {
 	case k.Name == "discord" && strings.TrimSpace(s["url"]) != "" && !signedIn:
 		// A signed-in Discord posts to the webhook its sign-in made.
 		return AuthWebhook
+	case k.oauth == "nextcloud" && !signedIn && strings.TrimSpace(s["password"]) != "":
+		return AuthPassword
 	case strings.TrimSpace(s["token"]) != "":
 		return AuthToken
 	case signedIn:

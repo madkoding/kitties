@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -60,6 +61,9 @@ type Provider struct {
 	SelfClient bool `json:"-"`
 	// Register makes an app on the service when there is none (Mastodon lets anyone).
 	Register func(ctx context.Context, do HTTPDo, app App, redirect string) (id, secret string, err error) `json:"-"`
+	// LoginFlow marks Nextcloud's Login Flow v2: a login page and a poll instead of a code and a
+	// callback, and an app password instead of a token.
+	LoginFlow bool `json:"-"`
 	// Finish turns the service's answer into the token the connector uses, and says what it
 	// learned for the settings (the page, the account id, the site).
 	Finish func(ctx context.Context, do HTTPDo, app App, c Credentials) (Credentials, map[string]string, error) `json:"-"`
@@ -68,7 +72,7 @@ type Provider struct {
 // Ready reports whether a person can sign in to the service without an app of their own.
 func (p Provider) Ready() bool {
 	id, _ := Builtin(p.Name)
-	return id != "" || p.SelfClient || p.Register != nil
+	return id != "" || p.SelfClient || p.Register != nil || p.LoginFlow
 }
 
 // address fills a provider address's {url} and {subdomain} from the settings.
@@ -189,6 +193,10 @@ type Manager struct {
 	now     func() time.Time
 	httpDo  HTTPDo
 	rand    func(n int) string
+	// sleep and loginEvery pace a login flow's poll; warn reports one that failed.
+	sleep      func(time.Duration)
+	loginEvery time.Duration
+	warn       func(format string, args ...any)
 }
 
 type flow struct {
@@ -204,7 +212,7 @@ type flow struct {
 // New creates the manager over the store.
 func New(store Store) *Manager {
 	return &Manager{store: store, pending: map[string]flow{}, now: time.Now,
-		httpDo: (&http.Client{Timeout: 30 * time.Second}).Do, rand: randomText}
+		httpDo: (&http.Client{Timeout: 30 * time.Second}).Do, rand: randomText, sleep: time.Sleep, loginEvery: 2 * time.Second, warn: log.Printf}
 }
 
 func randomText(n int) string {
@@ -287,6 +295,9 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 	p, ok := Providers[app.Provider]
 	if !ok {
 		return "", fmt.Errorf("%q has no OAuth flow", app.Provider)
+	}
+	if p.LoginFlow {
+		return m.startLoginFlow(connector, p, app)
 	}
 	redirect = RedirectFor(app.Provider, redirect)
 	authURL, err := p.address(p.AuthURL, app.Settings)

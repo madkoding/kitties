@@ -237,8 +237,9 @@ func catalog() []Kind {
 			Fields:  signIn([]Field{f("base", "Base id", "app…", true, false), f("table", "Table", "", true, false)}, f("token", "Personal access token", "", false, true), "airtable.com/create/oauth"),
 			Actions: []Action{{Name: "add_record", Help: "add a record", Args: []string{"fields (an object of column: value)"}}}, make: makeAirtable, oauth: "airtable"},
 		{Name: "nextcloud", Category: CatOffice, Label: "Nextcloud", Help: "files in a Nextcloud (WebDAV) folder",
-			Fields:  []Field{f("url", "Server", "https://cloud.example.com", true, false), f("user", "User", "", true, false), f("password", "App password", "", true, true), f("folder", "Folder", "Kitties", false, false)},
-			Actions: []Action{{Name: "upload", Help: "write a text file", Args: []string{"name", fContent}}, {Name: "download", Help: "read a file", Args: []string{"name"}}}, make: makeNextcloud},
+			Fields: []Field{f("url", "Server", "https://cloud.example.com", true, false), keyed(f("user", "User", "", false, false), keyPassword),
+				keyed(f("password", "App password", "instead of signing in", false, true), keyPassword), f("folder", "Folder", "Kitties", false, false)},
+			Actions: []Action{{Name: "upload", Help: "write a text file", Args: []string{"name", fContent}}, {Name: "download", Help: "read a file", Args: []string{"name"}}}, make: makeNextcloud, oauth: "nextcloud"},
 		{Name: "google-sheets", Category: CatOffice, Label: "Google Sheets", Help: "appends rows to a sheet through an Apps Script web app URL (deploy a doPost that appends e.values)",
 			Fields:  []Field{f("url", "Web app URL", "https://script.google.com/macros/s/…/exec", true, true)},
 			Actions: []Action{{Name: "append_row", Help: "append a row", Args: []string{"values (a list)"}}}, make: makeSheets},
@@ -413,6 +414,9 @@ const (
 	keyToken   = "token"
 	keyOAuth1  = "oauth1"
 	keyWebhook = "webhook"
+	// keyPassword is a user and an app password (Nextcloud, CalDAV, CardDAV): what a sign-in
+	// through Nextcloud's login flow fills in, or what is typed.
+	keyPassword = "password"
 )
 
 // keyed puts a field in a group of key fields.
@@ -642,8 +646,9 @@ func (a *api) send(ctx context.Context, req *request) ([]byte, error) {
 		}
 	}
 	// An OAuth kind signs the request with the account's token, unless the request is plain
-	// (a webhook) or already carries a token the person typed.
-	if a.kind.oauth != "" && !req.plain && strings.TrimSpace(a.s["token"]) == "" && strings.TrimSpace(strings.TrimPrefix(req.headers["Authorization"], "Bearer")) == "" {
+	// (a webhook), carries a user and password (Nextcloud's app password) or already carries a
+	// token the person typed.
+	if a.kind.oauth != "" && !req.plain && req.basic[0] == "" && strings.TrimSpace(a.s["token"]) == "" && strings.TrimSpace(strings.TrimPrefix(req.headers["Authorization"], "Bearer")) == "" {
 		if a.token == nil {
 			return nil, errors.New("not signed in: connect the account from Settings")
 		}

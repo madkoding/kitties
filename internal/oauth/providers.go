@@ -113,6 +113,10 @@ var Providers = map[string]Provider{
 		Name: "gitea", Label: "Gitea", AuthURL: "{url}/login/oauth/authorize", TokenURL: "{url}/login/oauth/access_token",
 		Scopes: []string{"write:repository", "write:issue", "read:user"},
 	},
+	"nextcloud": {
+		// Nextcloud's Login Flow v2 (loginflow.go): nothing to register, an app password back.
+		Name: "nextcloud", Label: "Nextcloud", LoginFlow: true,
+	},
 	"home-assistant": {
 		Name: "home-assistant", Label: "Home Assistant", AuthURL: "{url}/auth/authorize", TokenURL: "{url}/auth/token", SelfClient: true,
 	},

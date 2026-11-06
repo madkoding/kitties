@@ -620,3 +620,23 @@ func TestGiteaTakesATokenOrTheSignIn(t *testing.T) {
 		t.Errorf("url = %s", cp.reqs[1].URL)
 	}
 }
+
+func TestNextcloudKindsSignIn(t *testing.T) {
+	for _, name := range []string{"nextcloud", "caldav", "carddav"} {
+		k, _ := LookupKind(name)
+		if k.OAuth != "nextcloud" || !k.KeySet(Settings{"user": "a", "password": "p"}) || k.KeySet(Settings{"user": "a"}) || k.Validate(Settings{"url": "https://c"}) != nil {
+			t.Errorf("%s = %+v", name, k)
+		}
+	}
+	// Its user and app password go as basic auth, never a bearer token.
+	var cp capture
+	cp.install(t)
+	src := TokenSource(func(context.Context) (string, error) { return "", errors.New("must not be asked") })
+	c, _ := Build("nextcloud", WithTokenSource(Settings{"url": "https://c", "user": "ana", "password": "pw"}, src), "")
+	if _, err := c.Call(context.Background(), map[string]any{"action": "upload", "name": "a.txt", "content": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if u, p, ok := cp.reqs[0].BasicAuth(); !ok || u != "ana" || p != "pw" {
+		t.Errorf("auth = %v %v %v", u, p, ok)
+	}
+}

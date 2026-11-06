@@ -175,6 +175,9 @@ const dict: Dictionary = {
   "add an event; with attendees it invites them (that asks you first)":
     "agregar un evento; si tiene asistentes, los invita (antes te pregunta)",
   "add tracks to a playlist": "agregar canciones a una playlist",
+  "an app-specific password; a Nextcloud signs in instead": "una contraseña específica de app; un Nextcloud inicia sesión en su lugar",
+  "an app-specific password (iCloud: appleid.apple.com → Sign-In and Security); a Nextcloud signs in instead":
+    "una contraseña específica de app (iCloud: appleid.apple.com → Inicio de sesión y seguridad); un Nextcloud inicia sesión en su lugar",
   "an app-specific password": "una contraseña específica de app",
   "an app-specific password (iCloud: appleid.apple.com → Sign-In and Security)":
     "una contraseña específica de app (iCloud: appleid.apple.com → Sign-In and Security)",
