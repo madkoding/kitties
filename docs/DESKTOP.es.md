@@ -222,6 +222,38 @@ ahora**. `kitty-restore` se lo devuelve a un contenedor que se rehace (nunca sob
 que ya está: un workspace que conservó su perfil es más nuevo que cualquier respaldo). El respaldo de
 un kitty eliminado se borra con él.
 
+## Lo que sobrevive al escritorio: inicio, programas y Compartido
+
+Tres carpetas de tu computadora se montan en el escritorio de cada kitty, y nada las borra: ni una
+actualización, ni una detención, ni eliminar al kitty.
+
+| En tu computadora | En el escritorio | Qué guarda |
+| --- | --- | --- |
+| `<data_dir>/work/<nombre>` | `~/work` | sus archivos, el perfil del navegador, su tema y los paquetes de Debian que instaló |
+| `<data_dir>/homes/<nombre>` | `/home/kitty` | sus configuraciones (`~/.config`) y los programas que instaló para sí (`~/.local`: pipx, `pip --user`, `npm install -g`; `/opt/kitty-apps`) |
+| `<data_dir>/shared/<nombre>` | `~/Shared` | lo que hizo para ti: la app lo muestra en **Biblioteca > Compartido** |
+
+- **Programas.** Un paquete de Debian vuelve solo en un escritorio rehecho, como sea que se haya
+  instalado (`kitty-install`, `sudo apt install`: un hook de dpkg lo recuerda); `kitty-install --remove
+  <paquete>` lo olvida. Lo que está en `~/.local` o `/opt/kitty-apps` simplemente sigue ahí.
+- **Configuraciones.** El inicio se siembra desde la imagen (`kitty-home`): se copia lo que falta, y solo
+  el aspecto propio del escritorio (menús de Lumen, picom, PCManFM, GTK) se renueva cuando cambia la imagen.
+- **Compartido.** `kitty-share <archivo>` copia un archivo ahí (`-d carpeta`, `--list`); el kitty lo sabe.
+  La página lista los archivos de todos los kitties, previsualiza imágenes y texto, descarga cualquiera,
+  copia uno a la biblioteca (**guardar en biblioteca**) y borra. Cada carpeta admite hasta
+  `containers.shared_quota_mb` (1024; negativo: sin límite), que `kitty-share` respeta.
+- **Mover un escritorio antiguo.** Un escritorio hecho antes de que el inicio viviera en tu computadora
+  lo tiene dentro del contenedor: antes de borrarlo se copia (`homes/.moving/<nombre>.tar`, sin
+  `~/.cache`) y se pone en el nuevo, que se reinicia una vez. Si la copia falla, el escritorio antiguo
+  se deja como estaba y la actualización dice por qué.
+- **Exportar y restaurar.** La ventana del kitty muestra lo que guarda y cuánto ocupa; **Exportar
+  archivos** descarga un `.tar.gz` de su inicio, trabajo y Compartido sin llaves, contraseñas ni
+  sesiones del navegador (esas quedan en el respaldo cifrado), y **Restaurar desde una exportación** lo
+  devuelve al escritorio en marcha (un archivo más nuevo del kitty se queda).
+
+![Lo que un kitty guarda en tu computadora](screenshots/64-desktop-kept-files.png)
+![La biblioteca: lo que compartieron los kitties](screenshots/62-library-shared.png)
+
 ## Dónde está en el código
 
 | Qué | Dónde |

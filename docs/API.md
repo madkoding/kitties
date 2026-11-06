@@ -38,6 +38,8 @@
 | `GET /v1/chats/{id}/turns/{n}/replay.gif` · `POST …/turns/{n}/help` `{text, secret, enter, save}` | a task as an animated GIF; the person's answer to a kitty that asked for help (a secret is typed on its desktop, not told) |
 | `GET /v1/vault` · `PUT/DELETE /v1/vault/{name}` `{value, kitties}` | the secrets a kitty may type: names and who may use them, never values |
 | `GET /v1/kitties/{ref}/desktop` · `POST …/backup` · `POST …/update` | its desktop's image and whether a newer one waits, the backup of its cookies, sessions and passwords, and moving it to the newest image |
+| `GET /v1/shared` · `GET`/`DELETE /v1/kitties/{ref}/shared/{path}` (`?download=1`) · `POST /v1/kitties/{ref}/keep/{path}` | what every kitty left in its Shared folder (and the quota), one file (sandboxed), delete it, copy it into the library |
+| `GET /v1/kitties/{ref}/export` · `POST /v1/kitties/{ref}/import` | a `.tar.gz` of its home, work and Shared folders without keys, passwords or browser sessions; put one back into its running desktop |
 | `GET /v1/update` (`?refresh=1`) · `POST /v1/update/apply` | the version of Kitties and whether a newer one is out; install it and restart |
 | `POST /v1/settings/accounts/{kind}/login` · `GET/DELETE /v1/settings/logins/{id}` · `POST …/paste` · `DELETE /v1/settings/accounts/{kind}` | sign a model in with a subscription, follow it, paste the browser's address, sign out |
 
