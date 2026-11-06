@@ -83,6 +83,7 @@ const dict: Dictionary = {
   paused: "en pausa",
   "on events from {names}": "con eventos de {names}",
   "next {time}": "próxima vez: {time}",
+  "tries again {time}": "vuelve a intentarlo: {time}",
   "{n} run": "{n} ejecución",
   "{n} runs": "{n} ejecuciones",
   "run now": "ejecutar ahora",

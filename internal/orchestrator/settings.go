@@ -30,6 +30,8 @@ type Settings struct {
 	DefaultProvider string                      `json:"default_provider,omitempty"`
 	// Notify is where the person is told outside the interface; nil keeps the file's.
 	Notify *notify.Config `json:"notify,omitempty"`
+	// Autonomy is how long the kitties keep at a task on their own; nil keeps the file's.
+	Autonomy *config.Autonomy `json:"autonomy,omitempty"`
 	// Removed names entries of the file the person deleted from the page.
 	Removed struct {
 		Providers  []string `json:"providers,omitempty"`
@@ -79,7 +81,29 @@ func (m *Manager) loadSettings() error {
 	if s.Notify != nil {
 		m.cfg.Notify = *s.Notify
 	}
+	if s.Autonomy != nil {
+		m.cfg.Autonomy = *s.Autonomy
+	}
 	return nil
+}
+
+// Autonomy is how long the kitties keep at a task on their own.
+func (m *Manager) Autonomy() config.Autonomy {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cfg.Autonomy
+}
+
+// SetAutonomy changes how long the kitties keep at a task on their own.
+func (m *Manager) SetAutonomy(a config.Autonomy) error {
+	if err := a.Validate(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cfg.Autonomy = a
+	m.overlay.Autonomy = &a
+	return m.saveSettings()
 }
 
 // Notify is where the person is told, outside the interface, when a kitty needs them.
@@ -148,6 +172,8 @@ type ProviderView struct {
 	UsedBy []string `json:"used_by,omitempty"`
 	// Error says why the profile could not be built (a missing key), empty when it works.
 	Error string `json:"error,omitempty"`
+	// Fallback is the profile thought with while this one is down.
+	Fallback string `json:"fallback,omitempty"`
 }
 
 // ConnectorView is one connector as the page sees it: its settings with every secret field
@@ -239,6 +265,8 @@ type SettingsView struct {
 	// Notify is where the person is told outside the interface, and NotifyEvents what can be sent.
 	Notify       notify.Config `json:"notify"`
 	NotifyEvents []string      `json:"notify_events"`
+	// Autonomy is how long the kitties keep at a task on their own.
+	Autonomy config.Autonomy `json:"autonomy"`
 	// Accounts are the sign-ins a profile can think on instead of a key.
 	Accounts []llmauth.Account `json:"accounts"`
 	// OAuthReady are the services a connection signs in to without an app of the person's own
@@ -251,7 +279,7 @@ func (m *Manager) Settings() SettingsView {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 	view := SettingsView{DefaultProvider: m.cfg.DefaultProvider, ConnectorKinds: config.ConnectorKinds, Catalog: connector.Kinds(),
-		Categories: connector.Categories, MotitaURL: m.cfg.Motita.URL, Notify: m.cfg.Notify, Accounts: m.accounts.Accounts(), OAuthReady: []string{}}
+		Categories: connector.Categories, MotitaURL: m.cfg.Motita.URL, Notify: m.cfg.Notify, Autonomy: m.cfg.Autonomy, Accounts: m.accounts.Accounts(), OAuthReady: []string{}}
 	for name, p := range oauth.Providers {
 		if p.Ready() {
 			view.OAuthReady = append(view.OAuthReady, name)
@@ -277,7 +305,7 @@ func (m *Manager) Settings() SettingsView {
 		p := m.cfg.Providers[n]
 		_, fromOverlay := m.overlay.Providers[n]
 		v := ProviderView{Name: n, Kind: p.Kind, Model: p.Model, BaseURL: p.BaseURL, APIKeySet: p.Options().APIKey != "",
-			APIKeyEnv: p.APIKeyEnv, Auth: p.Auth, MaxTokens: p.MaxTokens, Temperature: p.Temperature, Default: n == m.cfg.DefaultProvider, FromFile: !fromOverlay}
+			APIKeyEnv: p.APIKeyEnv, Auth: p.Auth, MaxTokens: p.MaxTokens, Temperature: p.Temperature, Default: n == m.cfg.DefaultProvider, FromFile: !fromOverlay, Fallback: p.Fallback}
 		if c, err := m.providers.Get(n); err == nil {
 			v.Describe = c.Describe()
 		} else {
@@ -317,6 +345,9 @@ func (m *Manager) SetProvider(name string, p config.Provider) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, ok := m.cfg.Providers[p.Fallback]; p.Fallback != "" && !ok {
+		return fmt.Errorf("fallback: %q is not a configured profile", p.Fallback)
+	}
 	if p.APIKey == "" && p.Auth == "" {
 		if old, ok := m.cfg.Providers[name]; ok {
 			p.APIKey = old.APIKey

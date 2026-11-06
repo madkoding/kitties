@@ -118,7 +118,7 @@ func TestAskHelp(t *testing.T) {
 		last := seen[len(seen)-1].Content
 		want := "gave it back"
 		if !comes {
-			want = "nobody came"
+			want = "nobody came in 0 minutes: do not stop here. Go on with every part of the task that does not need this"
 		}
 		if !strings.Contains(last, want) {
 			t.Errorf("comes=%v: the kitty heard %q", comes, last)

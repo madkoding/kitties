@@ -76,6 +76,19 @@ its own; other methods ask first only if you or a kitty set a limit for them. Si
 the broad permissions of each service (Dropbox gets whatever the app has enabled in its
 console), so accounts signed in before need to sign in once more to get them.
 
+### A spare brain
+
+A profile can name another as its `fallback`. While the first is busy, failing (429, 5xx) or
+unreachable after its own retries, the kitties that think with it go on with the fallback instead
+of waiting; anything else (a refused key, a bad request) is still the first one's answer. In
+*Settings → Models → More*, it is *If it is down, think with*.
+
+```yaml
+providers:
+  main:  { kind: anthropic, model: claude-sonnet-5-5, fallback: spare }
+  spare: { kind: openai, model: gpt-5.5 }
+```
+
 ### Prompt caching
 
 Every turn of a long chat or tool loop re-sends the same start (system prompt, tool list, earlier

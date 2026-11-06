@@ -171,3 +171,32 @@ func TestSendNowAndRun(t *testing.T) {
 	cancel2()
 	g.r.Run(ctx2, nil)
 }
+
+func TestFollowUpsInTheSummary(t *testing.T) {
+	now := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	at := func(h int) time.Time { return now.Add(-time.Duration(h) * time.Hour) }
+	// Newest first, as the journal gives them.
+	entries := []agenda.Entry{
+		{At: at(1), Kind: agenda.KindRun, Goal: "g3", Text: "Report (follow_up)"},
+		{At: at(2), Kind: agenda.KindRetry, Goal: "g2", Text: "Groups: blocked; no follow-up left, it waits for its schedule, an event or you"},
+		{At: at(3), Kind: agenda.KindBlocked, Goal: "g2", Text: "stuck"},
+		{At: at(4), Kind: agenda.KindRun, Goal: "g2", Text: "Groups (follow_up)"},
+		{At: at(5), Kind: agenda.KindDone, Goal: "g1", Text: "ok"},
+		{At: at(6), Kind: agenda.KindRun, Goal: "g1", Text: "Inbox (follow_up)"},
+		{At: at(7), Kind: agenda.KindBlocked, Goal: "g1", Text: "first run"},
+		{At: at(8), Kind: agenda.KindRun, Goal: "g1", Text: "Inbox (schedule)"},
+		{At: at(9), Kind: agenda.KindDone, Text: "a chat, no goal"},
+		{At: at(30), Kind: agenda.KindRun, Goal: "g9", Text: "Old (follow_up)"},
+	}
+	if got := followUps(entries, at(24)); got != "Inbox → done, Groups → blocked (gave up), Report → running" {
+		t.Errorf("follow-ups = %q", got)
+	}
+	if followUps(entries[4:8], at(24)) != "Inbox → done" || followUps(nil, at(24)) != "" {
+		t.Error("partial / empty")
+	}
+	g := newRig(t)
+	g.r.src.Journal = func(string, int) []agenda.Entry { return entries }
+	if body := g.r.Build(now).Body; !strings.Contains(body, "mimi: 2 done, 2 blocked, 1 retried (12.4k tokens, 3 actions today)\n  follow-ups: Inbox → done, Groups → blocked (gave up), Report → running\n") {
+		t.Errorf("body = %s", body)
+	}
+}
