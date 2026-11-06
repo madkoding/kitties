@@ -234,12 +234,13 @@ func notUpYet(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusServiceUnavailable, errors.New("the live view is not answering yet: the desktop may still be starting, try again in a few seconds"))
 		return
 	}
+	lang := notUpLang(r)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusServiceUnavailable)
-	_, _ = io.WriteString(w, `<!doctype html><html lang="`+notUpLang(r)+`"><head><meta charset="utf-8"><meta http-equiv="refresh" content="3">`+
+	_, _ = io.WriteString(w, `<!doctype html><html lang="`+lang+`"><head><meta charset="utf-8"><meta http-equiv="refresh" content="3">`+
 		`<meta name="viewport" content="width=device-width,initial-scale=1"><title>Kitty desktop</title>`+
 		`<style>body{margin:0;height:100vh;display:grid;place-items:center;background:#111;color:#ccc;font:14px system-ui,sans-serif;text-align:center}</style>`+
-		`</head><body><p>`+notUpText[notUpLang(r)]+`</p></body></html>`)
+		`</head><body><p>`+notUpText[lang]+`</p></body></html>`)
 }
 
 // notUpText is what the waiting page says, by language.
@@ -249,12 +250,18 @@ var notUpText = map[string]string{
 	"pt": "A área de trabalho ainda está iniciando. Tentando de novo…",
 }
 
-// notUpLang is the first of the person's languages the waiting page has, else English.
+// notUpLang is the first of the person's languages the waiting page has, else English. It is
+// always one of the constant tags (never text of the request), as it goes into the page.
 func notUpLang(r *http.Request) string {
 	for _, part := range strings.Split(r.Header.Get("Accept-Language"), ",") {
 		tag := strings.ToLower(strings.TrimSpace(strings.SplitN(part, ";", 2)[0]))
-		if _, ok := notUpText[tag[:min(2, len(tag))]]; ok && len(tag) >= 2 {
-			return tag[:2]
+		switch {
+		case strings.HasPrefix(tag, "es"):
+			return "es"
+		case strings.HasPrefix(tag, "pt"):
+			return "pt"
+		case strings.HasPrefix(tag, "en"):
+			return "en"
 		}
 	}
 	return "en"
