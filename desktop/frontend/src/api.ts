@@ -34,6 +34,8 @@ export interface Kitty {
 // on and when it turns itself off.
 export interface Power {
   state: "on" | "starting" | "off" | "error";
+  // step: what a starting machine is doing ("desktop": its container is up, its desktop coming up).
+  step?: "desktop";
   error?: string;
   off_reason?: "idle" | "manual" | "kitty" | "";
   auto_off_minutes: number;
