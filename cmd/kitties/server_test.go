@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -298,4 +299,127 @@ func TestGatewayServesApprovalsMemoryAndNotifications(t *testing.T) {
 		t.Errorf("digest = %d %s", code, body)
 	}
 	stop()
+}
+
+func TestMCPToken(t *testing.T) {
+	dir := t.TempDir()
+	cfg := config.Defaults()
+	cfg.DataDir = dir
+	// Off by default: no token, nothing written.
+	if tok, _, err := mcpToken(cfg); tok != "" || err != nil {
+		t.Fatalf("off: %q %v", tok, err)
+	}
+	cfg.Gateway.MCP.Enabled = true
+	tok, path, err := mcpToken(cfg)
+	if err != nil || len(tok) != 32 || path != filepath.Join(dir, "mcp.token") {
+		t.Fatalf("first run: %q %q %v", tok, path, err)
+	}
+	if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("token file: %v %v", info, err)
+	}
+	// A restart keeps it.
+	if again, _, _ := mcpToken(cfg); again != tok {
+		t.Errorf("not kept: %q vs %q", again, tok)
+	}
+	// A damaged file is replaced; the configured token wins and is not written.
+	_ = os.WriteFile(path, []byte("abc"), 0o600)
+	if fresh, _, _ := mcpToken(cfg); fresh == tok || len(fresh) != 32 {
+		t.Errorf("damaged: %q", fresh)
+	}
+	cfg.Gateway.MCP.Token = "configured-token-1234"
+	if got, _, _ := mcpToken(cfg); got != "configured-token-1234" {
+		t.Errorf("configured: %q", got)
+	}
+	// A data directory that cannot be written is an error, not a silent open door.
+	file := filepath.Join(dir, "afile")
+	_ = os.WriteFile(file, nil, 0o600)
+	cfg.Gateway.MCP.Token = ""
+	cfg.DataDir = file
+	if _, _, err := mcpToken(cfg); err == nil {
+		t.Error("an unwritable data dir must fail")
+	}
+}
+
+func TestGatewayServesMCP(t *testing.T) {
+	withRuntime(t, true)
+	cfg := writeConfig(t, chatServer(t, "ok"))
+	t.Setenv("KITTIES_MCP", "true")
+	addr, out, _, stop := serve(t, "-config", cfg, "gateway")
+	defer stop()
+	line := strings.SplitN(strings.SplitN(out.String(), "MCP connector: ", 2)[1], "\n", 2)[0]
+	if !strings.Contains(line, "/mcp") || !strings.Contains(line, "mcp.token") {
+		t.Fatalf("announcement: %q", line)
+	}
+	post := func(token string) int {
+		req, _ := http.NewRequest("POST", "http://"+addr+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	if post("") != 401 {
+		t.Error("no token must be refused")
+	}
+	gw := strings.TrimSpace(strings.SplitN(strings.SplitN(out.String(), "gateway token: ", 2)[1], " ", 2)[0])
+	if post(gw) != 401 {
+		t.Error("the gateway token must not open the connector")
+	}
+	path := strings.TrimSuffix(strings.SplitN(strings.SplitN(line, "(token in ", 2)[1], ")", 2)[0], "")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if post(strings.TrimSpace(string(data))) != 200 {
+		t.Error("the connector's own token must open it")
+	}
+}
+
+func TestMCPStdioCommand(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "kitties.yaml")
+	_ = os.WriteFile(cfg, []byte("data_dir: "+dir+"\n"), 0o600)
+	ping := `{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n"
+	// No token anywhere.
+	t.Setenv("KITTIES_MCP_TOKEN", "")
+	if code, _, errOut := exec(t, ping, "-config", cfg, "mcp"); code != 1 || !strings.Contains(errOut, "no MCP token") {
+		t.Errorf("no token: %d %s", code, errOut)
+	}
+	if code, _, _ := exec(t, ping, "-config", cfg, "mcp", "-bogus"); code != 2 {
+		t.Error("bad flag")
+	}
+	// Against a gateway that has the connector on, with the token from the file.
+	withRuntime(t, true)
+	gwCfg := writeConfig(t, chatServer(t, "ok"))
+	t.Setenv("KITTIES_MCP", "true")
+	addr, out, _, stop := serve(t, "-config", gwCfg, "gateway")
+	defer stop()
+	line := strings.SplitN(strings.SplitN(out.String(), "MCP connector: ", 2)[1], "\n", 2)[0]
+	path := strings.SplitN(strings.SplitN(line, "(token in ", 2)[1], ")", 2)[0]
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "http://" + addr + "/mcp"
+	if code, got, errOut := exec(t, ping, "-config", cfg, "mcp", "-url", url, "-token", strings.TrimSpace(string(data))); code != 0 || !strings.Contains(got, `"id":1`) || strings.Contains(got, "error") {
+		t.Errorf("bridge = %d %q %s", code, got, errOut)
+	}
+	// The token from the environment, the address from gateway.listen (0.0.0.0 is reached on loopback).
+	t.Setenv("KITTIES_MCP_TOKEN", strings.TrimSpace(string(data)))
+	_, port, _ := net.SplitHostPort(addr)
+	_ = os.WriteFile(cfg, []byte("data_dir: "+dir+"\ngateway:\n  listen: 0.0.0.0:"+port+"\n"), 0o600)
+	if code, got, errOut := exec(t, ping, "-config", cfg, "mcp"); code != 0 || !strings.Contains(got, `"id":1`) {
+		t.Errorf("env token = %d %q %s", code, got, errOut)
+	}
+	// And from the token file of the data directory, the address from public_url.
+	t.Setenv("KITTIES_MCP_TOKEN", "")
+	_ = os.WriteFile(filepath.Join(dir, "mcp.token"), data, 0o600)
+	_ = os.WriteFile(cfg, []byte("data_dir: "+dir+"\ngateway:\n  public_url: http://"+addr+"\n"), 0o600)
+	if code, got, errOut := exec(t, ping, "-config", cfg, "mcp"); code != 0 || !strings.Contains(got, `"id":1`) {
+		t.Errorf("file token = %d %q %s", code, got, errOut)
+	}
 }

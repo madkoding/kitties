@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/kitty"
 )
 
@@ -303,4 +304,21 @@ func (w watchedConn) Close() error {
 	err := w.Conn.Close()
 	w.once.Do(w.done)
 	return err
+}
+
+// Compute is where a kitty's desktop runs: "local" (a container on this machine) or "cloud". It
+// follows the configuration (the kitty's own compute, else the deployment's); a kitty without a
+// desktop has none.
+func (m *Manager) Compute(ref string) (string, error) {
+	k, err := m.Get(ref)
+	if err != nil {
+		return "", err
+	}
+	if !k.Desktop {
+		return "", kitty.ErrNoMachine
+	}
+	if m.cfg.IsCloudContainer(kitty.ContainerName(k.Name)) {
+		return config.ComputeCloud, nil
+	}
+	return config.ComputeLocal, nil
 }

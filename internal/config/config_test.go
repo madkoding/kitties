@@ -447,3 +447,17 @@ func TestCloudNeededAndIsCloudContainer(t *testing.T) {
 		t.Error("a bad variable name must fail")
 	}
 }
+
+func TestApplyEnvMCP(t *testing.T) {
+	cfg := Defaults()
+	if cfg.Gateway.MCP.Enabled || cfg.Gateway.MCP.AllowExec {
+		t.Fatal("the MCP connector is off by default")
+	}
+	env := map[string]string{"KITTIES_MCP": "true", "KITTIES_MCP_TOKEN": "t0ken", "KITTIES_MCP_EXEC": "1", "KITTIES_MCP_OAUTH": "yes", "KITTIES_MCP_APPROVE": "true"}
+	if err := cfg.ApplyEnv(func(k string) string { return env[k] }); err != nil {
+		t.Fatal(err)
+	}
+	if m := cfg.Gateway.MCP; !m.Enabled || m.Token != "t0ken" || !m.AllowExec || !m.OAuth || !m.AllowApprove {
+		t.Errorf("env not applied: %+v", m)
+	}
+}

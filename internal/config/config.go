@@ -209,6 +209,22 @@ type Gateway struct {
 	// listens on this machine alone and no public_url or proxy is configured: a server never
 	// hands its token out.
 	LocalToken *bool `yaml:"local_token"`
+	// MCP is the connector that lets Claude run the fleet (docs/MCP.md). Off by default.
+	MCP MCP `yaml:"mcp"`
+}
+
+// MCP configures the connector at /mcp. It has a token of its own, kept in the data directory
+// (mcp.token) when Token is empty, so it can be revoked without touching the gateway's.
+type MCP struct {
+	Enabled bool   `yaml:"enabled"`
+	Token   string `yaml:"token"`
+	// AllowExec adds the tool that runs commands inside a kitty's container. Off unless asked.
+	AllowExec bool `yaml:"allow_exec"`
+	// OAuth lets a remote client (claude.ai) sign in to the connector. It needs https: set
+	// public_url or put a proxy in front.
+	OAuth bool `yaml:"oauth"`
+	// AllowApprove adds the tool that approves an action held for the person. Off unless asked.
+	AllowApprove bool `yaml:"allow_approve"`
 }
 
 // LocalTokenAllowed reports whether /v1/local-token may answer: the setting when given, else
@@ -254,6 +270,27 @@ func (c *Config) ApplyEnv(getenv func(string) string) error {
 	switch strings.ToLower(getenv("KITTIES_TRUST_PROXY")) {
 	case "1", "true", "yes":
 		c.Gateway.TrustProxy = true
+	}
+	// The MCP connector: KITTIES_MCP (true) turns it on, KITTIES_MCP_TOKEN sets its token and
+	// KITTIES_MCP_EXEC (true) adds the exec tool.
+	switch strings.ToLower(getenv("KITTIES_MCP")) {
+	case "1", "true", "yes":
+		c.Gateway.MCP.Enabled = true
+	}
+	switch strings.ToLower(getenv("KITTIES_MCP_APPROVE")) {
+	case "1", "true", "yes":
+		c.Gateway.MCP.AllowApprove = true
+	}
+	switch strings.ToLower(getenv("KITTIES_MCP_OAUTH")) {
+	case "1", "true", "yes":
+		c.Gateway.MCP.OAuth = true
+	}
+	if v := getenv("KITTIES_MCP_TOKEN"); v != "" {
+		c.Gateway.MCP.Token = v
+	}
+	switch strings.ToLower(getenv("KITTIES_MCP_EXEC")) {
+	case "1", "true", "yes":
+		c.Gateway.MCP.AllowExec = true
 	}
 	return c.Validate()
 }
