@@ -23,7 +23,9 @@ A kitty is not only something you talk to. Each one has an agenda:
   one stops, says so (and can be resumed) instead of running on. A **daily budget** caps what a kitty spends around the clock: out of tokens it rests until
   tomorrow (and tells you once); past its actions for the day, every post, reply or refund waits
   for your yes even if it normally acts alone.
-- **Recovery.** A failed attempt is retried with a different approach. When a kitty gives up,
+- **Recovery.** A brain that is down for a while (busy, failing, unreachable) is waited for,
+  up to half an hour, ever longer between tries, instead of failing the attempt; each wait shows
+  in the chat. A failed attempt is retried with a different approach. When a kitty gives up,
   its **backup** kitty takes the task over; without one, the kitty asks you (the chat is
   marked *help* until you answer). A watchdog brings a stopped container back and retries a
   kitty in error.

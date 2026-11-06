@@ -193,6 +193,11 @@ type Service struct {
 	// itself on the desktop before it stops at the safety cap and waits to be told to go on; zero,
 	// the default, sets no cap.
 	UnattendedWindows int
+	// BrainWait is how long, in all, an unattended task waits for a brain that is down (busy,
+	// failing or unreachable) before the attempt fails; zero does not wait.
+	BrainWait time.Duration
+	// brainEvery is the first wait before trying a brain that is down again; it doubles.
+	brainEvery time.Duration
 	// MaxTurns is how many turns of the thread a kitty is shown; zero (the default) shows all of
 	// it, fitted to the model's context window.
 	MaxTurns int
@@ -295,6 +300,7 @@ func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
 		now: time.Now, newID: randomID, MaxRounds: 4, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
 		DefaultLimits: kitty.Limits{MaxTokens: 0, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
+		BrainWait: 30 * time.Minute, brainEvery: 15 * time.Second,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -1097,6 +1103,11 @@ func (s *Service) startTask(id string, index int, k *kitty.Kitty, p *pendingTask
 }
 
 // runner is the fleet as a desktop runner, when it is one.
+// goOnWithout is what a kitty whose call for help went unanswered is told: the rest of the task
+// does not wait for the person.
+const goOnWithout = "do not stop here. Go on with every part of the task that does not need this, " +
+	"and only at the end say in your answer exactly what you still need from the person."
+
 // helpWait is how long a kitty that asked for help waits for the person to take its desktop.
 var helpWait = 15 * time.Minute
 
@@ -1125,7 +1136,7 @@ func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Ki
 	defer stop()
 	h, ok := s.fleet.(holder)
 	if !ok {
-		return "nobody can take your desktop from here: say in your answer what you need, and stop"
+		return "nobody can take your desktop from here: " + goOnWithout
 	}
 	started, _ := s.fleet.(holdStarter)
 	deadline := time.NewTimer(helpWait)
@@ -1147,7 +1158,7 @@ func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Ki
 			return s.applyHelp(ctx, id, index, k, a)
 		case <-deadline.C:
 			if !came {
-				return fmt.Sprintf("nobody came in %d minutes: say in your answer what you need from the person, and stop", int(helpWait.Minutes()))
+				return fmt.Sprintf("nobody came in %d minutes: %s", int(helpWait.Minutes()), goOnWithout)
 			}
 		case <-t.C:
 		}
@@ -1410,7 +1421,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		if err := s.overTokens(k); err != nil {
 			return "stopped: " + err.Error(), false
 		}
-		answer, err := ask(ctx, p.brain, p.native, st.messages, p.tools)
+		answer, err := s.askPatiently(ctx, id, index, p, st.messages, limits)
 		if err != nil {
 			if ctx.Err() != nil {
 				return stopReason(ctx, limits), false
@@ -1438,6 +1449,32 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		}
 	}
 }
+
+// askPatiently asks the brain for the task's next move. Unattended, a brain that is down for a
+// while (busy, failing, unreachable) is waited for, ever longer up to brainWaitMax between tries
+// and BrainWait in all, instead of spending one of the task's attempts and handing it to the
+// person over a passing outage. Each wait shows in the chat as a step.
+func (s *Service) askPatiently(ctx context.Context, id string, index int, p *pendingTask, messages []provider.Message, limits kitty.Limits) (provider.Reply, error) {
+	wait, waited := s.brainEvery, time.Duration(0)
+	for {
+		answer, err := ask(ctx, p.brain, p.native, messages, p.tools)
+		if err == nil || limits.Attended || ctx.Err() != nil || !provider.Transient(err) || waited+wait > s.BrainWait {
+			return answer, err
+		}
+		s.appendStep(id, index, Step{At: s.now(), Action: "wait", Error: clip(err.Error(), 300),
+			Result: fmt.Sprintf("the brain is not answering: trying again in %s", wait.Round(time.Second))})
+		select {
+		case <-ctx.Done():
+			return provider.Reply{}, ctx.Err()
+		case <-time.After(wait):
+		}
+		waited += wait
+		wait = min(wait*2, brainWaitMax)
+	}
+}
+
+// brainWaitMax is the longest wait between two tries of a brain that is down.
+const brainWaitMax = 5 * time.Minute
 
 // screenMessage is what the kitty is told after actions that can have changed its display: the
 // screenshot, which is also kept for the chat's step, or why there is none.
