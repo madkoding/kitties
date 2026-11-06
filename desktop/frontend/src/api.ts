@@ -14,7 +14,15 @@ export interface Kitty {
   status: "created" | "starting" | "running" | "stopped" | "error";
   error?: string;
   connectors?: string[];
-  soul: { name?: string; persona?: string; tone?: string; traits?: string[]; skills?: string[] };
+  soul: {
+    name?: string;
+    persona?: string;
+    tone?: string;
+    traits?: string[];
+    skills?: string[];
+    // voice reads its WhatsApp voice notes (alloy, nova, …); empty or "default": the gateway's.
+    voice?: string;
+  };
   avatar: { breed: string; color: string };
   // Limits bound one task; zero fields take the defaults. Backup takes over a task this kitty gives up on.
   limits?: Limits;
@@ -795,6 +803,8 @@ export const api = {
   testWhatsApp: (to: string) =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/whatsapp/test", { to }),
   clearWhatsAppHeld: () => request<WhatsAppStatus>("DELETE", "/v1/whatsapp/held"),
+  resendWhatsAppHeld: (id: string) =>
+    request<WhatsAppStatus>("POST", `/v1/whatsapp/held/${encodeURIComponent(id)}/resend`),
   revokeMcpClient: (id: string) =>
     request<{ revoked: string }>("DELETE", `/v1/mcp/clients/${encodeURIComponent(id)}`),
   // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
@@ -1301,6 +1311,7 @@ export type WhatsAppSettings = {
 // WhatsAppHeld is a message the hourly limit did not send: to is a number (digits) or a group
 // (its id, with its name).
 export type WhatsAppHeld = {
+  id: string;
   at: string;
   to: string;
   name?: string;

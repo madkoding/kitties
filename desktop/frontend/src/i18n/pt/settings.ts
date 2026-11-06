@@ -364,6 +364,10 @@ const dict: Dictionary = {
   "Remove {number}": "Remover {number}",
   Message: "Mensagem",
   File: "Arquivo",
+  "Sent again.": "Enviada de novo.",
+  Resend: "Reenviar",
+  "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.":
+    "Não foram enviadas: saíram mais de {limit} mensagens em uma hora. Reenvie uma quando houver espaço, ou aumente o limite acima. A lista fica selada, então um reinício não a perde.",
   "Voice notes": "Mensagens de voz",
   "Never: the kitties write": "Nunca: os kitties escrevem",
   "Answer a voice note with one": "Responder uma mensagem de voz com outra",
@@ -390,8 +394,6 @@ const dict: Dictionary = {
   "Voice note": "Mensagem de voz",
   Reaction: "Reação",
   "Held by the hourly limit ({n})": "Retidas pelo limite por hora ({n})",
-  "These were not sent: more than {limit} messages went in an hour. Raise the limit above if they should go.":
-    "Não foram enviadas: saíram mais de {limit} mensagens em uma hora. Aumente o limite acima se elas devem sair.",
   "Clear the list": "Limpar a lista",
   "I understand that WhatsApp may ban this number": "Entendo que o WhatsApp pode banir este número",
   "QR code to link WhatsApp": "Código QR para conectar o WhatsApp",

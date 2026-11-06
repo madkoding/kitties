@@ -858,6 +858,13 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   const basics = page.getByTestId("kitty-basics");
   await expect(basics.getByLabel("Brain")).toHaveValue("strong");
   await expect(basics.getByLabel("Who is it?")).toHaveValue(/patient researcher/);
+  // The voice of its WhatsApp voice notes: one of its own, and back to the gateway's.
+  const voice = basics.getByTestId("drawer-voice");
+  await expect(voice).toHaveValue("");
+  await voice.selectOption("nova");
+  await expect(voice).toHaveValue("nova");
+  await voice.selectOption("");
+  await expect(voice).toHaveValue("");
   await expect(page.getByTestId("kitty-connections").locator(".chip.on").first()).toContainText(
     "All, new ones too",
   );
@@ -2283,6 +2290,14 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
     wa = { ...wa, held: 0, held_log: [] };
     return route.fulfill({ json: wa });
   });
+  const resent: string[] = [];
+  await page.route("**/v1/whatsapp/held/*/resend", (route) => {
+    const id = route.request().url().split("/").slice(-2)[0];
+    resent.push(id);
+    const log = (wa.held_log as { id: string }[]).filter((h) => h.id !== id);
+    wa = { ...wa, held: log.length, held_log: log };
+    return route.fulfill({ json: wa });
+  });
   await page.route("**/v1/whatsapp/test", (route) => {
     tests.push(route.request().postDataJSON());
     return route.fulfill({ json: { ok: true } });
@@ -2368,6 +2383,7 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
     held: 2,
     held_log: [
       {
+        id: "2",
         at: "2026-11-06T18:42:00Z",
         to: "120363012345678901@g.us",
         name: "Familia",
@@ -2375,6 +2391,7 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
         text: "¡Listo! Ya reservé la mesa para el sábado a las nueve.",
       },
       {
+        id: "1",
         at: "2026-11-06T18:40:00Z",
         to: "56912345678",
         kind: "text",
@@ -2391,6 +2408,11 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
   await expect(held.getByTestId("whatsapp-held-item").nth(1)).toContainText("+56912345678");
   await held.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await shot(page, "66-whatsapp-held");
+  // One is sent again and leaves the list; the rest are cleared.
+  await held.getByTestId("whatsapp-held-resend").nth(1).click();
+  await expect(box.getByTestId("whatsapp-note")).toContainText("Sent again");
+  await expect(held.getByTestId("whatsapp-held-item")).toHaveCount(1);
+  expect(resent).toEqual(["1"]);
   await held.getByTestId("whatsapp-held-clear").click();
   await expect(held).toHaveCount(0);
   expect(cleared).toEqual(["DELETE"]);

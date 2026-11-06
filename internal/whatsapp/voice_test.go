@@ -7,12 +7,15 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/madkoding/kitties/internal/chat"
+	"github.com/madkoding/kitties/internal/kitty"
 )
 
 func TestRiskIsAcceptedOnce(t *testing.T) {
@@ -113,18 +116,20 @@ func TestClip(t *testing.T) {
 
 // speech is a fake speech service that counts what it reads aloud.
 type speech struct {
-	mu   sync.Mutex
-	said []string
-	fail bool
+	mu     sync.Mutex
+	said   []string
+	voices []string
+	fail   bool
 }
 
-func (s *speech) speak(_ context.Context, text string) (File, error) {
+func (s *speech) speak(_ context.Context, text, voice string) (File, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.fail {
 		return File{}, errors.New("no credit")
 	}
 	s.said = append(s.said, text)
+	s.voices = append(s.voices, voice)
 	return File{Name: "voice.ogg", MIME: VoiceMIME, Data: []byte("OggS")}, nil
 }
 
@@ -278,7 +283,7 @@ func TestSpeaker(t *testing.T) {
 	}))
 	defer srv.Close()
 	sp := Speaker{BaseURL: srv.URL + "/v1/", Key: "k"}
-	f, err := sp.Speak(context.Background(), "hola")
+	f, err := sp.Speak(context.Background(), "hola", "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,24 +291,27 @@ func TestSpeaker(t *testing.T) {
 		t.Fatalf("file = %+v, asked %v", f, got)
 	}
 	sp.Model, sp.Voice = "tts-1", "nova"
-	if _, err := sp.Speak(context.Background(), "x"); err != nil || got["model"] != "tts-1" || got["voice"] != "nova" {
+	if _, err := sp.Speak(context.Background(), "x", ""); err != nil || got["model"] != "tts-1" || got["voice"] != "nova" {
 		t.Fatalf("named = %v %v", err, got)
 	}
+	if _, err := sp.Speak(context.Background(), "x", "onyx"); err != nil || got["voice"] != "onyx" {
+		t.Fatalf("the kitty's voice = %v %v", err, got)
+	}
 	answer = "RIFFwav"
-	if _, err := sp.Speak(context.Background(), "x"); err == nil || !strings.Contains(err.Error(), "Ogg") {
+	if _, err := sp.Speak(context.Background(), "x", ""); err == nil || !strings.Contains(err.Error(), "Ogg") {
 		t.Fatalf("not ogg = %v", err)
 	}
 	answer, status = strings.Repeat("e", 400), http.StatusTooManyRequests
-	if _, err := sp.Speak(context.Background(), "x"); err == nil || !strings.Contains(err.Error(), "429") || len(err.Error()) > 400 {
+	if _, err := sp.Speak(context.Background(), "x", ""); err == nil || !strings.Contains(err.Error(), "429") || len(err.Error()) > 400 {
 		t.Fatalf("error = %v", err)
 	}
-	if _, err := (Speaker{}).Speak(context.Background(), "x"); err == nil {
+	if _, err := (Speaker{}).Speak(context.Background(), "x", ""); err == nil {
 		t.Fatal("spoke with no service")
 	}
-	if _, err := (Speaker{BaseURL: "http://127.0.0.1:1", Key: "k"}).Speak(context.Background(), "x"); err == nil {
+	if _, err := (Speaker{BaseURL: "http://127.0.0.1:1", Key: "k"}).Speak(context.Background(), "x", ""); err == nil {
 		t.Fatal("spoke with no server")
 	}
-	if _, err := (Speaker{BaseURL: "::bad", Key: "k"}).Speak(context.Background(), "x"); err == nil {
+	if _, err := (Speaker{BaseURL: "::bad", Key: "k"}).Speak(context.Background(), "x", ""); err == nil {
 		t.Fatal("spoke to a bad address")
 	}
 }
@@ -331,5 +339,203 @@ func TestOggSecondsAndSpoken(t *testing.T) {
 		if got := spoken(text); got != want {
 			t.Errorf("spoken(%.20q) = %q", text, got)
 		}
+	}
+}
+
+func TestEachKittyHasItsVoice(t *testing.T) {
+	old := typingEvery
+	typingEvery = 5 * time.Millisecond
+	t.Cleanup(func() { typingEvery = old })
+	r := newRig(t)
+	sp := &speech{}
+	r.b.opt.Speak = sp.speak
+	f := r.linked(t)
+	set := Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678", "+15550001111"},
+		Kitties: map[string]string{"+15550001111": "luna"}, Voice: VoiceAlways}
+	if err := r.b.Apply(set, false); err != nil {
+		t.Fatal(err)
+	}
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "hola"})
+	eventually(t, "mimi's voice note", func() bool { return sp.count() == 1 })
+	f.push(Event{Kind: EvMessage, From: "15550001111", Text: "hola"})
+	eventually(t, "luna's voice note", func() bool { return sp.count() == 2 })
+	sp.mu.Lock()
+	voices := append([]string(nil), sp.voices...)
+	sp.mu.Unlock()
+	if voices[0] != "" || voices[1] != "nova" {
+		t.Fatalf("voices = %q", voices)
+	}
+	// An answer that goes as a voice note shows "recording audio…".
+	typed := strings.Join(f.typings(), ",")
+	if !strings.Contains(typed, "56912345678:true:audio") || !strings.Contains(typed, "15550001111:false:audio") {
+		t.Fatalf("presence = %s", typed)
+	}
+	// "default" is the gateway's voice, and so is a kitty that is gone.
+	r.b.opt.Kitty = func(string) (*kitty.Kitty, error) {
+		k := &kitty.Kitty{ID: "k1", Name: "mimi"}
+		k.Soul.Voice = " Default "
+		return k, nil
+	}
+	if v := r.b.voiceOf("56912345678"); v != "" {
+		t.Fatalf("default = %q", v)
+	}
+	r.b.opt.Kitty = func(string) (*kitty.Kitty, error) { return nil, errors.New("gone") }
+	if v := r.b.voiceOf("56912345678"); v != "" {
+		t.Fatalf("no kitty = %q", v)
+	}
+}
+
+func TestResendHeld(t *testing.T) {
+	r := newRig(t)
+	sp := &speech{}
+	r.b.opt.Speak = sp.speak
+	r.b.opt.File = func(name string) (File, error) {
+		return File{Name: name, MIME: "application/pdf", Data: []byte("pdf")}, nil
+	}
+	f := r.linked(t)
+	set := Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, MaxPerHour: 1}
+	if err := r.b.Apply(set, false); err != nil {
+		t.Fatal(err)
+	}
+	c := connectorOf{r.b}
+	ctx := context.Background()
+	if _, err := c.Call(ctx, map[string]any{"text": "first"}); err != nil {
+		t.Fatal(err)
+	}
+	// A text, a voice note, a file and a reaction are held.
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "hola", Ref: Ref{Chat: "c", ID: "m1"}})
+	eventually(t, "the held reply", func() bool { return len(r.b.Status().HeldLog) == 1 })
+	for _, call := range []map[string]any{
+		{"action": "voice", "text": "nos vemos"},
+		{"file": "informe.pdf"},
+		{"action": "react", "emoji": "👍"},
+	} {
+		if _, err := c.Call(ctx, call); !errors.Is(err, ErrLimit) {
+			t.Fatalf("%v = %v", call, err)
+		}
+	}
+	log := r.b.Status().HeldLog
+	if len(log) != 4 || log[0].Kind != "reaction" || log[1].Kind != "file" || log[1].Text != "informe.pdf" || log[2].Kind != "voice" || log[3].Kind != "text" || log[0].ID == log[1].ID {
+		t.Fatalf("log = %+v", log)
+	}
+	if sp.count() != 0 {
+		t.Fatal("a held voice note was read aloud")
+	}
+	// While the limit is full nothing goes, and an unknown id is said so.
+	if err := r.b.Resend(ctx, log[3].ID); !errors.Is(err, ErrLimit) {
+		t.Fatalf("resend while full = %v", err)
+	}
+	if err := r.b.Resend(ctx, "nope"); !errors.Is(err, ErrNoHeld) {
+		t.Fatalf("unknown = %v", err)
+	}
+	// With room, each goes again and leaves the list.
+	room := func() {
+		r.b.mu.Lock()
+		r.b.sent = nil
+		r.b.mu.Unlock()
+	}
+	for _, h := range log {
+		room()
+		if err := r.b.Resend(ctx, h.ID); err != nil {
+			t.Fatalf("resend %s = %v", h.Kind, err)
+		}
+	}
+	st := r.b.Status()
+	if len(st.HeldLog) != 0 || st.Held != 0 {
+		t.Fatalf("after = %+v", st)
+	}
+	_, reacts := f.snapshot()
+	msgs := f.messages()
+	if len(reacts) != 1 || reacts[0] != "c/m1 👍" || sp.count() != 1 || len(msgs) != 4 ||
+		msgs[1] != "56912345678: [informe.pdf|application/pdf|pdf] " || msgs[3] != "56912345678: *hi* you said hola" {
+		t.Fatalf("reacts %q, said %d, sent %q", reacts, sp.count(), msgs)
+	}
+	// A number taken off the list is not written to again.
+	room()
+	if _, err := c.Call(ctx, map[string]any{"text": "uno"}); err != nil {
+		t.Fatal(err)
+	}
+	_, _ = c.Call(ctx, map[string]any{"text": "dos"})
+	id := r.b.Status().HeldLog[0].ID
+	set.Allow = []string{"+15550001111"}
+	if err := r.b.Apply(set, false); err != nil {
+		t.Fatal(err)
+	}
+	room()
+	if err := r.b.Resend(ctx, id); !errors.Is(err, ErrNotAllow) {
+		t.Fatalf("to a number off the list = %v", err)
+	}
+	if len(r.b.Status().HeldLog) != 1 {
+		t.Fatal("a message that was not sent left the list")
+	}
+}
+
+func TestHeldSurvivesARestart(t *testing.T) {
+	dir := t.TempDir()
+	r := newRigAt(t, dir)
+	r.linked(t)
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, MaxPerHour: 1}, false); err != nil {
+		t.Fatal(err)
+	}
+	c := connectorOf{r.b}
+	_, _ = c.Call(context.Background(), map[string]any{"text": "uno"})
+	_, _ = c.Call(context.Background(), map[string]any{"text": "secreto"})
+	r.b.Stop()
+	data, err := os.ReadFile(filepath.Join(dir, "held.bin"))
+	if err != nil || strings.Contains(string(data), "secreto") {
+		t.Fatalf("held.bin = %q %v", data, err)
+	}
+	again := newRigAt(t, dir)
+	st := again.b.Status()
+	if st.Held != 1 || len(st.HeldLog) != 1 || st.HeldLog[0].Text != "secreto" {
+		t.Fatalf("after a restart = %+v", st)
+	}
+	// Cleared, nothing is left on disk.
+	again.b.ClearHeld()
+	if _, err := os.Stat(filepath.Join(dir, "held.bin")); !os.IsNotExist(err) {
+		t.Fatalf("held.bin after clearing: %v", err)
+	}
+	again.b.ClearHeld()
+	// A list that does not open is dropped and said so.
+	if err := os.WriteFile(filepath.Join(dir, "held.bin"), []byte("garbage"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	third := newRigAt(t, dir)
+	if len(third.b.Status().HeldLog) != 0 || !strings.Contains(third.logString(), "held messages could not be read") {
+		t.Fatalf("damaged = %s", third.logString())
+	}
+	if _, err := os.Stat(filepath.Join(dir, "held.bin")); !os.IsNotExist(err) {
+		t.Fatal("the damaged list is still there")
+	}
+}
+
+func TestHeldThatCannotBeKept(t *testing.T) {
+	r := newRig(t)
+	r.b.opt.Box = box{fail: true}
+	r.b.mu.Lock()
+	r.b.set.MaxPerHour = 1
+	r.b.sent = []time.Time{r.b.now()}
+	r.b.mu.Unlock()
+	if err := r.b.take("56912345678", "text", "x", Ref{}); !errors.Is(err, ErrLimit) {
+		t.Fatal(err)
+	}
+	if !strings.Contains(r.logString(), "keep the held messages: sealed shut") {
+		t.Fatalf("log = %s", r.logString())
+	}
+	// Without a vault nothing is written or read.
+	r.b.opt.Box = nil
+	r.b.saveHeldLocked()
+	r.b.loadHeld()
+	if _, err := os.Stat(filepath.Join(r.dir, "held.bin")); !os.IsNotExist(err) {
+		t.Fatal("kept without a vault")
+	}
+	// A list that cannot be removed is said so.
+	if err := os.MkdirAll(filepath.Join(r.dir, "held.bin", "x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r.b.opt.Box = box{}
+	r.b.ClearHeld()
+	if !strings.Contains(r.logString(), "forget the held messages") {
+		t.Fatalf("log = %s", r.logString())
 	}
 }

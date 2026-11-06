@@ -44,12 +44,15 @@ const (
 // it, is easier to read than to hear, so it goes as text.
 const maxSpoken = 1200
 
-// Speak implements Options.Speak.
-func (s Speaker) Speak(ctx context.Context, text string) (File, error) {
+// Speak implements Options.Speak: voice ("" is s.Voice) is the speaker's voice.
+func (s Speaker) Speak(ctx context.Context, text, voice string) (File, error) {
 	if s.Key == "" || s.BaseURL == "" {
 		return File{}, errors.New("no speech service is set up")
 	}
-	model, voice := s.Model, s.Voice
+	model := s.Model
+	if voice == "" {
+		voice = s.Voice
+	}
 	if model == "" {
 		model = SpeakModel
 	}

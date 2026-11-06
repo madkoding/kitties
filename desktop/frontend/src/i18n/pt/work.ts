@@ -603,6 +603,10 @@ const dict: Dictionary = {
   unused: "sem uso",
   "Never in its prompt for two weeks: the next consolidation may drop it":
     "Duas semanas sem entrar nas instruções: a próxima consolidação pode removê-la",
+  "Voice for WhatsApp voice notes": "Voz para as mensagens de voz do WhatsApp",
+  "{name} now speaks with the voice {voice}.": "{name} agora fala com a voz {voice}.",
+  "{name} speaks with the gateway's voice.": "{name} fala com a voz do gateway.",
+  "The gateway's voice": "A voz do gateway",
 };
 
 export default dict;

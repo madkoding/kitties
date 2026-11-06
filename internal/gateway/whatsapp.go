@@ -14,6 +14,7 @@ type WhatsApp interface {
 	Status() whatsapp.Status
 	Apply(s whatsapp.Settings, acceptRisk bool) error
 	ClearHeld()
+	Resend(ctx context.Context, id string) error
 	Link() error
 	Reconnect() error
 	Unlink(ctx context.Context) error
@@ -34,6 +35,7 @@ func (s *Server) whatsappRoutes() {
 	s.mux.Handle("POST /v1/whatsapp/unlink", s.auth(s.handleWhatsAppUnlink))
 	s.mux.Handle("POST /v1/whatsapp/test", s.auth(s.handleWhatsAppTest))
 	s.mux.Handle("DELETE /v1/whatsapp/held", s.auth(s.handleWhatsAppClearHeld))
+	s.mux.Handle("POST /v1/whatsapp/held/{id}/resend", s.auth(s.handleWhatsAppResend))
 }
 
 var errNoWhatsApp = errors.New("this gateway has no WhatsApp link")
@@ -137,4 +139,23 @@ func (s *Server) handleWhatsAppClearHeld(w http.ResponseWriter, _ *http.Request)
 	}
 	s.whatsapp.ClearHeld()
 	reply(w, http.StatusOK, s.whatsapp.Status())
+}
+
+// handleWhatsAppResend sends a held message again, as the person's own send: to a number or a
+// group still on the list, while connected and with room under the hourly limit.
+func (s *Server) handleWhatsAppResend(w http.ResponseWriter, r *http.Request) {
+	if s.whatsapp == nil {
+		fail(w, http.StatusNotFound, errNoWhatsApp)
+		return
+	}
+	switch err := s.whatsapp.Resend(r.Context(), r.PathValue("id")); {
+	case errors.Is(err, whatsapp.ErrNoHeld):
+		fail(w, http.StatusNotFound, err)
+	case errors.Is(err, whatsapp.ErrLimit):
+		fail(w, http.StatusTooManyRequests, err)
+	case err != nil:
+		fail(w, http.StatusBadRequest, err)
+	default:
+		reply(w, http.StatusOK, s.whatsapp.Status())
+	}
 }

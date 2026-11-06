@@ -71,8 +71,11 @@ olvida la sesión.
 - **Un límite por hora.** Cuenta todo mensaje, nota de voz, archivo y reacción que sale; pasado el
   límite una respuesta queda retenida y un `send` de un kitty falla con un error claro. Evita que el
   número escriba como un bot. Ajustes lista los últimos 50 mensajes retenidos, del más nuevo al más
-  viejo (cuándo, a quién, de qué tipo y cómo empezaba), en **Retenidos por el límite por hora**, con
-  **Vaciar la lista**; la lista vive en memoria y parte vacía al reiniciar.
+  viejo (cuándo, a quién, de qué tipo y cómo empezaba), en **Retenidos por el límite por hora**.
+  **Reenviar** manda uno de nuevo cuando el límite tiene espacio (como un envío tuyo: el número o
+  grupo debe seguir en la lista, y fuera del horario de silencio) y lo saca de la lista; **Vaciar la
+  lista** los olvida todos. La lista queda sellada con la llave del vault (`held.bin`), así que un
+  reinicio no la pierde.
 
   ![Los mensajes retenidos por el límite por hora en Ajustes](screenshots/66-whatsapp-held.png)
 - **"escribiendo…" mientras piensa.** El chat del teléfono muestra al kitty escribiendo hasta que
@@ -92,7 +95,10 @@ olvida la sesión.
   de voz de verdad, con su duración) y cuenta como un mensaje. Una respuesta que se lee mejor de lo
   que se escucha (más de 1200 caracteres, o con código) sigue yendo como texto, un emoji sigue
   siendo una reacción, y si el servicio de voz falla va el texto. La voz de Groq solo entrega WAV,
-  que WhatsApp no reproduce como nota de voz, así que no se usa para esto.
+  que WhatsApp no reproduce como nota de voz, así que no se usa para esto. Cada kitty puede tener
+  **su propia voz** (en su cajón, *Voz para las notas de voz de WhatsApp*, o `voice:` en su alma);
+  los demás usan `speak_voice`. Mientras va en camino una respuesta que saldrá como nota de voz, el
+  chat del teléfono muestra **grabando audio…** en vez de escribiendo.
 - **Stickers, ubicaciones y contactos.** Un sticker llega como su imagen (con su emoji), una
   ubicación como su nombre y dirección con un enlace al mapa, y un contacto compartido como su
   nombre y números.
@@ -148,6 +154,7 @@ El código QR se sigue escaneando desde Ajustes, o se lee con `GET /v1/whatsapp`
 | --- | --- | --- |
 | Encendido o no, la lista, el kitty, el chat de cada número | `<data>/whatsapp/settings.json` | modo 0600, sin secretos |
 | Los mensajes que esperan el fin del silencio | `<data>/whatsapp/queue.bin` | **sellados** como la sesión; se borran al responderlos |
+| Los mensajes retenidos por el límite por hora (los últimos 50) | `<data>/whatsapp/held.bin` | **sellados** como la sesión; se borran al reenviarlos o vaciar la lista |
 | La sesión del dispositivo vinculado (sus llaves, las sesiones Signal, los contactos) | `<data>/whatsapp/session.bin` | **sellada** con la llave del vault (AES-256-GCM, atada a su uso); nunca en claro |
 
 La sesión es el estado de la librería guardado en memoria y sellado entero: el gateway no usa un
@@ -160,13 +167,14 @@ el teléfono de nuevo con otro código.
 
 | Ruta | Qué hace |
 | --- | --- |
-| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored`, `seen_groups` (los grupos que escribieron hace poco), `sent_last_hour`, `held`, `held_log` (los últimos retenidos: `at`, `to`, `name`, `kind`, `text`), `can_speak`, `risk_accepted`, `quiet`, `waiting` |
+| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored`, `seen_groups` (los grupos que escribieron hace poco), `sent_last_hour`, `held`, `held_log` (los últimos retenidos: `id`, `at`, `to`, `name`, `kind`, `text`), `can_speak`, `risk_accepted`, `quiet`, `waiting` |
 | `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups", "kitties", "max_per_hour", "quiet_from", "quiet_to", "voice"}`; activarlo la primera vez necesita `"accept_risk": true` (queda como `risk_accepted` en `settings.json`) |
 | `POST /v1/whatsapp/link` | Códigos QR nuevos (si expiraron o el teléfono quitó el dispositivo) |
 | `POST /v1/whatsapp/reconnect` | Conecta de nuevo con la sesión guardada (sin otro código) |
 | `POST /v1/whatsapp/unlink` | Quita el dispositivo del teléfono y olvida la sesión |
 | `POST /v1/whatsapp/test` | `{"to": "+56912345678"}` manda un mensaje corto a un número de la lista |
 | `DELETE /v1/whatsapp/held` | Vacía la lista de mensajes retenidos |
+| `POST /v1/whatsapp/held/{id}/resend` | Manda de nuevo un mensaje retenido (404 si ya no está en la lista, 429 mientras el límite está lleno) |
 
 ## Por dentro
 

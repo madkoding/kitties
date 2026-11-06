@@ -567,7 +567,7 @@ func (c *Client) React(ctx context.Context, ref whatsapp.Ref, emoji string) erro
 }
 
 // Typing implements whatsapp.Client.
-func (c *Client) Typing(ctx context.Context, to string, on bool) error {
+func (c *Client) Typing(ctx context.Context, to string, on, audio bool) error {
 	cn, err := c.current()
 	if err != nil {
 		return err
@@ -580,7 +580,11 @@ func (c *Client) Typing(ctx context.Context, to string, on bool) error {
 	if on {
 		state = types.ChatPresenceComposing
 	}
-	return cn.SendChatPresence(ctx, jid, state, types.ChatPresenceMediaText)
+	media := types.ChatPresenceMediaText
+	if audio {
+		media = types.ChatPresenceMediaAudio
+	}
+	return cn.SendChatPresence(ctx, jid, state, media)
 }
 
 // Logout implements whatsapp.Client.

@@ -498,6 +498,7 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
               limit={cur.max_per_hour || 60}
               busy={busy}
               onClear={() => run(() => api.clearWhatsAppHeld())}
+              onResend={(id) => run(() => api.resendWhatsAppHeld(id), t("Sent again."))}
             />
           )}
         </div>
@@ -737,6 +738,7 @@ function HeldLog(props: {
   limit: number;
   busy: boolean;
   onClear: () => void;
+  onResend: (id: string) => void;
 }) {
   const kinds: Record<WhatsAppHeld["kind"], string> = {
     text: t("Message"),
@@ -758,13 +760,13 @@ function HeldLog(props: {
       </summary>
       <p class="text-xs text-[var(--t3)] mt-1">
         {t(
-          "These were not sent: more than {limit} messages went in an hour. Raise the limit above if they should go.",
+          "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.",
           { limit: props.limit },
         )}
       </p>
       <ul class="mt-2 flex flex-col gap-2">
-        {props.held.map((h, i) => (
-          <li key={i} class="text-xs" data-testid="whatsapp-held-item">
+        {props.held.map((h) => (
+          <li key={h.id} class="text-xs" data-testid="whatsapp-held-item">
             <span class="text-[var(--t3)]">{when(h.at)}</span>
             {" · "}
             <span class="font-semibold">
@@ -772,6 +774,14 @@ function HeldLog(props: {
             </span>
             {" · "}
             <span class="chip !py-0 !px-1.5">{kinds[h.kind] || h.kind}</span>
+            <button
+              class="btn-outline ml-2 !py-0 px-2 text-xs"
+              disabled={props.busy}
+              onClick={() => props.onResend(h.id)}
+              data-testid="whatsapp-held-resend"
+            >
+              {t("Resend")}
+            </button>
             {h.text && <span class="block text-[var(--t2)] mt-0.5 break-words">{h.text}</span>}
           </li>
         ))}

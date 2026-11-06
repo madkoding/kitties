@@ -113,10 +113,14 @@ func (f *fakeClient) snapshot() (reads, reacts []string) {
 	return append([]string(nil), f.reads...), append([]string(nil), f.reacts...)
 }
 
-func (f *fakeClient) Typing(_ context.Context, to string, on bool) error {
+func (f *fakeClient) Typing(_ context.Context, to string, on, audio bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.typing = append(f.typing, fmt.Sprintf("%s:%v", to, on))
+	p := fmt.Sprintf("%s:%v", to, on)
+	if audio {
+		p += ":audio"
+	}
+	f.typing = append(f.typing, p)
 	return nil
 }
 
@@ -278,6 +282,7 @@ func kittyOf(ref string) (*kitty.Kitty, error) {
 	case "luna", "k2":
 		k := &kitty.Kitty{ID: "k2", Name: "luna"}
 		k.Soul.Language = "Spanish"
+		k.Soul.Voice = "nova"
 		return k, nil
 	}
 	return nil, fmt.Errorf("no kitty %q", ref)
