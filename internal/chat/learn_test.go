@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/kitty"
@@ -105,8 +106,30 @@ func TestMemoryInThePromptAndActions(t *testing.T) {
 	if fed := sa.seen[len(sa.seen)-1][len(sa.seen[len(sa.seen)-1])-1].Content; !strings.Contains(fed, "no project") {
 		t.Errorf("no project = %q", fed)
 	}
+	// A shared note from a kitty is only proposed: it waits for the person's yes.
+	b := &bell{}
+	s.SetNotifier(b)
+	sa.replies = []string{"@memory remember {\"text\": \"Pat lives in Lima\", \"scope\": \"shared\"}", "ok"}
+	_, _ = s.Send(context.Background(), sess.ID, "share it")
+	if fed := sa.seen[len(sa.seen)-1][len(sa.seen[len(sa.seen)-1])-1].Content; !strings.Contains(fed, "proposed to every kitty") {
+		t.Errorf("proposed = %q", fed)
+	}
+	if shared := m.Shared(); len(shared) != 1 || !shared[0].Proposed {
+		t.Errorf("shared = %+v", shared)
+	}
+	if !strings.Contains(kinds(j, "a1"), "learned") {
+		t.Error("the proposal is in the journal")
+	}
+	if b.events() != "approval" || b.seen[0].Body != "Pat lives in Lima" {
+		t.Errorf("the person is told a proposal waits: %+v", b.seen)
+	}
+	sa.replies = []string{"ok"}
+	_, _ = s.Send(context.Background(), sess.ID, "next")
+	if strings.Contains(sa.seen[len(sa.seen)-1][0].Content, "Pat lives in Lima") {
+		t.Error("a proposed note stays out of the prompt until the person says yes")
+	}
 	bo, _ := s.fleet.Get("bo")
-	if out := s.runMemory("", action{name: "list"}, bo); out.text != "(no notes yet)" {
+	if out := s.runMemory("", action{name: "list"}, bo); !strings.Contains(out.text, "Pat lives in Lima") {
 		t.Errorf("empty list = %+v", out)
 	}
 	// Native: the three tools are offered and their calls are memory actions.
@@ -219,14 +242,23 @@ func TestDistillation(t *testing.T) {
 	ana, _ := s.fleet.Get("ana")
 	_, _ = m.Remember(ana.ID, memory.ScopeUser, "Pat wrote this one", "person", true)
 	_, _ = m.Remember(ana.ID, memory.ScopeUser, "Correction: too long", "feedback", false)
+	_, _ = m.Remember(ana.ID, memory.ScopeShared, "Every kitty answers in Spanish", "person", true)
 	m.Record(ana.ID, memory.Feedback{Rating: "down", Note: "too long", Request: "summarise", Excerpt: "a very long summary"})
 	// The brain is asked with the notes and the verdicts, and its list replaces what is not pinned.
 	sa.replies = []string{"Here you go:\n[{\"scope\": \"user\", \"text\": \"Keep answers to two lines\"}, {\"scope\": \"WORK\", \"text\": \"Summaries first\"}, {\"text\": \"No scope means user\"}]\nDone."}
+	// Two weeks on, a note that never reached a prompt is marked for the brain to drop.
+	s.now = func() time.Time { return time.Now().Add(memory.StaleAfter + time.Hour) }
 	notes, err := s.Distill(context.Background(), "ana")
 	if err != nil {
 		t.Fatal(err)
 	}
+	if asked := sa.seen[0][1].Content; !strings.Contains(asked, "Correction: too long (unused") || strings.Contains(asked, "Pat wrote this one (unused") {
+		t.Errorf("stale notes = %q", asked)
+	}
 	asked := sa.seen[0][1].Content
+	if strings.Contains(asked, "Every kitty answers in Spanish") {
+		t.Errorf("the shared notes are not one kitty's to distill: %q", asked)
+	}
 	if !strings.Contains(asked, "[user] Correction: too long") || !strings.Contains(asked, "- down | asked: summarise | the kitty did: a very long summary | the person said: too long") {
 		t.Errorf("the brain was asked %q", asked)
 	}
@@ -343,6 +375,32 @@ func TestLearningFromApprovalsAndAPI(t *testing.T) {
 	if _, err := s.Remember("zz", "user", "x"); err == nil {
 		t.Error("unknown kitty")
 	}
+	if ed, err := s.EditNote("ana", note.ID, "Invoices are due on the 5th"); err != nil || ed.Text != "Invoices are due on the 5th" {
+		t.Errorf("edit = %+v %v", ed, err)
+	}
+	if _, err := s.EditNote("zz", note.ID, "x"); err == nil {
+		t.Error("edit on an unknown kitty")
+	}
+	if _, err := s.EditNote("ana", "nope", "x"); err == nil {
+		t.Error("edit of an unknown note")
+	}
+	// The shared notes, without a kitty.
+	if notes, err := s.SharedNotes(); err != nil || len(notes) != 0 {
+		t.Errorf("no shared notes yet: %v %v", notes, err)
+	}
+	sh, err := s.RememberShared("Pat works from Santiago")
+	if err != nil || sh.Scope != memory.ScopeShared {
+		t.Fatalf("shared = %+v %v", sh, err)
+	}
+	if ed, err := s.EditShared(sh.ID, "Pat works from Lima"); err != nil || ed.Text != "Pat works from Lima" {
+		t.Errorf("edit shared = %+v %v", ed, err)
+	}
+	if notes, _ := s.SharedNotes(); len(notes) != 1 {
+		t.Errorf("shared = %v", notes)
+	}
+	if err := s.ForgetShared(sh.ID); err != nil {
+		t.Error(err)
+	}
 	if err := s.ForgetNote("ana", note.ID); err != nil {
 		t.Error(err)
 	}
@@ -374,6 +432,11 @@ func TestLearningFromApprovalsAndAPI(t *testing.T) {
 		func() error { _, e := plain.MemoryOf("ana"); return e }(),
 		func() error { _, e := plain.Remember("ana", "user", "x"); return e }(),
 		plain.ForgetNote("ana", "x"),
+		func() error { _, e := plain.EditNote("ana", "x", "y"); return e }(),
+		func() error { _, e := plain.SharedNotes(); return e }(),
+		func() error { _, e := plain.RememberShared("x"); return e }(),
+		func() error { _, e := plain.EditShared("x", "y"); return e }(),
+		plain.ForgetShared("x"),
 		func() error { _, e := plain.SetProfile("ana", 3, true); return e }(),
 		func() error { _, e := plain.Distill(context.Background(), "ana"); return e }(),
 		plain.Feedback("c", 0, "up", ""),

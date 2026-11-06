@@ -6,7 +6,7 @@
 | `GET /v1/providers` · `GET /v1/connectors`| what the kitties can think with and reach      |
 | `GET /v1/kitties` · `POST /v1/kitties`    | the fleet; create `{name, provider, soul, connectors, desktop, start}` |
 | `POST /v1/kitties/{ref}/start` · `/stop` · `DELETE /v1/kitties/{ref}` | lifecycle, by id or name |
-| `GET /v1/kitties/{ref}/power` · `POST /v1/kitties/{ref}/power` `{on, force}` | its machine: `{state: on\|starting\|off\|error, off_reason, auto_off_minutes, in_use, in_use_by, off_in_seconds…}`; turn it on (202, it comes up in the background) or off (409 when something uses it, unless `force`) |
+| `GET /v1/kitties/{ref}/power` · `POST /v1/kitties/{ref}/power` `{on, force}` | its machine: `{state: on\|starting\|off\|error, step, off_reason, auto_off_minutes, in_use, in_use_by, off_in_seconds…}`; `step: desktop` while its container is up and its desktop still coming up; turn it on (202, it comes up in the background) or off (409 when something uses it, unless `force`) |
 | `PATCH /v1/kitties/{ref}` `{auto_off_minutes}` | minutes without use before its machine turns itself off (`0` never; `auto_off_default: true` goes back to the gateway's default) |
 | `POST /v1/kitties/{ref}/exec` `{argv}`    | run a command in its container                 |
 | `GET /v1/kitties/{ref}/screenshot`        | a PNG of its display                           |
@@ -31,7 +31,8 @@
 | `GET/PUT/DELETE /v1/artifacts/{name}`     | the artifacts library (raw file bodies) |
 | `GET /v1/approvals?status=pending` · `POST /v1/approvals/{id}/approve` `{always}` · `…/reject` `{reason}` | the actions held for a yes, and the answer |
 | `GET /v1/approvals/rules` · `POST /v1/approvals/rules` `{kitty, connector, action, mode}` · `DELETE /v1/approvals/rules/{id}` | the action limits (ask, never, auto; an empty action is all of the connection's), and taking one away |
-| `GET/POST /v1/kitties/{ref}/memory` · `DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes, its picture of you, and a distillation now |
+| `GET/POST /v1/kitties/{ref}/memory` · `PUT/DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes (correct one with `{"text": …}`), its picture of you, and a distillation now |
+| `GET/POST /v1/memory/shared` · `PUT/DELETE /v1/memory/shared/{id}` | the notes every kitty knows |
 | `POST /v1/chats/{id}/turns/{index}/feedback` `{rating, note}` | a thumb under an answer |
 | `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` · `POST …/notify/digest` | where and when kitties tell you; a test; the daily summary now |
 | `PUT /v1/settings/autonomy` | `{"follow_ups": "10m 30m 2h", "brain_wait": "30m", "stand_ins": "3"}`: how long the kitties keep at a task on their own (empty: defaults, `off`: none) |

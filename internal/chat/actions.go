@@ -88,7 +88,7 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 	}
 	if s.memory != nil {
 		tools = append(tools,
-			provider.Tool{Name: "memory_remember", Description: "Keep a note about the person or the work for next time: a preference, a correction, a fact of the project. Short, durable, one thing each.", Parameters: obj(map[string]any{"text": str("the note"), "scope": str("user (how the person likes things, the default), work (a lesson about the work) or project (about this thread's project)")}, "text")},
+			provider.Tool{Name: "memory_remember", Description: "Keep a note about the person or the work for next time: a preference, a correction, a fact of the project. Short, durable, one thing each.", Parameters: obj(map[string]any{"text": str("the note"), "scope": str("user (how the person likes things, the default), work (a lesson about the work), project (about this thread's project) or shared (every kitty should know it)")}, "text")},
 			provider.Tool{Name: "memory_forget", Description: "Drop a note that is wrong or out of date.", Parameters: obj(map[string]any{"id": str("the note's id")}, "id")},
 			provider.Tool{Name: "memory_list", Description: "Read your notes, with their ids.", Parameters: obj(map[string]any{})},
 		)

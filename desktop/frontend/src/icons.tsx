@@ -48,6 +48,8 @@ export const IconStop = (p: P) => svg(p, [<rect x="5" y="5" width="14" height="1
 export const IconPlay = (p: P) => svg(p, [<path d="M6 4l14 8-14 8z" />]);
 export const IconTrash = (p: P) =>
   svg(p, [<path d="M3 6h18" />, <path d="M8 6V4h8v2" />, <path d="M19 6l-1 14H6L5 6" />]);
+export const IconPencil = (p: P) =>
+  svg(p, [<path d="M17 3l4 4L8 20H4v-4z" />, <path d="M14 6l4 4" />]);
 export const IconSettings = (p: P) =>
   svg(p, [
     <circle cx="12" cy="12" r="3" />,

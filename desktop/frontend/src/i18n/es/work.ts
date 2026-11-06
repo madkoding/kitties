@@ -229,6 +229,9 @@ const dict: Dictionary = {
   "Scope of the note": "Alcance de la nota",
   "about me": "sobre mí",
   "about the work": "sobre el trabajo",
+  shared: "compartida",
+  "for every kitty": "para todos los kitties",
+  "Every kitty knows it": "Todos los kitties la conocen",
   "Always answer in Spanish": "Responde siempre en español",
   "A note for it to keep": "Una nota para que la guarde",
   "Add note": "Agregar nota",
@@ -559,6 +562,7 @@ const dict: Dictionary = {
   "you are watching its desktop": "estás viendo su escritorio",
   "running a command": "ejecutando un comando",
   "in use": "en uso",
+  "Starting the desktop…": "Iniciando el escritorio…",
   "Starting…": "Iniciando…",
   "Failed to start: {error}": "No pudo iniciar: {error}",
   "Failed to start": "No pudo iniciar",
@@ -577,6 +581,34 @@ const dict: Dictionary = {
   "{name}'s machine turns itself off after this time without use, never in the middle of a task or while you watch its desktop. {name} knows whether it is on, and turns it on by itself when it needs it.":
     "La máquina de {name} se apaga sola tras este tiempo sin uso, nunca en medio de una tarea ni mientras ves su escritorio. {name} sabe si está encendida y la enciende sola cuando la necesita.",
   off: "apagada",
+  "Correct: {note}": "Corregir: {note}",
+  "Edit: {note}": "Editar: {note}",
+  "What every kitty knows about you: your name, your language, how you like to work. It goes into each kitty's prompt; what one kitty learns alone stays in its own memory, in its drawer.":
+    "Lo que todos los kitties saben de ti: tu nombre, tu idioma, cómo te gusta trabajar. Va en las instrucciones de cada kitty; lo que un kitty aprende solo queda en su propia memoria, en su panel.",
+  "Nothing shared yet.": "Aún no hay nada compartido.",
+  "My name is Ana and I work from Madrid": "Me llamo Ana y trabajo desde Madrid",
+  "A note for every kitty": "Una nota para todos los kitties",
+  "That file is not a kitty's memory.": "Ese archivo no es la memoria de un kitty.",
+  "Save the notes in a file, to keep or to give to another kitty":
+    "Guarda las notas en un archivo, para conservarlas o dárselas a otro kitty",
+  Export: "Exportar",
+  Import: "Importar",
+  "Import notes from a file": "Importar notas desde un archivo",
+  "Notes imported: {n}.": "Notas importadas: {n}.",
+  "Shared memory": "Memoria compartida",
+  "It was in the kitty's prompt for {n} answers":
+    "Estuvo en las instrucciones del kitty en {n} respuestas",
+  "A kitty proposed it: it reaches every kitty once you say yes":
+    "La propuso un kitty: llega a todos cuando digas que sí",
+  "Accept: {note}": "Aceptar: {note}",
+  Accept: "Aceptar",
+  "Search the notes": "Buscar en las notas",
+  "Show the notes of": "Mostrar las notas de",
+  "every scope": "todos los ámbitos",
+  "No note matches.": "Ninguna nota coincide.",
+  unused: "sin uso",
+  "Never in its prompt for two weeks: the next consolidation may drop it":
+    "Dos semanas sin entrar en sus instrucciones: la próxima condensación puede quitarla",
 };
 
 export default dict;
