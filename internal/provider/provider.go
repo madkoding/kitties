@@ -24,6 +24,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"sort"
@@ -363,6 +364,21 @@ func (e *HTTPError) Error() string {
 // Retryable reports whether the status is worth another attempt.
 func (e *HTTPError) Retryable() bool {
 	return e.Code == http.StatusTooManyRequests || e.Code >= 500
+}
+
+// Transient reports whether an error from a model is likely to pass by itself: the provider is
+// busy or failing (429, 5xx), or the network did not reach it. A missing key, a refused sign-in
+// or a bad request is not: waiting does not fix those.
+func Transient(err error) bool {
+	if err == nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	var he *HTTPError
+	if errors.As(err, &he) {
+		return he.Retryable()
+	}
+	var ne net.Error
+	return errors.As(err, &ne) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, context.DeadlineExceeded)
 }
 
 // ErrNoKey is returned when a provider needs a key and none was given.

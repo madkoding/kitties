@@ -79,7 +79,7 @@ func (s *Server) WithMCPOptions(token string, opt MCPOptions) *Server {
 		}))
 	}
 	srv := mcp.New("kitties", s.version)
-	tools := append(s.mcpTools(opt.Exec), s.mcpMoreTools()...)
+	tools := append(append(s.mcpTools(opt.Exec), s.mcpMoreTools()...), s.mcpMemoryTools()...)
 	if opt.Approve {
 		tools = append(tools, s.mcpApproveTool())
 	}

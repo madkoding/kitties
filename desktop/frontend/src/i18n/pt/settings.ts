@@ -63,6 +63,20 @@ const dict: Dictionary = {
   "Only to reach it through a proxy or a compatible service.":
     "Só para chegar a ele por um proxy ou um serviço compatível.",
   "Longest answer (tokens)": "Resposta mais longa (tokens)",
+  "Tasks a day another kitty may take over": "Tarefas por dia que outro kitty pode assumir",
+  "When a kitty with no backup gives up, the free kitty most like it takes the task over, up to this many times a day. Write off to be asked instead.":
+    "Quando um kitty sem reserva desiste, o kitty livre mais parecido assume a tarefa, até este número de vezes por dia. Escreva off para que perguntem a você.",
+  "Working on their own": "Trabalho por conta própria",
+  "Try an unfinished goal again after": "Tentar de novo um objetivo inacabado após",
+  "A goal that ended blocked or waiting for you runs again by itself after each of these waits. Write off to never try again on its own.":
+    "Um objetivo que terminou bloqueado ou esperando por você roda de novo sozinho após cada uma destas esperas. Escreva off para nunca tentar de novo sozinho.",
+  "Wait for a model that is down": "Esperar por um modelo fora do ar",
+  "How long a task waits for its model to answer again (busy, failing, unreachable) before giving up. Write off to not wait.":
+    "Quanto tempo uma tarefa espera o modelo voltar a responder (ocupado, com falhas, inacessível) antes de desistir. Escreva off para não esperar.",
+  "If it is down, think with": "Se estiver fora do ar, pensar com",
+  "nothing else (wait for it)": "nada mais (esperar por ele)",
+  "While this model is busy or unreachable, the kitties go on with this one instead of waiting.":
+    "Enquanto este modelo estiver ocupado ou inacessível, os kitties seguem com este outro em vez de esperar.",
   "Saved, but the test did not pass: ": "Salvo, mas o teste não passou: ",
   "Change something": "Mudar algo",
   "Saved without a passing test.": "Salvo sem passar no teste.",
@@ -145,6 +159,8 @@ const dict: Dictionary = {
   "What the kitties are told it is for": "Para que você diz aos kitties que ela serve",
   "uses the OAuth 1.0 keys": "usa as chaves OAuth 1.0",
   "uses a token": "usa um token",
+  "uses an app password": "usa uma senha de app",
+  "A user and an app password of the account": "Um usuário e uma senha de app da conta",
   "uses a webhook": "usa um webhook",
   "token expired": "token expirado",
   "token expires in {time}": "o token expira em {time}",

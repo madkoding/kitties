@@ -19,7 +19,7 @@ func open(t *testing.T) *Store {
 }
 
 func TestScopesAndSlugs(t *testing.T) {
-	for _, ok := range []string{"user", "work", "project:launch", "project:q4 report", "project:a-b_c"} {
+	for _, ok := range []string{"user", "work", "shared", "project:launch", "project:q4 report", "project:a-b_c"} {
 		if !ValidScope(ok) {
 			t.Errorf("%q is a scope", ok)
 		}
@@ -237,6 +237,138 @@ func TestDistilledPersistenceAndPrompt(t *testing.T) {
 		bad := Open(filepath.Join(ro, "sub"))
 		if _, err := bad.Remember("k", ScopeUser, "x", "kitty", false); err != nil {
 			t.Error("an unwritable memory still works in memory")
+		}
+	}
+}
+
+func TestSharedNotes(t *testing.T) {
+	s := open(t)
+	sh, err := s.Remember("k1", ScopeShared, "Answer in Spanish", "person", true)
+	if err != nil || sh.Scope != ScopeShared {
+		t.Fatalf("shared: %+v %v", sh, err)
+	}
+	if _, err := s.Remember("k1", ScopeUser, "Likes tables", "kitty", false); err != nil {
+		t.Fatal(err)
+	}
+	// Every kitty sees the shared note; only k1 its own.
+	if n := s.Notes("k2", ""); len(n) != 1 || n[0].Text != "Answer in Spanish" {
+		t.Errorf("k2 notes: %+v", n)
+	}
+	if n := s.Notes("k1", ""); len(n) != 2 {
+		t.Errorf("k1 notes: %+v", n)
+	}
+	if n := s.Notes("k1", ScopeShared); len(n) != 1 {
+		t.Errorf("k1 shared: %+v", n)
+	}
+	if p := s.Prompt("k2", "Mad", ""); !strings.Contains(p, "What every kitty of Mad knows") || !strings.Contains(p, "Answer in Spanish") {
+		t.Errorf("prompt: %q", p)
+	}
+	// The same thing told from another kitty strengthens the one shared note.
+	if again, _ := s.Remember("k2", ScopeShared, "answer in  spanish", "kitty", false); again.ID != sh.ID || again.Strength != 2 {
+		t.Errorf("again: %+v", again)
+	}
+	// A distillation neither drops nor writes shared notes.
+	s.Distilled("k1", []Note{{Scope: ScopeShared, Text: "Invented"}, {Scope: ScopeWork, Text: "Check twice"}})
+	if n := s.Notes("k1", ScopeShared); len(n) != 1 || n[0].Text != "Answer in Spanish" {
+		t.Errorf("after distill: %+v", n)
+	}
+	// Removing a kitty keeps what is shared.
+	if err := s.ForgetKitty("k1"); err != nil {
+		t.Fatal(err)
+	}
+	if n := s.Notes("k3", ""); len(n) != 1 {
+		t.Errorf("after ForgetKitty: %+v", n)
+	}
+	// It is kept on disk, and any kitty can forget it.
+	s2 := Open(s.dir)
+	if n := s2.Notes("k9", ScopeShared); len(n) != 1 {
+		t.Errorf("reopened: %+v", n)
+	}
+	if len(s2.Shared()) != 1 {
+		t.Errorf("Shared = %+v", s2.Shared())
+	}
+	// A note is corrected in place, its own or a shared one, and becomes the person's.
+	own, _ := s2.Remember("k9", ScopeWork, "Deploy on Fridays", "kitty", false)
+	if ed, err := s2.Edit("k9", own.ID, "  Never deploy on Fridays "); err != nil || ed.Text != "Never deploy on Fridays" || !ed.Pinned || ed.Source != "person" {
+		t.Errorf("edit own = %+v %v", ed, err)
+	}
+	if ed, err := s2.Edit("k1", sh.ID, "Answer in English"); err != nil || ed.Text != "Answer in English" {
+		t.Errorf("edit shared = %+v %v", ed, err)
+	}
+	if ed, err := s2.Edit("", sh.ID, "Answer in Spanish"); err != nil || ed.Scope != ScopeShared {
+		t.Errorf("edit shared without a kitty = %+v %v", ed, err)
+	}
+	if _, err := s2.Edit("k9", own.ID, "  "); err == nil {
+		t.Error("an empty edit")
+	}
+	if _, err := s2.Edit("k9", "nope", "x"); err == nil {
+		t.Error("editing a missing note")
+	}
+	_ = s2.Forget("k9", own.ID)
+	if err := s2.Forget("k9", sh.ID); err != nil {
+		t.Fatal(err)
+	}
+	if n := s2.Notes("k2", ""); len(n) != 0 {
+		t.Errorf("after forget: %+v", n)
+	}
+	if err := s2.Forget("k9", "nope"); err == nil {
+		t.Error("forgetting a missing note")
+	}
+}
+
+func TestProposedSharedNotesAndUses(t *testing.T) {
+	s := open(t)
+	// A kitty's shared note is proposed: listed, but out of every prompt.
+	pr, _ := s.Remember("k1", ScopeShared, "Pat lives in Lima", "kitty", false)
+	if !pr.Proposed {
+		t.Fatalf("proposed = %+v", pr)
+	}
+	own, _ := s.Remember("k1", ScopeUser, "Likes tables", "kitty", false)
+	if p := s.Prompt("k2", "Pat", ""); strings.Contains(p, "Lima") {
+		t.Errorf("a proposal is not in the prompt: %q", p)
+	}
+	// The person writing the same thing, or correcting it, says yes.
+	if again, _ := s.Remember("k2", ScopeShared, "pat lives in lima", "person", true); again.Proposed {
+		t.Errorf("the person's word accepts it: %+v", again)
+	}
+	pr2, _ := s.Remember("k1", ScopeShared, "Pat has a cat", "kitty", false)
+	if ed, _ := s.Edit("k1", pr2.ID, "Pat has a cat"); ed.Proposed {
+		t.Errorf("an edit accepts it: %+v", ed)
+	}
+	// Every answer counts the notes that went into the prompt.
+	_ = s.Prompt("k1", "Pat", "")
+	_ = s.Prompt("k1", "Pat", "")
+	_ = s.Prompt("k2", "Pat", "")
+	uses := map[string]int{}
+	for _, n := range s.Notes("k1", "") {
+		uses[n.ID] = n.Uses
+	}
+	if uses[own.ID] != 2 || uses[pr.ID] != 3 || uses[pr2.ID] != 3 {
+		t.Errorf("uses = %v", uses)
+	}
+	// Reopened from disk, the counts are kept.
+	if n := Open(s.dir).Notes("k1", ScopeUser); len(n) != 1 || n[0].Uses != 2 {
+		t.Errorf("reopened = %+v", n)
+	}
+	// A kitty with nothing in its prompt counts nothing.
+	empty := open(t)
+	_ = empty.Prompt("k1", "", "")
+}
+
+func TestStale(t *testing.T) {
+	now := time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC)
+	old := now.Add(-StaleAfter - time.Hour)
+	for _, c := range []struct {
+		n    Note
+		want bool
+	}{
+		{Note{At: old}, true},
+		{Note{At: old, Uses: 1}, false},
+		{Note{At: old, Pinned: true}, false},
+		{Note{At: now.Add(-time.Hour)}, false},
+	} {
+		if got := Stale(c.n, now); got != c.want {
+			t.Errorf("Stale(%+v) = %v", c.n, got)
 		}
 	}
 }

@@ -64,6 +64,9 @@ type Turn struct {
 	// Resumable is true when the task stopped on its budget (time, tokens or rounds) and can go
 	// on from where it was: the kitty's next answer gets the steps it had taken.
 	Resumable bool `json:"resumable,omitempty"`
+	// Parked is true when the kitty stopped on its day's tokens: it goes on by itself once
+	// they are back (a new day, or a higher limit), see resume.go.
+	Parked bool `json:"parked,omitempty"`
 	// Delegations are the subtasks the kitty handed to other kitties in this turn.
 	Delegations []Delegation `json:"delegations,omitempty"`
 	// Approvals are the actions this turn held for the person's yes.
@@ -182,8 +185,15 @@ type Service struct {
 	vault *vault.Store
 	// helps are the kitties waiting for the person's answer, by turn (help.go).
 	helps map[string]chan HelpAnswer
-	now   func() time.Time
-	newID func() string
+	// standIns counts, for the day standInsDay, the tasks each kitty handed to a stand-in;
+	// standInsFrom gives how many it may (autonomy.go).
+	standIns     map[string]int
+	standInsDay  string
+	standInsFrom func() int
+	// resuming are the parked chats being woken up (resume.go).
+	resuming map[string]bool
+	now      func() time.Time
+	newID    func() string
 	// MaxRounds bounds how many times a kitty may call connectors in one answer.
 	MaxRounds int
 	// UnattendedRounds is how many rounds of connector calls an unattended kitty may take in one
@@ -193,6 +203,14 @@ type Service struct {
 	// itself on the desktop before it stops at the safety cap and waits to be told to go on; zero,
 	// the default, sets no cap.
 	UnattendedWindows int
+	// BrainWait is how long, in all, an unattended task waits for a brain that is down (busy,
+	// failing or unreachable) before the attempt fails; zero does not wait.
+	BrainWait time.Duration
+	// brainWaitFrom, when set, gives BrainWait, read at each outage so a change in the settings
+	// applies at once.
+	brainWaitFrom func() time.Duration
+	// brainEvery is the first wait before trying a brain that is down again; it doubles.
+	brainEvery time.Duration
 	// MaxTurns is how many turns of the thread a kitty is shown; zero (the default) shows all of
 	// it, fitted to the model's context window.
 	MaxTurns int
@@ -295,6 +313,7 @@ func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
 		now: time.Now, newID: randomID, MaxRounds: 4, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
 		DefaultLimits: kitty.Limits{MaxTokens: 0, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
+		BrainWait: DefaultBrainWait, brainEvery: 15 * time.Second,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -324,7 +343,9 @@ func (s *Service) libraryPrompt() string {
 	if s.arts != nil {
 		b.WriteString("You have a library of artifacts (files) shared by every kitty. Keep a result for later " +
 			"with `@artifact save {\"name\": \"report.md\", \"content\": \"…\"}`, read one with " +
-			"`@artifact read <name>`, list them with `@artifact list`.\n")
+			"`@artifact read <name>`, list them with `@artifact list`. To point a person at one, link it as " +
+			"`[report.md](/v1/artifacts/report.md)`: the app opens it from that path; never write a host " +
+			"(localhost, wails.localhost) in front of it.\n")
 		if idx := s.arts.Index(12); idx != "" {
 			b.WriteString("Artifacts:\n" + idx)
 		}
@@ -777,7 +798,7 @@ func (s *Service) sendWith(ctx context.Context, id, from, fromID, text string, f
 	for _, k := range responders {
 		turn, pending, err := s.answer(ctx, id, k, kitties)
 		if err != nil {
-			turn = Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: "(" + k.Name + " could not answer: " + Plain(err.Error()) + ")", Detail: err.Error()}
+			turn = Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: "(" + k.Name + " could not answer: " + Plain(err.Error()) + ")", Detail: err.Error(), Parked: errors.Is(err, ErrDayTokens)}
 		}
 		s.mu.Lock()
 		sess.Turns = append(sess.Turns, turn)
@@ -1097,6 +1118,11 @@ func (s *Service) startTask(id string, index int, k *kitty.Kitty, p *pendingTask
 }
 
 // runner is the fleet as a desktop runner, when it is one.
+// goOnWithout is what a kitty whose call for help went unanswered is told: the rest of the task
+// does not wait for the person.
+const goOnWithout = "do not stop here. Go on with every part of the task that does not need this, " +
+	"and only at the end say in your answer exactly what you still need from the person."
+
 // helpWait is how long a kitty that asked for help waits for the person to take its desktop.
 var helpWait = 15 * time.Minute
 
@@ -1125,7 +1151,7 @@ func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Ki
 	defer stop()
 	h, ok := s.fleet.(holder)
 	if !ok {
-		return "nobody can take your desktop from here: say in your answer what you need, and stop"
+		return "nobody can take your desktop from here: " + goOnWithout
 	}
 	started, _ := s.fleet.(holdStarter)
 	deadline := time.NewTimer(helpWait)
@@ -1147,7 +1173,7 @@ func (s *Service) askHelp(ctx context.Context, id string, index int, k *kitty.Ki
 			return s.applyHelp(ctx, id, index, k, a)
 		case <-deadline.C:
 			if !came {
-				return fmt.Sprintf("nobody came in %d minutes: say in your answer what you need from the person, and stop", int(helpWait.Minutes()))
+				return fmt.Sprintf("nobody came in %d minutes: %s", int(helpWait.Minutes()), goOnWithout)
 			}
 		case <-t.C:
 		}
@@ -1204,6 +1230,8 @@ type taskState struct {
 	pre map[int]outcome
 	// detail is why the task failed, as the error said it.
 	detail string
+	// parked is whether it stopped on the kitty's day's tokens.
+	parked bool
 }
 
 // runTask drives a desktop task to its end within the kitty's limits: rounds of actions, a
@@ -1251,6 +1279,7 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 		s.edit(id, index, func(t *Turn) {
 			t.Detail = st.detail
 			t.Resumable = strings.HasPrefix(fail, "stopped")
+			t.Parked = st.parked
 		})
 	}
 }
@@ -1408,9 +1437,10 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		}
 		st.messages = fitContext(trimHistory(st.messages, s.MaxTurns*2), provider.ContextWindow(p.brain))
 		if err := s.overTokens(k); err != nil {
+			st.parked = true
 			return "stopped: " + err.Error(), false
 		}
-		answer, err := ask(ctx, p.brain, p.native, st.messages, p.tools)
+		answer, err := s.askPatiently(ctx, id, index, p, st.messages, limits)
 		if err != nil {
 			if ctx.Err() != nil {
 				return stopReason(ctx, limits), false
@@ -1438,6 +1468,45 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		}
 	}
 }
+
+// askPatiently asks the brain for the task's next move. Unattended, a brain that is down for a
+// while (busy, failing, unreachable) is waited for, ever longer up to brainWaitMax between tries
+// and BrainWait in all, instead of spending one of the task's attempts and handing it to the
+// person over a passing outage. Each wait shows in the chat as a step.
+func (s *Service) askPatiently(ctx context.Context, id string, index int, p *pendingTask, messages []provider.Message, limits kitty.Limits) (provider.Reply, error) {
+	wait, waited := s.brainEvery, time.Duration(0)
+	for {
+		answer, err := ask(ctx, p.brain, p.native, messages, p.tools)
+		if err == nil || limits.Attended || ctx.Err() != nil || !provider.Transient(err) || waited+wait > s.brainWait() {
+			return answer, err
+		}
+		s.appendStep(id, index, Step{At: s.now(), Action: "wait", Error: clip(err.Error(), 300),
+			Result: fmt.Sprintf("the brain is not answering: trying again in %s", wait.Round(time.Second))})
+		select {
+		case <-ctx.Done():
+			return provider.Reply{}, ctx.Err()
+		case <-time.After(wait):
+		}
+		waited += wait
+		wait = min(wait*2, brainWaitMax)
+	}
+}
+
+// DefaultBrainWait is how long an unattended task waits for a brain that is down, by default.
+const DefaultBrainWait = 30 * time.Minute
+
+// SetBrainWait has the wait for a brain that is down read from fn (the settings).
+func (s *Service) SetBrainWait(fn func() time.Duration) { s.brainWaitFrom = fn }
+
+func (s *Service) brainWait() time.Duration {
+	if s.brainWaitFrom != nil {
+		return s.brainWaitFrom()
+	}
+	return s.BrainWait
+}
+
+// brainWaitMax is the longest wait between two tries of a brain that is down.
+const brainWaitMax = 5 * time.Minute
 
 // screenMessage is what the kitty is told after actions that can have changed its display: the
 // screenshot, which is also kept for the chat's step, or why there is none.

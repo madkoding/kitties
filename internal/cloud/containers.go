@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/madkoding/kitties/internal/container"
@@ -41,6 +42,9 @@ type Backend interface {
 type Containers struct {
 	P    Provider
 	Size string
+	// zones remembers the time zone each machine was asked for (the spec's TZ, else the host's),
+	// so a machine woken by Start gets it again.
+	zones sync.Map
 }
 
 var _ Backend = (*Containers)(nil)
@@ -69,6 +73,7 @@ func (c *Containers) Up(ctx context.Context, s container.Spec) (string, error) {
 				return "", err
 			}
 		}
+		c.setZone(ctx, s.Name, m.ID, s.Zone())
 		return m.ID, nil
 	case !errors.Is(err, ErrNotFound):
 		return "", err // an inventory that cannot be read is never taken for an empty one
@@ -81,6 +86,7 @@ func (c *Containers) Up(ctx context.Context, s container.Spec) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	c.setZone(ctx, s.Name, m.ID, s.Zone())
 	return m.ID, nil
 }
 
@@ -89,8 +95,28 @@ func (c *Containers) Start(ctx context.Context, name string) error {
 	if err != nil {
 		return err
 	}
-	_, err = c.P.Wake(ctx, m.ID)
-	return err
+	if _, err = c.P.Wake(ctx, m.ID); err != nil {
+		return err
+	}
+	zone := container.HostTimezone()
+	if z, ok := c.zones.Load(name); ok {
+		zone = z.(string)
+	}
+	c.setZone(ctx, name, m.ID, zone)
+	return nil
+}
+
+// setZone puts the machine in the time zone, as the local desktops take the host's: the machine
+// is a whole system, so its /etc/localtime (read by every program started after) rather than a
+// TZ in its environment. A zone the machine has no file for (a POSIX one) is left out. Best
+// effort: a machine that cannot be reached keeps its clock in UTC, and works.
+func (c *Containers) setZone(ctx context.Context, name, id, zone string) {
+	if zone == "" {
+		return
+	}
+	c.zones.Store(name, zone)
+	_, _ = c.P.Exec(ctx, id, "z="+quote(zone)+`; f="/usr/share/zoneinfo/$z"; [ -f "$f" ] || exit 0; `+
+		`sudo -n ln -sf "$f" /etc/localtime && printf '%s\n' "$z" | sudo -n tee /etc/timezone >/dev/null`, execTimeout)
 }
 
 func (c *Containers) Stop(ctx context.Context, name string) error {
@@ -315,6 +341,21 @@ func (r *Router) ImageStale(ctx context.Context, name, image string) (bool, erro
 		return false, nil
 	}
 	return r.Local.ImageStale(ctx, name, image)
+}
+
+// ZoneStale concerns the local desktops, which take the host's time zone; a machine in the cloud
+// is left as it is.
+func (r *Router) ZoneStale(ctx context.Context, name, zone string) (bool, error) {
+	if r.IsCloud != nil && r.IsCloud(name) || r.Local == nil {
+		return false, nil
+	}
+	z, ok := r.Local.(interface {
+		ZoneStale(ctx context.Context, name, zone string) (bool, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	return z.ZoneStale(ctx, name, zone)
 }
 
 // List joins both backends. A backend that cannot answer is left out as long as the other can;

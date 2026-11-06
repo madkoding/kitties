@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/madkoding/kitties/internal/chat"
+	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/memory"
 	"github.com/madkoding/kitties/internal/notify"
 )
@@ -16,6 +17,11 @@ type Memories interface {
 	MemoryOf(ref string) (*chat.MemoryView, error)
 	Remember(ref, scope, text string) (*memory.Note, error)
 	ForgetNote(ref, id string) error
+	EditNote(ref, id, text string) (*memory.Note, error)
+	SharedNotes() ([]memory.Note, error)
+	RememberShared(text string) (*memory.Note, error)
+	EditShared(id, text string) (*memory.Note, error)
+	ForgetShared(id string) error
 	SetProfile(ref string, demand int, auto bool) (memory.Profile, error)
 	Distill(ctx context.Context, ref string) ([]memory.Note, error)
 	Feedback(chatID string, index int, rating, note string) error
@@ -54,10 +60,16 @@ func (s *Server) memoryRoutes() {
 	s.mux.Handle("GET /v1/kitties/{ref}/memory", api(s.handleMemory))
 	s.mux.Handle("POST /v1/kitties/{ref}/memory", api(s.handleRemember))
 	s.mux.Handle("DELETE /v1/kitties/{ref}/memory/{id}", api(s.handleForgetNote))
+	s.mux.Handle("PUT /v1/kitties/{ref}/memory/{id}", api(s.handleEditNote))
+	s.mux.Handle("GET /v1/memory/shared", api(s.handleShared))
+	s.mux.Handle("POST /v1/memory/shared", api(s.handleRememberShared))
+	s.mux.Handle("PUT /v1/memory/shared/{id}", api(s.handleEditShared))
+	s.mux.Handle("DELETE /v1/memory/shared/{id}", api(s.handleForgetShared))
 	s.mux.Handle("PUT /v1/kitties/{ref}/memory/profile", api(s.handleSetProfile))
 	s.mux.Handle("POST /v1/kitties/{ref}/memory/distill", api(s.handleDistill))
 	s.mux.Handle("POST /v1/chats/{id}/turns/{index}/feedback", api(s.handleFeedback))
 	s.mux.Handle("PUT /v1/settings/notify", api(s.handleSetNotify))
+	s.mux.Handle("PUT /v1/settings/autonomy", api(s.handleSetAutonomy))
 	s.mux.Handle("POST /v1/settings/notify/test", api(s.handleTestNotify))
 	s.mux.Handle("POST /v1/settings/notify/digest", api(s.handleSendDigest))
 }
@@ -190,6 +202,19 @@ func (s *Server) handleSetNotify(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, s.fleet.Settings())
 }
 
+func (s *Server) handleSetAutonomy(w http.ResponseWriter, r *http.Request) {
+	var a config.Autonomy
+	if err := decode(r, &a); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.fleet.SetAutonomy(a); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, s.fleet.Settings())
+}
+
 func (s *Server) handleTestNotify(w http.ResponseWriter, r *http.Request) {
 	if s.notifier == nil {
 		fail(w, http.StatusNotFound, errors.New("this gateway cannot send notifications"))
@@ -223,6 +248,77 @@ func (s *Server) handleSendDigest(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.digester.SendNow(r.Context()); err != nil {
 		reply(w, http.StatusOK, map[string]any{"ok": false, "error": err.Error()})
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// noteText reads the text of a note from a request.
+func noteText(r *http.Request) (string, error) {
+	var body struct {
+		Text string `json:"text"`
+	}
+	err := decode(r, &body)
+	return body.Text, err
+}
+
+func (s *Server) handleEditNote(w http.ResponseWriter, r *http.Request) {
+	s.writeNote(w, r, http.StatusOK, func(text string) (*memory.Note, error) {
+		return s.memories.EditNote(r.PathValue("ref"), r.PathValue("id"), text)
+	})
+}
+
+func (s *Server) handleRememberShared(w http.ResponseWriter, r *http.Request) {
+	s.writeNote(w, r, http.StatusCreated, func(text string) (*memory.Note, error) {
+		return s.memories.RememberShared(text)
+	})
+}
+
+func (s *Server) handleEditShared(w http.ResponseWriter, r *http.Request) {
+	s.writeNote(w, r, http.StatusOK, func(text string) (*memory.Note, error) {
+		return s.memories.EditShared(r.PathValue("id"), text)
+	})
+}
+
+// writeNote reads a note's text and writes it with do, answering with the note.
+func (s *Server) writeNote(w http.ResponseWriter, r *http.Request, code int, do func(string) (*memory.Note, error)) {
+	if s.memories == nil {
+		fail(w, http.StatusNotFound, errNoMemory)
+		return
+	}
+	text, err := noteText(r)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	note, err := do(text)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, code, map[string]any{"note": note})
+}
+
+func (s *Server) handleShared(w http.ResponseWriter, r *http.Request) {
+	if s.memories == nil {
+		fail(w, http.StatusNotFound, errNoMemory)
+		return
+	}
+	notes, err := s.memories.SharedNotes()
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"notes": notes})
+}
+
+func (s *Server) handleForgetShared(w http.ResponseWriter, r *http.Request) {
+	if s.memories == nil {
+		fail(w, http.StatusNotFound, errNoMemory)
+		return
+	}
+	if err := s.memories.ForgetShared(r.PathValue("id")); err != nil {
+		fail(w, codeFor(err), err)
 		return
 	}
 	reply(w, http.StatusOK, map[string]any{"ok": true})

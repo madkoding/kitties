@@ -21,12 +21,27 @@ A kitty is not only something you talk to. Each one has an agenda:
 - **Limits.** Per kitty: tokens, seconds and rounds per task, and how many times a failed
   attempt is tried another way. Unattended, there is no per-task token limit by default (nor a daily one) nor time limit; set `max_tokens`/`max_seconds` to cap one, and `day_tokens` caps the whole day. They are the safety net of unattended work: a task that hits
   one stops, says so (and can be resumed) instead of running on. A **daily budget** caps what a kitty spends around the clock: out of tokens it rests until
-  tomorrow (and tells you once); past its actions for the day, every post, reply or refund waits
+  tomorrow (and tells you once), then goes on by itself from where it stopped (right away if you
+  raise or remove the limit); past its actions for the day, every post, reply or refund waits
   for your yes even if it normally acts alone.
-- **Recovery.** A failed attempt is retried with a different approach. When a kitty gives up,
-  its **backup** kitty takes the task over; without one, the kitty asks you (the chat is
+- **Recovery.** A brain that is down for a while (busy, failing, unreachable) is waited for,
+  up to half an hour, ever longer between tries, instead of failing the attempt; each wait shows
+  in the chat. A failed attempt is retried with a different approach. When a kitty gives up,
+  its **backup** kitty takes the task over; without one, the free kitty of the fleet most like it
+  (a desktop if the task needs one, not in error, not at work; then the connectors it uses and
+  the skills of its soul) stands in, up to `stand_ins` tasks a day (3 by default); when none is
+  free (or the kitty is *attended*), the kitty asks you (the chat is
   marked *help* until you answer). A watchdog brings a stopped container back and retries a
   kitty in error.
+- **Follow-ups.** A goal whose run did not finish (blocked, escalated to you, or it could not
+  even start) is picked up again by itself: after 10 minutes, then 30, then 2 hours, in the same
+  thread, told to go on from where it stopped, with its `TODO.md` (what it wrote down as done
+  and left) right in the call. A run that finishes starts the count again; past
+  the third the goal waits for its schedule, an event or you. The journal says when the next one
+  is due, and the goal shows *tries again …*. Both waits are set in *Settings → Preferences →
+  Working on their own* (or `autonomy:` in the YAML).
+- **A spare brain.** A model profile can name a `fallback`: while it is down the kitties think
+  with the spare instead of waiting ([Configuration](CONFIGURATION.md#a-spare-brain)).
 - **Delegation.** A kitty can hand a subtask to another (`@delegate luna {"task": "..."}`,
   or the native `delegate` tool), waits for the answer and goes on. Hand-overs are bounded in
   depth so two kitties cannot bounce a task back and forth.
@@ -36,11 +51,16 @@ A kitty is not only something you talk to. Each one has an agenda:
 | | |
 | --- | --- |
 | ![A kitty's goals and journal](screenshots/21-goals-journal.png) | ![A goal's thread: the scheduler's call and the answer](screenshots/22-goal-chat.png) |
-| ![A kitty hands a subtask to another](screenshots/20-delegation.png) | |
+| ![A kitty hands a subtask to another](screenshots/20-delegation.png) | ![How long they keep at it on their own](screenshots/60-autonomy.png) |
 
 In the YAML, under a kitty:
 
 ```yaml
+autonomy:                        # Settings → Preferences → Working on their own
+  follow_ups: 10m 30m 2h         # waits before an unfinished goal runs again; off: never
+  brain_wait: 30m                # how long a task waits for a model that is down; off: not at all
+  stand_ins: 3                   # tasks a day a kitty without a backup hands to a free one; off: none
+kitties:
   - name: mimi
     backup: luna                 # takes over what mimi gives up on
     limits: {max_tokens: 200000, max_seconds: 900, retries: 2, day_tokens: 2000000, day_actions: 20}
@@ -57,11 +77,19 @@ In the YAML, under a kitty:
 Autonomy needs a memory, a leash that loosens with trust, and a way to reach you.
 
 - **Memory.** Each kitty keeps what it knows about you and the work: notes in three scopes
-  (*you*, *work* and one per project), pinned notes of your own, and a level of how demanding you
+  (*you*, *work* and one per project), plus *shared* notes that every kitty knows (kept once, in
+  `memory/_shared.json`; a kitty's distillation never rewrites them and removing a kitty keeps
+  them; Settings → Shared memory lists them), pinned notes of your own, and a level of how demanding you
   are (1 relaxed to 5 strict) that it learns from the thumbs under its answers. Every few verdicts
   it distils the corrections into lasting notes with its own brain. It writes notes itself
   (`@memory remember {...}` or the native `memory_*` tools) when you say "remember that...". The
-  memory sits in its prompt, so it answers the way you like.
+  memory sits in its prompt, so it answers the way you like. Any note can be corrected in place
+  (it becomes yours), and a kitty's notes go to a JSON file and come back from one (Export and
+  Import in its memory), to keep them or hand them to another kitty. A shared note a kitty writes
+  is only *proposed*: it stays out of every prompt until you accept it (or write or correct it
+  yourself), and you are notified as for an action that waits for a yes. Each note counts the answers it was in the prompt for (×N), and the notes can be
+  searched and narrowed to a scope. A note of the kitty's that has not reached a prompt in two
+  weeks shows as *unused*, and the next consolidation drops it unless it still matters.
 - **Action limits.** Nothing is limited by default: a kitty does on a connection what the account
   allows, since that is the service's to limit (the scopes of the sign-in, the permissions of the
   key). Tell a kitty "ask me before posting" or "never delete anything" and it adds the limit to
@@ -82,7 +110,8 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   needs help, when an action waits for a yes, and optionally when a goal finishes, gets blocked or
   a container recovers or a kitty spends its day's tokens. Bursts are folded into one message every
   ten minutes. Optionally a **daily summary** arrives at the hour you choose: what each kitty did
-  in the last day, what it spent and what waits for your yes.
+  in the last day, what it spent, which goals ran again on their own and how they ended, and
+  what waits for your yes.
 - **Community manager, support, finance.** Besides writing, connectors read and answer: Mastodon
   and Bluesky timelines, mentions, replies and likes; Gmail and Outlook inboxes; Slack and
   Telegram messages; Stripe balance, invoices and payments; Zendesk tickets. Results come back as
@@ -96,6 +125,7 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
 | --- | --- |
 | ![An action waits for a yes](screenshots/23-waiting-for-a-yes.png) | ![The Approvals screen](screenshots/24-approvals.png) |
 | ![Thumbs under the answers](screenshots/25-feedback.png) | ![What a kitty knows about you](screenshots/26-memory.png) |
+| ![The memory every kitty shares](screenshots/60-shared-memory.png) | |
 | ![Notifications: a phone channel and its events](screenshots/27-notifications.png) | ![Stripe: invoices and payments as one line each](screenshots/28-stripe.png) |
 | ![The daily summary, sent on demand](screenshots/29-daily-summary.png) | |
 

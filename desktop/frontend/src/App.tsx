@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo, Session } from "./api";
 import { ApiError, api, cookieLogin, errText, inWails, watchChat } from "./api";
+import ArtifactReader from "./ArtifactReader";
 import { ConfirmHost, ask } from "./Confirm";
 import Login from "./Login";
 import Welcome from "./Welcome";
@@ -30,6 +31,7 @@ type ModalKind =
   | "library"
   | "artifacts"
   | "connector"
+  | "artifact"
   | "approvals"
   | "notifications"
   | "preferences";
@@ -40,6 +42,7 @@ function routeFromHash(): {
   kitty: string | null;
   modal: ModalKind;
   connector: string;
+  artifact: string;
 } {
   const m = location.hash.match(
     /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications|preferences))?/,
@@ -48,12 +51,21 @@ function routeFromHash(): {
     /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|approvals|notifications|preferences)/,
   );
   const c = location.hash.match(/^#connector\/([a-z0-9-]+)/);
-  const modal = (c ? "connector" : m?.[3] || n?.[1] || "none") as ModalKind;
+  // #artifact/<name> opens a file of the library in the reader: a link that can be shared.
+  const a = location.hash.match(/^#artifact\/([^/?#]+)$/);
+  let artifact = "";
+  try {
+    artifact = a ? decodeURIComponent(a[1]) : "";
+  } catch {
+    artifact = "";
+  }
+  const modal = (c ? "connector" : artifact ? "artifact" : m?.[3] || n?.[1] || "none") as ModalKind;
   return {
     chat: m?.[1] === "chat" ? m[2] : null,
     kitty: m?.[1] === "kitty" ? m[2] : null,
     modal,
     connector: c?.[1] || "",
+    artifact,
   };
 }
 
@@ -183,7 +195,9 @@ export default function App() {
     const onHash = () => {
       const r = routeFromHash();
       // A dialog's own address keeps the chat that was open behind it.
-      setCurrent(r.chat || (/^#(new-|connector\/)/.test(location.hash) ? lastChat.current : null));
+      setCurrent(
+        r.chat || (/^#(new-|connector\/|artifact\/)/.test(location.hash) ? lastChat.current : null),
+      );
       setKittyOpen(r.kitty);
       // The address decides the dialog: one that no longer names it closes it, except the
       // sign-in and the gateway's, which the page opens itself.
@@ -318,7 +332,7 @@ export default function App() {
     const nested = h.match(/^(#(?:chat|kitty)\/[a-z0-9-]+)\/new-[a-z-]+$/);
     if (nested) {
       location.hash = nested[1];
-    } else if (/^#(new-|connector\/)/.test(h)) {
+    } else if (/^#(new-|connector\/|artifact\/)/.test(h)) {
       location.hash = lastChat.current ? `#chat/${lastChat.current}` : "";
     }
   };
@@ -596,6 +610,9 @@ export default function App() {
           initial={modal === "artifacts" ? "artifacts" : "skills"}
           onClose={closeModal}
         />
+      )}
+      {modal === "artifact" && routeFromHash().artifact && (
+        <ArtifactReader name={routeFromHash().artifact} onClose={closeModal} />
       )}
       {modal === "approvals" && (
         <ApprovalsModal

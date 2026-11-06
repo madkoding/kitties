@@ -37,6 +37,11 @@ type Goal struct {
 	LastResult string `json:"last_result,omitempty"`
 	// FromFile marks a goal that came from the configuration, which the page cannot edit.
 	FromFile bool `json:"from_file,omitempty"`
+	// FollowUps is how many follow-up runs in a row the goal has had since its last run that
+	// finished; FollowUpAt is when the next one is due (zero: none). A run that ends blocked,
+	// escalated or failed is picked up again by itself (scheduler.go).
+	FollowUps  int       `json:"follow_ups,omitempty"`
+	FollowUpAt time.Time `json:"follow_up_at,omitempty"`
 }
 
 // Validate checks a goal's fields and parses its schedule.
@@ -291,6 +296,8 @@ func (s *Store) started(id string, now time.Time) {
 	g.LastRun = now
 	g.LastResult = "running"
 	g.NextRun = nextRun(*g, now)
+	// Any run, scheduled, by hand or on an event, is the follow-up: none stays pending.
+	g.FollowUpAt = time.Time{}
 	_ = s.save()
 }
 
@@ -315,13 +322,49 @@ func (s *Store) attach(id, chatID string) {
 }
 
 // Report records how a goal's last run ended.
-func (s *Store) Report(id, result string) {
+func (s *Store) Report(id, result string) { s.report(id, result, nil) }
+
+// report records how a goal's last run ended and plans its follow-up: a run that did not
+// finish is due again after the next of delays (none once they are used up), and a run that
+// finished starts the count again. It returns the goal as it is now, or nil.
+func (s *Store) report(id, result string, delays []time.Duration) *Goal {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if g, ok := s.goals[id]; ok {
-		g.LastResult = result
-		_ = s.save()
+	g, ok := s.goals[id]
+	if !ok {
+		return nil
 	}
+	g.LastResult = result
+	switch {
+	case unfinished(result) && g.Enabled && g.FollowUps < len(delays):
+		g.FollowUpAt = s.now().Add(delays[g.FollowUps])
+		g.FollowUps++
+	case unfinished(result):
+		g.FollowUpAt = time.Time{}
+	default:
+		g.FollowUps, g.FollowUpAt = 0, time.Time{}
+	}
+	_ = s.save()
+	c := *g
+	return &c
+}
+
+// unfinished reports whether a run's result leaves the goal's work undone.
+func unfinished(result string) bool {
+	return result == "blocked" || result == "escalated" || result == "failed"
+}
+
+// followUpsDue returns the enabled goals whose follow-up run is not after now.
+func (s *Store) followUpsDue(now time.Time) []*Goal {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var out []*Goal
+	for _, g := range s.listLocked("") {
+		if g.Enabled && !g.FollowUpAt.IsZero() && !g.FollowUpAt.After(now) {
+			out = append(out, g)
+		}
+	}
+	return out
 }
 
 // due returns the enabled, scheduled goals whose next run is not after now.

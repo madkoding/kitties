@@ -42,7 +42,7 @@ function inUseText(by?: string): string {
 function stateText(p: Power): string {
   switch (p.state) {
     case "starting":
-      return t("Starting…");
+      return p.step === "desktop" ? t("Starting the desktop…") : t("Starting…");
     case "error":
       return p.error ? t("Failed to start: {error}", { error: p.error }) : t("Failed to start");
     case "off":
@@ -83,10 +83,11 @@ export default function MachinePower({
       .catch(() => setPower(null));
   useEffect(() => {
     void load();
-    const timer = setInterval(() => void load(), 15000);
+    // A machine coming up is looked at more often, so the step it is on shows as it changes.
+    const timer = setInterval(() => void load(), power?.state === "starting" ? 2000 : 15000);
     return () => clearInterval(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kitty.id, kitty.status]);
+  }, [kitty.id, kitty.status, power?.state]);
   if (!power) {
     return null;
   }

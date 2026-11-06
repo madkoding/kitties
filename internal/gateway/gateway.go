@@ -88,6 +88,8 @@ type Fleet interface {
 	// Notify is where the person is told outside the interface; SetNotify changes it.
 	Notify() notify.Config
 	SetNotify(c notify.Config) error
+	// SetAutonomy changes how long the kitties keep at a task on their own.
+	SetAutonomy(a config.Autonomy) error
 }
 
 // Chats is what the gateway needs from the chat service.
@@ -271,6 +273,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.Handle("GET /v1/oauth/{name}/redirect", api(s.handleOAuthRedirect))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
+	s.mux.HandleFunc("POST /v1/oauth/fragment", s.handleOAuthFragment)
 	s.mux.Handle("GET /v1/skills", api(s.handleSkills))
 	s.mux.Handle("GET /v1/skills/{name}", api(s.handleSkill))
 	s.mux.Handle("PUT /v1/skills/{name}", api(s.handleSaveSkill))
@@ -373,6 +376,13 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, oauth.CallbackHTML, "Sign-in refused", html.EscapeString(e+" "+q.Get("error_description")))
 		return
 	}
+	if q.Get("code") == "" && s.fleet.OAuth().Implicit(q.Get("state")) {
+		// The token is in the fragment, which only the browser has: the page posts it back.
+		state, _ := json.Marshal(q.Get("state"))
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'")
+		_, _ = fmt.Fprintf(w, oauth.FragmentHTML, state)
+		return
+	}
 	name, err := s.fleet.OAuth().Exchange(r.Context(), q.Get("state"), q.Get("code"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -380,6 +390,25 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = fmt.Fprintf(w, oauth.CallbackHTML, "Connected", "The connector "+html.EscapeString(name)+" is signed in. You can close this window.")
+}
+
+// handleOAuthFragment takes the token an implicit flow's page read from its fragment; it is open
+// like the callback, and the state ties it to a flow this gateway started.
+func (s *Server) handleOAuthFragment(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		State string `json:"state"`
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<10)).Decode(&in); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	name, err := s.fleet.OAuth().Deliver(in.State, in.Token)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"name": name})
 }
 
 func (s *Server) noLibrary(w http.ResponseWriter) bool {
@@ -569,10 +598,10 @@ func codeFor(err error) int {
 		strings.Contains(msg, "clear text"), strings.Contains(msg, ".kind:"), strings.HasPrefix(msg, "avatar."),
 		strings.Contains(msg, "too big"), strings.Contains(msg, "too long"), strings.Contains(msg, "is empty"), strings.Contains(msg, "needs a name"),
 		strings.Contains(msg, "built in"), strings.Contains(msg, "holds"), strings.Contains(msg, " needs "), strings.Contains(msg, "not a valid"),
-		strings.Contains(msg, "does not sign in"), strings.Contains(msg, "no OAuth flow"), strings.Contains(msg, "not signed in"),
+		strings.Contains(msg, "does not sign in"), strings.Contains(msg, "only signs in back to"), strings.Contains(msg, "no OAuth flow"), strings.Contains(msg, "not signed in"),
 		strings.HasPrefix(msg, "schedule:"), strings.HasPrefix(msg, "on:"), strings.Contains(msg, "a goal "), strings.Contains(msg, "back itself up"),
 		strings.Contains(msg, "limits"), strings.Contains(msg, "auto_off_minutes"), strings.HasPrefix(msg, "a limit "), strings.Contains(msg, "not ask or auto"), strings.Contains(msg, "can be for good"), strings.Contains(msg, "always asked"),
-		strings.HasPrefix(msg, "notify."), strings.Contains(msg, "rating is"), strings.Contains(msg, "feedback is for"), strings.Contains(msg, "demand is a level"),
+		strings.HasPrefix(msg, "notify."), strings.HasPrefix(msg, "autonomy."), strings.Contains(msg, "rating is"), strings.Contains(msg, "feedback is for"), strings.Contains(msg, "demand is a level"),
 		strings.Contains(msg, "a note needs"), strings.HasPrefix(msg, "scope "), strings.Contains(msg, "the turn is"),
 		strings.HasPrefix(msg, "there is no "), strings.HasPrefix(msg, "a secret"), strings.Contains(msg, "is not running"), strings.Contains(msg, "nothing to back up"), strings.Contains(msg, "cannot back up"), strings.Contains(msg, "keeps no backups"), strings.Contains(msg, "still think with"):
 		return http.StatusBadRequest

@@ -53,6 +53,8 @@ type Config struct {
 	// WhatsApp is the link to a number of the kitties' own (docs/WHATSAPP.md), used while
 	// nothing was saved from Settings.
 	WhatsApp WhatsApp `yaml:"whatsapp"`
+	// Autonomy tunes how long a kitty keeps at a task on its own (autonomy.go).
+	Autonomy Autonomy `yaml:"autonomy"`
 }
 
 // WhatsApp is the WhatsApp link as the file sets it. Turning it on here is accepting its risk: it
@@ -84,6 +86,7 @@ type WhatsApp struct {
 // Set reports whether the file says anything about WhatsApp.
 func (w WhatsApp) Set() bool {
 	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != ""
+
 }
 
 // Provider is one AI profile.
@@ -114,6 +117,9 @@ type Provider struct {
 	// Auth is empty for a key, or login for an account signed in from Settings (a ChatGPT plan
 	// for codex, GitHub Copilot, a Google login for gemini).
 	Auth string `yaml:"auth" json:"auth,omitempty"`
+	// Fallback names another profile to think with while this one is down (busy, failing or
+	// unreachable once its own retries are spent). Empty: none.
+	Fallback string `yaml:"fallback" json:"fallback,omitempty"`
 }
 
 // Options converts the profile into what the provider package takes.
@@ -405,6 +411,9 @@ func ValidateProvider(name string, p Provider) error {
 	if p.Tools != "" && p.Tools != "native" && p.Tools != "text" {
 		return fmt.Errorf("providers.%s.tools: %q is not native or text", name, p.Tools)
 	}
+	if p.Fallback == name {
+		return fmt.Errorf("providers.%s.fallback: a profile cannot be its own fallback", name)
+	}
 	return nil
 }
 
@@ -480,6 +489,9 @@ func (c *Config) Validate() error {
 	for name, p := range c.Providers {
 		if err := ValidateProvider(name, p); err != nil {
 			return err
+		}
+		if _, ok := c.Providers[p.Fallback]; p.Fallback != "" && !ok {
+			return fmt.Errorf("providers.%s.fallback: %q is not a configured profile", name, p.Fallback)
 		}
 	}
 	if c.DefaultProvider != "" {
@@ -574,6 +586,9 @@ func (c *Config) Validate() error {
 		return errors.New("gateway.listen cannot be empty")
 	}
 	if err := c.Notify.Validate(nil); err != nil {
+		return err
+	}
+	if err := c.Autonomy.Validate(); err != nil {
 		return err
 	}
 	if c.Notify.Connector != "" {

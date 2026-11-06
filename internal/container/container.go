@@ -247,33 +247,182 @@ func (s Spec) Args() []string {
 	return append(args, s.Image)
 }
 
-// zoneName matches an IANA time zone name such as America/Santiago or UTC.
-var zoneName = regexp.MustCompile(`^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$`)
+// Zone is the time zone the container of s runs in: the spec's own TZ, else the host's.
+func (s Spec) Zone() string {
+	if z, own := s.Env["TZ"]; own {
+		return z
+	}
+	return HostTimezone()
+}
 
-// HostTimezone is the IANA name of the host's time zone: $TZ, /etc/timezone, or where
-// /etc/localtime points (Linux and macOS); empty when it cannot be told.
+var (
+	// zoneName matches an IANA time zone name such as America/Santiago or UTC.
+	zoneName = regexp.MustCompile(`^[A-Za-z0-9_+-]+(/[A-Za-z0-9_+-]+){0,2}$`)
+	// fixedZone matches the POSIX zone fixedOffset writes for a part of an hour, <+0530>-5:30.
+	fixedZone = regexp.MustCompile(`^<[+-][0-9]{2}([0-9]{2})?>[+-]?[0-9]{1,2}(:[0-9]{2})?$`)
+
+	// Where the host keeps its zone; variables so a test can point them elsewhere.
+	timezoneFile  = "/etc/timezone"
+	localtimeFile = "/etc/localtime"
+	zoneinfoDirs  = []string{"/usr/share/zoneinfo", "/usr/lib/zoneinfo", "/usr/share/lib/zoneinfo"}
+	clockNow      = time.Now
+	// windowsZoneID is the id of the host's zone on Windows, as tzutil /g prints it (with
+	// "_dstoff" when summer time is switched off); empty elsewhere.
+	windowsZoneID = func() string {
+		if runtime.GOOS != "windows" {
+			return ""
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		out, err := exec.CommandContext(ctx, "tzutil", "/g").Output()
+		if err != nil {
+			return ""
+		}
+		return string(out)
+	}
+)
+
+// HostTimezone is the IANA name of the host's time zone: $TZ, /etc/timezone, where
+// /etc/localtime points (Linux and macOS), or the zone whose rules /etc/localtime holds (a copy,
+// or a file mounted into the gateway's own container), or Windows' own zone. When none tells it,
+// the host's offset from UTC right now, such as Etc/GMT+3: the desktop shows the hour of the
+// host, and a change of offset (summer time) is noticed at its next start.
 func HostTimezone() string {
 	ok := func(z string) string {
 		z = strings.TrimPrefix(strings.TrimSpace(z), ":")
-		if zoneName.MatchString(z) {
+		if zoneName.MatchString(z) || fixedZone.MatchString(z) {
 			return z
 		}
 		return ""
 	}
-	if z := ok(os.Getenv("TZ")); z != "" {
+	if z := ok(getEnv("TZ")); z != "" {
 		return z
 	}
-	if b, err := os.ReadFile("/etc/timezone"); err == nil {
+	if b, err := os.ReadFile(timezoneFile); err == nil {
 		if z := ok(string(b)); z != "" {
 			return z
 		}
 	}
-	if link, err := os.Readlink("/etc/localtime"); err == nil {
+	if link, err := os.Readlink(localtimeFile); err == nil {
 		if _, after, found := strings.Cut(link, "zoneinfo/"); found {
-			return ok(after)
+			if z := ok(after); z != "" {
+				return z
+			}
+		}
+	}
+	if b, err := os.ReadFile(localtimeFile); err == nil && len(b) > 0 {
+		if z := zoneOfRules(b); z != "" {
+			return z
+		}
+	}
+	// Windows names its zones its own way (Pacific SA Standard Time): CLDR's table gives the IANA
+	// name, summer time included. With summer time switched off, the offset is the truth.
+	if id := strings.TrimSpace(windowsZoneID()); id != "" && !strings.HasSuffix(id, "_dstoff") {
+		if z := windowsZones[id]; z != "" {
+			return z
+		}
+	}
+	return fixedOffset(clockNow())
+}
+
+// zoneOfRules names the zone whose compiled rules are b, looking first at the canonical names of
+// the zone tables (so America/Santiago, not its alias Chile/Continental), then at every file.
+func zoneOfRules(b []byte) string {
+	same := func(path string) bool {
+		got, err := os.ReadFile(path)
+		return err == nil && string(got) == string(b)
+	}
+	for _, dir := range zoneinfoDirs {
+		if _, err := os.Stat(dir); err != nil {
+			continue
+		}
+		for _, name := range canonicalZones(dir) {
+			if same(filepath.Join(dir, name)) {
+				return name
+			}
+		}
+		found := ""
+		_ = filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
+			if err != nil {
+				return nil
+			}
+			rel, _ := filepath.Rel(dir, path)
+			rel = filepath.ToSlash(rel)
+			if d.IsDir() {
+				if rel == "posix" || rel == "right" {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if zoneName.MatchString(rel) && same(path) {
+				found = rel
+				return filepath.SkipAll
+			}
+			return nil
+		})
+		if found != "" {
+			return found
 		}
 	}
 	return ""
+}
+
+// canonicalZones lists UTC and the zones of zone1970.tab and zone.tab in dir.
+func canonicalZones(dir string) []string {
+	names := []string{"UTC"}
+	for _, tab := range []string{"zone1970.tab", "zone.tab"} {
+		b, err := os.ReadFile(filepath.Join(dir, tab))
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(b), "\n") {
+			if f := strings.Fields(line); len(f) >= 3 && !strings.HasPrefix(f[0], "#") && zoneName.MatchString(f[2]) {
+				names = append(names, f[2])
+			}
+		}
+	}
+	return names
+}
+
+// fixedOffset is the zone of t's offset from UTC: UTC, Etc/GMT+3 for UTC-3 (the Etc names count
+// the other way round, as POSIX does), which Chromium knows too; an offset of whole hours has one.
+// Else a POSIX zone such as <+0530>-5:30, which only the C library knows.
+func fixedOffset(t time.Time) string {
+	_, off := t.Zone()
+	if off == 0 {
+		return "UTC"
+	}
+	sign, posix := "+", "-"
+	if off < 0 {
+		sign, posix, off = "-", "+", -off
+	}
+	h, m := off/3600, off%3600/60
+	if m == 0 && h <= 14 {
+		return fmt.Sprintf("Etc/GMT%s%d", posix, h)
+	}
+	return fmt.Sprintf("<%s%02d%02d>%s%d:%02d", sign, h, m, strings.TrimPrefix(posix, "+"), h, m)
+}
+
+// ZoneStale tells whether a container runs in another time zone than zone (the host moved, or
+// the container was made before its zone could be told). An empty zone is never stale.
+func (m *Manager) ZoneStale(ctx context.Context, name, zone string) (bool, error) {
+	if zone == "" {
+		return false, nil
+	}
+	if !nameRe.MatchString(name) {
+		return false, fmt.Errorf("container name %q is not valid", name)
+	}
+	out, err := runCmd(ctx, m.rt.Bin, "inspect", "-f", "{{range .Config.Env}}{{println .}}{{end}}", name)
+	if err != nil {
+		return false, fmt.Errorf("inspect %s: %s", name, tail(string(out), 4))
+	}
+	have := ""
+	for _, line := range strings.Split(string(out), "\n") {
+		if v, found := strings.CutPrefix(strings.TrimSpace(line), "TZ="); found {
+			have = v
+		}
+	}
+	return have != zone, nil
 }
 
 // Manager starts and stops containers with one runtime.

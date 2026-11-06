@@ -47,6 +47,38 @@ func (m *fakeMemory) ForgetNote(_, id string) error {
 	}
 	return errors.New("no such note " + id)
 }
+func (m *fakeMemory) EditNote(_, id, text string) (*memory.Note, error) {
+	if text == "" {
+		return nil, errors.New("a note needs text")
+	}
+	for i := range m.notes {
+		if m.notes[i].ID == id {
+			m.notes[i].Text = text
+			n := m.notes[i]
+			return &n, nil
+		}
+	}
+	return nil, errors.New("no such note " + id)
+}
+func (m *fakeMemory) SharedNotes() ([]memory.Note, error) {
+	if m.failing {
+		return nil, errors.New("the shared notes could not be read")
+	}
+	out := []memory.Note{}
+	for _, n := range m.notes {
+		if n.Scope == memory.ScopeShared {
+			out = append(out, n)
+		}
+	}
+	return out, nil
+}
+func (m *fakeMemory) RememberShared(text string) (*memory.Note, error) {
+	return m.Remember("", memory.ScopeShared, text)
+}
+func (m *fakeMemory) EditShared(id, text string) (*memory.Note, error) {
+	return m.EditNote("", id, text)
+}
+func (m *fakeMemory) ForgetShared(id string) error { return m.ForgetNote("", id) }
 func (m *fakeMemory) SetProfile(_ string, demand int, auto bool) (memory.Profile, error) {
 	if demand < 1 || demand > 5 {
 		return memory.Profile{}, errors.New("demand is a level from 1 (relaxed) to 5 (strict)")
@@ -140,7 +172,8 @@ func TestMemoryAPI(t *testing.T) {
 	// Without a memory every route says so.
 	none := httptest.NewServer(New(f, &fakeChats{}, "tok", ""))
 	defer none.Close()
-	for _, tc := range []struct{ method, path string }{{"GET", "/v1/kitties/ana/memory"}, {"POST", "/v1/kitties/ana/memory"}, {"DELETE", "/v1/kitties/ana/memory/x"}, {"PUT", "/v1/kitties/ana/memory/profile"}, {"POST", "/v1/kitties/ana/memory/distill"}, {"POST", "/v1/chats/c/turns/1/feedback"}} {
+	for _, tc := range []struct{ method, path string }{{"GET", "/v1/kitties/ana/memory"}, {"POST", "/v1/kitties/ana/memory"}, {"DELETE", "/v1/kitties/ana/memory/x"}, {"PUT", "/v1/kitties/ana/memory/profile"}, {"POST", "/v1/kitties/ana/memory/distill"}, {"POST", "/v1/chats/c/turns/1/feedback"},
+		{"PUT", "/v1/kitties/ana/memory/x"}, {"GET", "/v1/memory/shared"}, {"POST", "/v1/memory/shared"}, {"PUT", "/v1/memory/shared/x"}, {"DELETE", "/v1/memory/shared/x"}} {
 		if code, _, data := call(t, none, tc.method, tc.path, "tok", nil); code != 404 || !strings.Contains(string(data), "no memory") {
 			t.Errorf("%s %s without memory = %d", tc.method, tc.path, code)
 		}
@@ -168,6 +201,15 @@ func TestNotifySettingsAPI(t *testing.T) {
 	}
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/notify", "tok", map[string]any{"connector": "bad"}); code != 400 {
 		t.Error("a bad connector")
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/autonomy", "tok", map[string]any{"follow_ups": "5m 1h", "brain_wait": "off"}); code != 200 || f.auto.FollowUps != "5m 1h" || f.auto.BrainWait != "off" {
+		t.Errorf("autonomy: %d %+v", code, f.auto)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/autonomy", "tok", map[string]any{"brain_wait": "soon"}); code != 400 {
+		t.Errorf("bad autonomy: %d", code)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/settings/autonomy", "tok", "{nope"); code != 400 {
+		t.Errorf("bad autonomy body: %d", code)
 	}
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/notify", "tok", "{nope"); code != 400 {
 		t.Error("bad json")
@@ -220,5 +262,60 @@ func TestSendDigestNow(t *testing.T) {
 	defer none.Close()
 	if code, _, _ := call(t, none, "POST", "/v1/settings/notify/digest", "tok", nil); code != 404 {
 		t.Error("no digest")
+	}
+}
+
+func TestEditAndSharedMemoryAPI(t *testing.T) {
+	mem := &fakeMemory{profile: memory.Profile{Demand: 3, Auto: true}}
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": {ID: "a1", Name: "ana"}}}
+	srv := httptest.NewServer(New(f, &fakeChats{}, "tok", "").WithMemory(mem))
+	defer srv.Close()
+	_, _, _ = call(t, srv, "POST", "/v1/kitties/ana/memory", "tok", map[string]any{"text": "Answer in Spanish", "scope": "user"})
+	// A note is corrected in place.
+	if code, m, _ := call(t, srv, "PUT", "/v1/kitties/ana/memory/n0", "tok", map[string]any{"text": "Answer in English"}); code != 200 || m["note"].(map[string]any)["text"] != "Answer in English" {
+		t.Errorf("edit = %d %v", code, m)
+	}
+	for name, tc := range map[string]struct {
+		path string
+		body any
+		code int
+	}{
+		"empty":           {"/v1/kitties/ana/memory/n0", map[string]any{"text": ""}, 400},
+		"unknown":         {"/v1/kitties/ana/memory/zz", map[string]any{"text": "x"}, 404},
+		"bad json":        {"/v1/kitties/ana/memory/n0", "{nope", 400},
+		"shared bad json": {"/v1/memory/shared/n0", "{nope", 400},
+		"shared unknown":  {"/v1/memory/shared/zz", map[string]any{"text": "x"}, 404},
+	} {
+		if code, _, _ := call(t, srv, "PUT", tc.path, "tok", tc.body); code != tc.code {
+			t.Errorf("%s = %d, want %d", name, code, tc.code)
+		}
+	}
+	// The shared notes: listed, written, corrected and forgotten without a kitty.
+	if code, m, _ := call(t, srv, "GET", "/v1/memory/shared", "tok", nil); code != 200 || len(m["notes"].([]any)) != 0 {
+		t.Errorf("no shared notes yet = %d %v", code, m)
+	}
+	code, m, _ := call(t, srv, "POST", "/v1/memory/shared", "tok", map[string]any{"text": "My name is Mad"})
+	if code != 201 || m["note"].(map[string]any)["scope"] != "shared" {
+		t.Fatalf("remember shared = %d %v", code, m)
+	}
+	id := m["note"].(map[string]any)["id"].(string)
+	if code, _, _ := call(t, srv, "POST", "/v1/memory/shared", "tok", map[string]any{"text": ""}); code != 400 {
+		t.Error("an empty shared note")
+	}
+	if code, m, _ := call(t, srv, "PUT", "/v1/memory/shared/"+id, "tok", map[string]any{"text": "Call me Mad"}); code != 200 || m["note"].(map[string]any)["text"] != "Call me Mad" {
+		t.Errorf("edit shared = %d %v", code, m)
+	}
+	if code, m, _ := call(t, srv, "GET", "/v1/memory/shared", "tok", nil); code != 200 || len(m["notes"].([]any)) != 1 {
+		t.Errorf("shared = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/memory/shared/"+id, "tok", nil); code != 200 {
+		t.Error("forget shared")
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/memory/shared/"+id, "tok", nil); code != 404 {
+		t.Error("forget a shared note twice")
+	}
+	mem.failing = true
+	if code, _, _ := call(t, srv, "GET", "/v1/memory/shared", "tok", nil); code == 200 {
+		t.Error("a store that fails")
 	}
 }

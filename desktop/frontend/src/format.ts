@@ -147,21 +147,3 @@ function keyName(keys: string): string {
     })
     .join("+");
 }
-
-// inline turns **bold** and `code` into elements; everything else stays text.
-export function inline(text: string): (string | { t: "b" | "c"; v: string })[] {
-  const out: (string | { t: "b" | "c"; v: string })[] = [];
-  const re = /\*\*([^*]+)\*\*|`([^`]+)`/g;
-  let last = 0;
-  for (const m of text.matchAll(re)) {
-    if (m.index! > last) {
-      out.push(text.slice(last, m.index));
-    }
-    out.push(m[1] !== undefined ? { t: "b", v: m[1] } : { t: "c", v: m[2] });
-    last = m.index! + m[0].length;
-  }
-  if (last < text.length) {
-    out.push(text.slice(last));
-  }
-  return out;
-}

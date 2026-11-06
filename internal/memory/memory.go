@@ -20,17 +20,23 @@ import (
 	"time"
 )
 
-// The scopes of a note: what the person likes, how the work goes, or a project.
+// The scopes of a note: what the person likes, how the work goes, a project, or what every
+// kitty should know (shared).
 const (
-	ScopeUser = "user"
-	ScopeWork = "work"
+	ScopeUser   = "user"
+	ScopeWork   = "work"
+	ScopeShared = "shared"
 )
+
+// sharedKey is where the notes every kitty shares are kept, beside the kitties' own. A kitty's
+// id never starts with an underscore, so it cannot clash with one.
+const sharedKey = "_shared"
 
 var projectScope = regexp.MustCompile(`^project:[a-z0-9][a-z0-9 _-]{0,39}$`)
 
-// ValidScope reports whether s names a scope: user, work or project:<name>.
+// ValidScope reports whether s names a scope: user, work, shared or project:<name>.
 func ValidScope(s string) bool {
-	return s == ScopeUser || s == ScopeWork || projectScope.MatchString(s)
+	return s == ScopeUser || s == ScopeWork || s == ScopeShared || projectScope.MatchString(s)
 }
 
 // Slug is a project's name as a scope: lowercase letters, digits, spaces, dashes.
@@ -64,6 +70,11 @@ type Note struct {
 	Source string `json:"source"`
 	// Pinned notes were written by the person: a distillation never drops them.
 	Pinned bool `json:"pinned,omitempty"`
+	// Proposed is a shared note a kitty wrote: it waits for the person's yes before it reaches
+	// every kitty's prompt.
+	Proposed bool `json:"proposed,omitempty"`
+	// Uses is how many answers were given with the note in the kitty's prompt.
+	Uses int `json:"uses,omitempty"`
 }
 
 // Feedback is one verdict of the person on something a kitty did.
@@ -186,7 +197,10 @@ func (s *Store) Remember(kitty, scope, text, source string, pinned bool) (*Note,
 		scope = ScopeUser
 	}
 	if !ValidScope(scope) {
-		return nil, fmt.Errorf("scope %q is not user, work or project:<name>", scope)
+		return nil, fmt.Errorf("scope %q is not user, work, shared or project:<name>", scope)
+	}
+	if scope == ScopeShared {
+		kitty = sharedKey
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -196,12 +210,14 @@ func (s *Store) Remember(kitty, scope, text, source string, pinned bool) (*Note,
 			n.Strength++
 			n.Updated = s.now()
 			n.Pinned = n.Pinned || pinned
+			n.Proposed = n.Proposed && source != "person"
 			s.save(kitty, f)
 			c := *n
 			return &c, nil
 		}
 	}
-	n := &Note{ID: s.id(), Scope: scope, Text: text, Strength: 1, At: s.now(), Updated: s.now(), Source: source, Pinned: pinned}
+	n := &Note{ID: s.id(), Scope: scope, Text: text, Strength: 1, At: s.now(), Updated: s.now(), Source: source, Pinned: pinned,
+		Proposed: scope == ScopeShared && source != "person"}
 	f.Notes = append(f.Notes, n)
 	if len(f.Notes) > MaxNotes {
 		s.evict(f)
@@ -227,20 +243,54 @@ func (s *Store) evict(f *file) {
 	}
 }
 
-// Forget removes one note.
+// Forget removes one note, the kitty's own or a shared one.
 func (s *Store) Forget(kitty, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	f := s.load(kitty)
-	for i, n := range f.Notes {
-		if n.ID == id {
-			f.Notes = append(f.Notes[:i], f.Notes[i+1:]...)
-			s.save(kitty, f)
-			return nil
+	for _, key := range []string{kitty, sharedKey} {
+		if key == "" {
+			continue
+		}
+		f := s.load(key)
+		for i, n := range f.Notes {
+			if n.ID == id {
+				f.Notes = append(f.Notes[:i], f.Notes[i+1:]...)
+				s.save(key, f)
+				return nil
+			}
 		}
 	}
 	return fmt.Errorf("no such note %q", id)
 }
+
+// Edit rewrites a note, the kitty's own or a shared one. The person wrote it now, so it is
+// pinned and a distillation never drops it.
+func (s *Store) Edit(kitty, id, text string) (*Note, error) {
+	text = clip(strings.Join(strings.Fields(text), " "), 240)
+	if text == "" {
+		return nil, errors.New("a note needs text")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, key := range []string{kitty, sharedKey} {
+		if key == "" {
+			continue
+		}
+		f := s.load(key)
+		for _, n := range f.Notes {
+			if n.ID == id {
+				n.Text, n.Updated, n.Source, n.Pinned, n.Proposed = text, s.now(), "person", true, false
+				s.save(key, f)
+				c := *n
+				return &c, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("no such note %q", id)
+}
+
+// Shared returns the notes every kitty knows, strongest first.
+func (s *Store) Shared() []Note { return s.Notes(sharedKey, "") }
 
 // ForgetKitty removes everything about a kitty that was removed.
 func (s *Store) ForgetKitty(kitty string) error {
@@ -254,12 +304,17 @@ func (s *Store) ForgetKitty(kitty string) error {
 	return err
 }
 
-// Notes returns a kitty's notes of a scope ("" for all), strongest first.
+// Notes returns a kitty's notes of a scope ("" for all), strongest first. They include the
+// shared notes, which every kitty sees.
 func (s *Store) Notes(kitty, scope string) []Note {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []Note
-	for _, n := range s.load(kitty).Notes {
+	all := s.load(kitty).Notes
+	if kitty != sharedKey {
+		all = append(append([]*Note(nil), all...), s.load(sharedKey).Notes...)
+	}
+	for _, n := range all {
 		if scope == "" || n.Scope == scope {
 			out = append(out, *n)
 		}
@@ -378,7 +433,8 @@ func (s *Store) Distilled(kitty string, notes []Note) {
 		for _, k := range kept {
 			dup = dup || (k.Scope == n.Scope && norm(k.Text) == norm(n.Text))
 		}
-		if dup || !ValidScope(n.Scope) || strings.TrimSpace(n.Text) == "" {
+		// Shared notes are tended by hand or by remember, never replaced by one kitty's distillation.
+		if dup || !ValidScope(n.Scope) || n.Scope == ScopeShared || strings.TrimSpace(n.Text) == "" {
 			continue
 		}
 		kept = append(kept, &Note{ID: s.id(), Scope: n.Scope, Text: clip(n.Text, 240), Strength: max(1, n.Strength), At: s.now(), Updated: s.now(), Source: "distilled"})
@@ -397,6 +453,36 @@ var levels = map[int]string{
 	5: "They are strict: be exacting. Verify everything twice, show your evidence, never assume, and ask before anything that cannot be undone.",
 }
 
+// StaleAfter is how long a note may go without reaching a prompt before it counts as unused.
+const StaleAfter = 14 * 24 * time.Hour
+
+// Stale reports whether a note has never been in a prompt for StaleAfter: a distillation may
+// drop it. The person's own notes are never stale.
+func Stale(n Note, now time.Time) bool {
+	return !n.Pinned && n.Uses == 0 && now.Sub(n.At) > StaleAfter
+}
+
+// use counts one more answer for the notes that went into a kitty's prompt.
+func (s *Store) use(kitty string, ids map[string]bool) {
+	if len(ids) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, key := range []string{kitty, sharedKey} {
+		f, changed := s.load(key), false
+		for _, n := range f.Notes {
+			if ids[n.ID] {
+				n.Uses++
+				changed = true
+			}
+		}
+		if changed {
+			s.save(key, f)
+		}
+	}
+}
+
 // LevelText says how a level asks the kitty to work.
 func LevelText(demand int) string { return levels[min(5, max(1, demand))] }
 
@@ -408,22 +494,37 @@ func (s *Store) Prompt(kitty, person, project string) string {
 	}
 	notes := s.Notes(kitty, "")
 	p := s.Profile(kitty)
-	var user, work, proj []string
+	var user, work, proj, shared []string
+	used := map[string]bool{}
 	for _, n := range notes {
 		line := "- " + n.Text
+		in := true
 		switch {
+		case n.Proposed:
+			in = false
 		case n.Scope == ScopeUser && len(user) < 12:
 			user = append(user, line)
+		case n.Scope == ScopeShared && len(shared) < 12:
+			shared = append(shared, line)
 		case n.Scope == ScopeWork && len(work) < 8:
 			work = append(work, line)
 		case project != "" && n.Scope == "project:"+project && len(proj) < 10:
 			proj = append(proj, line)
+		default:
+			in = false
+		}
+		if in {
+			used[n.ID] = true
 		}
 	}
+	s.use(kitty, used)
 	var b strings.Builder
 	fmt.Fprintf(&b, "How demanding %s is with you: %d of 5. %s\n", person, p.Demand, LevelText(p.Demand))
 	if len(user) > 0 {
 		fmt.Fprintf(&b, "What you have learned about %s and how they like things done (follow it):\n%s\n", person, strings.Join(user, "\n"))
+	}
+	if len(shared) > 0 {
+		fmt.Fprintf(&b, "What every kitty of %s knows (shared, follow it):\n%s\n", person, strings.Join(shared, "\n"))
 	}
 	if len(work) > 0 {
 		fmt.Fprintf(&b, "Lessons about the work:\n%s\n", strings.Join(work, "\n"))

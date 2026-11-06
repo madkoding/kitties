@@ -161,6 +161,7 @@ COPY --chmod=755 kitty-stream.sh /usr/local/bin/kitty-stream
 COPY --from=grab --chmod=755 /kitty-grab /usr/local/bin/kitty-grab
 COPY --chmod=755 kitty-clip.sh /usr/local/bin/kitty-clip
 COPY --chmod=755 kitty-theme.sh /usr/local/bin/kitty-theme
+COPY --chmod=755 kitty-ready.sh /usr/local/bin/kitty-ready
 COPY --chmod=755 kitty-shelf-media.sh /usr/local/bin/kitty-shelf-media
 COPY --chmod=755 kitty-shelf-weather.sh /usr/local/bin/kitty-shelf-weather
 COPY --chmod=755 kitty-shelf-net.sh /usr/local/bin/kitty-shelf-net

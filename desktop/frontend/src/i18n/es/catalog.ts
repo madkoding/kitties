@@ -2,6 +2,13 @@ import type { Dictionary } from "../../i18n";
 
 // The service catalogue: the services, their fields and what the kitties can do with them.
 const dict: Dictionary = {
+  Services: "Servicios",
+  "what the kitties may reach; the sign-in asks Google only for these (all when none is ticked)":
+    "lo que pueden usar los kitties; el inicio de sesión solo le pide a Google estos (todos si no marcas ninguno)",
+  Gmail: "Gmail",
+  Drive: "Drive",
+  Sheets: "Hojas de cálculo",
+  Docs: "Documentos",
   // Services, their fields and what they do.
   "!abc:matrix.org": "!abc:matrix.org",
   "#general: where the messages go": "#general: adonde van los mensajes",
@@ -175,6 +182,10 @@ const dict: Dictionary = {
   "add an event; with attendees it invites them (that asks you first)":
     "agregar un evento; si tiene asistentes, los invita (antes te pregunta)",
   "add tracks to a playlist": "agregar canciones a una playlist",
+  "an app-specific password; a Nextcloud signs in instead":
+    "una contraseña específica de app; un Nextcloud inicia sesión en su lugar",
+  "an app-specific password (iCloud: appleid.apple.com → Sign-In and Security); a Nextcloud signs in instead":
+    "una contraseña específica de app (iCloud: appleid.apple.com → Inicio de sesión y seguridad); un Nextcloud inicia sesión en su lugar",
   "an app-specific password": "una contraseña específica de app",
   "an app-specific password (iCloud: appleid.apple.com → Sign-In and Security)":
     "una contraseña específica de app (iCloud: appleid.apple.com → Sign-In and Security)",
@@ -229,6 +240,8 @@ const dict: Dictionary = {
   "flagged tasks and the ones due soon": "tareas marcadas y las que vencen pronto",
   "for a protected topic": "para un tema protegido",
   "from @BotFather": "de @BotFather",
+  "from the channel's settings → Integrations → Webhooks; signing in makes one":
+    "de la configuración del canal → Integraciones → Webhooks; iniciar sesión crea uno",
   "from Slack's app settings → Incoming Webhooks; it posts to the one channel it was made for":
     "de la configuración de la app de Slack → Incoming Webhooks; publica solo en el canal para el que se creó",
   "group/name": "group/name",
@@ -243,6 +256,7 @@ const dict: Dictionary = {
     "https://contacts.icloud.com, https://carddav.fastmail.com, https://cloud.example.com/remote.php/dav",
   "https://gitlab.com when empty": "https://gitlab.com si está vacío",
   "https://kroki.io (the default)": "https://kroki.io (el predeterminado)",
+  "https://codeberg.org": "https://codeberg.org",
   "https://mastodon.social": "https://mastodon.social",
   "https://matrix.org": "https://matrix.org",
   "https://ntfy.sh when empty": "https://ntfy.sh si está vacío",
@@ -277,8 +291,8 @@ const dict: Dictionary = {
     "solo para iniciar sesión con una app tuya en Admin Center → Apps and integrations → APIs → OAuth clients; vacío: la de Kitties",
   "only to sign in through an app of your own at airtable.com/create/oauth; empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en airtable.com/create/oauth; vacío: la de Kitties",
-  "only to sign in through an app of your own at console.cloud.google.com (a Desktop or Web client); empty: Kitties' own":
-    "solo para iniciar sesión con una app tuya en console.cloud.google.com (un cliente Desktop o Web); vacío: la de Kitties",
+  "only to sign in through an app of your own at console.cloud.google.com (a Desktop app client: see docs/GOOGLE.md); empty: Kitties' own":
+    "solo para iniciar sesión con una app tuya en console.cloud.google.com (un cliente «App de escritorio»: ver docs/GOOGLE.md); vacío: la de Kitties",
   "only to sign in through an app of your own at developer.atlassian.com/console/myapps; empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en developer.atlassian.com/console/myapps; vacío: la de Kitties",
   "only to sign in through an app of your own at developer.spotify.com (redirect: this gateway's /v1/oauth/callback); empty: Kitties' own":
@@ -289,6 +303,8 @@ const dict: Dictionary = {
     "solo para iniciar sesión con una app tuya en developer.todoist.com/appconsole.html; vacío: la de Kitties",
   "only to sign in through an app of your own at developers.facebook.com; empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en developers.facebook.com; vacío: la de Kitties",
+  "only to sign in through an app of your own at discord.com/developers (redirect: this gateway's /v1/oauth/callback); empty: Kitties' own":
+    "solo para iniciar sesión con una app tuya en discord.com/developers (redirect: el /v1/oauth/callback de este gateway); vacío: la de Kitties",
   "only to sign in through an app of your own at dropbox.com/developers; empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en dropbox.com/developers; vacío: la de Kitties",
   "only to sign in through an app of your own at entra.microsoft.com (an app registration); empty: Kitties' own":
@@ -301,6 +317,8 @@ const dict: Dictionary = {
     "solo para iniciar sesión con una app tuya en linkedin.com/developers; vacío: la de Kitties",
   "only to sign in through an app of your own at notion.so/my-integrations (a public integration); empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en notion.so/my-integrations (una integración pública); vacío: la de Kitties",
+  "only to sign in through an app of your own at your instance: Settings → Applications → OAuth2 applications; empty: Kitties' own":
+    "solo para iniciar sesión con una app tuya en tu instancia: Settings → Applications → OAuth2 applications; vacío: la de Kitties",
   "only to sign in through an app of your own at your GitLab: Preferences → Applications; empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en tu GitLab: Preferences → Applications; vacío: la de Kitties",
   "open a pull request": "abrir un pull request",
@@ -312,7 +330,8 @@ const dict: Dictionary = {
     "reproducir lo que mejor coincida con una búsqueda, un uri spotify:, o reanudar",
   "post a message": "publicar un mensaje",
   "post the arguments": "enviar los argumentos",
-  "posts messages to a Discord channel": "publica mensajes en un canal de Discord",
+  "posts messages to a Discord channel, through a webhook or a sign-in":
+    "publica mensajes en un canal de Discord, con un webhook o iniciando sesión",
   "posts messages to a Slack channel, through a webhook, a bot token or a sign-in":
     "publica mensajes en un canal de Slack, mediante un webhook, un token de bot o iniciando sesión",
   "posts the arguments as JSON to a URL": "envía los argumentos como JSON a una URL",
@@ -541,6 +560,10 @@ const dict: Dictionary = {
   Request: "Petición a la API",
   "anything else the service's API lets the account do":
     "cualquier otra cosa que la API del servicio le permita a la cuenta",
+  "with the token, instead of signing in": "con el token, en lugar de iniciar sesión",
+  "API key of your own Power-Up": "API key de tu propio Power-Up",
+  "only to sign in through a Power-Up of your own at trello.com/power-ups/admin (allow this gateway's address as an origin); empty: Kitties' own":
+    "solo para iniciar sesión con un Power-Up tuyo en trello.com/power-ups/admin (permite la dirección de este gateway como origen); vacío: el de Kitties",
 };
 
 export default dict;
