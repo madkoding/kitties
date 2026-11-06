@@ -50,6 +50,29 @@ type Config struct {
 	Connectors map[string]Connector `yaml:"connectors"`
 	// Notify says where the person is told, outside the interface, when a kitty needs them.
 	Notify notify.Config `yaml:"notify"`
+	// WhatsApp is the link to a number of the kitties' own (docs/WHATSAPP.md), used while
+	// nothing was saved from Settings.
+	WhatsApp WhatsApp `yaml:"whatsapp"`
+}
+
+// WhatsApp is the WhatsApp link as the file sets it. Turning it on here is accepting its risk: it
+// is not an official API and WhatsApp may ban the number.
+type WhatsApp struct {
+	Enabled bool `yaml:"enabled"`
+	// Allow are the numbers that may write, with their country code.
+	Allow []string `yaml:"allow"`
+	// Kitty answers the messages (its name).
+	Kitty string `yaml:"kitty"`
+	// Groups lets the kitty answer in groups when someone on the list mentions it.
+	Groups bool `yaml:"groups"`
+	// Transcribe is the profile (openai or groq) whose speech API turns voice notes into text;
+	// empty takes the first such profile, "off" none.
+	Transcribe string `yaml:"transcribe"`
+}
+
+// Set reports whether the file says anything about WhatsApp.
+func (w WhatsApp) Set() bool {
+	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0
 }
 
 // Provider is one AI profile.

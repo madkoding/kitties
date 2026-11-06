@@ -461,3 +461,17 @@ func TestApplyEnvMCP(t *testing.T) {
 		t.Errorf("env not applied: %+v", m)
 	}
 }
+
+func TestWhatsAppSection(t *testing.T) {
+	base := "providers:\n  p:\n    kind: ollama\n"
+	cfg, err := Parse([]byte(base + "whatsapp:\n  enabled: true\n  allow: [\"+56 9 1234 5678\"]\n  kitty: ana\n  groups: true\n  transcribe: off\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if w := cfg.WhatsApp; !w.Set() || !w.Enabled || w.Allow[0] != "+56 9 1234 5678" || w.Kitty != "ana" || !w.Groups || w.Transcribe != "off" {
+		t.Fatalf("whatsapp = %+v", w)
+	}
+	if (WhatsApp{Transcribe: "p"}).Set() {
+		t.Fatal("only the transcriber says the file sets WhatsApp")
+	}
+}

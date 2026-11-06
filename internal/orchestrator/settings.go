@@ -652,3 +652,24 @@ func contains(list []string, s string) bool {
 	}
 	return false
 }
+
+// Profile is an AI profile as configured and changed in Settings, its key included, for the parts
+// of the gateway that call another API of its provider (WhatsApp's voice notes, to speech).
+func (m *Manager) Profile(name string) (config.Provider, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	p, ok := m.cfg.Providers[name]
+	return p, ok
+}
+
+// ProfileNames are the AI profiles, sorted.
+func (m *Manager) ProfileNames() []string {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	out := make([]string, 0, len(m.cfg.Providers))
+	for n := range m.cfg.Providers {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
