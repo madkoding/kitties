@@ -117,6 +117,13 @@ var Providers = map[string]Provider{
 		// Nextcloud's Login Flow v2 (loginflow.go): nothing to register, an app password back.
 		Name: "nextcloud", Label: "Nextcloud", LoginFlow: true,
 	},
+	"trello": {
+		// The app is an API key (Power-Up admin → API key, with this gateway's origin allowed);
+		// the token never expires.
+		Name: "trello", Label: "Trello", AuthURL: "https://trello.com/1/authorize", Implicit: true, AppKey: "key",
+		Scopes: []string{"read", "write"},
+		Extra:  map[string]string{"expiration": "never", "name": "Kitties", "response_type": "token", "callback_method": "fragment"},
+	},
 	"home-assistant": {
 		Name: "home-assistant", Label: "Home Assistant", AuthURL: "{url}/auth/authorize", TokenURL: "{url}/auth/token", SelfClient: true,
 	},

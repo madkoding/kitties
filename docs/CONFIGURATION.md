@@ -126,6 +126,7 @@ required.
 | --- | --- |
 | Mastodon, Home Assistant | nothing to set up: Kitties registers itself on the instance, or uses the gateway's own address as its app |
 | Nextcloud, and CalDAV / CardDAV on a Nextcloud | nothing to set up: Nextcloud's Login Flow v2 opens its page, you allow Kitties, and the app password it hands back becomes the connection's password (revoke it in Nextcloud → Security) |
+| Trello | through Kitties' own API key when the build has one, else the API key of a Power-Up of yours (trello.com/power-ups/admin) with this gateway's address allowed as an origin; Trello hands the token back in the page's address, which the callback page posts to the gateway |
 | Gitea, Forgejo (Codeberg) | an OAuth2 app made on your instance (Settings → Applications), with this gateway's `/v1/oauth/callback` as its redirect |
 | Google, Microsoft, Slack, Discord, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
 

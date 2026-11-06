@@ -762,6 +762,7 @@ const OAUTH_LABEL: Record<string, string> = {
   dropbox: "Dropbox",
   notion: "Notion",
   todoist: "Todoist",
+  trello: "Trello",
   linear: "Linear",
   airtable: "Airtable",
   figma: "Figma",

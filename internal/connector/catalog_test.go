@@ -640,3 +640,33 @@ func TestNextcloudKindsSignIn(t *testing.T) {
 		t.Errorf("auth = %v %v %v", u, p, ok)
 	}
 }
+
+func TestTrelloTakesKeysOrTheSignIn(t *testing.T) {
+	k, _ := LookupKind("trello")
+	if k.OAuth != "trello" || !k.KeySet(Settings{"key": "k", "token": "t"}) || k.KeySet(Settings{"key": "k"}) || k.Validate(Settings{}) != nil {
+		t.Errorf("trello = %+v", k)
+	}
+	var cp capture
+	cp.install(t)
+	args := map[string]any{"name": "Card", "list": "L1"}
+	c, _ := Build("trello", Settings{"key": "k", "token": "typed"}, "")
+	if _, err := c.Call(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+	src := TokenSource(func(context.Context) (string, error) { return "signed", nil })
+	c, _ = Build("trello", WithTokenSource(Settings{"key": "k"}, src), "")
+	if _, err := c.Call(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []string{"typed", "signed"} {
+		q := cp.reqs[i].URL.Query()
+		if q.Get("token") != want || q.Get("key") != "k" || cp.reqs[i].Header.Get("Authorization") != "" {
+			t.Errorf("request %d = %s %v", i, cp.reqs[i].URL, cp.reqs[i].Header)
+		}
+	}
+	r := request{url: "https://x/a"}
+	tokenInQuery(&r, "t t")
+	if r.url != "https://x/a?token=t+t" {
+		t.Errorf("first param = %s", r.url)
+	}
+}

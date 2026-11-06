@@ -175,7 +175,8 @@ const dict: Dictionary = {
   "add an event; with attendees it invites them (that asks you first)":
     "adicionar um evento; se tiver participantes, envia os convites (mas pergunta para você antes)",
   "add tracks to a playlist": "adicionar músicas a uma playlist",
-  "an app-specific password; a Nextcloud signs in instead": "uma senha específica de app; um Nextcloud faz login no lugar",
+  "an app-specific password; a Nextcloud signs in instead":
+    "uma senha específica de app; um Nextcloud faz login no lugar",
   "an app-specific password (iCloud: appleid.apple.com → Sign-In and Security); a Nextcloud signs in instead":
     "uma senha específica de app (iCloud: appleid.apple.com → Início de sessão e segurança); um Nextcloud faz login no lugar",
   "an app-specific password": "uma senha específica de app",
@@ -552,6 +553,10 @@ const dict: Dictionary = {
   Request: "Requisição à API",
   "anything else the service's API lets the account do":
     "qualquer outra coisa que a API do serviço permita à conta",
+  "with the token, instead of signing in": "com o token, em vez de fazer login",
+  "API key of your own Power-Up": "API key do seu próprio Power-Up",
+  "only to sign in through a Power-Up of your own at trello.com/power-ups/admin (allow this gateway's address as an origin); empty: Kitties' own":
+    "só para fazer login com um Power-Up seu em trello.com/power-ups/admin (permita o endereço deste gateway como origem); vazio: o do Kitties",
 };
 
 export default dict;

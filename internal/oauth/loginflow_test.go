@@ -11,9 +11,9 @@ import (
 
 func TestDavRoot(t *testing.T) {
 	for in, want := range map[string]string{
-		"https://cloud.example.com/":                      "https://cloud.example.com",
-		"https://cloud.example.com/remote.php/dav":        "https://cloud.example.com",
-		"https://example.com/nc/remote.php/dav/?x=1#y":    "https://example.com/nc",
+		"https://cloud.example.com/":                     "https://cloud.example.com",
+		"https://cloud.example.com/remote.php/dav":       "https://cloud.example.com",
+		"https://example.com/nc/remote.php/dav/?x=1#y":   "https://example.com/nc",
 		" http://192.168.1.5:8080/nextcloud/index.php/ ": "http://192.168.1.5:8080/nextcloud/index.php",
 	} {
 		if u, err := davRoot(in); err != nil || u.String() != want {

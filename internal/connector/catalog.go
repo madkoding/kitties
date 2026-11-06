@@ -200,8 +200,10 @@ func catalog() []Kind {
 				{Name: "append", Help: "append a paragraph to a page", Args: []string{"page", fText}},
 			}, make: makeNotion, oauth: "notion"},
 		{Name: "trello", Category: CatProductivity, Label: "Trello", Help: "cards on a Trello board",
-			Fields:  []Field{f("key", "API key", "", true, true), fToken, f("list", "Default list id", "", false, false)},
-			Actions: []Action{{Name: "create_card", Help: "add a card", Args: []string{"name", "desc", "list (optional)"}}}, make: makeTrello},
+			Fields: []Field{keyed(f("key", "API key", "with the token, instead of signing in", false, true), keyToken), keyed(f("token", "Token", "instead of signing in", false, true), keyToken),
+				f("list", "Default list id", "", false, false),
+				f("client_id", "API key of your own Power-Up", "only to sign in through a Power-Up of your own at trello.com/power-ups/admin (allow this gateway's address as an origin); empty: Kitties' own", false, false)},
+			Actions: []Action{{Name: "create_card", Help: "add a card", Args: []string{"name", "desc", "list (optional)"}}}, make: makeTrello, oauth: "trello"},
 		{Name: "todoist", Category: CatProductivity, Label: "Todoist", Help: "tasks in Todoist",
 			Fields:  signIn([]Field{f("project", "Default project id", "", false, false)}, f("token", "API token", "", false, true), "developer.todoist.com/appconsole.html"),
 			Actions: []Action{{Name: "add_task", Help: "add a task", Args: []string{"content", "due (natural language, optional)"}}}, make: makeTodoist, oauth: "todoist"},
@@ -550,6 +552,9 @@ type request struct {
 	file string
 	// plain marks a request that takes no account token (a webhook): an OAuth kind leaves it.
 	plain bool
+	// tokenIn, when set, puts the account's token where the service reads it instead of a
+	// bearer header (Trello's query).
+	tokenIn func(r *request, token string)
 	// follow, when set, turns the answer into the text for the model, with more requests if it
 	// needs them (it gets the headers, the account's token included).
 	follow func(ctx context.Context, raw []byte, headers map[string]string) (string, error)
@@ -655,6 +660,10 @@ func (a *api) send(ctx context.Context, req *request) ([]byte, error) {
 		tok, err := a.token(ctx)
 		if err != nil {
 			return nil, err
+		}
+		if req.tokenIn != nil {
+			req.tokenIn(req, tok)
+			return do(ctx, *req)
 		}
 		if req.headers == nil {
 			req.headers = map[string]string{}
@@ -1261,6 +1270,15 @@ func makeNotion(s Settings) Connector {
 	}, "create_page")
 }
 
+// tokenInQuery adds the token to the request's query.
+func tokenInQuery(r *request, token string) {
+	sep := "?"
+	if strings.Contains(r.url, "?") {
+		sep = "&"
+	}
+	r.url += sep + url.Values{"token": {token}}.Encode()
+}
+
 func makeTrello(s Settings) Connector {
 	return newAPI("trello", s, map[string]actionFn{"create_card": func(s Settings, a map[string]any) (request, error) {
 		name, err := need(a, "name", "title", "text")
@@ -1271,8 +1289,12 @@ func makeTrello(s Settings) Connector {
 		if list == "" {
 			return request{}, errors.New("list is missing (a list id)")
 		}
-		q := url.Values{"key": {s["key"]}, "token": {s["token"]}, "idList": {list}, "name": {name}, "desc": {str(a, "desc", "body")}}
-		return request{method: "POST", url: "https://api.trello.com/1/cards?" + q.Encode()}, nil
+		q := url.Values{"key": {s["key"]}, "idList": {list}, "name": {name}, "desc": {str(a, "desc", "body")}}
+		if tok := strings.TrimSpace(s["token"]); tok != "" {
+			q.Set("token", tok)
+		}
+		// Trello reads the token from the query, not from a bearer header.
+		return request{method: "POST", url: "https://api.trello.com/1/cards?" + q.Encode(), tokenIn: tokenInQuery}, nil
 	}}, "create_card")
 }
 
