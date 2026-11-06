@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -69,6 +70,15 @@ type Provider struct {
 	SelfClient bool `json:"-"`
 	// Register makes an app on the service when there is none (Mastodon lets anyone).
 	Register func(ctx context.Context, do HTTPDo, app App, redirect string) (id, secret string, err error) `json:"-"`
+	// LoginFlow marks Nextcloud's Login Flow v2: a login page and a poll instead of a code and a
+	// callback, and an app password instead of a token.
+	LoginFlow bool `json:"-"`
+	// Implicit marks an authorize page that returns the token itself in the return address's
+	// fragment (Trello) instead of a code: see implicit.go.
+	Implicit bool `json:"-"`
+	// AppKey names the setting that holds the person's own app id when it is not client_id
+	// (Trello's API key).
+	AppKey string `json:"-"`
 	// Finish turns the service's answer into the token the connector uses, and says what it
 	// learned for the settings (the page, the account id, the site).
 	Finish func(ctx context.Context, do HTTPDo, app App, c Credentials) (Credentials, map[string]string, error) `json:"-"`
@@ -77,7 +87,7 @@ type Provider struct {
 // Ready reports whether a person can sign in to the service without an app of their own.
 func (p Provider) Ready() bool {
 	id, _ := Builtin(p.Name)
-	return id != "" || p.SelfClient || p.Register != nil
+	return id != "" || p.SelfClient || p.Register != nil || p.LoginFlow
 }
 
 // address fills a provider address's {url} and {subdomain} from the settings.
@@ -136,6 +146,9 @@ type Credentials struct {
 	// the scopes granted): read by a provider's Finish, not kept.
 	IDToken string `json:"-"`
 	Scope   string `json:"-"`
+	// Answer is the token answer as the service sent it, for a Finish that reads more of it
+	// (Discord's webhook); never saved.
+	Answer json.RawMessage `json:"-"`
 }
 
 // Keys of the connector settings the credentials live in.
@@ -199,6 +212,10 @@ type Manager struct {
 	now     func() time.Time
 	httpDo  HTTPDo
 	rand    func(n int) string
+	// sleep and loginEvery pace a login flow's poll; warn reports one that failed.
+	sleep      func(time.Duration)
+	loginEvery time.Duration
+	warn       func(format string, args ...any)
 }
 
 type flow struct {
@@ -214,7 +231,7 @@ type flow struct {
 // New creates the manager over the store.
 func New(store Store) *Manager {
 	return &Manager{store: store, pending: map[string]flow{}, now: time.Now,
-		httpDo: (&http.Client{Timeout: 30 * time.Second}).Do, rand: randomText}
+		httpDo: (&http.Client{Timeout: 30 * time.Second}).Do, rand: randomText, sleep: time.Sleep, loginEvery: 2 * time.Second, warn: log.Printf}
 }
 
 func randomText(n int) string {
@@ -238,6 +255,8 @@ func (m *Manager) client(ctx context.Context, connector string, p Provider, app 
 	switch {
 	case app.ClientID != "":
 		return app.ClientID, app.ClientSecret, nil
+	case p.AppKey != "" && strings.TrimSpace(app.Settings[p.AppKey]) != "":
+		return strings.TrimSpace(app.Settings[p.AppKey]), "", nil
 	case p.SelfClient:
 		return origin(redirect), "", nil
 	}
@@ -315,6 +334,9 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 	if !ok {
 		return "", fmt.Errorf("%q has no OAuth flow", app.Provider)
 	}
+	if p.LoginFlow {
+		return m.startLoginFlow(connector, p, app)
+	}
 	redirect = RedirectFor(app.Provider, redirect)
 	if p.LoopbackOrHTTPS {
 		if err := loopbackOrHTTPS(p, redirect); err != nil {
@@ -331,17 +353,13 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if p.Implicit {
+		return m.startImplicit(connector, p, app, redirect, authURL, clientID), nil
+	}
 	state := m.rand(24)
 	verifier := m.rand(48)
 	sum := sha256.Sum256([]byte(verifier))
-	m.mu.Lock()
-	for k, f := range m.pending {
-		if m.now().Sub(f.started) > 15*time.Minute {
-			delete(m.pending, k)
-		}
-	}
-	m.pending[state] = flow{connector: connector, provider: p, verifier: verifier, redirect: redirect, started: m.now(), clientID: clientID, secret: secret}
-	m.mu.Unlock()
+	m.remember(state, flow{connector: connector, provider: p, verifier: verifier, redirect: redirect, started: m.now(), clientID: clientID, secret: secret})
 	sep := p.ScopeSep
 	if sep == "" {
 		sep = " "
@@ -364,6 +382,18 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 		q.Set("login_hint", hint)
 	}
 	return authURL + "?" + q.Encode(), nil
+}
+
+// remember keeps a flow until its callback, dropping the ones left for more than 15 minutes.
+func (m *Manager) remember(state string, f flow) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, old := range m.pending {
+		if m.now().Sub(old.started) > 15*time.Minute {
+			delete(m.pending, k)
+		}
+	}
+	m.pending[state] = f
 }
 
 // Exchange finishes a sign-in with the code the callback received, and saves the credentials.
@@ -494,7 +524,7 @@ func (m *Manager) token(ctx context.Context, p Provider, app App, secret string,
 		account = answer.WorkspaceName
 	}
 	return Credentials{AccessToken: answer.AccessToken, RefreshToken: answer.RefreshToken, Expiry: m.now().Add(ttl), Account: account,
-		IDToken: answer.IDToken, Scope: answer.Scope}, nil
+		IDToken: answer.IDToken, Scope: answer.Scope, Answer: data}, nil
 }
 
 // RefusedError is a token request the service answered with an error.

@@ -245,6 +245,9 @@ func (f *fakeFleet) RemoveConnector(name string) error {
 type oauthStore struct{ creds oauth.Credentials }
 
 func (o *oauthStore) OAuthApp(name string) (oauth.App, error) {
+	if name == "tr" {
+		return oauth.App{Provider: "trello", Settings: map[string]string{"key": "trello-key"}}, nil
+	}
 	if name != "g" {
 		return oauth.App{}, errors.New("connector \"x\" does not sign in with OAuth")
 	}
@@ -899,6 +902,29 @@ func TestEventsAndOAuth(t *testing.T) {
 	state := u.URL.Query().Get("state")
 	if code, _, data := call(t, srv, "GET", "/v1/oauth/callback?state="+state+"&code=the-code", "", nil); code != 200 || !strings.Contains(string(data), "Connected") {
 		t.Errorf("callback = %d %s", code, data)
+	}
+	// Trello returns the token in the fragment: the callback serves a page that posts it back.
+	_, m, _ = call(t, srv, "POST", "/v1/oauth/tr/start", "tok", nil)
+	u, _ = http.NewRequest("GET", m["url"].(string), nil)
+	back, _ := http.NewRequest("GET", u.URL.Query().Get("return_url"), nil)
+	state = back.URL.Query().Get("state")
+	page, err := http.Get(srv.URL + "/v1/oauth/callback?state=" + state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(page.Body)
+	page.Body.Close()
+	if page.StatusCode != 200 || !strings.Contains(string(body), `fetch("fragment"`) || !strings.Contains(string(body), `"`+state+`"`) || !strings.Contains(page.Header.Get("Content-Security-Policy"), "connect-src 'self'") {
+		t.Errorf("fragment page = %d %s", page.StatusCode, body)
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/oauth/fragment", "", map[string]string{"state": state, "token": "trello-token"}); code != 200 || m["name"] != "tr" {
+		t.Errorf("fragment = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/oauth/fragment", "", map[string]string{"state": state, "token": "again"}); code != 400 {
+		t.Error("a state is used once")
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/oauth/fragment", "", "{"); code != 400 {
+		t.Errorf("bad body = %d", code)
 	}
 }
 

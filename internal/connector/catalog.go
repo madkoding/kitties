@@ -154,8 +154,10 @@ func catalog() []Kind {
 				keyed(f("channel", "Channel", "#general: where the messages go", false, false), keyToken),
 				f("client_id", "OAuth client id", "to sign in instead of pasting a token: a Slack app of your own", false, false), f("client_secret", "OAuth client secret", "", false, true)},
 			Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeSlack, oauth: "slack"},
-		{Name: "discord", Category: CatMessaging, Label: "Discord", Help: "posts messages to a Discord channel",
-			Fields: []Field{f("url", "Webhook URL", "", true, true)}, Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeDiscord},
+		{Name: "discord", Category: CatMessaging, Label: "Discord", Help: "posts messages to a Discord channel, through a webhook or a sign-in",
+			Fields: append([]Field{keyed(f("url", "Webhook URL", "from the channel's settings → Integrations → Webhooks; signing in makes one", false, true), keyWebhook)},
+				fApp("discord.com/developers (redirect: this gateway's /v1/oauth/callback)")...),
+			Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeDiscord, oauth: "discord"},
 		{Name: "telegram", Category: CatMessaging, Label: "Telegram", Help: "sends messages through a bot",
 			Fields:  []Field{f("token", "Bot token", "from @BotFather", true, true), f("chat_id", "Chat id", "", true, false)},
 			Actions: []Action{{Name: "send", Help: "send a message", Args: []string{fText}}}, make: makeTelegram},
@@ -197,8 +199,9 @@ func catalog() []Kind {
 				{Name: "comment", Help: "comment on an issue", Args: []string{"project", "iid", fText}},
 			}, make: makeGitLab, oauth: "gitlab"},
 		{Name: "gitea", Category: CatGit, Label: "Gitea / Forgejo", Help: "issues on a Gitea or Forgejo server",
-			Fields:  []Field{fURL, fToken, f("repo", "Default repository", "owner/name", false, false)},
-			Actions: []Action{{Name: "create_issue", Help: "open an issue", Args: []string{fRepo, fTitle, fBody}}}, make: makeGitea},
+			Fields: signIn([]Field{f("url", "Instance", "https://codeberg.org", true, false), f("repo", "Default repository", "owner/name", false, false)},
+				f("token", "Token", "", false, true), "your instance: Settings → Applications → OAuth2 applications"),
+			Actions: []Action{{Name: "create_issue", Help: "open an issue", Args: []string{fRepo, fTitle, fBody}}}, make: makeGitea, oauth: "gitea"},
 		{Name: "motita", Category: CatGit, Label: "Motita", Help: "runs a coding task in motita (an agent that proves it is done) and returns the result",
 			Fields:  []Field{f("url", "Gateway", "http://127.0.0.1:7477", false, false), fOptTok},
 			Actions: []Action{{Name: "run", Help: "run a task", Args: []string{"task"}}}},
@@ -210,8 +213,10 @@ func catalog() []Kind {
 				{Name: "append", Help: "append a paragraph to a page", Args: []string{"page", fText}},
 			}, make: makeNotion, oauth: "notion"},
 		{Name: "trello", Category: CatProductivity, Label: "Trello", Help: "cards on a Trello board",
-			Fields:  []Field{f("key", "API key", "", true, true), fToken, f("list", "Default list id", "", false, false)},
-			Actions: []Action{{Name: "create_card", Help: "add a card", Args: []string{"name", "desc", "list (optional)"}}}, make: makeTrello},
+			Fields: []Field{keyed(f("key", "API key", "with the token, instead of signing in", false, true), keyToken), keyed(f("token", "Token", "instead of signing in", false, true), keyToken),
+				f("list", "Default list id", "", false, false),
+				f("client_id", "API key of your own Power-Up", "only to sign in through a Power-Up of your own at trello.com/power-ups/admin (allow this gateway's address as an origin); empty: Kitties' own", false, false)},
+			Actions: []Action{{Name: "create_card", Help: "add a card", Args: []string{"name", "desc", "list (optional)"}}}, make: makeTrello, oauth: "trello"},
 		{Name: "todoist", Category: CatProductivity, Label: "Todoist", Help: "tasks in Todoist",
 			Fields:  signIn([]Field{f("project", "Default project id", "", false, false)}, f("token", "API token", "", false, true), "developer.todoist.com/appconsole.html"),
 			Actions: []Action{{Name: "add_task", Help: "add a task", Args: []string{"content", "due (natural language, optional)"}}}, make: makeTodoist, oauth: "todoist"},
@@ -247,8 +252,9 @@ func catalog() []Kind {
 			Fields:  signIn([]Field{f("base", "Base id", "app…", true, false), f("table", "Table", "", true, false)}, f("token", "Personal access token", "", false, true), "airtable.com/create/oauth"),
 			Actions: []Action{{Name: "add_record", Help: "add a record", Args: []string{"fields (an object of column: value)"}}}, make: makeAirtable, oauth: "airtable"},
 		{Name: "nextcloud", Category: CatOffice, Label: "Nextcloud", Help: "files in a Nextcloud (WebDAV) folder",
-			Fields:  []Field{f("url", "Server", "https://cloud.example.com", true, false), f("user", "User", "", true, false), f("password", "App password", "", true, true), f("folder", "Folder", "Kitties", false, false)},
-			Actions: []Action{{Name: "upload", Help: "write a text file", Args: []string{"name", fContent}}, {Name: "download", Help: "read a file", Args: []string{"name"}}}, make: makeNextcloud},
+			Fields: []Field{f("url", "Server", "https://cloud.example.com", true, false), keyed(f("user", "User", "", false, false), keyPassword),
+				keyed(f("password", "App password", "instead of signing in", false, true), keyPassword), f("folder", "Folder", "Kitties", false, false)},
+			Actions: []Action{{Name: "upload", Help: "write a text file", Args: []string{"name", fContent}}, {Name: "download", Help: "read a file", Args: []string{"name"}}}, make: makeNextcloud, oauth: "nextcloud"},
 		{Name: "google-sheets", Category: CatOffice, Label: "Google Sheets", Help: "appends rows to a sheet through an Apps Script web app URL (deploy a doPost that appends e.values)",
 			Fields:  []Field{f("url", "Web app URL", "https://script.google.com/macros/s/…/exec", true, true)},
 			Actions: []Action{{Name: "append_row", Help: "append a row", Args: []string{"values (a list)"}}}, make: makeSheets},
@@ -423,6 +429,9 @@ const (
 	keyToken   = "token"
 	keyOAuth1  = "oauth1"
 	keyWebhook = "webhook"
+	// keyPassword is a user and an app password (Nextcloud, CalDAV, CardDAV): what a sign-in
+	// through Nextcloud's login flow fills in, or what is typed.
+	keyPassword = "password"
 )
 
 // keyed puts a field in a group of key fields.
@@ -556,6 +565,9 @@ type request struct {
 	file string
 	// plain marks a request that takes no account token (a webhook): an OAuth kind leaves it.
 	plain bool
+	// tokenIn, when set, puts the account's token where the service reads it instead of a
+	// bearer header (Trello's query).
+	tokenIn func(r *request, token string)
 	// follow, when set, turns the answer into the text for the model, with more requests if it
 	// needs them (it gets the headers, the account's token included).
 	follow func(ctx context.Context, raw []byte, headers map[string]string) (string, error)
@@ -652,14 +664,19 @@ func (a *api) send(ctx context.Context, req *request) ([]byte, error) {
 		}
 	}
 	// An OAuth kind signs the request with the account's token, unless the request is plain
-	// (a webhook) or already carries a token the person typed.
-	if a.kind.oauth != "" && !req.plain && strings.TrimSpace(a.s["token"]) == "" && strings.TrimSpace(strings.TrimPrefix(req.headers["Authorization"], "Bearer")) == "" {
+	// (a webhook), carries a user and password (Nextcloud's app password) or already carries a
+	// token the person typed.
+	if a.kind.oauth != "" && !req.plain && req.basic[0] == "" && strings.TrimSpace(a.s["token"]) == "" && strings.TrimSpace(strings.TrimPrefix(req.headers["Authorization"], "Bearer")) == "" {
 		if a.token == nil {
 			return nil, errors.New("not signed in: connect the account from Settings")
 		}
 		tok, err := a.token(ctx)
 		if err != nil {
 			return nil, err
+		}
+		if req.tokenIn != nil {
+			req.tokenIn(req, tok)
+			return do(ctx, *req)
 		}
 		if req.headers == nil {
 			req.headers = map[string]string{}
@@ -827,7 +844,10 @@ func makeDiscord(s Settings) Connector {
 		if err != nil {
 			return request{}, err
 		}
-		return request{method: "POST", url: s["url"], body: map[string]any{"content": text}}, nil
+		if strings.TrimSpace(s["url"]) == "" {
+			return request{}, errors.New("no webhook yet: sign in to Discord from Settings, or paste a webhook URL")
+		}
+		return request{method: "POST", url: s["url"], body: map[string]any{"content": text}, plain: true}, nil
 	}}, "send")
 }
 
@@ -1210,7 +1230,12 @@ func makeGitea(s Settings) Connector {
 		if err != nil {
 			return request{}, err
 		}
-		return request{method: "POST", url: base(s, "") + "/api/v1/repos/" + repo + "/issues", headers: map[string]string{"Authorization": "token " + s["token"]},
+		// A typed token goes as Gitea's own "token"; without one the sign-in's bearer token does.
+		headers := map[string]string{}
+		if tok := strings.TrimSpace(s["token"]); tok != "" {
+			headers["Authorization"] = "token " + tok
+		}
+		return request{method: "POST", url: base(s, "") + "/api/v1/repos/" + repo + "/issues", headers: headers,
 			body: map[string]any{"title": title, "body": str(a, "body", "text")}}, nil
 	}}, "create_issue")
 }
@@ -1258,6 +1283,15 @@ func makeNotion(s Settings) Connector {
 	}, "create_page")
 }
 
+// tokenInQuery adds the token to the request's query.
+func tokenInQuery(r *request, token string) {
+	sep := "?"
+	if strings.Contains(r.url, "?") {
+		sep = "&"
+	}
+	r.url += sep + url.Values{"token": {token}}.Encode()
+}
+
 func makeTrello(s Settings) Connector {
 	return newAPI("trello", s, map[string]actionFn{"create_card": func(s Settings, a map[string]any) (request, error) {
 		name, err := need(a, "name", "title", "text")
@@ -1268,8 +1302,12 @@ func makeTrello(s Settings) Connector {
 		if list == "" {
 			return request{}, errors.New("list is missing (a list id)")
 		}
-		q := url.Values{"key": {s["key"]}, "token": {s["token"]}, "idList": {list}, "name": {name}, "desc": {str(a, "desc", "body")}}
-		return request{method: "POST", url: "https://api.trello.com/1/cards?" + q.Encode()}, nil
+		q := url.Values{"key": {s["key"]}, "idList": {list}, "name": {name}, "desc": {str(a, "desc", "body")}}
+		if tok := strings.TrimSpace(s["token"]); tok != "" {
+			q.Set("token", tok)
+		}
+		// Trello reads the token from the query, not from a bearer header.
+		return request{method: "POST", url: "https://api.trello.com/1/cards?" + q.Encode(), tokenIn: tokenInQuery}, nil
 	}}, "create_card")
 }
 

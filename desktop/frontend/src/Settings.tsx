@@ -761,13 +761,16 @@ const OAUTH_LABEL: Record<string, string> = {
   google: "Google",
   microsoft: "Microsoft",
   slack: "Slack",
+  discord: "Discord",
   github: "GitHub",
   gitlab: "GitLab",
+  gitea: "Gitea",
   spotify: "Spotify",
   tidal: "TIDAL",
   dropbox: "Dropbox",
   notion: "Notion",
   todoist: "Todoist",
+  trello: "Trello",
   linear: "Linear",
   airtable: "Airtable",
   figma: "Figma",
@@ -778,7 +781,12 @@ const OAUTH_LABEL: Record<string, string> = {
   facebook: "Facebook",
   mastodon: "Mastodon",
   "home-assistant": "Home Assistant",
+  nextcloud: "Nextcloud",
 };
+
+// SIGN_IN_LAST are the kinds whose sign-in is the less usual way in: CalDAV and CardDAV sign in
+// only to a Nextcloud, and are mostly iCloud or Fastmail with an app password.
+const SIGN_IN_LAST = ["caldav", "carddav"];
 
 // A connection that signs in keeps a key or a token as the other way in, and an app of the
 // person's own as a third; these are their fields.
@@ -796,6 +804,8 @@ function wayLabel(kind: string, way: string, service: string): string {
       return t("App keys");
     case "webhook":
       return t("Webhook");
+    case "password":
+      return t("App password");
   }
   if (kind === "slack") {
     return t("Bot token");
@@ -815,6 +825,8 @@ function wayHint(way: string, builtin: boolean): string {
       return t("Four keys from your app's page; they do not expire");
     case "webhook":
       return t("Posts to one channel, nothing to sign in");
+    case "password":
+      return t("A user and an app password of the account");
   }
   return t("Created in the service's settings");
 }
@@ -1058,7 +1070,9 @@ function ConnectionForm({
   const groups = [...new Set(keyFields.map((f) => f.key as string))]
     .map((id) => ({ id, fields: keyFields.filter((f) => f.key === id) }))
     .filter((g) => !g.fields.every((f) => f.lifetime) || g.fields.some((f) => had(f.name)));
-  const ways = [...(signs ? ["signin"] : []), ...groups.map((g) => g.id)];
+  const ways = SIGN_IN_LAST.includes(def.name)
+    ? [...groups.map((g) => g.id), ...(signs ? ["signin"] : [])]
+    : [...(signs ? ["signin"] : []), ...groups.map((g) => g.id)];
   const [way, setWay] = useState(
     () =>
       (signedIn && "signin") ||
@@ -1438,6 +1452,7 @@ const AUTH_LABEL: Record<string, string> = {
   keys: t("uses the OAuth 1.0 keys"),
   token: t("uses a token"),
   webhook: t("uses a webhook"),
+  password: t("uses an app password"),
 };
 
 // expiresIn says how long a token has left, or that it is gone.

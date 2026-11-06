@@ -125,7 +125,10 @@ required.
 | Signs in | How |
 | --- | --- |
 | Mastodon, Home Assistant | nothing to set up: Kitties registers itself on the instance, or uses the gateway's own address as its app |
-| Google, Microsoft, Slack, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
+| Nextcloud, and CalDAV / CardDAV on a Nextcloud | nothing to set up: Nextcloud's Login Flow v2 opens its page, you allow Kitties, and the app password it hands back becomes the connection's password (revoke it in Nextcloud → Security) |
+| Trello | through Kitties' own API key when the build has one, else the API key of a Power-Up of yours (trello.com/power-ups/admin) with this gateway's address allowed as an origin; Trello hands the token back in the page's address, which the callback page posts to the gateway |
+| Gitea, Forgejo (Codeberg) | an OAuth2 app made on your instance (Settings → Applications), with this gateway's `/v1/oauth/callback` as its redirect |
+| Google, Microsoft, Slack, Discord, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
 
 **The redirect address.** The service matches it to the letter, so register exactly the one Settings shows
 in the connection (a copy-ready box under "needs an app of your own"): this gateway's `/v1/oauth/callback`,
@@ -143,8 +146,12 @@ connection, shows the account's email, and lets each connection be another accou
 
 Signing in also fills what you would otherwise look up: your Facebook Page and its token (one
 that does not expire), the Instagram account linked to it, your LinkedIn author URN, your X user
-id, your Jira site. Telegram, WhatsApp, email, Stripe, Discord and the webhooks keep their keys:
-those services have no sign-in for this.
+id, your Jira site, your Discord webhook (Discord asks for the server and channel and makes the
+webhook there; a pasted webhook URL still works). Telegram, WhatsApp, email, Stripe and the webhooks
+keep their keys: those services have no sign-in for this.
+
+![Discord: sign in, or paste a webhook](screenshots/60-connector-discord.png)
+![Nextcloud: sign in, nothing to set up](screenshots/61-connector-nextcloud.png)
 
 **X** takes the sign-in (its OAuth 2.0 Client ID and Secret, with this gateway's callback under
 *User authentication settings*), or, without a sign-in, the four **OAuth 1.0 keys** of *Keys and
