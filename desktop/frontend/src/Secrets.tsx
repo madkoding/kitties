@@ -1,4 +1,4 @@
-import { useEffect, useState } from "preact/hooks";
+import { useEffect, useRef, useState } from "preact/hooks";
 import type { Kitty, Secret } from "./api";
 import { api, errText } from "./api";
 import { ask } from "./Confirm";
@@ -60,6 +60,34 @@ export default function Secrets({ kitties }: { kitties: Kitty[] }) {
       .then(setSecrets)
       .catch((e) => setErr(errText(e)));
   }, []);
+  // Who may use a secret changes in place: each click works on what the list shows now (not on
+  // the row it was drawn from), the saves go one after the other, and only the last answer is
+  // shown, so quick clicks are never lost or undone by an older answer.
+  const shown = useRef<Secret[] | null>(null);
+  shown.current = secrets;
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const pending = useRef(0);
+  const toggle = (name: string, id: string) => {
+    const s = shown.current?.find((x) => x.name === name);
+    if (!s) return;
+    setErr("");
+    const next = toggled(s.kitties, id);
+    const list = shown.current!.map((x) => (x.name === name ? { ...x, kitties: next } : x));
+    shown.current = list;
+    setSecrets(list);
+    pending.current++;
+    queue.current = queue.current.then(async () => {
+      try {
+        const saved = await api.saveSecret(name, { kitties: next });
+        if (pending.current === 1) setSecrets(saved);
+      } catch (e) {
+        setErr(errText(e));
+        if (pending.current === 1) api.vault().then(setSecrets, () => {});
+      } finally {
+        pending.current--;
+      }
+    });
+  };
   const act = async (fn: () => Promise<Secret[]>) => {
     setErr("");
     try {
@@ -121,9 +149,7 @@ export default function Secrets({ kitties }: { kitties: Kitty[] }) {
               kitties={kitties}
               on={s.kitties}
               label={t("Kitties that may use {name}", { name: s.name })}
-              onToggle={(id) =>
-                act(() => api.saveSecret(s.name, { kitties: toggled(s.kitties, id) }))
-              }
+              onToggle={(id) => toggle(s.name, id)}
             />
           </div>
         ))}
