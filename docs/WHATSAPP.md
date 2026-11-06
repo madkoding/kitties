@@ -30,7 +30,7 @@ connector.
    and pick the groups: the ones that wrote lately show up there (WhatsApp gives a linked device no
    list of groups until they write). With more than one kitty, **Who answers each one** gives a
    number or a group a kitty of its own; **Messages sent per hour** caps what goes out (60 when
-   left empty).
+   left empty); **Quiet hours** hold the answers until they end.
 3. Tick **Turn on WhatsApp**, then **I understand that WhatsApp may ban this number**, and **Save**.
 4. A QR code appears. On the phone of the kitties' number: WhatsApp, Settings, **Linked devices**,
    **Link a device**, and point it at the code. The code changes every few seconds; if they run out,
@@ -38,7 +38,8 @@ connector.
 5. Once it says **Connected · +number**, **Send a test** writes to a number on the list.
 
 The phone must stay on and online from time to time (WhatsApp unlinks a device whose phone has been
-off for about two weeks). **Unlink** removes the device from the phone and forgets the session.
+off for about two weeks). When the connection drops, **Reconnect** opens it again with the kept
+session, without a new code. **Unlink** removes the device from the phone and forgets the session.
 
 ## How it works
 
@@ -50,6 +51,12 @@ off for about two weeks). **Unlink** removes the device from the phone and forge
 - **Read, and reactions.** A message is marked read (blue ticks) when the kitty starts on it. An
   answer that is only an emoji goes as a reaction to the message, and the kitties can react with
   the connector.
+- **Quotes.** In a group, and in a chat where newer messages came in the meantime, the answer quotes
+  the message it answers.
+- **Quiet hours.** From one time to another (the gateway's clock, `TZ`), a message gets one short
+  note in the kitty's language ("🌙 luna is resting until 08:00…") and its answer when they end; the
+  kitties' own sends and reactions wait too. Messages waiting are kept in memory: a restart in the
+  quiet hours loses them.
 - **A kitty per number or group.** Each number or group may have its own kitty; the others go to
   the kitty that answers. Moving one to another kitty starts a new chat with it.
 - **An hourly limit.** Every message, file and reaction that goes out counts; past the limit a
@@ -101,6 +108,7 @@ whatsapp:
   allow_groups: ["120363012345678901@g.us"]   # the ids Settings lists (GET /v1/whatsapp, seen_groups)
   kitties: {"+1 555 000 1111": luna, "120363012345678901@g.us": tom}
   max_per_hour: 30               # 0: 60
+  quiet: {from: "22:00", to: "08:00"}
   transcribe: ""                 # the openai or groq profile for voice notes; empty: the first; off: none
 ```
 
@@ -123,9 +131,10 @@ phone is linked again with a new code.
 
 | Route | What it does |
 | --- | --- |
-| `GET /v1/whatsapp` | The link: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` and `qr_png` (a PNG data URL) while it waits, `phone`, `linked`, `ignored`, `seen_groups` (the groups that wrote lately), `sent_last_hour`, `held` |
-| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups", "kitties", "max_per_hour"}`; turning it on needs `"accept_risk": true` |
+| `GET /v1/whatsapp` | The link: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` and `qr_png` (a PNG data URL) while it waits, `phone`, `linked`, `ignored`, `seen_groups` (the groups that wrote lately), `sent_last_hour`, `held`, `quiet`, `waiting` |
+| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups", "kitties", "max_per_hour", "quiet_from", "quiet_to"}`; turning it on needs `"accept_risk": true` |
 | `POST /v1/whatsapp/link` | New QR codes (after they expired or the phone logged the device out) |
+| `POST /v1/whatsapp/reconnect` | Connects again with the kept session (no new code) |
 | `POST /v1/whatsapp/unlink` | Removes the device from the phone and forgets the session |
 | `POST /v1/whatsapp/test` | `{"to": "+56912345678"}` sends a short message to a number on the list |
 

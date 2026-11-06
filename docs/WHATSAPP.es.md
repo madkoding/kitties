@@ -30,7 +30,8 @@ escribirles con el conector `whatsapp-web`.
    grupos, y elige los grupos: ahí aparecen los que escribieron hace poco (WhatsApp no le da a un
    dispositivo vinculado la lista de grupos hasta que escriben). Con más de un kitty, **Quién
    responde a cada uno** le da a un número o grupo su propio kitty; **Mensajes enviados por hora**
-   limita lo que sale (60 si se deja vacío).
+   limita lo que sale (60 si se deja vacío); el **Horario de silencio** guarda las respuestas hasta
+   que termina.
 3. Marca **Activar WhatsApp**, luego **Entiendo que WhatsApp puede bloquear este número**, y
    **Guardar**.
 4. Aparece un código QR. En el teléfono del número de los kitties: WhatsApp, Ajustes,
@@ -39,7 +40,8 @@ escribirles con el conector `whatsapp-web`.
 5. Cuando diga **Conectado · +número**, **Enviar una prueba** escribe a un número de la lista.
 
 El teléfono debe seguir encendido y conectarse de vez en cuando (WhatsApp desvincula un dispositivo
-cuyo teléfono lleva unas dos semanas apagado). **Desvincular** quita el dispositivo del teléfono y
+cuyo teléfono lleva unas dos semanas apagado). Si la conexión se cae, **Reconectar** la abre de nuevo
+con la sesión guardada, sin otro código. **Desvincular** quita el dispositivo del teléfono y
 olvida la sesión.
 
 ## Cómo funciona
@@ -52,6 +54,12 @@ olvida la sesión.
 - **Leído y reacciones.** Un mensaje se marca como leído (ticks azules) cuando el kitty lo toma. Una
   respuesta que es solo un emoji va como reacción al mensaje, y los kitties pueden reaccionar con
   el conector.
+- **Citas.** En un grupo, y en un chat donde llegaron mensajes nuevos entretanto, la respuesta cita
+  el mensaje al que responde.
+- **Horario de silencio.** De una hora a otra (el reloj del gateway, `TZ`), un mensaje recibe un
+  aviso corto en el idioma del kitty ("🌙 luna descansa hasta las 08:00…") y su respuesta al
+  terminar; los envíos y reacciones de los kitties también esperan. Los mensajes en espera quedan en
+  memoria: un reinicio durante el silencio los pierde.
 - **Un kitty por número o grupo.** Cada número o grupo puede tener su propio kitty; los demás van al
   kitty que responde. Cambiar uno de kitty abre un chat nuevo con él.
 - **Un límite por hora.** Cuenta todo mensaje, archivo y reacción que sale; pasado el límite una
@@ -106,6 +114,7 @@ whatsapp:
   allow_groups: ["120363012345678901@g.us"]   # los ids que lista Ajustes (GET /v1/whatsapp, seen_groups)
   kitties: {"+1 555 000 1111": luna, "120363012345678901@g.us": tom}
   max_per_hour: 30               # 0: 60
+  quiet: {from: "22:00", to: "08:00"}
   transcribe: ""                 # el perfil openai o groq para notas de voz; vacío: el primero; off: ninguno
 ```
 
@@ -128,9 +137,10 @@ el teléfono de nuevo con otro código.
 
 | Ruta | Qué hace |
 | --- | --- |
-| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored`, `seen_groups` (los grupos que escribieron hace poco), `sent_last_hour`, `held` |
-| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups", "kitties", "max_per_hour"}`; activarlo necesita `"accept_risk": true` |
+| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored`, `seen_groups` (los grupos que escribieron hace poco), `sent_last_hour`, `held`, `quiet`, `waiting` |
+| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups", "kitties", "max_per_hour", "quiet_from", "quiet_to"}`; activarlo necesita `"accept_risk": true` |
 | `POST /v1/whatsapp/link` | Códigos QR nuevos (si expiraron o el teléfono quitó el dispositivo) |
+| `POST /v1/whatsapp/reconnect` | Conecta de nuevo con la sesión guardada (sin otro código) |
 | `POST /v1/whatsapp/unlink` | Quita el dispositivo del teléfono y olvida la sesión |
 | `POST /v1/whatsapp/test` | `{"to": "+56912345678"}` manda un mensaje corto a un número de la lista |
 
