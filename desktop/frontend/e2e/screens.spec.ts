@@ -522,7 +522,8 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   await expect(notes).toContainText("Answer in Spanish when I write in Spanish");
   await expect(notes.locator(".tag", { hasText: "yours" })).toHaveCount(2);
   // The shared note is every kitty's: tom sees it too.
-  await expect(notes.locator(".tag", { hasText: "shared" })).toHaveCount(1);
+  await expect(notes.locator(".tag", { hasText: "shared" })).toHaveCount(2);
+  await expect(notes.locator(".tag", { hasText: "proposed" })).toHaveCount(1);
   await expect(notes).toContainText("My name is Mad and I work from Santiago");
   await expect(notes).toContainText("Correction: Too long: two lines at most");
   await expect(notes).toContainText("I prefer short answers");
@@ -546,6 +547,17 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   await expect(page.getByTestId("level")).toContainText("They are easygoing");
   await memory.getByRole("button", { name: "4 · demanding" }).click();
   await expect(page.getByTestId("level")).toContainText("They are demanding");
+  // The notes can be searched and narrowed to a scope.
+  await memory.getByLabel("Search the notes").fill("two lines");
+  await expect(notes).toContainText("Too long: two lines at most");
+  await expect(notes).not.toContainText("Answer in Spanish");
+  await memory.getByLabel("Search the notes").fill("zzz");
+  await expect(notes).toContainText("No note matches.");
+  await memory.getByLabel("Search the notes").fill("");
+  await memory.getByLabel("Show the notes of").selectOption("shared");
+  await expect(notes).toContainText("My name is Mad");
+  await expect(notes).not.toContainText("Answer in Spanish");
+  await memory.getByLabel("Show the notes of").selectOption("");
   // A note is corrected in place, and becomes the person's.
   await memory.getByRole("button", { name: "Edit: I prefer short answers." }).click();
   const box = memory.getByLabel("Correct: I prefer short answers.");
@@ -598,10 +610,15 @@ test("the memory every kitty shares is tended in Settings", async ({ page }) => 
   const shared = page.getByTestId("shared-memory");
   const notes = shared.getByTestId("shared-notes");
   await expect(notes).toContainText("My name is Mad and I work from Santiago");
+  // What a kitty proposed for everyone waits for a yes.
+  await expect(notes).toContainText("I write dates day first");
+  await expect(notes.locator(".tag", { hasText: "proposed" })).toHaveCount(1);
   await shared.getByLabel("A note for every kitty").fill("Dates are written day/month/year");
   await shared.getByRole("button", { name: "Add note" }).click();
   await expect(notes).toContainText("Dates are written day/month/year");
   await shot(page, "60-shared-memory");
+  await shared.getByRole("button", { name: "Accept: I write dates day first" }).click();
+  await expect(notes.locator(".tag", { hasText: "proposed" })).toHaveCount(0);
   await shared.getByRole("button", { name: "Edit: Dates are written day/month/year" }).click();
   const box = shared.getByLabel("Correct: Dates are written day/month/year");
   await box.fill("Dates are written day-month-year");

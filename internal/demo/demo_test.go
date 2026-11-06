@@ -77,6 +77,12 @@ func TestBrain(t *testing.T) {
 	if got := ask(t, b, desk, "Results of your actions:\n- @limit set {}: ok\n  from now on, send on team-slack waits for the person's yes\n\nContinue, and answer the person."); !strings.Contains(got, "ask you before posting") {
 		t.Errorf("limit set = %q", got)
 	}
+	if got := ask(t, b, desk, "[Pat]: tell every kitty that I work from Lima"); !strings.Contains(got, `@memory remember {"text": "I work from Lima", "scope": "shared"}`) {
+		t.Errorf("shared = %q", got)
+	}
+	if got := ask(t, b, desk, "Results of your actions:\n- @memory remember {}: ok\n  proposed to every kitty (id a1)\n\nContinue."); !strings.Contains(got, "once you say yes") {
+		t.Errorf("proposed = %q", got)
+	}
 	if got := ask(t, b, desk, "[Pat]: please remember that I like short answers"); !strings.Contains(got, `@memory remember {"text": "I like short answers"}`) {
 		t.Error(got)
 	}

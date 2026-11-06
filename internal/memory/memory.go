@@ -70,6 +70,11 @@ type Note struct {
 	Source string `json:"source"`
 	// Pinned notes were written by the person: a distillation never drops them.
 	Pinned bool `json:"pinned,omitempty"`
+	// Proposed is a shared note a kitty wrote: it waits for the person's yes before it reaches
+	// every kitty's prompt.
+	Proposed bool `json:"proposed,omitempty"`
+	// Uses is how many answers were given with the note in the kitty's prompt.
+	Uses int `json:"uses,omitempty"`
 }
 
 // Feedback is one verdict of the person on something a kitty did.
@@ -205,12 +210,14 @@ func (s *Store) Remember(kitty, scope, text, source string, pinned bool) (*Note,
 			n.Strength++
 			n.Updated = s.now()
 			n.Pinned = n.Pinned || pinned
+			n.Proposed = n.Proposed && source != "person"
 			s.save(kitty, f)
 			c := *n
 			return &c, nil
 		}
 	}
-	n := &Note{ID: s.id(), Scope: scope, Text: text, Strength: 1, At: s.now(), Updated: s.now(), Source: source, Pinned: pinned}
+	n := &Note{ID: s.id(), Scope: scope, Text: text, Strength: 1, At: s.now(), Updated: s.now(), Source: source, Pinned: pinned,
+		Proposed: scope == ScopeShared && source != "person"}
 	f.Notes = append(f.Notes, n)
 	if len(f.Notes) > MaxNotes {
 		s.evict(f)
@@ -272,7 +279,7 @@ func (s *Store) Edit(kitty, id, text string) (*Note, error) {
 		f := s.load(key)
 		for _, n := range f.Notes {
 			if n.ID == id {
-				n.Text, n.Updated, n.Source, n.Pinned = text, s.now(), "person", true
+				n.Text, n.Updated, n.Source, n.Pinned, n.Proposed = text, s.now(), "person", true, false
 				s.save(key, f)
 				c := *n
 				return &c, nil
@@ -446,6 +453,27 @@ var levels = map[int]string{
 	5: "They are strict: be exacting. Verify everything twice, show your evidence, never assume, and ask before anything that cannot be undone.",
 }
 
+// use counts one more answer for the notes that went into a kitty's prompt.
+func (s *Store) use(kitty string, ids map[string]bool) {
+	if len(ids) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, key := range []string{kitty, sharedKey} {
+		f, changed := s.load(key), false
+		for _, n := range f.Notes {
+			if ids[n.ID] {
+				n.Uses++
+				changed = true
+			}
+		}
+		if changed {
+			s.save(key, f)
+		}
+	}
+}
+
 // LevelText says how a level asks the kitty to work.
 func LevelText(demand int) string { return levels[min(5, max(1, demand))] }
 
@@ -458,9 +486,13 @@ func (s *Store) Prompt(kitty, person, project string) string {
 	notes := s.Notes(kitty, "")
 	p := s.Profile(kitty)
 	var user, work, proj, shared []string
+	used := map[string]bool{}
 	for _, n := range notes {
 		line := "- " + n.Text
+		in := true
 		switch {
+		case n.Proposed:
+			in = false
 		case n.Scope == ScopeUser && len(user) < 12:
 			user = append(user, line)
 		case n.Scope == ScopeShared && len(shared) < 12:
@@ -469,8 +501,14 @@ func (s *Store) Prompt(kitty, person, project string) string {
 			work = append(work, line)
 		case project != "" && n.Scope == "project:"+project && len(proj) < 10:
 			proj = append(proj, line)
+		default:
+			in = false
+		}
+		if in {
+			used[n.ID] = true
 		}
 	}
+	s.use(kitty, used)
 	var b strings.Builder
 	fmt.Fprintf(&b, "How demanding %s is with you: %d of 5. %s\n", person, p.Demand, LevelText(p.Demand))
 	if len(user) > 0 {

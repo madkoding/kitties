@@ -62,6 +62,8 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
   const [scope, setScope] = useState("user");
   const [busy, setBusy] = useState(false);
   const [info, setInfo] = useState("");
+  const [query, setQuery] = useState("");
+  const [only, setOnly] = useState("");
   const load = () => {
     api
       .memory(kitty.id)
@@ -89,6 +91,11 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
     return err ? <p class="text-xs text-[var(--t4)] mt-5">{err}</p> : null;
   }
   const p = view.profile;
+  const scopes = [...new Set(view.notes.map((n) => n.scope))].sort();
+  const words = query.trim().toLowerCase();
+  const shown = view.notes.filter(
+    (n) => (!only || n.scope === only) && (!words || n.text.toLowerCase().includes(words)),
+  );
   return (
     <div data-testid="memory">
       <div class="section-title !mx-0 mt-5">
@@ -178,8 +185,36 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
           {t("Nothing yet. It learns from your thumbs, your yes and no, and what it notices.")}
         </p>
       )}
+      {view.notes.length > 4 && (
+        <div class="flex gap-2 mb-2">
+          <input
+            class="flex-1 min-w-0 px-2 py-1 text-xs"
+            type="search"
+            value={query}
+            onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+            placeholder={t("Search the notes")}
+            aria-label={t("Search the notes")}
+          />
+          <select
+            class="px-2 py-1 text-xs"
+            aria-label={t("Show the notes of")}
+            value={only}
+            onChange={(e) => setOnly((e.target as HTMLSelectElement).value)}
+          >
+            <option value="">{t("every scope")}</option>
+            {scopes.map((sc) => (
+              <option key={sc} value={sc}>
+                {sc.startsWith("project:") ? sc.replace("project:", "") : t(sc)}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div class="flex flex-col gap-1" data-testid="notes">
-        {view.notes.map((n) => (
+        {shown.length === 0 && view.notes.length > 0 && (
+          <p class="text-xs text-[var(--t4)]">{t("No note matches.")}</p>
+        )}
+        {shown.map((n) => (
           <NoteRow
             key={n.id}
             n={n}

@@ -560,6 +560,15 @@ const dict: Dictionary = {
   "Import notes from a file": "Importar notas de um arquivo",
   "Notes imported: {n}.": "Notas importadas: {n}.",
   "Shared memory": "Memória compartilhada",
+  "It was in the kitty's prompt for {n} answers": "Esteve nas instruções do kitty em {n} respostas",
+  "A kitty proposed it: it reaches every kitty once you say yes":
+    "Um kitty a propôs: chega a todos quando você disser sim",
+  "Accept: {note}": "Aceitar: {note}",
+  Accept: "Aceitar",
+  "Search the notes": "Buscar nas notas",
+  "Show the notes of": "Mostrar as notas de",
+  "every scope": "todos os escopos",
+  "No note matches.": "Nenhuma nota corresponde.",
 };
 
 export default dict;

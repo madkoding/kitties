@@ -315,3 +315,42 @@ func TestSharedNotes(t *testing.T) {
 		t.Error("forgetting a missing note")
 	}
 }
+
+func TestProposedSharedNotesAndUses(t *testing.T) {
+	s := open(t)
+	// A kitty's shared note is proposed: listed, but out of every prompt.
+	pr, _ := s.Remember("k1", ScopeShared, "Pat lives in Lima", "kitty", false)
+	if !pr.Proposed {
+		t.Fatalf("proposed = %+v", pr)
+	}
+	own, _ := s.Remember("k1", ScopeUser, "Likes tables", "kitty", false)
+	if p := s.Prompt("k2", "Pat", ""); strings.Contains(p, "Lima") {
+		t.Errorf("a proposal is not in the prompt: %q", p)
+	}
+	// The person writing the same thing, or correcting it, says yes.
+	if again, _ := s.Remember("k2", ScopeShared, "pat lives in lima", "person", true); again.Proposed {
+		t.Errorf("the person's word accepts it: %+v", again)
+	}
+	pr2, _ := s.Remember("k1", ScopeShared, "Pat has a cat", "kitty", false)
+	if ed, _ := s.Edit("k1", pr2.ID, "Pat has a cat"); ed.Proposed {
+		t.Errorf("an edit accepts it: %+v", ed)
+	}
+	// Every answer counts the notes that went into the prompt.
+	_ = s.Prompt("k1", "Pat", "")
+	_ = s.Prompt("k1", "Pat", "")
+	_ = s.Prompt("k2", "Pat", "")
+	uses := map[string]int{}
+	for _, n := range s.Notes("k1", "") {
+		uses[n.ID] = n.Uses
+	}
+	if uses[own.ID] != 2 || uses[pr.ID] != 3 || uses[pr2.ID] != 3 {
+		t.Errorf("uses = %v", uses)
+	}
+	// Reopened from disk, the counts are kept.
+	if n := Open(s.dir).Notes("k1", ScopeUser); len(n) != 1 || n[0].Uses != 2 {
+		t.Errorf("reopened = %+v", n)
+	}
+	// A kitty with nothing in its prompt counts nothing.
+	empty := open(t)
+	_ = empty.Prompt("k1", "", "")
+}

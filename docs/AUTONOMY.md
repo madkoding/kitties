@@ -85,7 +85,10 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   (`@memory remember {...}` or the native `memory_*` tools) when you say "remember that...". The
   memory sits in its prompt, so it answers the way you like. Any note can be corrected in place
   (it becomes yours), and a kitty's notes go to a JSON file and come back from one (Export and
-  Import in its memory), to keep them or hand them to another kitty.
+  Import in its memory), to keep them or hand them to another kitty. A shared note a kitty writes
+  is only *proposed*: it stays out of every prompt until you accept it (or write or correct it
+  yourself). Each note counts the answers it was in the prompt for (×N), and the notes can be
+  searched and narrowed to a scope.
 - **Action limits.** Nothing is limited by default: a kitty does on a connection what the account
   allows, since that is the service's to limit (the scopes of the sign-in, the permissions of the
   key). Tell a kitty "ask me before posting" or "never delete anything" and it adds the limit to

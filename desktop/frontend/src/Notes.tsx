@@ -72,6 +72,32 @@ export function NoteRow({
           onBlur={save}
         />
       )}
+      {!!n.uses && draft === null && (
+        <span
+          class="text-[10px] font-mono text-[var(--t4)] pt-1 whitespace-nowrap"
+          title={t("It was in the kitty's prompt for {n} answers", { n: n.uses })}
+        >
+          ×{n.uses}
+        </span>
+      )}
+      {n.proposed && draft === null && (
+        <>
+          <span
+            class="tag tag-amber"
+            title={t("A kitty proposed it: it reaches every kitty once you say yes")}
+          >
+            {t("proposed")}
+          </span>
+          <button
+            class="btn-outline px-2 py-0.5 text-xs"
+            aria-label={t("Accept: {note}", { note: n.text })}
+            disabled={busy}
+            onClick={() => onSave(n.text)}
+          >
+            {t("Accept")}
+          </button>
+        </>
+      )}
       {n.pinned && draft === null && (
         <span class="tag" title={t("You wrote it: a consolidation never drops it")}>
           {t("yours")}

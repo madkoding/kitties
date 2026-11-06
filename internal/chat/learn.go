@@ -91,6 +91,10 @@ func (s *Service) runMemory(id string, a action, k *kitty.Kitty) outcome {
 		if err != nil {
 			return outcome{action: a, err: err.Error()}
 		}
+		if n.Proposed {
+			s.note(k, agenda.KindLearned, s.goalOf(id), id, "proposed for every kitty: "+n.Text)
+			return outcome{action: a, text: fmt.Sprintf("proposed to every kitty (id %s): it reaches them once the person says yes; until then keep it in mind yourself", n.ID)}
+		}
 		s.note(k, agenda.KindLearned, s.goalOf(id), id, "noted ("+n.Scope+"): "+n.Text)
 		return outcome{action: a, text: fmt.Sprintf("noted (%s, id %s)", n.Scope, n.ID)}
 	case "forget", "drop":

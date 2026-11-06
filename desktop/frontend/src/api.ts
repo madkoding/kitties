@@ -89,6 +89,8 @@ export interface MemoryNote {
   strength: number;
   source: string;
   pinned?: boolean;
+  proposed?: boolean;
+  uses?: number;
   updated: string;
 }
 

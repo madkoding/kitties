@@ -105,8 +105,25 @@ func TestMemoryInThePromptAndActions(t *testing.T) {
 	if fed := sa.seen[len(sa.seen)-1][len(sa.seen[len(sa.seen)-1])-1].Content; !strings.Contains(fed, "no project") {
 		t.Errorf("no project = %q", fed)
 	}
+	// A shared note from a kitty is only proposed: it waits for the person's yes.
+	sa.replies = []string{"@memory remember {\"text\": \"Pat lives in Lima\", \"scope\": \"shared\"}", "ok"}
+	_, _ = s.Send(context.Background(), sess.ID, "share it")
+	if fed := sa.seen[len(sa.seen)-1][len(sa.seen[len(sa.seen)-1])-1].Content; !strings.Contains(fed, "proposed to every kitty") {
+		t.Errorf("proposed = %q", fed)
+	}
+	if shared := m.Shared(); len(shared) != 1 || !shared[0].Proposed {
+		t.Errorf("shared = %+v", shared)
+	}
+	if !strings.Contains(kinds(j, "a1"), "learned") {
+		t.Error("the proposal is in the journal")
+	}
+	sa.replies = []string{"ok"}
+	_, _ = s.Send(context.Background(), sess.ID, "next")
+	if strings.Contains(sa.seen[len(sa.seen)-1][0].Content, "Pat lives in Lima") {
+		t.Error("a proposed note stays out of the prompt until the person says yes")
+	}
 	bo, _ := s.fleet.Get("bo")
-	if out := s.runMemory("", action{name: "list"}, bo); out.text != "(no notes yet)" {
+	if out := s.runMemory("", action{name: "list"}, bo); !strings.Contains(out.text, "Pat lives in Lima") {
 		t.Errorf("empty list = %+v", out)
 	}
 	// Native: the three tools are offered and their calls are memory actions.
