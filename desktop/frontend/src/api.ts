@@ -289,6 +289,8 @@ export interface ProviderView {
   describe: string;
   from_file: boolean;
   error?: string;
+  // fallback is the model thought with while this one is down.
+  fallback?: string;
 }
 
 export interface ConnectorView {

@@ -55,6 +55,8 @@ func TestValidation(t *testing.T) {
 		{base + "kitties:\n  - name: a\n    replicas: 1000\n", "between 0 and 999"},
 		{base + "kitties:\n  - name: a\n    avatar:\n      breed: lion\n", "avatar.breed"},
 		{"providers:\n  p:\n    kind: ollama\n    tools: magic\n", "not native or text"},
+		{"providers:\n  p:\n    kind: ollama\n    fallback: p\n", "its own fallback"},
+		{"providers:\n  p:\n    kind: ollama\n    fallback: q\n", "fallback: \"q\" is not a configured profile"},
 		{"providers:\n  p:\n    kind: codex\n    auth: oauth\n", "is not login"},
 		{"providers:\n  p:\n    kind: openai\n    auth: login\n", "takes an API key"},
 		{base + "kitties:\n  - name: a\n    connectors: [x]\n", "not a configured connector"},

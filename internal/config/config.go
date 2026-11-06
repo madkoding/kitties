@@ -80,6 +80,9 @@ type Provider struct {
 	// Auth is empty for a key, or login for an account signed in from Settings (a ChatGPT plan
 	// for codex, GitHub Copilot, a Google login for gemini).
 	Auth string `yaml:"auth" json:"auth,omitempty"`
+	// Fallback names another profile to think with while this one is down (busy, failing or
+	// unreachable once its own retries are spent). Empty: none.
+	Fallback string `yaml:"fallback" json:"fallback,omitempty"`
 }
 
 // Options converts the profile into what the provider package takes.
@@ -371,6 +374,9 @@ func ValidateProvider(name string, p Provider) error {
 	if p.Tools != "" && p.Tools != "native" && p.Tools != "text" {
 		return fmt.Errorf("providers.%s.tools: %q is not native or text", name, p.Tools)
 	}
+	if p.Fallback == name {
+		return fmt.Errorf("providers.%s.fallback: a profile cannot be its own fallback", name)
+	}
 	return nil
 }
 
@@ -446,6 +452,9 @@ func (c *Config) Validate() error {
 	for name, p := range c.Providers {
 		if err := ValidateProvider(name, p); err != nil {
 			return err
+		}
+		if _, ok := c.Providers[p.Fallback]; p.Fallback != "" && !ok {
+			return fmt.Errorf("providers.%s.fallback: %q is not a configured profile", name, p.Fallback)
 		}
 	}
 	if c.DefaultProvider != "" {

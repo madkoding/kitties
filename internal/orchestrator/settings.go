@@ -148,6 +148,8 @@ type ProviderView struct {
 	UsedBy []string `json:"used_by,omitempty"`
 	// Error says why the profile could not be built (a missing key), empty when it works.
 	Error string `json:"error,omitempty"`
+	// Fallback is the profile thought with while this one is down.
+	Fallback string `json:"fallback,omitempty"`
 }
 
 // ConnectorView is one connector as the page sees it: its settings with every secret field
@@ -277,7 +279,7 @@ func (m *Manager) Settings() SettingsView {
 		p := m.cfg.Providers[n]
 		_, fromOverlay := m.overlay.Providers[n]
 		v := ProviderView{Name: n, Kind: p.Kind, Model: p.Model, BaseURL: p.BaseURL, APIKeySet: p.Options().APIKey != "",
-			APIKeyEnv: p.APIKeyEnv, Auth: p.Auth, MaxTokens: p.MaxTokens, Temperature: p.Temperature, Default: n == m.cfg.DefaultProvider, FromFile: !fromOverlay}
+			APIKeyEnv: p.APIKeyEnv, Auth: p.Auth, MaxTokens: p.MaxTokens, Temperature: p.Temperature, Default: n == m.cfg.DefaultProvider, FromFile: !fromOverlay, Fallback: p.Fallback}
 		if c, err := m.providers.Get(n); err == nil {
 			v.Describe = c.Describe()
 		} else {
@@ -317,6 +319,9 @@ func (m *Manager) SetProvider(name string, p config.Provider) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if _, ok := m.cfg.Providers[p.Fallback]; p.Fallback != "" && !ok {
+		return fmt.Errorf("fallback: %q is not a configured profile", p.Fallback)
+	}
 	if p.APIKey == "" && p.Auth == "" {
 		if old, ok := m.cfg.Providers[name]; ok {
 			p.APIKey = old.APIKey

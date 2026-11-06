@@ -10,7 +10,15 @@ import type {
   ProviderView,
   SettingsView,
 } from "./api";
-import { api, errText, inWails, oauthRedirect, oauthStart, openExternal, savedConnection } from "./api";
+import {
+  api,
+  errText,
+  inWails,
+  oauthRedirect,
+  oauthStart,
+  openExternal,
+  savedConnection,
+} from "./api";
 import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,
@@ -166,6 +174,8 @@ function ModelForm({
   const [key, setKey] = useState("");
   const [base, setBase] = useState(view?.base_url || "");
   const [maxTokens, setMaxTokens] = useState(view?.max_tokens ? String(view.max_tokens) : "");
+  // fallback is the model thought with while this one is down.
+  const [fallback, setFallback] = useState(view?.fallback || "");
   const [name, setName] = useState(view?.name || "");
   const [err, setErr] = useState("");
   const [phase, setPhase] = useState<"edit" | "saving" | "testing" | "failed">("edit");
@@ -251,6 +261,9 @@ function ModelForm({
       }
       if (maxTokens.trim()) {
         body.max_tokens = Number(maxTokens);
+      }
+      if (fallback) {
+        body.fallback = fallback;
       }
       const s = await api.setProvider(finalName, body);
       setSaved(s);
@@ -511,6 +524,31 @@ function ModelForm({
           onInput={(e) => setMaxTokens((e.target as HTMLInputElement).value.replace(/\D/g, ""))}
           placeholder="4096"
         />
+        {taken.filter((n) => n !== finalName).length > 0 && (
+          <>
+            <label class={LABEL} for="model-fallback">
+              {t("If it is down, think with")}
+            </label>
+            <select
+              id="model-fallback"
+              class={INPUT}
+              value={fallback}
+              onChange={(e) => setFallback((e.target as HTMLSelectElement).value)}
+            >
+              <option value="">{t("nothing else (wait for it)")}</option>
+              {taken
+                .filter((n) => n !== finalName)
+                .map((n) => (
+                  <option value={n}>{n}</option>
+                ))}
+            </select>
+            <p class={HELP}>
+              {t(
+                "While this model is busy or unreachable, the kitties go on with this one instead of waiting.",
+              )}
+            </p>
+          </>
+        )}
       </More>
       {phase === "failed" ? (
         <div class="callout callout-warn mt-3">

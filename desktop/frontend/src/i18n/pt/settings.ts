@@ -63,6 +63,10 @@ const dict: Dictionary = {
   "Only to reach it through a proxy or a compatible service.":
     "Só para chegar a ele por um proxy ou um serviço compatível.",
   "Longest answer (tokens)": "Resposta mais longa (tokens)",
+  "If it is down, think with": "Se estiver fora do ar, pensar com",
+  "nothing else (wait for it)": "nada mais (esperar por ele)",
+  "While this model is busy or unreachable, the kitties go on with this one instead of waiting.":
+    "Enquanto este modelo estiver ocupado ou inacessível, os kitties seguem com este outro em vez de esperar.",
   "Saved, but the test did not pass: ": "Salvo, mas o teste não passou: ",
   "Change something": "Mudar algo",
   "Saved without a passing test.": "Salvo sem passar no teste.",

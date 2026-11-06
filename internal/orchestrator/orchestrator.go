@@ -1050,9 +1050,24 @@ func (m *Manager) InboundSecret(name string) (string, error) {
 	return c.ConnectorSettings()["inbound_secret"], nil
 }
 
-// Brain returns the provider client the kitty thinks with.
+// Brain returns the provider client the kitty thinks with: its profile's, backed by the
+// profile's fallback when it names one that works.
 func (m *Manager) Brain(k *kitty.Kitty) (provider.Client, error) {
-	return m.providers.Get(k.Provider)
+	c, err := m.providers.Get(k.Provider)
+	if err != nil {
+		return nil, err
+	}
+	m.mu.RLock()
+	fallback := m.cfg.Providers[k.Provider].Fallback
+	m.mu.RUnlock()
+	if fallback == "" {
+		return c, nil
+	}
+	fb, err := m.providers.Get(fallback)
+	if err != nil {
+		return c, nil
+	}
+	return provider.WithFallback(c, fb), nil
 }
 
 // Exec runs a command in the kitty's container.
