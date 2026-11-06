@@ -46,7 +46,7 @@ func TestWhatsAppBridge(t *testing.T) {
 func TestWhatsAppFromTheFile(t *testing.T) {
 	cfg := config.Defaults()
 	cfg.DataDir = t.TempDir()
-	cfg.WhatsApp = config.WhatsApp{Enabled: true, Allow: []string{"+56 9 1234 5678"}, Groups: true, AllowGroups: []string{"1@g.us"}}
+	cfg.WhatsApp = config.WhatsApp{Enabled: true, Allow: []string{"+56 9 1234 5678"}, Groups: true, AllowGroups: []string{"1@g.us"}, MaxPerHour: 9}
 	cfg.Providers = map[string]config.Provider{"main": {Kind: "groq", APIKey: "gk"}}
 	fleet, err := orchestrator.New(cfg)
 	if err != nil {
@@ -62,7 +62,7 @@ func TestWhatsAppFromTheFile(t *testing.T) {
 		t.Fatal(warn.String())
 	}
 	st := b.Status()
-	if !st.Enabled || !st.Groups || len(st.Allow) != 1 || st.Allow[0] != "56912345678" || st.AllowGroups[0] != "1@g.us" {
+	if !st.Enabled || !st.Groups || len(st.Allow) != 1 || st.Allow[0] != "56912345678" || st.AllowGroups[0] != "1@g.us" || st.MaxPerHour != 9 {
 		t.Fatalf("from the file = %+v", st)
 	}
 }

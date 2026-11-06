@@ -67,6 +67,10 @@ type WhatsApp struct {
 	Groups bool `yaml:"groups"`
 	// AllowGroups are the groups it answers in (their ids, "…@g.us", as Settings lists them).
 	AllowGroups []string `yaml:"allow_groups"`
+	// Kitties gives a number or a group a kitty of its own: {"+56912345678": luna}.
+	Kitties map[string]string `yaml:"kitties"`
+	// MaxPerHour is the most messages sent in an hour (0: 60).
+	MaxPerHour int `yaml:"max_per_hour"`
 	// Transcribe is the profile (openai or groq) whose speech API turns voice notes into text;
 	// empty takes the first such profile, "off" none.
 	Transcribe string `yaml:"transcribe"`
@@ -74,7 +78,7 @@ type WhatsApp struct {
 
 // Set reports whether the file says anything about WhatsApp.
 func (w WhatsApp) Set() bool {
-	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0
+	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0
 }
 
 // Provider is one AI profile.

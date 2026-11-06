@@ -32,7 +32,8 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 		}
 	}
 	if w.Set() {
-		opt.Defaults = &whatsapp.Settings{Enabled: w.Enabled, Allow: w.Allow, Kitty: w.Kitty, Groups: w.Groups, AllowGroups: w.AllowGroups}
+		opt.Defaults = &whatsapp.Settings{Enabled: w.Enabled, Allow: w.Allow, Kitty: w.Kitty, Groups: w.Groups, AllowGroups: w.AllowGroups,
+			Kitties: w.Kitties, MaxPerHour: w.MaxPerHour}
 	}
 	if a.arts != nil {
 		opt.File = libraryFile(a.arts.Get)
