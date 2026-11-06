@@ -98,7 +98,8 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   needs help, when an action waits for a yes, and optionally when a goal finishes, gets blocked or
   a container recovers or a kitty spends its day's tokens. Bursts are folded into one message every
   ten minutes. Optionally a **daily summary** arrives at the hour you choose: what each kitty did
-  in the last day, what it spent and what waits for your yes.
+  in the last day, what it spent, which goals ran again on their own and how they ended, and
+  what waits for your yes.
 - **Community manager, support, finance.** Besides writing, connectors read and answer: Mastodon
   and Bluesky timelines, mentions, replies and likes; Gmail and Outlook inboxes; Slack and
   Telegram messages; Stripe balance, invoices and payments; Zendesk tickets. Results come back as
