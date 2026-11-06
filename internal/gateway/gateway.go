@@ -148,6 +148,8 @@ type Server struct {
 	digester Digester
 	// exposure shows and changes where the gateway listens, nil when it cannot.
 	exposure Exposing
+	// mcpControl shows and changes the MCP connector, nil when it cannot.
+	mcpControl MCPControl
 }
 
 // WithLibrary serves the skills and the artifacts.
@@ -261,6 +263,7 @@ func (s *Server) routes() {
 	s.desktopRoutes()
 	s.updateRoutes()
 	s.exposureRoutes()
+	s.mcpControlRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.Handle("GET /v1/oauth/{name}/redirect", api(s.handleOAuthRedirect))

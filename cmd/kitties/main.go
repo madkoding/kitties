@@ -182,6 +182,7 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	if err == nil && cmd == "gateway" {
 		// What the person chose in Settings or an installer (local, lan, wan) wins over the file and the environment.
 		cfg.ApplyExposure()
+		cfg.ApplyMCPSettings()
 	}
 	if err != nil {
 		fmt.Fprintf(errOut, "kitties: %v\nRun `kitties init` to write an example configuration.\n", err)
@@ -568,7 +569,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	g := a.cfg.Gateway
 	srv := gateway.New(a.fleet, a.chats, token, version).WithLibrary(a.skills, a.arts).WithAgenda(a.agenda).
 		WithApprovals(a.chats).WithMemory(a.chats).WithMaintenance(a.fleet).WithUpdater(a.updater).WithNotifier(a.notifier).WithDigest(a.digest).
-		WithExposure(exposureOf(a.cfg, g.Listen)).WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
+		WithExposure(exposureOf(a.cfg, g.Listen)).WithMCPControl(mcpControlOf(a.cfg)).WithPublicURL(g.PublicURL).WithProxy(g.TrustProxy).WithLocalToken(g.LocalTokenAllowed()).WithTLS(g.TLSCert, g.TLSKey)
 	if a.vault != nil {
 		srv.WithVault(a.vault)
 	}
