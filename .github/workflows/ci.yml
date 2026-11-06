@@ -285,6 +285,16 @@ jobs:
           cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max,scope=kitty-desktop-amd64' || '' }}
       - name: the shelf's weather and player feeds, and its font
         run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/shelf-feeds.sh
+      - name: what outlives the container (home, Shared, packages, import)
+        run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/home.sh
+      - name: a desktop on an empty home of the host comes up seeded
+        run: |
+          mkdir -p "$RUNNER_TEMP/home" "$RUNNER_TEMP/shared" && chmod 777 "$RUNNER_TEMP/home" "$RUNNER_TEMP/shared"
+          docker run -d --name kitty-home -v "$RUNNER_TEMP/home:/home/kitty" -v "$RUNNER_TEMP/shared:/home/kitty/Shared" -e KITTY_NAME=ci kitty-desktop:ci
+          sleep 5
+          docker exec kitty-home sh -xc 'pgrep -x lumen-wm && test -f ~/.config/lumen/rc.xml && test -f ~/.config/kitties/skel && test -L /opt/kitty-apps && echo hi > ~/Shared/hi.txt && kitty-share --list | grep -qx hi.txt'
+          test -f "$RUNNER_TEMP/home/.config/lumen/rc.xml" && test -f "$RUNNER_TEMP/shared/hi.txt"
+          docker rm -f kitty-home
       - name: the display comes up and a screenshot is a PNG
         run: |
           docker run -d --name kitty-ci -e KITTY_NAME=ci kitty-desktop:ci

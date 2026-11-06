@@ -2,6 +2,8 @@
 # Starts the virtual display and keeps the container alive. Everything else happens through
 # `docker exec` from the orchestrator.
 set -eu
+# The home may be a folder of the host (it outlives the container): it gets what the image brings.
+kitty-home || echo "kitty-home: the home could not be seeded" >&2
 : "${DISPLAY:=:99}"
 : "${SCREEN:=1280x800x24}"
 # -noreset: without it the display forgets the resources (xrdb) when its last client leaves.
