@@ -122,3 +122,41 @@ func TestMCPControlRoutes(t *testing.T) {
 		t.Errorf("rotate refused = %d", code)
 	}
 }
+
+func TestMCPTestAsksTheConnectorItself(t *testing.T) {
+	fleet := &fakeFleet{kitties: map[string]*kitty.Kitty{}}
+	chats := &fakeChats{sessions: map[string]*chat.Session{}}
+	f := &fakeMCPControl{info: MCPInfo{MCPSettings: config.MCPSettings{Enabled: true}}, relaunch: make(chan struct{}, 1)}
+	// The fake's token is the one the connector below accepts.
+	srv := httptest.NewServer(New(fleet, chats, "tok", "test").WithMCP("secret-token-value", false).WithMCPControl(f))
+	defer srv.Close()
+	code, got, _ := call(t, srv, "POST", "/v1/mcp/test", "tok", nil)
+	if code != 200 || got["ok"] != true || got["tools"].(float64) < 5 {
+		t.Fatalf("test = %d %v", code, got)
+	}
+	if _, leaked := got["token"]; leaked {
+		t.Error("the test result carries the token")
+	}
+	// a token the connector does not know: it says so, without failing the request
+	f.tokenErr = nil
+	other := httptest.NewServer(New(fleet, chats, "tok", "test").WithMCP("another-token-value", false).WithMCPControl(f))
+	defer other.Close()
+	if code, got, _ := call(t, other, "POST", "/v1/mcp/test", "tok", nil); code != 200 || got["ok"] != false || got["error"] == "" {
+		t.Errorf("wrong token = %d %v", code, got)
+	}
+	// off, or no token yet
+	f.info.Enabled = false
+	if code, got, _ := call(t, srv, "POST", "/v1/mcp/test", "tok", nil); code != 200 || got["ok"] != false {
+		t.Errorf("off = %d %v", code, got)
+	}
+	f.info.Enabled = true
+	f.tokenErr = errors.New("no token")
+	if _, got, _ := call(t, srv, "POST", "/v1/mcp/test", "tok", nil); got["ok"] != false {
+		t.Errorf("no token = %v", got)
+	}
+	plain := httptest.NewServer(New(fleet, chats, "tok", "test"))
+	defer plain.Close()
+	if code, _, _ := call(t, plain, "POST", "/v1/mcp/test", "tok", nil); code != 404 {
+		t.Errorf("without control = %d", code)
+	}
+}

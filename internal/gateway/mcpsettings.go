@@ -1,8 +1,11 @@
 package gateway
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"time"
 
 	"github.com/madkoding/kitties/internal/config"
@@ -45,6 +48,7 @@ func (s *Server) mcpControlRoutes() {
 	s.mux.Handle("PUT /v1/mcp", s.auth(s.handleSetMCP))
 	s.mux.Handle("GET /v1/mcp/token", s.auth(s.handleMCPToken))
 	s.mux.Handle("POST /v1/mcp/token", s.auth(s.handleRotateMCPToken))
+	s.mux.Handle("POST /v1/mcp/test", s.auth(s.handleTestMCP))
 }
 
 var errNoMCPControl = errors.New("this gateway cannot change the MCP connector")
@@ -124,4 +128,37 @@ func (s *Server) relaunchSoon(relaunch func() error) {
 		time.Sleep(restartAfter)
 		_ = relaunch()
 	}()
+}
+
+// handleTestMCP asks the connector itself for its tools, with its own token, the way a client
+// would, so the person sees whether Claude will get an answer. The token stays inside.
+func (s *Server) handleTestMCP(w http.ResponseWriter, r *http.Request) {
+	if s.mcpControl == nil {
+		fail(w, http.StatusNotFound, errNoMCPControl)
+		return
+	}
+	info := s.mcpControl.MCP()
+	tok, err := s.mcpControl.Token()
+	if !info.Enabled || err != nil {
+		reply(w, http.StatusOK, map[string]any{"ok": false, "error": "the connector is off or has no token yet"})
+		return
+	}
+	req := httptest.NewRequest("POST", MCPPath, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"tools/list"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = r.RemoteAddr
+	rec := httptest.NewRecorder()
+	s.mux.ServeHTTP(rec, req)
+	var out struct {
+		Result struct {
+			Tools []struct {
+				Name string `json:"name"`
+			} `json:"tools"`
+		} `json:"result"`
+	}
+	if rec.Code != http.StatusOK || json.Unmarshal(rec.Body.Bytes(), &out) != nil {
+		reply(w, http.StatusOK, map[string]any{"ok": false, "error": "the connector answered " + http.StatusText(rec.Code)})
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"ok": true, "tools": len(out.Result.Tools)})
 }
