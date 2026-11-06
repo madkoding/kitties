@@ -295,7 +295,12 @@ type rig struct {
 
 func newRig(t *testing.T) *rig {
 	t.Helper()
-	r := &rig{chats: newChats(), reg: &registry{items: map[string]connector.Connector{}}, clients: make(chan *fakeClient, 8), dir: t.TempDir(), logs: &strings.Builder{}}
+	return newRigAt(t, t.TempDir())
+}
+
+func newRigAt(t *testing.T, dir string) *rig {
+	t.Helper()
+	r := &rig{chats: newChats(), reg: &registry{items: map[string]connector.Connector{}}, clients: make(chan *fakeClient, 8), dir: dir, logs: &strings.Builder{}}
 	b, err := New(Options{
 		Dir: r.dir, Box: box{}, Chats: r.chats, Kitty: kittyOf, Registry: r.reg,
 		NewClient: func() Client {
@@ -1478,5 +1483,85 @@ func TestReconnect(t *testing.T) {
 	f2.mu.Unlock()
 	if f2 == f || session != "state" {
 		t.Fatalf("reconnected with %q", session)
+	}
+}
+
+func TestQuietQueueSurvivesARestart(t *testing.T) {
+	dir := t.TempDir()
+	r := newRigAt(t, dir)
+	night := time.Date(2026, 11, 6, 23, 0, 0, 0, time.Local)
+	r.b.now = func() time.Time { return night }
+	r.b.sleep = func(ctx context.Context, _ time.Duration) { <-ctx.Done() } // the gateway stops before 08:00
+	f := r.linked(t)
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, QuietFrom: "22:00", QuietTo: "08:00"}); err != nil {
+		t.Fatal(err)
+	}
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "first", Ref: Ref{ID: "m1"}, Files: []File{{Name: "a.txt", MIME: "text/plain", Data: []byte("hi")}}})
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "second", Ref: Ref{ID: "m2"}})
+	eventually(t, "the note", func() bool { return len(f.messages()) == 1 })
+	sealed, err := os.ReadFile(filepath.Join(dir, "queue.bin"))
+	if err != nil || bytes.Contains(sealed, []byte("first")) {
+		t.Fatalf("the queue is not sealed: %v", err)
+	}
+	r.b.Stop()
+	if r.chats.created != 0 {
+		t.Fatal("answered in the quiet hours")
+	}
+	// After the restart, in the morning, both are answered in order and the queue goes away.
+	r2 := newRigAt(t, dir)
+	r2.b.now = func() time.Time { return night.Add(10 * time.Hour) }
+	r2.b.Start(context.Background())
+	f2 := r2.next(t)
+	f2.push(Event{Kind: EvConnected, Phone: "15550001"})
+	f2.push(Event{Kind: EvConnected, Phone: "15550001"}) // a reconnect does not answer them again
+	eventually(t, "both answers", func() bool { return len(f2.messages()) == 2 })
+	r2.b.wg.Wait()
+	r2.chats.mu.Lock()
+	texts, files := append([]string(nil), r2.chats.texts...), append([]string(nil), r2.chats.files...)
+	r2.chats.mu.Unlock()
+	if strings.Join(texts, ",") != "first,second" || len(files) != 1 {
+		t.Fatalf("texts = %q, files = %q", texts, files)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "queue.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the queue stays: %v", err)
+	}
+	if !strings.Contains(r2.logString(), "2 waiting messages") {
+		t.Fatal(r2.logString())
+	}
+}
+
+func TestQuietQueueDamaged(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "queue.bin"), []byte("garbage"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := newRigAt(t, dir)
+	f := r.linked(t)
+	_ = f
+	eventually(t, "the drop", func() bool { return strings.Contains(r.logString(), "cannot be read") })
+	if _, err := os.Stat(filepath.Join(dir, "queue.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("a damaged queue stays")
+	}
+	// A queue that cannot be sealed is reported.
+	r.b.mu.Lock()
+	r.b.opt.Box = box{fail: true}
+	r.b.queue["x"] = pending{}
+	r.b.saveQueueLocked()
+	r.b.queue = map[string]pending{}
+	r.b.mu.Unlock()
+	if !strings.Contains(r.logString(), "keep the waiting messages") {
+		t.Fatal(r.logString())
+	}
+	// Unlinking forgets them.
+	r.b.mu.Lock()
+	r.b.opt.Box = box{}
+	r.b.queue["y"] = pending{}
+	r.b.saveQueueLocked()
+	r.b.mu.Unlock()
+	if err := r.b.Unlink(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "queue.bin")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatal("unlink kept the queue")
 	}
 }

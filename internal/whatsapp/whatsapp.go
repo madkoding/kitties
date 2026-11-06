@@ -22,6 +22,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -282,18 +283,24 @@ type Bridge struct {
 	sent    []time.Time          // when the messages of the last hour went
 	refs    map[string]Ref       // the last message of each chat (by key), to react to
 	noted   map[string]time.Time // the chats told about the quiet hours, until when
+	queue   map[string]pending   // the messages waiting for the quiet hours to end, by id
+	seq     int
+	resumed bool
+	runCtx  context.Context // the connection's, while there is one
 	waiting int
 	// now and sleep are the clock (a fake one in the tests).
-	now     func() time.Time
-	sleep   func(ctx context.Context, d time.Duration)
-	status  Status
-	client  Client
-	cancel  context.CancelFunc
-	done    chan struct{}
-	base    context.Context
-	last    string // the last allowed number that wrote
-	numbers map[string]*sync.Mutex
-	wg      sync.WaitGroup
+	now    func() time.Time
+	sleep  func(ctx context.Context, d time.Duration)
+	status Status
+	client Client
+	cancel context.CancelFunc
+	done   chan struct{}
+	base   context.Context
+	last   string // the last allowed number that wrote
+	// tails is the last message of each chat being answered: the next one waits for it, so a
+	// chat's messages are answered one at a time, in the order they came.
+	tails map[string]chan struct{}
+	wg    sync.WaitGroup
 	// wait is how long a reply that works on the desktop is followed.
 	wait time.Duration
 }
@@ -309,7 +316,7 @@ func New(opt Options) (*Bridge, error) {
 	if opt.Log == nil {
 		opt.Log = func(string, ...any) {}
 	}
-	b := &Bridge{opt: opt, chats: map[string]string{}, numbers: map[string]*sync.Mutex{}, refs: map[string]Ref{}, noted: map[string]time.Time{}, wait: 2 * time.Hour,
+	b := &Bridge{opt: opt, chats: map[string]string{}, tails: map[string]chan struct{}{}, refs: map[string]Ref{}, noted: map[string]time.Time{}, queue: map[string]pending{}, wait: 2 * time.Hour,
 		now: time.Now, sleep: sleepCtx}
 	data, err := os.ReadFile(b.settingsPath())
 	switch {
@@ -690,6 +697,8 @@ func (b *Bridge) Unlink(ctx context.Context) error {
 	}
 	b.status.Phone = ""
 	b.chats = map[string]string{}
+	b.queue = map[string]pending{}
+	b.saveQueueLocked()
 	if err := b.saveLocked(); err != nil {
 		return err
 	}
@@ -736,7 +745,7 @@ func (b *Bridge) startLocked() {
 	ctx, cancel := context.WithCancel(b.base)
 	c := b.opt.NewClient()
 	done := make(chan struct{})
-	b.client, b.cancel, b.done = c, cancel, done
+	b.client, b.cancel, b.done, b.runCtx = c, cancel, done, ctx
 	b.status.State, b.status.Error, b.status.QR, b.status.QRImage = StateStarting, "", "", ""
 	session, err := b.loadSession()
 	if err != nil {
@@ -769,7 +778,8 @@ func (b *Bridge) stopLocked() {
 		<-done
 		b.mu.Lock()
 	}
-	b.client, b.cancel, b.done = nil, nil, nil
+	b.client, b.cancel, b.done, b.runCtx = nil, nil, nil, nil
+	b.resumed = false // the next connection answers what still waits
 	b.status.State, b.status.QR, b.status.QRImage = StateOff, "", ""
 	b.syncConnectorLocked()
 }
@@ -837,6 +847,7 @@ func (b *Bridge) on(c Client, ev Event) {
 		if ev.Phone != "" {
 			b.status.Phone = ev.Phone
 		}
+		b.resumeLocked(c)
 	case EvDisconnected:
 		b.status.State = StateDisconnected
 	case EvLoggedOut:
@@ -903,24 +914,146 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 	if ev.Ref.ID != "" {
 		b.refs[in.key] = ev.Ref
 	}
-	lock := b.numbers[in.key]
-	if lock == nil {
-		lock = &sync.Mutex{}
-		b.numbers[in.key] = lock
+	// A message that comes in the quiet hours is kept sealed until it is answered, so a restart
+	// does not lose it.
+	if on, _ := b.quietLocked(b.now()); on {
+		b.seq++
+		in.qid = fmt.Sprintf("%d-%d", b.now().UnixNano(), b.seq)
+		b.queue[in.qid] = pendingOf(in)
+		b.saveQueueLocked()
 	}
-	ctx := b.base
+	b.dispatchLocked(c, in)
+}
+
+// dispatchLocked answers in on its own, after the earlier messages of its chat.
+func (b *Bridge) dispatchLocked(c Client, in inbound) {
+	prev, done := b.tails[in.key], make(chan struct{})
+	b.tails[in.key] = done
+	// The quiet hours are waited out on the connection's context: a stop or a reconnect ends the
+	// wait, and the message stays in the queue for the next connection.
+	ctx, conn := b.base, b.runCtx
+	if conn == nil {
+		conn = ctx
+	}
 	b.wg.Add(1)
 	go func() {
 		defer b.wg.Done()
-		// One message of a chat at a time, in order.
-		lock.Lock()
-		defer lock.Unlock()
-		b.waitQuiet(ctx, c, in)
-		if ctx.Err() != nil {
+		defer func() {
+			close(done)
+			b.mu.Lock()
+			if b.tails[in.key] == done {
+				delete(b.tails, in.key)
+			}
+			b.mu.Unlock()
+		}()
+		if prev != nil {
+			<-prev
+		}
+		b.waitQuiet(conn, c, in)
+		if conn.Err() != nil || ctx.Err() != nil {
 			return
+		}
+		if in.qid != "" {
+			b.mu.Lock()
+			delete(b.queue, in.qid)
+			b.saveQueueLocked()
+			b.mu.Unlock()
 		}
 		b.answer(ctx, c, in)
 	}()
+}
+
+// pending is a message kept for the end of the quiet hours.
+type pending struct {
+	From      string `json:"from"`
+	Name      string `json:"name,omitempty"`
+	Text      string `json:"text"`
+	Raw       string `json:"raw"`
+	Files     []File `json:"files,omitempty"`
+	Key       string `json:"key"`
+	To        string `json:"to"`
+	Who       string `json:"who"`
+	Group     bool   `json:"group,omitempty"`
+	GroupName string `json:"group_name,omitempty"`
+	Ref       Ref    `json:"ref"`
+}
+
+func pendingOf(in inbound) pending {
+	return pending{From: in.from, Name: in.name, Text: in.text, Raw: in.raw, Files: in.files, Key: in.key, To: in.to,
+		Who: in.who, Group: in.group, GroupName: in.groupName, Ref: in.ref}
+}
+
+func (p pending) inbound(qid string) inbound {
+	return inbound{from: p.From, name: p.Name, text: p.Text, raw: p.Raw, files: p.Files, key: p.Key, to: p.To,
+		who: p.Who, group: p.Group, groupName: p.GroupName, ref: p.Ref, qid: qid}
+}
+
+// queueAAD binds the sealed queue to its use.
+var queueAAD = []byte("whatsapp:queue")
+
+func (b *Bridge) queuePath() string { return filepath.Join(b.opt.Dir, "queue.bin") }
+
+// saveQueueLocked keeps the waiting messages sealed (nothing on disk when there are none).
+func (b *Bridge) saveQueueLocked() {
+	if len(b.queue) == 0 {
+		if err := os.Remove(b.queuePath()); err != nil && !errors.Is(err, os.ErrNotExist) {
+			b.opt.Log("whatsapp: forget the waiting messages: %v", err)
+		}
+		return
+	}
+	err := func() error {
+		data, err := json.Marshal(b.queue)
+		if err != nil {
+			return err
+		}
+		sealed, err := b.opt.Box.Seal(data, queueAAD)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(b.opt.Dir, 0o700); err != nil {
+			return err
+		}
+		tmp := b.queuePath() + ".tmp"
+		if err := os.WriteFile(tmp, sealed, 0o600); err != nil {
+			return err
+		}
+		return os.Rename(tmp, b.queuePath())
+	}()
+	if err != nil {
+		b.opt.Log("whatsapp: keep the waiting messages: %v", err)
+	}
+}
+
+// resumeLocked answers the messages kept from before a restart, once, when it connects.
+func (b *Bridge) resumeLocked(c Client) {
+	if b.resumed {
+		return
+	}
+	b.resumed = true
+	sealed, err := os.ReadFile(b.queuePath())
+	if err != nil {
+		return
+	}
+	var kept map[string]pending
+	data, err := b.opt.Box.Open(sealed, queueAAD)
+	if err == nil {
+		err = json.Unmarshal(data, &kept)
+	}
+	if err != nil {
+		b.opt.Log("whatsapp: the waiting messages cannot be read (%v); they are dropped", err)
+		_ = os.Remove(b.queuePath())
+		return
+	}
+	ids := make([]string, 0, len(kept))
+	for id := range kept {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids) // in the order they came
+	for _, id := range ids {
+		b.queue[id] = kept[id]
+		b.dispatchLocked(c, kept[id].inbound(id))
+	}
+	b.opt.Log("whatsapp: %d waiting messages from before the restart", len(ids))
 }
 
 // inbound is a message to answer: key names its chat (a number, or "g:" and a group), to is
@@ -936,6 +1069,8 @@ type inbound struct {
 	// who is the number or group whose kitty answers; ref the message.
 	who string
 	ref Ref
+	// qid is its place in the sealed queue while it waits for the quiet hours to end.
+	qid string
 }
 
 // groupAllowedLocked reports whether a group is on the list.
