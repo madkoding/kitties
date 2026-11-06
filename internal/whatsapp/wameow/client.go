@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -31,6 +32,8 @@ type conn interface {
 	Disconnect()
 	SendMessage(ctx context.Context, to types.JID, message *waE2E.Message, extra ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error)
 	Logout(ctx context.Context) error
+	SendChatPresence(ctx context.Context, jid types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error
+	Download(ctx context.Context, msg whatsmeow.DownloadableMessage) ([]byte, error)
 }
 
 // Client is a whatsapp.Client over whatsmeow.
@@ -72,7 +75,11 @@ func (c *Client) Run(ctx context.Context, session []byte, emit func(whatsapp.Eve
 	}()
 	over := make(chan struct{}, 1)
 	cn.AddEventHandler(func(evt any) {
-		for _, ev := range translate(st, dev, evt) {
+		evs := translate(st, dev, evt)
+		if m, ok := evt.(*events.Message); ok && len(evs) == 1 {
+			evs[0].Files = media(ctx, cn, m.Message)
+		}
+		for _, ev := range evs {
 			if ev.Kind == whatsapp.EvConnected {
 				flush(st, emit)
 			}
@@ -164,16 +171,125 @@ func translate(st *Store, dev *store.Device, evt any) []whatsapp.Event {
 		if e.Info.IsFromMe || e.Message == nil {
 			return nil
 		}
-		text := e.Message.GetConversation()
-		if text == "" {
-			text = e.Message.GetExtendedTextMessage().GetText()
-		}
-		return []whatsapp.Event{{
+		m := e.Message
+		text := firstOf(m.GetConversation(), m.GetExtendedTextMessage().GetText(), m.GetImageMessage().GetCaption(),
+			m.GetVideoMessage().GetCaption(), m.GetDocumentMessage().GetCaption())
+		ev := whatsapp.Event{
 			Kind: whatsapp.EvMessage, From: phoneOf(st, e.Info.Sender, e.Info.SenderAlt),
 			Name: e.Info.PushName, Text: text, ID: e.Info.ID, Group: e.Info.IsGroup,
-		}}
+		}
+		if ev.Group {
+			ev.Chat = e.Info.Chat.ToNonAD().String()
+			ev.Mentioned = mentioned(dev, m)
+		}
+		return []whatsapp.Event{ev}
 	}
 	return nil
+}
+
+func firstOf(texts ...string) string {
+	for _, t := range texts {
+		if t != "" {
+			return t
+		}
+	}
+	return ""
+}
+
+// contextOf is what a message says about the ones it answers or mentions.
+func contextOf(m *waE2E.Message) *waE2E.ContextInfo {
+	for _, c := range []*waE2E.ContextInfo{
+		m.GetExtendedTextMessage().GetContextInfo(), m.GetImageMessage().GetContextInfo(),
+		m.GetVideoMessage().GetContextInfo(), m.GetDocumentMessage().GetContextInfo(), m.GetAudioMessage().GetContextInfo(),
+	} {
+		if c != nil {
+			return c
+		}
+	}
+	return nil
+}
+
+// mentioned reports whether a message @mentions this number or answers one of its messages.
+func mentioned(dev *store.Device, m *waE2E.Message) bool {
+	c := contextOf(m)
+	if c == nil {
+		return false
+	}
+	ours := map[string]bool{}
+	for _, j := range []types.JID{dev.GetJID(), dev.GetLID()} {
+		if j.User != "" {
+			ours[j.User] = true
+		}
+	}
+	for _, s := range append(c.GetMentionedJID(), c.GetParticipant()) {
+		if j, err := types.ParseJID(s); err == nil && ours[j.User] {
+			return true
+		}
+	}
+	return false
+}
+
+// maxMedia is the largest file taken from a message (the chat takes 50 MB of any file).
+const maxMedia = 25 << 20
+
+// media downloads the picture, video, document or audio of a message.
+func media(ctx context.Context, cn conn, m *waE2E.Message) []whatsapp.File {
+	type item struct {
+		msg   whatsmeow.DownloadableMessage
+		size  uint64
+		name  string
+		mime  string
+		voice bool
+	}
+	var items []item
+	if x := m.GetImageMessage(); x != nil {
+		items = append(items, item{x, x.GetFileLength(), "picture" + ext(x.GetMimetype(), ".jpg"), x.GetMimetype(), false})
+	}
+	if x := m.GetVideoMessage(); x != nil {
+		items = append(items, item{x, x.GetFileLength(), "video" + ext(x.GetMimetype(), ".mp4"), x.GetMimetype(), false})
+	}
+	if x := m.GetDocumentMessage(); x != nil {
+		items = append(items, item{x, x.GetFileLength(), firstOf(x.GetFileName(), "document"), x.GetMimetype(), false})
+	}
+	if x := m.GetAudioMessage(); x != nil {
+		items = append(items, item{x, x.GetFileLength(), "audio" + ext(x.GetMimetype(), ".ogg"), x.GetMimetype(), x.GetPTT()})
+	}
+	var out []whatsapp.File
+	for _, it := range items {
+		if it.size > maxMedia {
+			continue
+		}
+		dctx, cancel := context.WithTimeout(ctx, time.Minute)
+		data, err := cn.Download(dctx, it.msg)
+		cancel()
+		if err != nil || len(data) == 0 || len(data) > maxMedia {
+			continue
+		}
+		out = append(out, whatsapp.File{Name: it.name, MIME: it.mime, Data: data, Voice: it.voice})
+	}
+	return out
+}
+
+// ext is the file extension of a media type, or def.
+func ext(mime, def string) string {
+	base, _, _ := strings.Cut(mime, ";")
+	switch strings.TrimSpace(base) {
+	case "image/png":
+		return ".png"
+	case "image/webp":
+		return ".webp"
+	case "image/jpeg":
+		return ".jpg"
+	case "audio/mpeg":
+		return ".mp3"
+	case "audio/mp4":
+		return ".m4a"
+	case "audio/ogg":
+		return ".ogg"
+	case "video/mp4":
+		return ".mp4"
+	}
+	return def
 }
 
 // phoneOf is the phone number of a sender, who may come as a LID (WhatsApp's hidden id).
@@ -202,14 +318,43 @@ func (c *Client) current() (conn, error) {
 	return c.conn, nil
 }
 
+// jidOf is a number (digits) or a JID (a group).
+func jidOf(to string) (types.JID, error) {
+	if strings.Contains(to, "@") {
+		return types.ParseJID(to)
+	}
+	return types.NewJID(to, types.DefaultUserServer), nil
+}
+
 // Send implements whatsapp.Client.
-func (c *Client) Send(ctx context.Context, phone, text string) error {
+func (c *Client) Send(ctx context.Context, to, text string) error {
 	cn, err := c.current()
 	if err != nil {
 		return err
 	}
-	_, err = cn.SendMessage(ctx, types.NewJID(phone, types.DefaultUserServer), &waE2E.Message{Conversation: proto.String(text)})
+	jid, err := jidOf(to)
+	if err != nil {
+		return err
+	}
+	_, err = cn.SendMessage(ctx, jid, &waE2E.Message{Conversation: proto.String(text)})
 	return err
+}
+
+// Typing implements whatsapp.Client.
+func (c *Client) Typing(ctx context.Context, to string, on bool) error {
+	cn, err := c.current()
+	if err != nil {
+		return err
+	}
+	jid, err := jidOf(to)
+	if err != nil {
+		return err
+	}
+	state := types.ChatPresencePaused
+	if on {
+		state = types.ChatPresenceComposing
+	}
+	return cn.SendChatPresence(ctx, jid, state, types.ChatPresenceMediaText)
 }
 
 // Logout implements whatsapp.Client.
