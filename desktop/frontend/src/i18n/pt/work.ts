@@ -476,7 +476,7 @@ const dict: Dictionary = {
     "Excluir {name} da pasta Compartilhado de {kitty}?",
   "Nothing shared yet. Ask a kitty to share a file with you: it leaves it in ~/Shared on its computer and it shows up here.":
     "Nada compartilhado ainda. Peça a um kitty para compartilhar um arquivo com você: ele o deixa em ~/Shared no computador dele e aparece aqui.",
-  shared: "compartilhado",
+  "Shared files": "Compartilhado",
   "Back up now": "Copiar agora",
   "The backup is sealed and kept away from the desktop, and goes back into it when it is made anew. It is also made when the desktop stops.":
     "A cópia é criptografada e guardada longe da área de trabalho, e volta a ela quando é refeita. Também é feita quando a área de trabalho para.",

@@ -45,7 +45,7 @@ type homeKeeper interface {
 
 // DefaultSharedQuotaMB is how much a kitty's Shared folder may hold when the configuration does
 // not say (containers.shared_quota_mb; a negative value is no limit).
-const DefaultSharedQuotaMB = 1024
+const DefaultSharedQuotaMB = 5120
 
 // SharedQuotaMB is the most a kitty's Shared folder holds, in MB; 0 is no limit.
 func (m *Manager) SharedQuotaMB() int {

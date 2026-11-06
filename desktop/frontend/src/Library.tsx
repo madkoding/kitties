@@ -83,7 +83,7 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
               class={`plain px-4 py-2 text-sm border-b-2 capitalize ${tab === tb ? "border-[var(--color-accent)] text-[var(--t1)]" : "border-transparent text-[var(--t3)]"}`}
               onClick={() => setTab(tb)}
             >
-              {t(tb)}
+              {tb === "shared" ? t("Shared files") : t(tb)}
               {tb === "shared" && shared.files.length > 0 && (
                 <span class="tag ml-2" data-testid="shared-count">
                   {shared.files.length}

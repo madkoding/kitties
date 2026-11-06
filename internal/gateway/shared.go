@@ -43,7 +43,7 @@ var maxImport int64 = 4 << 30
 
 func (s *Server) sharedRoutes() {
 	api := s.auth
-	s.mux.Handle("GET /v1/shared", api(s.handleShared))
+	s.mux.Handle("GET /v1/shared", api(s.handleSharedFiles))
 	s.mux.Handle("GET /v1/kitties/{ref}/shared/{path...}", api(s.handleSharedFile))
 	s.mux.Handle("DELETE /v1/kitties/{ref}/shared/{path...}", api(s.handleDeleteShared))
 	s.mux.Handle("POST /v1/kitties/{ref}/keep/{path...}", api(s.handleKeepShared))
@@ -51,8 +51,8 @@ func (s *Server) sharedRoutes() {
 	s.mux.Handle("POST /v1/kitties/{ref}/import", api(s.handleImport))
 }
 
-// handleShared lists every kitty's shared files, the newest first.
-func (s *Server) handleShared(w http.ResponseWriter, _ *http.Request) {
+// handleSharedFiles lists every kitty's shared files, the newest first.
+func (s *Server) handleSharedFiles(w http.ResponseWriter, _ *http.Request) {
 	if s.shared == nil {
 		fail(w, http.StatusNotFound, errNoShared)
 		return

@@ -241,7 +241,7 @@ actualización, ni una detención, ni eliminar al kitty.
 - **Compartido.** `kitty-share <archivo>` copia un archivo ahí (`-d carpeta`, `--list`); el kitty lo sabe.
   La página lista los archivos de todos los kitties, previsualiza imágenes y texto, descarga cualquiera,
   copia uno a la biblioteca (**guardar en biblioteca**) y borra. Cada carpeta admite hasta
-  `containers.shared_quota_mb` (1024; negativo: sin límite), que `kitty-share` respeta.
+  `containers.shared_quota_mb` (5120, 5 GB; negativo: sin límite), que `kitty-share` respeta.
 - **Mover un escritorio antiguo.** Un escritorio hecho antes de que el inicio viviera en tu computadora
   lo tiene dentro del contenedor: antes de borrarlo se copia (`homes/.moving/<nombre>.tar`, sin
   `~/.cache`) y se pone en el nuevo, que se reinicia una vez. Si la copia falla, el escritorio antiguo

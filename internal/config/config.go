@@ -183,7 +183,7 @@ type Containers struct {
 	// Env is extra environment for every container.
 	Env map[string]string `yaml:"env"`
 	// SharedQuotaMB is the most each kitty's Shared folder (~/Shared, what it shares with its
-	// person) may hold: 1024 by default, a negative value is no limit.
+	// person) may hold: 5120 (5 GB) by default, a negative value is no limit.
 	SharedQuotaMB int `yaml:"shared_quota_mb"`
 	// AutoUpdate keeps the desktops on the newest image: the gateway looks for a new one every
 	// UpdateCheckHours, downloads it, and makes a desktop anew (its sessions backed up and put back)

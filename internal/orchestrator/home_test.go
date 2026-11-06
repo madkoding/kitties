@@ -90,7 +90,7 @@ func TestANewDesktopGetsAHomeAndSharedOfTheHost(t *testing.T) {
 	s := h.specs[0]
 	data := m.cfg.DataDirOr()
 	if s.Home != filepath.Join(data, "homes", "mimi") || s.Shared != filepath.Join(data, "shared", "mimi") ||
-		s.Env["KITTY_SHARED_QUOTA_MB"] != "1024" {
+		s.Env["KITTY_SHARED_QUOTA_MB"] != "5120" {
 		t.Errorf("spec = %+v", s)
 	}
 	for _, dir := range []string{s.Home, s.Shared} {
@@ -280,7 +280,7 @@ func TestStorageTellsWhatIsKept(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s := info.Storage; !s.Home || s.HomeBytes != 5 || s.WorkBytes != 3 || s.SharedBytes != 1 || s.SharedQuotaMB != 1024 || s.Moving {
+	if s := info.Storage; !s.Home || s.HomeBytes != 5 || s.WorkBytes != 3 || s.SharedBytes != 1 || s.SharedQuotaMB != 5120 || s.Moving {
 		t.Errorf("storage = %+v", s)
 	}
 	old := sizeCap

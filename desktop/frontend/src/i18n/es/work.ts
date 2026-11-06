@@ -481,7 +481,7 @@ const dict: Dictionary = {
     "¿Eliminar {name} de la carpeta Compartido de {kitty}?",
   "Nothing shared yet. Ask a kitty to share a file with you: it leaves it in ~/Shared on its computer and it shows up here.":
     "Aún no hay nada compartido. Pídele a un kitty que te comparta un archivo: lo deja en ~/Shared en su computadora y aparece aquí.",
-  shared: "compartido",
+  "Shared files": "Compartido",
   "Back up now": "Respaldar ahora",
   "The backup is sealed and kept away from the desktop, and goes back into it when it is made anew. It is also made when the desktop stops.":
     "El respaldo está cifrado y guardado lejos del escritorio, y vuelve a él cuando se rehace. También se hace cuando el escritorio se detiene.",

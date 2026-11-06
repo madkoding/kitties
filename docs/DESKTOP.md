@@ -230,7 +230,7 @@ an update, not a stop, not removing the kitty.
 - **Shared.** `kitty-share <file>` copies a file there (`-d folder`, `--list`); the kitty is told so.
   The page lists every kitty's files together, previews pictures and text, downloads anything, copies
   a file into the library (**keep in library**) and deletes. Each folder holds up to
-  `containers.shared_quota_mb` (1024; negative: no limit), which `kitty-share` enforces.
+  `containers.shared_quota_mb` (5120, 5 GB; negative: no limit), which `kitty-share` enforces.
 - **Moving an older desktop.** A desktop made before homes lived on your computer has its home inside
   its container: before that container is removed, its home is copied out (`homes/.moving/<name>.tar`,
   without `~/.cache`) and put into the new one, which restarts once. If the copy fails, the old
