@@ -76,10 +76,14 @@ func (f *fakeConn) SendMessage(_ context.Context, to types.JID, m *waE2E.Message
 	return whatsmeow.SendResponse{}, f.sendErr
 }
 
-func (f *fakeConn) SendChatPresence(_ context.Context, to types.JID, state types.ChatPresence, _ types.ChatPresenceMedia) error {
+func (f *fakeConn) SendChatPresence(_ context.Context, to types.JID, state types.ChatPresence, media types.ChatPresenceMedia) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.presences = append(f.presences, to.String()+" "+string(state))
+	p := to.String() + " " + string(state)
+	if media == types.ChatPresenceMediaAudio {
+		p += " audio"
+	}
+	f.presences = append(f.presences, p)
 	return nil
 }
 
@@ -393,17 +397,20 @@ func TestTypingAndGroups(t *testing.T) {
 	blob, _ := s.Export()
 	f := &fakeConn{}
 	c := clientWith(f)
-	if err := c.Typing(context.Background(), "1", true); !errors.Is(err, ErrNotConnected) {
+	if err := c.Typing(context.Background(), "1", true, false); !errors.Is(err, ErrNotConnected) {
 		t.Fatalf("typing before the start = %v", err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { done <- c.Run(ctx, blob, func(whatsapp.Event) {}) }()
 	wait(t, "the connection", func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.connected })
-	if err := c.Typing(context.Background(), "56912345678", true); err != nil {
+	if err := c.Typing(context.Background(), "56912345678", true, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := c.Typing(context.Background(), "120363@g.us", false); err != nil {
+	if err := c.Typing(context.Background(), "56912345678", true, true); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Typing(context.Background(), "120363@g.us", false, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := c.Send(context.Background(), "120363@g.us", "hola grupo"); err != nil {
@@ -413,13 +420,13 @@ func TestTypingAndGroups(t *testing.T) {
 		if err := c.Send(context.Background(), bad, "x"); err == nil {
 			t.Fatalf("sent to %q", bad)
 		}
-		if err := c.Typing(context.Background(), bad, true); err == nil {
+		if err := c.Typing(context.Background(), bad, true, false); err == nil {
 			t.Fatalf("typed to %q", bad)
 		}
 	}
 	cancel()
 	<-done
-	if got := strings.Join(f.presences, ","); got != "56912345678@s.whatsapp.net composing,120363@g.us paused" {
+	if got := strings.Join(f.presences, ","); got != "56912345678@s.whatsapp.net composing,56912345678@s.whatsapp.net composing audio,120363@g.us paused" {
 		t.Fatalf("presences = %s", got)
 	}
 	if f.sent[0] != "120363@g.us hola grupo" {
@@ -737,5 +744,34 @@ func TestSendReply(t *testing.T) {
 	}
 	if ci := f.msgs[1].GetExtendedTextMessage().GetContextInfo(); ci.Participant != nil || ci.RemoteJID != nil {
 		t.Fatalf("direct = %v", ci)
+	}
+}
+
+func TestSendVoiceNote(t *testing.T) {
+	s, _ := paired(t)
+	blob, _ := s.Export()
+	f := &fakeConn{}
+	c := clientWith(f)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx, blob, func(whatsapp.Event) {}) }()
+	wait(t, "the connection", func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.connected })
+	// One Ogg page whose granule position is three seconds at 48 kHz.
+	page := append([]byte("OggS\x00\x04"), 0x00, 0x32, 0x02, 0, 0, 0, 0, 0)
+	voice := whatsapp.File{Name: "voice.ogg", MIME: "audio/ogg", Data: page, Voice: true}
+	if err := c.SendFile(context.Background(), "56912345678", voice, ""); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SendFile(context.Background(), "56912345678", whatsapp.File{Name: "song.mp3", MIME: "audio/mpeg", Data: []byte("mp3")}, ""); err != nil {
+		t.Fatal(err)
+	}
+	cancel()
+	<-done
+	a := f.msgs[0].GetAudioMessage()
+	if !a.GetPTT() || a.GetMimetype() != whatsapp.VoiceMIME || a.GetSeconds() != 3 {
+		t.Fatalf("voice note = %v", a)
+	}
+	if b := f.msgs[1].GetAudioMessage(); b.GetPTT() || b.Seconds != nil {
+		t.Fatalf("an audio went as a voice note: %v", b)
 	}
 }

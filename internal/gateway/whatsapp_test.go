@@ -12,26 +12,40 @@ import (
 )
 
 type fakeWhatsApp struct {
-	st       whatsapp.Status
-	applied  *whatsapp.Settings
-	applyErr error
-	linkErr  error
-	reconns  int
-	unErr    error
-	testErr  error
-	links    int
-	unlinks  int
-	tested   string
+	st        whatsapp.Status
+	applied   *whatsapp.Settings
+	applyErr  error
+	linkErr   error
+	reconns   int
+	unErr     error
+	testErr   error
+	links     int
+	unlinks   int
+	tested    string
+	cleared   int
+	resendErr error
+	resent    string
 }
 
 func (f *fakeWhatsApp) Status() whatsapp.Status { return f.st }
-func (f *fakeWhatsApp) Apply(s whatsapp.Settings) error {
+func (f *fakeWhatsApp) Apply(s whatsapp.Settings, acceptRisk bool) error {
 	if f.applyErr != nil {
 		return f.applyErr
+	}
+	if s.Enabled && !f.st.Enabled && !f.st.RiskAccepted && !acceptRisk {
+		return whatsapp.ErrRisk
+	}
+	if acceptRisk {
+		f.st.RiskAccepted = true
 	}
 	f.applied = &s
 	f.st.Settings = s
 	return nil
+}
+func (f *fakeWhatsApp) ClearHeld() { f.cleared++; f.st.Held = 0 }
+func (f *fakeWhatsApp) Resend(_ context.Context, id string) error {
+	f.resent = id
+	return f.resendErr
 }
 func (f *fakeWhatsApp) Link() error { f.links++; return f.linkErr }
 
@@ -50,7 +64,7 @@ func TestWhatsAppRoutes(t *testing.T) {
 	chats := &fakeChats{sessions: map[string]*chat.Session{}}
 	plain := httptest.NewServer(New(fleet, chats, "tok", "test"))
 	defer plain.Close()
-	for _, r := range [][2]string{{"GET", "/v1/whatsapp"}, {"PUT", "/v1/whatsapp"}, {"POST", "/v1/whatsapp/link"}, {"POST", "/v1/whatsapp/reconnect"}, {"POST", "/v1/whatsapp/unlink"}, {"POST", "/v1/whatsapp/test"}} {
+	for _, r := range [][2]string{{"GET", "/v1/whatsapp"}, {"PUT", "/v1/whatsapp"}, {"POST", "/v1/whatsapp/link"}, {"POST", "/v1/whatsapp/reconnect"}, {"POST", "/v1/whatsapp/unlink"}, {"POST", "/v1/whatsapp/test"}, {"DELETE", "/v1/whatsapp/held"}, {"POST", "/v1/whatsapp/held/x/resend"}} {
 		if code, _, _ := call(t, plain, r[0], r[1], "tok", map[string]any{}); code != 404 {
 			t.Errorf("%s %s without WhatsApp = %d", r[0], r[1], code)
 		}
@@ -87,6 +101,21 @@ func TestWhatsAppRoutes(t *testing.T) {
 	f.applyErr = errors.New("bad number")
 	if code, body, _ := call(t, srv, "PUT", "/v1/whatsapp", "tok", on); code != 400 || body["error"] == nil {
 		t.Fatalf("apply error = %d %v", code, body)
+	}
+
+	f.st.Held = 3
+	if code, body, _ := call(t, srv, "DELETE", "/v1/whatsapp/held", "tok", nil); code != 200 || f.cleared != 1 || body["held"] != float64(0) {
+		t.Fatalf("clear held = %d %v", code, body)
+	}
+
+	if code, _, _ := call(t, srv, "POST", "/v1/whatsapp/held/17-3/resend", "tok", nil); code != 200 || f.resent != "17-3" {
+		t.Fatalf("resend = %d %q", code, f.resent)
+	}
+	for err, want := range map[error]int{whatsapp.ErrNoHeld: 404, whatsapp.ErrLimit: 429, whatsapp.ErrNotAllow: 400} {
+		f.resendErr = err
+		if code, body, _ := call(t, srv, "POST", "/v1/whatsapp/held/1/resend", "tok", nil); code != want || body["error"] == nil {
+			t.Fatalf("resend %v = %d %v", err, code, body)
+		}
 	}
 
 	if code, _, _ := call(t, srv, "POST", "/v1/whatsapp/link", "tok", nil); code != 200 || f.links != 1 {

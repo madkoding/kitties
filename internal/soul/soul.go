@@ -30,6 +30,9 @@ type Soul struct {
 	Language string `yaml:"language" json:"language,omitempty"`
 	// Skills names what the kitty is good at; they are listed to the model and to people.
 	Skills []string `yaml:"skills" json:"skills,omitempty"`
+	// Voice is the speech voice its voice notes are read with (alloy, nova, …); empty or
+	// "default" takes the gateway's.
+	Voice string `yaml:"voice" json:"voice,omitempty"`
 }
 
 // Default is the soul every kitty starts from: helpful, kind and adaptable.
@@ -87,6 +90,9 @@ func Merge(base, over Soul) Soul {
 	}
 	if len(over.Skills) > 0 {
 		out.Skills = append([]string(nil), over.Skills...)
+	}
+	if over.Voice != "" {
+		out.Voice = over.Voice
 	}
 	return out
 }

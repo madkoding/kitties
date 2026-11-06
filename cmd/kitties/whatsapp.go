@@ -33,13 +33,16 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 	}
 	if w.Set() {
 		opt.Defaults = &whatsapp.Settings{Enabled: w.Enabled, Allow: w.Allow, Kitty: w.Kitty, Groups: w.Groups, AllowGroups: w.AllowGroups,
-			Kitties: w.Kitties, MaxPerHour: w.MaxPerHour, QuietFrom: w.Quiet.From, QuietTo: w.Quiet.To}
+			Kitties: w.Kitties, MaxPerHour: w.MaxPerHour, QuietFrom: w.Quiet.From, QuietTo: w.Quiet.To, Voice: w.Voice}
 	}
 	if a.arts != nil {
 		opt.File = libraryFile(a.arts.Get)
 	}
 	if t, ok := a.transcriber(w.Transcribe, os.Getenv); ok {
 		opt.Transcribe = t.Transcribe
+	}
+	if sp, ok := a.speaker(w.Speak, w.SpeakVoice, os.Getenv); ok {
+		opt.Speak = sp.Speak
 	}
 	b, err := whatsapp.New(opt)
 	if err != nil {
@@ -109,4 +112,27 @@ func speechOf(p config.Provider, getenv func(string) string) (whatsapp.Transcrib
 		return whatsapp.Transcriber{}, false
 	}
 	return whatsapp.Transcriber{BaseURL: base, Key: key, Model: whatsapp.TranscribeModel(base)}, true
+}
+
+// speaker is the speech API that reads the kitties' answers aloud: the named profile, else the
+// first openai profile with a key ("off" turns it off). Groq's speech answers only WAV, which
+// WhatsApp does not play as a voice note.
+func (a *app) speaker(name, voice string, getenv func(string) string) (whatsapp.Speaker, bool) {
+	if name == "off" {
+		return whatsapp.Speaker{}, false
+	}
+	names := a.fleet.ProfileNames()
+	if name != "" {
+		names = []string{name}
+	}
+	for _, n := range names {
+		p, ok := a.fleet.Profile(n)
+		if !ok || p.Kind != "openai" {
+			continue
+		}
+		if t, ok := speechOf(p, getenv); ok {
+			return whatsapp.Speaker{BaseURL: t.BaseURL, Key: t.Key, Model: whatsapp.SpeakModel, Voice: voice}, true
+		}
+	}
+	return whatsapp.Speaker{}, false
 }

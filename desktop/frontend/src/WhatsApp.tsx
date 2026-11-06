@@ -1,17 +1,18 @@
-import { useEffect, useState } from "preact/hooks";
-import type { Kitty, WhatsAppGroup, WhatsAppSettings, WhatsAppStatus } from "./api";
+import { useEffect, useLayoutEffect, useState } from "preact/hooks";
+import type { Kitty, WhatsAppGroup, WhatsAppHeld, WhatsAppSettings, WhatsAppStatus } from "./api";
 import { api, errText } from "./api";
 import { ask } from "./Confirm";
 import ConnectorLogo from "./ConnectorLogo";
 import { t } from "./i18n";
-import { IconX } from "./icons";
+import { IconHand, IconShield, IconUsers, IconX } from "./icons";
 
 // WHATSAPP AS A LINKED DEVICE, docs/WHATSAPP.md.
 //
 // The kitties get a number of their own: the gateway links to a phone the way WhatsApp Web does
 // (a QR code drawn here), the numbers on the list talk to the chosen kitty and the kitties write
-// to them. Off until turned on, with the list empty; turning it on asks the person to accept the
-// risk of an unofficial API. The session never reaches this page.
+// to them. Off until turned on, with the list empty; turning it on the first time shows a welcome
+// that asks the person to accept the risk of an unofficial API. The session never reaches this
+// page.
 
 // The states that change by themselves: the page asks again until they settle.
 const MOVING = ["starting", "qr", "disconnected"];
@@ -27,6 +28,7 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     max_per_hour: s.max_per_hour || 0,
     quiet_from: s.quiet_from || "",
     quiet_to: s.quiet_to || "",
+    voice: s.voice || "",
   };
 }
 
@@ -40,6 +42,7 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     (a.max_per_hour || 0) === (b.max_per_hour || 0) &&
     (a.quiet_from || "") === (b.quiet_from || "") &&
     (a.quiet_to || "") === (b.quiet_to || "") &&
+    (a.voice || "") === (b.voice || "") &&
     pairs(a.kitties) === pairs(b.kitties)
   );
 }
@@ -62,6 +65,7 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
   const [want, setWant] = useState<WhatsAppSettings | null>(null);
   const [number, setNumber] = useState("");
   const [risk, setRisk] = useState(false);
+  const [welcome, setWelcome] = useState(false);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [err, setErr] = useState("");
@@ -101,6 +105,8 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
   }
   const changed = !same(want, pick(cur));
   const turningOn = want.enabled && !cur.enabled;
+  // The risk is asked once: the first time the link is turned on.
+  const needsRisk = turningOn && !cur.risk_accepted && !risk;
   const disabled = !cur.can_change || busy;
   const run = async (fn: () => Promise<WhatsAppStatus>, done?: string) => {
     setBusy(true);
@@ -190,8 +196,11 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           checked={want.enabled}
           disabled={disabled}
           onChange={() => {
+            if (!want.enabled && !cur.risk_accepted && !risk) {
+              setWelcome(true);
+              return;
+            }
             setWant({ ...want, enabled: !want.enabled });
-            setRisk(false);
           }}
         />
         <span>
@@ -333,17 +342,29 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           {t("Messages then are answered when they end.")}
         </span>
       </div>
-      {turningOn && changed && (
-        <label class="flex items-center gap-2 mt-3 text-sm cursor-pointer">
-          <input
-            type="checkbox"
-            checked={risk}
-            onChange={() => setRisk(!risk)}
-            data-testid="whatsapp-accept"
-          />
-          {t("I understand that WhatsApp may ban this number")}
-        </label>
-      )}
+      <label class="flex flex-wrap items-center gap-2 mt-3 text-sm" data-testid="whatsapp-voice">
+        {t("Voice notes")}
+        <select
+          class="px-2 py-1 text-sm"
+          value={want.voice || ""}
+          disabled={disabled || (!cur.can_speak && !want.voice)}
+          onChange={(e) =>
+            setWant({
+              ...want,
+              voice: (e.target as HTMLSelectElement).value as WhatsAppSettings["voice"],
+            })
+          }
+        >
+          <option value="">{t("Never: the kitties write")}</option>
+          <option value="mirror">{t("Answer a voice note with one")}</option>
+          <option value="always">{t("Every answer")}</option>
+        </select>
+        <span class="text-xs text-[var(--t3)]">
+          {cur.can_speak
+            ? t("Short answers are read aloud; long ones and code still go as text.")
+            : t("Needs an OpenAI profile with a key, for its speech.")}
+        </span>
+      </label>
       {!cur.can_change && cur.why && (
         <p class="text-xs text-[var(--t3)] mt-2" data-testid="whatsapp-locked">
           {cur.why}
@@ -352,7 +373,7 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
       {cur.can_change && (
         <button
           class="btn-accent mt-3 px-3 py-1.5 text-sm"
-          disabled={!changed || disabled || (turningOn && !risk)}
+          disabled={!changed || disabled || needsRisk}
           onClick={() => run(() => api.setWhatsApp(want, risk), t("Saved."))}
           data-testid="whatsapp-save"
         >
@@ -471,7 +492,26 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
                 " " + t("{n} were held by the hourly limit.", { n: cur.held || 0 })}
             </p>
           )}
+          {(cur.held_log || []).length > 0 && (
+            <HeldLog
+              held={cur.held_log || []}
+              limit={cur.max_per_hour || 60}
+              busy={busy}
+              onClear={() => run(() => api.clearWhatsAppHeld())}
+              onResend={(id) => run(() => api.resendWhatsAppHeld(id), t("Sent again."))}
+            />
+          )}
         </div>
+      )}
+      {welcome && (
+        <Welcome
+          onCancel={() => setWelcome(false)}
+          onAccept={() => {
+            setWelcome(false);
+            setRisk(true);
+            setWant({ ...want, enabled: true });
+          }}
+        />
       )}
       {note && (
         <p class="text-xs text-[var(--t3)] mt-2" role="status" data-testid="whatsapp-note">
@@ -582,5 +622,178 @@ function WhoAnswers(props: {
         ))}
       </div>
     </div>
+  );
+}
+
+// Welcome is shown the first time the link is turned on: what it does, what it risks, and the
+// official way, with the risk to accept before going on.
+function Welcome(props: { onCancel: () => void; onAccept: () => void }) {
+  const [ok, setOk] = useState(false);
+  // Escape cancels the welcome only, not Settings behind it: taken before Settings sees it, and
+  // from the first frame.
+  useLayoutEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopImmediatePropagation();
+        props.onCancel();
+      }
+    };
+    addEventListener("keydown", onKey, true);
+    return () => removeEventListener("keydown", onKey, true);
+  }, []);
+  const points = [
+    {
+      icon: <IconHand size={18} />,
+      title: t("Not an official API"),
+      text: t(
+        "Kitties links as WhatsApp Web does. WhatsApp's terms do not allow it, and it may ban the number without warning.",
+      ),
+    },
+    {
+      icon: <IconUsers size={18} />,
+      title: t("A spare number, and a short list"),
+      text: t(
+        "Use a number that is not your own. Only the numbers and groups you add can talk to the kitties, and the kitties write only to them, a few messages an hour.",
+      ),
+    },
+    {
+      icon: <IconShield size={18} />,
+      title: t("The session stays here"),
+      text: t(
+        "The linked device is sealed in this gateway's vault. Unlink it here or from the phone at any time.",
+      ),
+    },
+  ];
+  return (
+    <div
+      class="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4 backdrop"
+      onClick={props.onCancel}
+    >
+      <div
+        class="chat-modal w-full max-w-md p-5"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="whatsapp-welcome-title"
+        onClick={(e) => e.stopPropagation()}
+        data-testid="whatsapp-welcome"
+      >
+        <div class="flex items-center gap-2">
+          <ConnectorLogo kind="whatsapp" size={22} />
+          <h2 id="whatsapp-welcome-title" class="text-base font-semibold">
+            {t("Before you turn on WhatsApp")}
+          </h2>
+        </div>
+        <p class="text-sm text-[var(--t3)] mt-2">
+          {t(
+            "The kitties get a WhatsApp number of their own: the people on your list write to them, and they answer from here.",
+          )}
+        </p>
+        <ul class="mt-4 flex flex-col gap-3">
+          {points.map((p) => (
+            <li key={p.title} class="flex gap-3">
+              <span class="shrink-0 mt-0.5 text-[var(--c-amber)]">{p.icon}</span>
+              <span>
+                <span class="block text-sm font-semibold">{p.title}</span>
+                <span class="block text-xs text-[var(--t3)] mt-0.5">{p.text}</span>
+              </span>
+            </li>
+          ))}
+        </ul>
+        <p class="text-xs text-[var(--t3)] mt-4">
+          {t(
+            "For a business, the official way is the WhatsApp Cloud API connection (Meta Business), in Connections.",
+          )}
+        </p>
+        <label class="callout flex items-start gap-2 mt-4 cursor-pointer text-sm">
+          <input
+            type="checkbox"
+            class="mt-1"
+            checked={ok}
+            onChange={() => setOk(!ok)}
+            data-testid="whatsapp-accept"
+          />
+          {t("I understand that WhatsApp may ban this number")}
+        </label>
+        <div class="flex justify-end gap-2 mt-4">
+          <button class="btn-ghost px-4 py-2 text-sm" onClick={props.onCancel}>
+            {t("Cancel")}
+          </button>
+          <button
+            class="btn-accent px-4 py-2 text-sm"
+            disabled={!ok}
+            onClick={props.onAccept}
+            data-testid="whatsapp-welcome-accept"
+          >
+            {t("Accept and continue")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// HeldLog lists the last messages the hourly limit did not send, newest first.
+function HeldLog(props: {
+  held: WhatsAppHeld[];
+  limit: number;
+  busy: boolean;
+  onClear: () => void;
+  onResend: (id: string) => void;
+}) {
+  const kinds: Record<WhatsAppHeld["kind"], string> = {
+    text: t("Message"),
+    voice: t("Voice note"),
+    file: t("File"),
+    reaction: t("Reaction"),
+  };
+  const when = (at: string) =>
+    new Date(at).toLocaleString(undefined, {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  return (
+    <details class="callout mt-3" data-testid="whatsapp-held">
+      <summary class="cursor-pointer text-sm font-semibold">
+        {t("Held by the hourly limit ({n})", { n: props.held.length })}
+      </summary>
+      <p class="text-xs text-[var(--t3)] mt-1">
+        {t(
+          "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.",
+          { limit: props.limit },
+        )}
+      </p>
+      <ul class="mt-2 flex flex-col gap-2">
+        {props.held.map((h) => (
+          <li key={h.id} class="text-xs" data-testid="whatsapp-held-item">
+            <span class="text-[var(--t3)]">{when(h.at)}</span>
+            {" · "}
+            <span class="font-semibold">
+              {h.name || (h.to.endsWith("@g.us") ? h.to.replace(/@g\.us$/, "") : "+" + h.to)}
+            </span>
+            {" · "}
+            <span class="chip !py-0 !px-1.5">{kinds[h.kind] || h.kind}</span>
+            <button
+              class="btn-outline ml-2 !py-0 px-2 text-xs"
+              disabled={props.busy}
+              onClick={() => props.onResend(h.id)}
+              data-testid="whatsapp-held-resend"
+            >
+              {t("Resend")}
+            </button>
+            {h.text && <span class="block text-[var(--t2)] mt-0.5 break-words">{h.text}</span>}
+          </li>
+        ))}
+      </ul>
+      <button
+        class="btn-outline mt-2 px-3 py-1 text-xs"
+        disabled={props.busy}
+        onClick={props.onClear}
+        data-testid="whatsapp-held-clear"
+      >
+        {t("Clear the list")}
+      </button>
+    </details>
   );
 }

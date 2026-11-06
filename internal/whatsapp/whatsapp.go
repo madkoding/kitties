@@ -130,8 +130,9 @@ type Client interface {
 	MarkRead(ctx context.Context, ref Ref) error
 	// React puts an emoji on a message ("" takes it off).
 	React(ctx context.Context, ref Ref, emoji string) error
-	// Typing shows (on) or stops showing that the number is writing to to.
-	Typing(ctx context.Context, to string, on bool) error
+	// Typing shows (on) or stops showing that the number is writing to to: recording a voice note
+	// when audio is true, typing otherwise.
+	Typing(ctx context.Context, to string, on, audio bool) error
 	// Logout removes this device from the phone.
 	Logout(ctx context.Context) error
 }
@@ -177,6 +178,9 @@ type Settings struct {
 	// comes then is answered when they end, and the kitties do not write. Empty: none.
 	QuietFrom string `json:"quiet_from,omitempty"`
 	QuietTo   string `json:"quiet_to,omitempty"`
+	// Voice is when the kitties answer with a voice note: VoiceOff (never), VoiceMirror (a voice
+	// note gets one) or VoiceAlways. It needs a speech service (Options.Speak).
+	Voice string `json:"voice,omitempty"`
 }
 
 // DefaultPerHour is the hourly limit of messages when Settings sets none.
@@ -216,6 +220,13 @@ type Status struct {
 	// start because the hourly limit was reached.
 	SentLastHour int `json:"sent_last_hour"`
 	Held         int `json:"held"`
+	// HeldLog are the last messages held by the limit, newest first, for Settings to show.
+	HeldLog []HeldMessage `json:"held_log"`
+	// CanSpeak is true when there is a speech service for voice notes.
+	CanSpeak bool `json:"can_speak"`
+	// RiskAccepted is true once the person accepted that WhatsApp may ban the number: Settings
+	// asks it the first time the link is turned on.
+	RiskAccepted bool `json:"risk_accepted"`
 	// Quiet is true during the quiet hours; Waiting counts the messages that wait for their end.
 	Quiet   bool `json:"quiet"`
 	Waiting int  `json:"waiting"`
@@ -225,6 +236,35 @@ type Status struct {
 	CanChange bool   `json:"can_change"`
 	Why       string `json:"why,omitempty"`
 }
+
+// HeldMessage is a message the hourly limit did not let go.
+type HeldMessage struct {
+	// ID names it, to send it again.
+	ID string    `json:"id"`
+	At time.Time `json:"at"`
+	// To is the number (digits) or the group (its JID) it was for; Name the group's name.
+	To   string `json:"to"`
+	Name string `json:"name,omitempty"`
+	// Kind is text, voice, file or reaction; Text its start (the file's name, the emoji).
+	Kind string `json:"kind"`
+	Text string `json:"text,omitempty"`
+}
+
+// held is a held message as the bridge keeps it (sealed in held.bin): with all of it, to send it
+// again.
+type held struct {
+	HeldMessage
+	// Body is the whole text, the voice note's words, the library file's name or the emoji.
+	Body string `json:"body"`
+	// Ref is the message a reaction was for.
+	Ref Ref `json:"ref,omitzero"`
+}
+
+// maxHeldLog is how many held messages Settings shows, and maxHeldText how much of each.
+const (
+	maxHeldLog  = 50
+	maxHeldText = 160
+)
 
 // Options build a Bridge.
 type Options struct {
@@ -243,6 +283,9 @@ type Options struct {
 	QRImage func(code string) (string, error)
 	// Transcribe turns a voice note into text (optional: without it the audio is attached as it is).
 	Transcribe func(ctx context.Context, f File) (string, error)
+	// Speak reads an answer aloud as a voice note, with a voice of the speech service ("" is the
+	// configured one); optional: without it the kitties only write.
+	Speak func(ctx context.Context, text, voice string) (File, error)
 	// File reads a file of the library by its name, for the kitties to send (optional).
 	File func(name string) (File, error)
 	// Defaults are the settings while none were saved from Settings (the configuration file's).
@@ -266,6 +309,10 @@ var (
 	ErrQuiet = errors.New("it is the quiet hours of WhatsApp: nothing is sent until they end")
 	// ErrNoSession is a reconnect without a kept session.
 	ErrNoSession = errors.New("there is no linked session to reconnect: show a new QR code")
+	// ErrRisk is turning the link on before the risk was accepted.
+	ErrRisk = errors.New("WhatsApp Web is not an official API and WhatsApp may ban the number: confirm with accept_risk")
+	// ErrNoSpeech is a voice note asked for without a speech service.
+	ErrNoSpeech = errors.New("there is no speech service for voice notes: add an openai profile with a key")
 	// ErrLimit is returned while the hourly limit of messages is reached.
 	ErrLimit = errors.New("the hourly limit of WhatsApp messages is reached: try again later, or raise it in Settings")
 )
@@ -281,6 +328,8 @@ type Bridge struct {
 	chats   map[string]string // number (or "g:" and a group) -> chat id
 	seen    []Group
 	sent    []time.Time          // when the messages of the last hour went
+	held    []held               // the last ones the limit held, oldest first
+	risk    time.Time            // when the person accepted the risk (zero: not yet)
 	refs    map[string]Ref       // the last message of each chat (by key), to react to
 	noted   map[string]time.Time // the chats told about the quiet hours, until when
 	queue   map[string]pending   // the messages waiting for the quiet hours to end, by id
@@ -309,6 +358,8 @@ type saved struct {
 	Settings
 	Chats map[string]string `json:"chats,omitempty"`
 	Seen  []Group           `json:"seen_groups,omitempty"`
+	// Risk is when the person accepted the risk of the unofficial API.
+	Risk time.Time `json:"risk_accepted,omitzero"`
 }
 
 // New reads the saved settings. Nothing connects before Start.
@@ -340,6 +391,9 @@ func New(opt Options) (*Bridge, error) {
 			if b.set.QuietFrom, b.set.QuietTo, err = quietHours(opt.Defaults.QuietFrom, opt.Defaults.QuietTo); err != nil {
 				return nil, err
 			}
+			if b.set.Voice, err = voiceMode(opt.Defaults.Voice); err != nil {
+				return nil, err
+			}
 			if b.set.Enabled && !b.usable() {
 				b.set.Enabled = false
 				opt.Log("whatsapp: %v", ErrNoVault)
@@ -357,8 +411,10 @@ func New(opt Options) (*Bridge, error) {
 			b.chats = s.Chats
 		}
 		b.seen = s.Seen
+		b.risk = s.Risk
 	}
 	b.status.State = StateOff
+	b.loadHeld()
 	return b, nil
 }
 
@@ -403,6 +459,13 @@ func (b *Bridge) Status() Status {
 		st.Kitties[k] = v
 	}
 	st.SentLastHour = b.recentLocked(b.now())
+	st.HeldLog = make([]HeldMessage, 0, len(b.held))
+	for i := len(b.held) - 1; i >= 0; i-- {
+		st.HeldLog = append(st.HeldLog, b.held[i].HeldMessage)
+	}
+	st.CanSpeak = b.opt.Speak != nil
+	// Turning it on from the configuration file is accepting the risk there.
+	st.RiskAccepted = !b.risk.IsZero() || b.set.Enabled
 	st.Quiet, _ = b.quietLocked(b.now())
 	st.Waiting = b.waiting
 	st.CanChange = b.usable()
@@ -419,8 +482,9 @@ func (b *Bridge) Status() Status {
 	return st
 }
 
-// Apply keeps new settings and connects or disconnects to match.
-func (b *Bridge) Apply(s Settings) error {
+// Apply keeps new settings and connects or disconnects to match. Turning the link on the first
+// time needs acceptRisk: WhatsApp Web is not an official API and the number can be banned.
+func (b *Bridge) Apply(s Settings, acceptRisk bool) error {
 	clean, err := b.check(s)
 	if err != nil {
 		return err
@@ -430,6 +494,12 @@ func (b *Bridge) Apply(s Settings) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	was := b.set.Enabled
+	if clean.Enabled && !was && b.risk.IsZero() {
+		if !acceptRisk {
+			return ErrRisk
+		}
+		b.risk = b.now().UTC()
+	}
 	b.set = clean
 	if err := b.saveLocked(); err != nil {
 		return err
@@ -461,6 +531,9 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 		return Settings{}, fmt.Errorf("the hourly limit goes from 1 to %d messages (0 is %d)", MaxPerHourLimit, DefaultPerHour)
 	}
 	out.MaxPerHour = s.MaxPerHour
+	if out.Voice, err = voiceMode(s.Voice); err != nil {
+		return Settings{}, err
+	}
 	if out.QuietFrom, out.QuietTo, err = quietHours(s.QuietFrom, s.QuietTo); err != nil {
 		return Settings{}, err
 	}
@@ -489,6 +562,148 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 		out.Kitty = k.ID
 	}
 	return out, nil
+}
+
+// voiceMode is a voice mode of Settings, VoiceOff for "", "off" and "never".
+func voiceMode(v string) (string, error) {
+	switch v = strings.ToLower(strings.TrimSpace(v)); v {
+	case VoiceOff, "off", "never":
+		return VoiceOff, nil
+	case VoiceMirror, VoiceAlways:
+		return v, nil
+	}
+	return "", fmt.Errorf("voice is %q (voice notes answer voice notes) or %q (every answer), or empty", VoiceMirror, VoiceAlways)
+}
+
+// ClearHeld forgets the messages the hourly limit held.
+func (b *Bridge) ClearHeld() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.held = nil
+	b.status.Held = 0
+	b.saveHeldLocked()
+}
+
+// ErrNoHeld is a held message that is not on the list (any more).
+var ErrNoHeld = errors.New("that message is not on the list of held messages any more")
+
+// Resend sends a held message again, to the same number or group, and takes it off the list. It
+// goes as a send of the person's: the number or group must still be on the allow list, the link
+// connected and out of the quiet hours, and the hourly limit must have room.
+func (b *Bridge) Resend(ctx context.Context, id string) error {
+	b.mu.Lock()
+	var h held
+	found := false
+	for _, x := range b.held {
+		if x.ID == id {
+			h, found = x, true
+		}
+	}
+	full := b.fullLocked(b.now())
+	b.mu.Unlock()
+	if !found {
+		return ErrNoHeld
+	}
+	if full {
+		return ErrLimit
+	}
+	c, dest, err := b.ready(ctx, h.To)
+	if err != nil {
+		return err
+	}
+	switch h.Kind {
+	case "voice":
+		err = b.voiceNote(ctx, c, dest, h.Body, b.voiceOf(dest))
+	case "file":
+		err = b.sendFile(ctx, c, dest, h.Body, "")
+	case "reaction":
+		if err = b.take(dest, h.Kind, h.Body, h.Ref); err == nil {
+			err = c.React(ctx, h.Ref, h.Body)
+		}
+	default:
+		if err = b.take(dest, h.Kind, h.Body, Ref{}); err == nil {
+			err = c.Send(ctx, dest, h.Body)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for i, x := range b.held {
+		if x.ID == id {
+			b.held = append(b.held[:i:i], b.held[i+1:]...)
+			break
+		}
+	}
+	if b.status.Held > 0 {
+		b.status.Held--
+	}
+	b.saveHeldLocked()
+	return nil
+}
+
+// heldAAD binds the sealed list of held messages to its use.
+var heldAAD = []byte("whatsapp:held")
+
+func (b *Bridge) heldPath() string { return filepath.Join(b.opt.Dir, "held.bin") }
+
+// saveHeldLocked keeps the held messages sealed, so a restart does not lose them (nothing on disk
+// when there are none, or no vault to seal them with).
+func (b *Bridge) saveHeldLocked() {
+	if b.opt.Box == nil {
+		return
+	}
+	if len(b.held) == 0 {
+		if err := os.Remove(b.heldPath()); err != nil && !errors.Is(err, os.ErrNotExist) {
+			b.opt.Log("whatsapp: forget the held messages: %v", err)
+		}
+		return
+	}
+	err := func() error {
+		data, err := json.Marshal(b.held)
+		if err != nil {
+			return err
+		}
+		sealed, err := b.opt.Box.Seal(data, heldAAD)
+		if err != nil {
+			return err
+		}
+		if err := os.MkdirAll(b.opt.Dir, 0o700); err != nil {
+			return err
+		}
+		tmp := b.heldPath() + ".tmp"
+		if err := os.WriteFile(tmp, sealed, 0o600); err != nil {
+			return err
+		}
+		return os.Rename(tmp, b.heldPath())
+	}()
+	if err != nil {
+		b.opt.Log("whatsapp: keep the held messages: %v", err)
+	}
+}
+
+// loadHeld reads the held messages kept before a restart; a list that does not open is dropped.
+func (b *Bridge) loadHeld() {
+	if b.opt.Box == nil {
+		return
+	}
+	sealed, err := os.ReadFile(b.heldPath())
+	if err != nil {
+		return
+	}
+	var list []held
+	data, err := b.opt.Box.Open(sealed, heldAAD)
+	if err == nil {
+		err = json.Unmarshal(data, &list)
+	}
+	if err != nil {
+		b.opt.Log("whatsapp: the held messages could not be read, they are dropped: %v", err)
+		_ = os.Remove(b.heldPath())
+		return
+	}
+	b.held = list
+	b.status.Held = len(list)
 }
 
 // quietHours checks the quiet hours: both or none, as HH:MM, and not the same.
@@ -727,7 +942,7 @@ func (b *Bridge) saveLocked() error {
 	if err := os.MkdirAll(b.opt.Dir, 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(saved{Settings: b.set, Chats: b.chats, Seen: b.seen}, "", "  ")
+	data, err := json.MarshalIndent(saved{Settings: b.set, Chats: b.chats, Seen: b.seen, Risk: b.risk}, "", "  ")
 	if err != nil {
 		return err
 	}
@@ -1208,7 +1423,7 @@ func contains(list []string, s string) bool {
 var typingEvery = 10 * time.Second
 
 // typing shows that the kitty is writing until the returned func is called.
-func (b *Bridge) typing(ctx context.Context, c Client, to string) func() {
+func (b *Bridge) typing(ctx context.Context, c Client, to string, audio bool) func() {
 	ctx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
 	go func() {
@@ -1216,7 +1431,7 @@ func (b *Bridge) typing(ctx context.Context, c Client, to string) func() {
 		t := time.NewTicker(typingEvery)
 		defer t.Stop()
 		for {
-			_ = c.Typing(ctx, to, true)
+			_ = c.Typing(ctx, to, true, audio)
 			select {
 			case <-ctx.Done():
 				return
@@ -1227,7 +1442,7 @@ func (b *Bridge) typing(ctx context.Context, c Client, to string) func() {
 	return func() {
 		cancel()
 		<-done
-		_ = c.Typing(context.WithoutCancel(ctx), to, false)
+		_ = c.Typing(context.WithoutCancel(ctx), to, false, audio)
 	}
 }
 
@@ -1266,7 +1481,9 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 			b.opt.Log("whatsapp: mark read: %v", err)
 		}
 	}
-	stopTyping := b.typing(ctx, c, in.to)
+	voice := b.speaks(&in)
+	// An answer that goes as a voice note shows "recording audio…" instead of "typing…".
+	stopTyping := b.typing(ctx, c, in.to, voice)
 	files := b.uploads(ctx, &in)
 	events, unsubscribe := b.opt.Chats.Subscribe(id)
 	defer unsubscribe()
@@ -1293,7 +1510,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 	first := len(sess.Turns) - len(turns)
 	working := map[int]string{}
 	for i, t := range turns {
-		b.replyTo(ctx, c, in.to, &in, t.Text)
+		b.say(ctx, c, in.to, in.who, &in, t.Text, voice && !t.Working)
 		b.replyFiles(ctx, c, in.to, t.Artifacts)
 		if t.Working {
 			working[first+i] = t.Text
@@ -1313,7 +1530,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 				continue
 			}
 			delete(working, ev.Index)
-			b.reply(ctx, c, in.to, strings.TrimSpace(strings.TrimPrefix(ev.Turn.Text, sent)))
+			b.say(ctx, c, in.to, in.who, nil, strings.TrimSpace(strings.TrimPrefix(ev.Turn.Text, sent)), voice)
 			b.replyFiles(ctx, c, in.to, ev.Turn.Artifacts)
 		}
 	}
@@ -1396,7 +1613,7 @@ func (b *Bridge) replyTo(ctx context.Context, c Client, to string, in *inbound, 
 		b.mu.Unlock()
 	}
 	if e := strings.TrimSpace(text); ref.ID != "" && IsEmoji(e) {
-		if err := b.take(); err != nil {
+		if err := b.take(to, "reaction", e, ref); err != nil {
 			b.opt.Log("whatsapp: react in %s: %v", to, err)
 			return
 		}
@@ -1406,7 +1623,7 @@ func (b *Bridge) replyTo(ctx context.Context, c Client, to string, in *inbound, 
 		return
 	}
 	for i, part := range Split(Plain(text), maxPart) {
-		if err := b.take(); err != nil {
+		if err := b.take(to, "text", part, Ref{}); err != nil {
 			b.opt.Log("whatsapp: reply to %s: %v", to, err)
 			return
 		}
@@ -1425,21 +1642,50 @@ func (b *Bridge) replyTo(ctx context.Context, c Client, to string, in *inbound, 
 
 const maxPart = 4000
 
-// take counts one message against the hourly limit, or says it is reached.
-func (b *Bridge) take() error {
+// take counts one message against the hourly limit, or says it is reached and keeps what it
+// held (to, its kind, all of it and the message a reaction was for) for Settings to show and
+// send again.
+func (b *Bridge) take(to, kind, body string, ref Ref) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	now := time.Now()
-	limit := b.set.MaxPerHour
-	if limit <= 0 {
-		limit = DefaultPerHour
-	}
-	if b.recentLocked(now) >= limit {
+	now := b.now()
+	if b.fullLocked(now) {
 		b.status.Held++
+		b.seq++
+		h := held{HeldMessage: HeldMessage{ID: fmt.Sprintf("%d-%d", now.UnixNano(), b.seq), At: now, To: to, Kind: kind,
+			Text: clip(strings.TrimSpace(body), maxHeldText)}, Body: body, Ref: ref}
+		for _, g := range b.seen {
+			if g.ID == to {
+				h.Name = g.Name
+			}
+		}
+		b.held = append(b.held, h)
+		if len(b.held) > maxHeldLog {
+			b.held = b.held[len(b.held)-maxHeldLog:]
+		}
+		b.saveHeldLocked()
 		return ErrLimit
 	}
 	b.sent = append(b.sent, now)
 	return nil
+}
+
+// fullLocked reports whether the hourly limit is reached.
+func (b *Bridge) fullLocked(now time.Time) bool {
+	limit := b.set.MaxPerHour
+	if limit <= 0 {
+		limit = DefaultPerHour
+	}
+	return b.recentLocked(now) >= limit
+}
+
+// clip is s cut to max runes, with an ellipsis when cut.
+func clip(s string, max int) string {
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return strings.TrimSpace(string(r[:max-1])) + "…"
 }
 
 // recentLocked drops the sends older than an hour and counts the rest.
@@ -1501,7 +1747,7 @@ func (b *Bridge) sendFile(ctx context.Context, c Client, to, name, caption strin
 	if f.Name == "" {
 		f.Name = name
 	}
-	if err := b.take(); err != nil {
+	if err := b.take(to, "file", name, Ref{}); err != nil {
 		return err
 	}
 	return c.SendFile(ctx, to, f, caption)
@@ -1518,35 +1764,9 @@ func (b *Bridge) send(ctx context.Context, to, text string) error {
 }
 
 func (b *Bridge) sendWith(ctx context.Context, to, text, file string) error {
-	b.mu.Lock()
-	c, state, enabled, last := b.client, b.status.State, b.set.Enabled, b.last
-	allow := append([]string(nil), b.set.Allow...)
-	b.mu.Unlock()
-	if !enabled {
-		return ErrNotOn
-	}
-	if c == nil || state != StateConnected {
-		return ErrNotReady
-	}
-	if strings.TrimSpace(to) == "" {
-		switch {
-		case last != "":
-			to = last
-		case len(allow) == 1:
-			to = allow[0]
-		default:
-			return errors.New(`say who to write to: "to" is a number on the allow list`)
-		}
-	}
-	b.mu.Lock()
-	n, err := b.destLocked(to)
-	inQuiet, _ := b.quietLocked(b.now())
-	b.mu.Unlock()
+	c, n, err := b.ready(ctx, to)
 	if err != nil {
 		return err
-	}
-	if inQuiet && !b.testing(ctx) {
-		return ErrQuiet
 	}
 	text = strings.TrimSpace(text)
 	if text == "" && file == "" {
@@ -1558,7 +1778,7 @@ func (b *Bridge) sendWith(ctx context.Context, to, text, file string) error {
 		caption, parts = parts[0], nil
 	}
 	for _, part := range parts {
-		if err := b.take(); err != nil {
+		if err := b.take(n, "text", part, Ref{}); err != nil {
 			return err
 		}
 		if err := c.Send(ctx, n, part); err != nil {
@@ -1569,6 +1789,138 @@ func (b *Bridge) sendWith(ctx context.Context, to, text, file string) error {
 		return b.sendFile(ctx, c, n, file, caption)
 	}
 	return nil
+}
+
+// ready is the connection and where a message the person or a kitty asked for goes: a number or
+// a group on the list ("" is whoever wrote last, or the only number), while connected and out of
+// the quiet hours.
+func (b *Bridge) ready(ctx context.Context, to string) (Client, string, error) {
+	b.mu.Lock()
+	c, state, enabled, last := b.client, b.status.State, b.set.Enabled, b.last
+	allow := append([]string(nil), b.set.Allow...)
+	b.mu.Unlock()
+	if !enabled {
+		return nil, "", ErrNotOn
+	}
+	if c == nil || state != StateConnected {
+		return nil, "", ErrNotReady
+	}
+	if strings.TrimSpace(to) == "" {
+		switch {
+		case last != "":
+			to = last
+		case len(allow) == 1:
+			to = allow[0]
+		default:
+			return nil, "", errors.New(`say who to write to: "to" is a number on the allow list`)
+		}
+	}
+	b.mu.Lock()
+	n, err := b.destLocked(to)
+	inQuiet, _ := b.quietLocked(b.now())
+	b.mu.Unlock()
+	if err != nil {
+		return nil, "", err
+	}
+	if inQuiet && !b.testing(ctx) {
+		return nil, "", ErrQuiet
+	}
+	return c, n, nil
+}
+
+// sendVoice is a voice note a kitty asked for, with text read aloud.
+func (b *Bridge) sendVoice(ctx context.Context, to, text string) error {
+	if b.opt.Speak == nil {
+		return ErrNoSpeech
+	}
+	c, n, err := b.ready(ctx, to)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(text) == "" {
+		return errors.New("the message is empty")
+	}
+	return b.voiceNote(ctx, c, n, text, b.voiceOf(n))
+}
+
+// errNotSpoken is an answer that reads better than it sounds (long, or with code in it).
+var errNotSpoken = errors.New("this answer is better read than heard: it goes as text")
+
+// speaks reports whether the answer to in goes as a voice note.
+func (b *Bridge) speaks(in *inbound) bool {
+	if b.opt.Speak == nil {
+		return false
+	}
+	b.mu.Lock()
+	mode := b.set.Voice
+	b.mu.Unlock()
+	switch mode {
+	case VoiceAlways:
+		return true
+	case VoiceMirror:
+		for _, f := range in.files {
+			if f.Voice {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// voiceOf is the voice of the kitty that answers who (a number or a group): its soul's, or ""
+// for the configured one ("default" is that one too).
+func (b *Bridge) voiceOf(who string) string {
+	b.mu.Lock()
+	k := b.kittyLocked(who)
+	b.mu.Unlock()
+	if k == nil {
+		return ""
+	}
+	v := strings.TrimSpace(k.Soul.Voice)
+	if strings.EqualFold(v, "default") {
+		return ""
+	}
+	return v
+}
+
+// say answers in: as a voice note when voice is on and the answer reads well aloud, else as
+// text (also when the speech service fails). who is the number or group whose kitty answers.
+func (b *Bridge) say(ctx context.Context, c Client, to, who string, in *inbound, text string, voice bool) {
+	if voice {
+		err := b.voiceNote(ctx, c, to, text, b.voiceOf(who))
+		if err == nil || errors.Is(err, ErrLimit) {
+			return
+		}
+		if !errors.Is(err, errNotSpoken) {
+			b.opt.Log("whatsapp: voice note to %s: %v", to, err)
+		}
+	}
+	b.replyTo(ctx, c, to, in, text)
+}
+
+// voiceNote reads text aloud with a voice ("" the configured one) and sends it as a voice note:
+// one message against the limit.
+func (b *Bridge) voiceNote(ctx context.Context, c Client, to, text, voice string) error {
+	words := spoken(text)
+	if words == "" {
+		return errNotSpoken
+	}
+	b.mu.Lock()
+	full := b.fullLocked(b.now())
+	b.mu.Unlock()
+	// A held voice note is not read aloud for nothing.
+	if full {
+		return b.take(to, "voice", words, Ref{})
+	}
+	f, err := b.opt.Speak(ctx, words, voice)
+	if err != nil {
+		return err
+	}
+	f.Voice = true
+	if err := b.take(to, "voice", words, Ref{}); err != nil {
+		return err
+	}
+	return c.SendFile(ctx, to, f, "")
 }
 
 // react puts an emoji on the last message of a number or a group on the list.
@@ -1607,7 +1959,7 @@ func (b *Bridge) react(ctx context.Context, to, emoji string) error {
 	if ref.ID == "" {
 		return errors.New("there is no message of that chat to react to yet")
 	}
-	if err := b.take(); err != nil {
+	if err := b.take(dest, "reaction", emoji, ref); err != nil {
 		return err
 	}
 	return c.React(ctx, ref, emoji)
@@ -1731,12 +2083,16 @@ func (c connectorOf) Describe() string {
 	c.b.mu.Lock()
 	allow := strings.Join(append(prefixed(c.b.set.Allow), c.b.groupNamesLocked()...), ", ")
 	c.b.mu.Unlock()
+	voice := ""
+	if c.b.opt.Speak != nil {
+		voice = `{"action": "voice", "to": "+56912345678", "text": "..."} sends "text" read aloud as a voice note (short, plain words: no lists or code). `
+	}
 	return `WhatsApp from your own linked number: {"action": "send", "to": "+56912345678", "text": "..."} ` +
 		`writes to a number or a group on the allow list (` + allow + `; "to" left out writes to whoever wrote last). ` +
 		`Add "file": "<name of a file in the library>" to send a picture, video, audio or document, with "text" as its caption. ` +
 		`Files you save to the library while answering someone on WhatsApp are sent to them by themselves. ` +
 		`{"action": "react", "to": "+56912345678", "emoji": "👍"} puts an emoji on the last message of that chat ("to" left out: whoever wrote last); ` +
-		`an answer that is only an emoji goes as a reaction too. ` +
+		`an answer that is only an emoji goes as a reaction too. ` + voice +
 		`{"action": "status"} says whether it is connected. The people on the list also write to you here.`
 }
 
@@ -1777,6 +2133,11 @@ func (c connectorOf) Call(ctx context.Context, args map[string]any) (string, err
 			return "", err
 		}
 		return "reacted", nil
+	case "voice":
+		if err := c.b.sendVoice(ctx, str("to"), str("text")); err != nil {
+			return "", err
+		}
+		return "sent as a voice note", nil
 	case "status":
 		st := c.b.Status()
 		out := "WhatsApp is " + st.State
@@ -1788,6 +2149,6 @@ func (c connectorOf) Call(ctx context.Context, args map[string]any) (string, err
 		c.b.mu.Unlock()
 		return out + "; it may write to " + strings.Join(to, ", "), nil
 	default:
-		return "", fmt.Errorf("unknown action %q (send, react, status)", action)
+		return "", fmt.Errorf("unknown action %q (send, voice, react, status)", action)
 	}
 }

@@ -479,8 +479,17 @@ func (c *Client) SendFile(ctx context.Context, to string, f whatsapp.File, capti
 		msg = &waE2E.Message{VideoMessage: &waE2E.VideoMessage{Caption: capt, Mimetype: proto.String(mime),
 			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: size}}
 	case whatsmeow.MediaAudio:
-		msg = &waE2E.Message{AudioMessage: &waE2E.AudioMessage{Mimetype: proto.String(mime),
-			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: size}}
+		audio := &waE2E.AudioMessage{Mimetype: proto.String(mime),
+			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: size}
+		// A voice note (push to talk) plays in the chat like one recorded on the phone.
+		if f.Voice {
+			audio.PTT = proto.Bool(true)
+			audio.Mimetype = proto.String(whatsapp.VoiceMIME)
+			if sec := whatsapp.OggSeconds(f.Data); sec > 0 {
+				audio.Seconds = proto.Uint32(sec)
+			}
+		}
+		msg = &waE2E.Message{AudioMessage: audio}
 	default:
 		msg = &waE2E.Message{DocumentMessage: &waE2E.DocumentMessage{Caption: capt, Mimetype: proto.String(mime), FileName: proto.String(f.Name), Title: proto.String(f.Name),
 			URL: &up.URL, DirectPath: &up.DirectPath, MediaKey: up.MediaKey, FileEncSHA256: up.FileEncSHA256, FileSHA256: up.FileSHA256, FileLength: size}}
@@ -558,7 +567,7 @@ func (c *Client) React(ctx context.Context, ref whatsapp.Ref, emoji string) erro
 }
 
 // Typing implements whatsapp.Client.
-func (c *Client) Typing(ctx context.Context, to string, on bool) error {
+func (c *Client) Typing(ctx context.Context, to string, on, audio bool) error {
 	cn, err := c.current()
 	if err != nil {
 		return err
@@ -571,7 +580,11 @@ func (c *Client) Typing(ctx context.Context, to string, on bool) error {
 	if on {
 		state = types.ChatPresenceComposing
 	}
-	return cn.SendChatPresence(ctx, jid, state, types.ChatPresenceMediaText)
+	media := types.ChatPresenceMediaText
+	if audio {
+		media = types.ChatPresenceMediaAudio
+	}
+	return cn.SendChatPresence(ctx, jid, state, media)
 }
 
 // Logout implements whatsapp.Client.

@@ -99,6 +99,33 @@ func TestTranscriber(t *testing.T) {
 	}
 }
 
+func TestSpeaker(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.DataDir = t.TempDir()
+	cfg.Providers = map[string]config.Provider{
+		"a-groq":   {Kind: "groq", APIKey: "gk"},
+		"b-openai": {Kind: "openai", BaseURL: "http://local/v1"},
+	}
+	fleet, err := orchestrator.New(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := &app{cfg: cfg, fleet: fleet}
+	getenv := func(k string) string { return map[string]string{"OPENAI_API_KEY": "ok"}[k] }
+	// Groq's speech is skipped: only openai reads aloud in Ogg Opus.
+	if sp, ok := a.speaker("", "nova", getenv); !ok || sp.Key != "ok" || sp.BaseURL != "http://local/v1" || sp.Voice != "nova" || sp.Model != "gpt-4o-mini-tts" {
+		t.Fatalf("first = %+v %v", sp, ok)
+	}
+	for _, name := range []string{"off", "a-groq", "nobody"} {
+		if _, ok := a.speaker(name, "", getenv); ok {
+			t.Fatalf("%q speaks", name)
+		}
+	}
+	if _, ok := a.speaker("", "", func(string) string { return "" }); ok {
+		t.Fatal("speaks without a key")
+	}
+}
+
 func TestLibraryFile(t *testing.T) {
 	lib := map[string][]byte{"a.png": []byte("\x89PNG\r\n\x1a\nxx"), "v.mp4": []byte("....ftypmp42"), "n.ogg": []byte("OggS"), "t.txt": []byte("hola")}
 	get := libraryFile(func(name string) ([]byte, error) {

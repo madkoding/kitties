@@ -27,6 +27,21 @@ import PixelCat, { BREEDS, CatPicker, COLORS, type Mood } from "./PixelCat";
 import { Missing, Required } from "./Required";
 import { t } from "./i18n";
 
+// VOICES are the speech voices a kitty's WhatsApp voice notes can take (OpenAI's).
+const VOICES = [
+  "alloy",
+  "ash",
+  "ballad",
+  "coral",
+  "echo",
+  "fable",
+  "nova",
+  "onyx",
+  "sage",
+  "shimmer",
+  "verse",
+];
+
 // suggestAvatar picks a cat from the name, the way the gateway does when none is chosen.
 function suggestAvatar(name: string): { breed: string; color: string } {
   let h = 2166136261;
@@ -517,6 +532,31 @@ function KittyBasics({
           {t("Save personality")}
         </button>
       )}
+      <label class="block text-xs text-[var(--t4)] mb-1 mt-3" for="drawer-voice">
+        {t("Voice for WhatsApp voice notes")}
+      </label>
+      <select
+        id="drawer-voice"
+        class={INPUT}
+        value={kitty.soul?.voice && kitty.soul.voice !== "default" ? kitty.soul.voice : ""}
+        onChange={(e) => {
+          const v = (e.target as HTMLSelectElement).value;
+          save(
+            { soul: { voice: v || "default" } },
+            v
+              ? t("{name} now speaks with the voice {voice}.", { name: kitty.name, voice: v })
+              : t("{name} speaks with the gateway's voice.", { name: kitty.name }),
+          );
+        }}
+        data-testid="drawer-voice"
+      >
+        <option value="">{t("The gateway's voice")}</option>
+        {VOICES.map((v) => (
+          <option key={v} value={v}>
+            {v}
+          </option>
+        ))}
+      </select>
       {(kitty.soul?.traits?.length || 0) > 0 && (
         <div class="flex flex-wrap gap-1 mt-2">
           {kitty.soul!.traits!.map((t) => (

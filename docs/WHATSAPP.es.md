@@ -9,6 +9,8 @@ escribirles con el conector `whatsapp-web`.
 
 ![WhatsApp en Ajustes, esperando el código QR](screenshots/60-settings-whatsapp.png)
 
+![La bienvenida que aparece la primera vez que se activa WhatsApp](screenshots/65-whatsapp-welcome.png)
+
 > [!WARNING]
 > **No es una API oficial.** Los términos de servicio de WhatsApp no permiten clientes no oficiales
 > ni automatizados, y WhatsApp puede bloquear un número usado así, por un tiempo o para siempre.
@@ -31,9 +33,12 @@ escribirles con el conector `whatsapp-web`.
    dispositivo vinculado la lista de grupos hasta que escriben). Con más de un kitty, **Quién
    responde a cada uno** le da a un número o grupo su propio kitty; **Mensajes enviados por hora**
    limita lo que sale (60 si se deja vacío); el **Horario de silencio** guarda las respuestas hasta
-   que termina.
-3. Marca **Activar WhatsApp**, luego **Entiendo que WhatsApp puede bloquear este número**, y
-   **Guardar**.
+   que termina; **Notas de voz** elige cuándo los kitties responden hablando (ver más abajo).
+3. Marca **Activar WhatsApp**. La primera vez, una **bienvenida** explica qué hace y qué arriesga (no
+   es una API oficial, usa un número de repuesto, la sesión sellada en el vault, la Cloud API como
+   vía oficial): marca **Entiendo que WhatsApp puede bloquear este número**, **Aceptar y
+   continuar**, y luego **Guardar**. Se pregunta una sola vez: desactivarlo y activarlo después no
+   vuelve a preguntar.
 4. Aparece un código QR. En el teléfono del número de los kitties: WhatsApp, Ajustes,
    **Dispositivos vinculados**, **Vincular un dispositivo**, y apunta al código. El código cambia
    cada pocos segundos; si se acaban, **Mostrar un código nuevo**.
@@ -63,9 +68,16 @@ olvida la sesión.
   pasado el silencio.
 - **Un kitty por número o grupo.** Cada número o grupo puede tener su propio kitty; los demás van al
   kitty que responde. Cambiar uno de kitty abre un chat nuevo con él.
-- **Un límite por hora.** Cuenta todo mensaje, archivo y reacción que sale; pasado el límite una
-  respuesta queda retenida (y se cuenta en Ajustes) y un `send` de un kitty falla con un error
-  claro. Evita que el número escriba como un bot.
+- **Un límite por hora.** Cuenta todo mensaje, nota de voz, archivo y reacción que sale; pasado el
+  límite una respuesta queda retenida y un `send` de un kitty falla con un error claro. Evita que el
+  número escriba como un bot. Ajustes lista los últimos 50 mensajes retenidos, del más nuevo al más
+  viejo (cuándo, a quién, de qué tipo y cómo empezaba), en **Retenidos por el límite por hora**.
+  **Reenviar** manda uno de nuevo cuando el límite tiene espacio (como un envío tuyo: el número o
+  grupo debe seguir en la lista, y fuera del horario de silencio) y lo saca de la lista; **Vaciar la
+  lista** los olvida todos. La lista queda sellada con la llave del vault (`held.bin`), así que un
+  reinicio no la pierde.
+
+  ![Los mensajes retenidos por el límite por hora en Ajustes](screenshots/66-whatsapp-held.png)
 - **"escribiendo…" mientras piensa.** El chat del teléfono muestra al kitty escribiendo hasta que
   sale la respuesta. Un mensaje que llega mientras sigue ocupado recibe un aviso corto en el idioma
   del kitty (el de su alma, o si no el del mensaje: inglés, español o portugués).
@@ -77,6 +89,16 @@ olvida la sesión.
 - **Fotos, videos, documentos y audios.** Le llegan al kitty como archivos del chat (hasta 25 MB
   cada uno), con su pie de foto como texto. Una **nota de voz** se pasa a texto con la API de voz
   (Whisper) de un perfil `openai` o `groq` con llave; sin uno llega como archivo de audio.
+- **Notas de voz de vuelta (texto a voz).** **Notas de voz** en Ajustes: **Nunca** (por defecto),
+  **Responder una nota de voz con otra**, o **Todas las respuestas**. La respuesta se lee en voz alta
+  con la API de voz de un perfil `openai` con llave (`gpt-4o-mini-tts`, Ogg Opus, enviada como nota
+  de voz de verdad, con su duración) y cuenta como un mensaje. Una respuesta que se lee mejor de lo
+  que se escucha (más de 1200 caracteres, o con código) sigue yendo como texto, un emoji sigue
+  siendo una reacción, y si el servicio de voz falla va el texto. La voz de Groq solo entrega WAV,
+  que WhatsApp no reproduce como nota de voz, así que no se usa para esto. Cada kitty puede tener
+  **su propia voz** (en su cajón, *Voz para las notas de voz de WhatsApp*, o `voice:` en su alma);
+  los demás usan `speak_voice`. Mientras va en camino una respuesta que saldrá como nota de voz, el
+  chat del teléfono muestra **grabando audio…** en vez de escribiendo.
 - **Stickers, ubicaciones y contactos.** Un sticker llega como su imagen (con su emoji), una
   ubicación como su nombre y dirección con un enlace al mapa, y un contacto compartido como su
   nombre y números.
@@ -91,11 +113,13 @@ olvida la sesión.
   @connector whatsapp-web {"action": "send", "to": "+56912345678", "text": "El informe está listo."}
   @connector whatsapp-web {"action": "send", "to": "Familia", "text": "Aquí está.", "file": "informe.pdf"}
   @connector whatsapp-web {"action": "react", "to": "+56912345678", "emoji": "👍"}
+  @connector whatsapp-web {"action": "voice", "to": "+56912345678", "text": "Listo, nos vemos a las nueve."}
   @connector whatsapp-web {"action": "status"}
   ```
 
   `to` es un número o un grupo de la lista (su nombre o su id); `file` es un archivo de la
-  biblioteca, que va con `text` como pie. Sin `to` escribe a quien escribió último (o al único número de la lista). Un envío llega a otras
+  biblioteca, que va con `text` como pie; `voice` manda `text` leído en voz alta como nota de voz
+  (se ofrece solo si hay servicio de voz). Sin `to` escribe a quien escribió último (o al único número de la lista). Un envío llega a otras
   personas, así que como todo `send` **queda retenido para tu aprobación** hasta que confíes en el
   kitty para eso ([AUTONOMY.md](AUTONOMY.md)). Las respuestas a quien escribió no se retienen: lo
   pidió.
@@ -117,6 +141,9 @@ whatsapp:
   max_per_hour: 30               # 0: 60
   quiet: {from: "22:00", to: "08:00"}
   transcribe: ""                 # el perfil openai o groq para notas de voz; vacío: el primero; off: ninguno
+  voice: mirror                  # responder con notas de voz: mirror (a notas de voz), always, u off (por defecto)
+  speak: ""                      # el perfil openai que lee las respuestas; vacío: el primero; off: ninguno
+  speak_voice: nova              # su voz (alloy, nova, shimmer, …); vacío: alloy
 ```
 
 El código QR se sigue escaneando desde Ajustes, o se lee con `GET /v1/whatsapp` (`qr_png`).
@@ -127,6 +154,7 @@ El código QR se sigue escaneando desde Ajustes, o se lee con `GET /v1/whatsapp`
 | --- | --- | --- |
 | Encendido o no, la lista, el kitty, el chat de cada número | `<data>/whatsapp/settings.json` | modo 0600, sin secretos |
 | Los mensajes que esperan el fin del silencio | `<data>/whatsapp/queue.bin` | **sellados** como la sesión; se borran al responderlos |
+| Los mensajes retenidos por el límite por hora (los últimos 50) | `<data>/whatsapp/held.bin` | **sellados** como la sesión; se borran al reenviarlos o vaciar la lista |
 | La sesión del dispositivo vinculado (sus llaves, las sesiones Signal, los contactos) | `<data>/whatsapp/session.bin` | **sellada** con la llave del vault (AES-256-GCM, atada a su uso); nunca en claro |
 
 La sesión es el estado de la librería guardado en memoria y sellado entero: el gateway no usa un
@@ -139,18 +167,21 @@ el teléfono de nuevo con otro código.
 
 | Ruta | Qué hace |
 | --- | --- |
-| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored`, `seen_groups` (los grupos que escribieron hace poco), `sent_last_hour`, `held`, `quiet`, `waiting` |
-| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups", "kitties", "max_per_hour", "quiet_from", "quiet_to"}`; activarlo necesita `"accept_risk": true` |
+| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored`, `seen_groups` (los grupos que escribieron hace poco), `sent_last_hour`, `held`, `held_log` (los últimos retenidos: `id`, `at`, `to`, `name`, `kind`, `text`), `can_speak`, `risk_accepted`, `quiet`, `waiting` |
+| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups", "kitties", "max_per_hour", "quiet_from", "quiet_to", "voice"}`; activarlo la primera vez necesita `"accept_risk": true` (queda como `risk_accepted` en `settings.json`) |
 | `POST /v1/whatsapp/link` | Códigos QR nuevos (si expiraron o el teléfono quitó el dispositivo) |
 | `POST /v1/whatsapp/reconnect` | Conecta de nuevo con la sesión guardada (sin otro código) |
 | `POST /v1/whatsapp/unlink` | Quita el dispositivo del teléfono y olvida la sesión |
 | `POST /v1/whatsapp/test` | `{"to": "+56912345678"}` manda un mensaje corto a un número de la lista |
+| `DELETE /v1/whatsapp/held` | Vacía la lista de mensajes retenidos |
+| `POST /v1/whatsapp/held/{id}/resend` | Manda de nuevo un mensaje retenido (404 si ya no está en la lista, 429 mientras el límite está lleno) |
 
 ## Por dentro
 
 El protocolo es [whatsmeow](https://github.com/tulir/whatsmeow) (MPL-2.0), el protocolo multi-
 dispositivo de WhatsApp Web en Go. `internal/whatsapp` es el puente (ajustes, lista, chats, conector)
-y no sabe nada del protocolo (`transcribe.go` manda las notas de voz a `/audio/transcriptions`);
+y no sabe nada del protocolo (`transcribe.go` manda las notas de voz a `/audio/transcriptions`, y
+`speak.go` lee las respuestas en voz alta con `/audio/speech`);
 `internal/whatsapp/wameow` es la conexión, las descargas de archivos y el almacenamiento en memoria
 que se exporta, se sella y se vuelve a leer. El puente se prueba con un cliente falso; el
 almacenamiento y la conexión, con un falso del cliente de whatsmeow.
