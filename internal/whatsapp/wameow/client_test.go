@@ -705,3 +705,37 @@ func TestReadAndReact(t *testing.T) {
 		t.Fatalf("ref = %+v", ev.Ref)
 	}
 }
+
+func TestSendReply(t *testing.T) {
+	s, _ := paired(t)
+	blob, _ := s.Export()
+	f := &fakeConn{}
+	c := clientWith(f)
+	ref := whatsapp.Ref{Chat: "120363@g.us", Sender: "56912345678@s.whatsapp.net", ID: "m1"}
+	if err := c.SendReply(context.Background(), "120363@g.us", "sí", ref, "¿vienes?"); !errors.Is(err, ErrNotConnected) {
+		t.Fatalf("before = %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- c.Run(ctx, blob, func(whatsapp.Event) {}) }()
+	wait(t, "the connection", func() bool { f.mu.Lock(); defer f.mu.Unlock(); return f.connected })
+	if err := c.SendReply(context.Background(), "120363@g.us", "sí", ref, "¿vienes?"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SendReply(context.Background(), "56912345678", "ok", whatsapp.Ref{ID: "m2"}, "x"); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.SendReply(context.Background(), "a:x@s.whatsapp.net", "x", ref, "x"); err == nil {
+		t.Fatal("sent to a bad JID")
+	}
+	cancel()
+	<-done
+	e := f.msgs[0].GetExtendedTextMessage()
+	ci := e.GetContextInfo()
+	if e.GetText() != "sí" || ci.GetStanzaID() != "m1" || ci.GetParticipant() != ref.Sender || ci.GetRemoteJID() != "120363@g.us" || ci.GetQuotedMessage().GetConversation() != "¿vienes?" {
+		t.Fatalf("reply = %v", f.msgs[0])
+	}
+	if ci := f.msgs[1].GetExtendedTextMessage().GetContextInfo(); ci.Participant != nil || ci.RemoteJID != nil {
+		t.Fatalf("direct = %v", ci)
+	}
+}

@@ -495,6 +495,27 @@ func (c *Client) SendFile(ctx context.Context, to string, f whatsapp.File, capti
 	return err
 }
 
+// SendReply implements whatsapp.Client: the text quotes the message it answers.
+func (c *Client) SendReply(ctx context.Context, to, text string, ref whatsapp.Ref, quoted string) error {
+	cn, err := c.current()
+	if err != nil {
+		return err
+	}
+	jid, err := jidOf(to)
+	if err != nil {
+		return err
+	}
+	ctxInfo := &waE2E.ContextInfo{StanzaID: proto.String(ref.ID), QuotedMessage: &waE2E.Message{Conversation: proto.String(quoted)}}
+	if ref.Sender != "" {
+		ctxInfo.Participant = proto.String(ref.Sender)
+	}
+	if ref.Chat != "" {
+		ctxInfo.RemoteJID = proto.String(ref.Chat)
+	}
+	_, err = cn.SendMessage(ctx, jid, &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ctxInfo}})
+	return err
+}
+
 // refOf is the chat and the sender of a message the bridge points at.
 func refOf(ref whatsapp.Ref) (chat, sender types.JID, err error) {
 	if ref.ID == "" {
