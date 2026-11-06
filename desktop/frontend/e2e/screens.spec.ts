@@ -261,12 +261,29 @@ test("the library: skills with a proposal, and the artifacts", async ({ page }) 
   await shot(page, "15-library-skills");
   await open(page, "#new-artifacts");
   await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
+  // The filters: a kind narrows the list, a search finds a file by its name.
+  const filters = page.getByTestId("artifact-filters");
+  await expect(filters).toBeVisible();
+  await filters.getByTestId("kind-data").click();
+  await expect(page.getByText("prices.csv").first()).toBeVisible();
+  await expect(page.getByText("competitor-notes.md")).toHaveCount(0);
+  await filters.getByTestId("kind-data").click();
+  await filters.getByRole("searchbox").fill("nothing-like-this");
+  await expect(page.getByTestId("artifacts-none")).toBeVisible();
+  await filters.getByRole("searchbox").fill("");
+  await filters.getByRole("searchbox").blur();
   await shot(page, "16-library-artifacts");
   // A markdown file opens in a reader that draws it as a document.
   await page.getByRole("button", { name: "competitor-notes.md", exact: true }).click();
   const reader = page.getByTestId("artifact-reader");
   await expect(reader.locator("h2", { hasText: "Competitor notes" })).toBeVisible();
   await expect(reader.locator("table td", { hasText: "Acme" })).toBeVisible();
+  // Three headings or more: a table of contents that scrolls to each.
+  const toc = reader.getByTestId("md-toc");
+  await expect(toc.getByRole("button", { name: "Sources" })).toBeVisible();
+  await toc.getByRole("button", { name: "Sources" }).click();
+  await expect(reader.locator("#md-sources")).toBeInViewport();
+  await reader.locator("h2").first().scrollIntoViewIfNeeded();
   await shot(page, "60-artifact-reader");
   // Escape closes the reader and leaves the library open under it.
   await page.keyboard.press("Escape");

@@ -244,3 +244,37 @@ export function highlight(code: string, lang: string): Token[] {
   }
   return out;
 }
+
+// slug is a heading's anchor: lower case, words joined by dashes.
+export function slug(text: string): string {
+  return (
+    text
+      .toLowerCase()
+      .replace(/[`*_[\]()]/g, "")
+      .replace(/[^\p{L}\p{N}]+/gu, "-")
+      .replace(/^-+|-+$/g, "") || "section"
+  );
+}
+
+export interface Heading {
+  level: number;
+  text: string;
+  id: string;
+}
+
+// headings lists a document's headings with an anchor each, the same one twice made unique, for
+// its table of contents.
+export function headings(blocks: Block[]): Heading[] {
+  const seen = new Map<string, number>();
+  const out: Heading[] = [];
+  for (const b of blocks) {
+    if (b.t !== "h") {
+      continue;
+    }
+    const base = slug(b.text);
+    const n = (seen.get(base) || 0) + 1;
+    seen.set(base, n);
+    out.push({ level: b.level, text: b.text, id: n > 1 ? `${base}-${n}` : base });
+  }
+  return out;
+}

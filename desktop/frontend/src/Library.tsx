@@ -6,6 +6,7 @@ import { ask } from "./Confirm";
 import { when } from "./format";
 import { t } from "./i18n";
 import { IconPlus, IconTrash, IconX } from "./icons";
+import { facets, filterArtifacts, type Kind, type Sort } from "./library";
 import { Missing, Required } from "./Required";
 
 type Tab = "skills" | "artifacts";
@@ -20,6 +21,11 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
   const [open, setOpen] = useState<Skill | null>(null);
   const [draft, setDraft] = useState<{ name: string; body: string } | null>(null);
   const [reading, setReading] = useState<string | null>(null);
+  // The artifacts' filters: a search in the names, a kind, the kitty that saved them, an order.
+  const [q, setQ] = useState("");
+  const [kind, setKind] = useState<Kind | "">("");
+  const [by, setBy] = useState("");
+  const [sort, setSort] = useState<Sort>("new");
   const [err, setErr] = useState("");
   const load = () => {
     api
@@ -222,8 +228,26 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
                 "Files the kitties saved for later: reports, tables, diagrams, drafts. Any kitty can read them in any chat; you can download or delete them.",
               )}
             </p>
+            {arts.length > 0 && (
+              <ArtifactFilters
+                list={arts}
+                q={q}
+                setQ={setQ}
+                kind={kind}
+                setKind={setKind}
+                by={by}
+                setBy={setBy}
+                sort={sort}
+                setSort={setSort}
+              />
+            )}
             <div class="flex flex-col gap-1 mt-3">
-              {arts.map((a) => (
+              {arts.length > 0 && filterArtifacts(arts, { q, kind, by, sort }).length === 0 && (
+                <div class="text-sm text-[var(--t4)] px-2" data-testid="artifacts-none">
+                  {t("No file matches these filters.")}
+                </div>
+              )}
+              {filterArtifacts(arts, { q, kind, by, sort }).map((a) => (
                 <div key={a.name} class="row !py-2.5">
                   <button class="row-hit" onClick={() => setReading(a.name)} aria-label={a.name} />
                   <span class="dot running" />
@@ -273,6 +297,86 @@ export default function LibraryModal({ onClose, initial }: { onClose: () => void
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+const KIND_LABEL: Record<Kind, string> = {
+  doc: "Documents",
+  data: "Data",
+  image: "Images",
+  code: "Code",
+  other: "Other",
+};
+
+// ArtifactFilters narrows the artifacts: a search, a chip per kind the library has, the kitty
+// that saved them and the order.
+function ArtifactFilters(p: {
+  list: ArtifactInfo[];
+  q: string;
+  setQ: (v: string) => void;
+  kind: Kind | "";
+  setKind: (v: Kind | "") => void;
+  by: string;
+  setBy: (v: string) => void;
+  sort: Sort;
+  setSort: (v: Sort) => void;
+}) {
+  const f = facets(p.list);
+  return (
+    <div class="flex flex-col gap-2 mt-3" data-testid="artifact-filters">
+      <div class="flex gap-2 flex-wrap">
+        <input
+          class="flex-1 min-w-[10rem] px-3 py-2 text-sm"
+          type="search"
+          placeholder={t("Search the files")}
+          aria-label={t("Search the files")}
+          value={p.q}
+          onInput={(e) => p.setQ((e.target as HTMLInputElement).value)}
+        />
+        {f.by.length > 1 && (
+          <select
+            class="px-3 py-2 text-sm"
+            aria-label={t("Saved by")}
+            value={p.by}
+            onChange={(e) => p.setBy((e.target as HTMLSelectElement).value)}
+          >
+            <option value="">{t("Every kitty")}</option>
+            {f.by.map((b) => (
+              <option key={b} value={b}>
+                {b}
+              </option>
+            ))}
+          </select>
+        )}
+        <select
+          class="px-3 py-2 text-sm"
+          aria-label={t("Order")}
+          value={p.sort}
+          onChange={(e) => p.setSort((e.target as HTMLSelectElement).value as Sort)}
+        >
+          <option value="new">{t("Newest first")}</option>
+          <option value="name">{t("By name")}</option>
+          <option value="size">{t("Biggest first")}</option>
+        </select>
+      </div>
+      {f.kinds.length > 1 && (
+        <div class="flex gap-1 flex-wrap">
+          <button class={`chip ${p.kind === "" ? "on" : ""}`} onClick={() => p.setKind("")}>
+            {t("All")}
+          </button>
+          {f.kinds.map((k) => (
+            <button
+              key={k}
+              class={`chip ${p.kind === k ? "on" : ""}`}
+              data-testid={`kind-${k}`}
+              onClick={() => p.setKind(p.kind === k ? "" : k)}
+            >
+              {t(KIND_LABEL[k])}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

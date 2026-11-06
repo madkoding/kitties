@@ -2107,3 +2107,35 @@ html.mac-inset .live-head {
 .hl-num {
   color: var(--c-amber, #fbbf24);
 }
+
+/* The table of contents of a long document in the reader. */
+.md-toc {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgb(var(--ov-rgb) / 0.1);
+  border-radius: var(--radius-cut);
+  background: rgb(var(--ov-rgb) / 0.03);
+  font-size: 0.8125rem;
+}
+.md-toc-title {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--t3);
+  margin-bottom: 0.25rem;
+}
+.md .md-toc ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+.md-toc .artifact-link {
+  text-decoration: none;
+  text-align: left;
+}
+.md h2,
+.md h3,
+.md h4 {
+  scroll-margin-top: 0.5rem;
+}

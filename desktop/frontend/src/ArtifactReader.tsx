@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { artifactText, shotURL } from "./api";
-import { highlight, inline, markdown, type Inline } from "./markdown";
+import { headings, highlight, inline, markdown, type Inline } from "./markdown";
 import { t } from "./i18n";
 import { Modal } from "./Modal";
 
@@ -76,14 +76,41 @@ export function Markdown({
   // chat is a message: its line breaks stay, and it sits in the bubble without outer margins.
   chat?: boolean;
 }) {
+  const blocks = markdown(text, chat);
+  // A document gets anchors on its headings, and a table of contents once it has three or more;
+  // a chat message has neither (the same anchor in two messages would clash).
+  const heads = chat ? [] : headings(blocks);
+  let h = 0;
   return (
     <div class={chat ? "md md-chat" : "md"} data-testid="markdown">
-      {markdown(text, chat).map((b, i) => {
+      {heads.length >= 3 && (
+        <nav class="md-toc" data-testid="md-toc" aria-label={t("Contents")}>
+          <div class="md-toc-title">{t("Contents")}</div>
+          <ul>
+            {heads.map((hd) => (
+              <li key={hd.id} style={{ paddingLeft: `${(hd.level - 1) * 0.75}rem` }}>
+                <button
+                  class="plain artifact-link"
+                  onClick={() =>
+                    document
+                      .getElementById(`md-${hd.id}`)
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                >
+                  {hd.text.replace(/[*`_]/g, "")}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
+      {blocks.map((b, i) => {
         switch (b.t) {
           case "h": {
             const H = `h${Math.min(b.level + 1, 6)}` as "h2";
+            const id = heads[h++]?.id;
             return (
-              <H key={i}>
+              <H key={i} id={id ? `md-${id}` : undefined}>
                 <Inlines text={b.text} onOpen={onOpen} />
               </H>
             );

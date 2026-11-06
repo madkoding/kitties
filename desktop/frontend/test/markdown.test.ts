@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { artifactName, highlight, inline, markdown } from "../src/markdown.ts";
+import { artifactName, headings, highlight, inline, markdown, slug } from "../src/markdown.ts";
 
 const wails = "http://wails.localhost/v1/artifacts/borrador-CV-continuum-backend-go-gcp.md";
 
@@ -135,4 +135,16 @@ test("highlight: comments, strings, numbers and keywords by the fence's language
   assert.deepEqual(highlight("<b>x</b>", ""), [{ k: "", v: "<b>x</b>" }]);
   assert.deepEqual(highlight("", ""), []);
   assert.deepEqual(highlight("a ", "js"), [{ k: "", v: "a " }]);
+});
+
+test("headings: anchors for the table of contents, made unique", () => {
+  assert.equal(slug("Next **steps**!"), "next-steps");
+  assert.equal(slug("Año 2026 · plan"), "año-2026-plan");
+  assert.equal(slug("***"), "section");
+  assert.deepEqual(headings(markdown("# A\ntext\n## B\n## B\n### `C`")), [
+    { level: 1, text: "A", id: "a" },
+    { level: 2, text: "B", id: "b" },
+    { level: 2, text: "B", id: "b-2" },
+    { level: 3, text: "`C`", id: "c" },
+  ]);
 });
