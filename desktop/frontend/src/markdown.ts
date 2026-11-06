@@ -69,7 +69,7 @@ export type Block =
   | { t: "h"; level: number; text: string }
   | { t: "p"; text: string }
   | { t: "ul" | "ol"; items: string[] }
-  | { t: "code"; text: string }
+  | { t: "code"; text: string; lang: string }
   | { t: "quote"; text: string }
   | { t: "hr" }
   | { t: "table"; head: string[]; rows: string[][] };
@@ -103,11 +103,12 @@ export function markdown(src: string, breaks = false): Block[] {
     if (/^\s*(```|~~~)/.test(line)) {
       flush();
       const fence = line.trim().slice(0, 3);
+      const lang = line.trim().slice(3).trim().split(/\s+/)[0].toLowerCase();
       const body: string[] = [];
       for (i++; i < lines.length && !lines[i].trim().startsWith(fence); i++) {
         body.push(lines[i]);
       }
-      out.push({ t: "code", text: body.join("\n") });
+      out.push({ t: "code", text: body.join("\n"), lang });
     } else if (!line.trim()) {
       flush();
     } else if ((m = /^(#{1,6})\s+(.*?)\s*#*$/.exec(line))) {
@@ -157,5 +158,89 @@ export function markdown(src: string, breaks = false): Block[] {
     }
   }
   flush();
+  return out;
+}
+
+// Token is a piece of code, with what it is for its colour: a keyword, a string, a comment, a
+// number, or "" for the rest.
+export interface Token {
+  k: "" | "kw" | "str" | "com" | "num";
+  v: string;
+}
+
+const KEYWORDS = new Set(
+  (
+    "break case catch class const continue def default defer do elif else enum except export " +
+    "extends false finally fn for func function go if import in interface let match module new " +
+    "nil none null package pass private pub public raise return select self static struct super " +
+    "switch this throw true try type typeof use var void while with yield async await from as " +
+    "lambda not and or is true false True False None SELECT FROM WHERE INSERT UPDATE DELETE " +
+    "INTO VALUES JOIN ON GROUP BY ORDER LIMIT AND OR NOT NULL CREATE TABLE"
+  ).split(" "),
+);
+const HASH = new Set([
+  "py",
+  "python",
+  "sh",
+  "bash",
+  "shell",
+  "zsh",
+  "yaml",
+  "yml",
+  "toml",
+  "rb",
+  "ruby",
+  "r",
+  "dockerfile",
+  "makefile",
+  "conf",
+  "ini",
+]);
+const DASH = new Set(["sql", "lua", "haskell", "hs"]);
+
+// highlight cuts a code block into tokens for its colours, from the language of its fence. A
+// block with no language is left as it is. The tokens are text the page draws itself: nothing
+// in the code becomes markup.
+export function highlight(code: string, lang: string): Token[] {
+  if (!lang) {
+    return code ? [{ k: "", v: code }] : [];
+  }
+  const line = HASH.has(lang)
+    ? "#[^\\n]*"
+    : DASH.has(lang)
+      ? "--[^\\n]*"
+      : "\\/\\/[^\\n]*|\\/\\*[\\s\\S]*?(?:\\*\\/|$)";
+  const re = new RegExp(
+    `(${line})|("(?:[^"\\\\\\n]|\\\\.)*"?|'(?:[^'\\\\\\n]|\\\\.)*'?|\`[^\`]*\`?)|(\\b\\d[\\d_]*(?:\\.\\d+)?\\b)|([A-Za-z_][\\w]*)`,
+    "g",
+  );
+  const out: Token[] = [];
+  let last = 0;
+  const push = (k: Token["k"], v: string) => {
+    const prev = out[out.length - 1];
+    if (prev && prev.k === k) {
+      prev.v += v;
+    } else {
+      out.push({ k, v });
+    }
+  };
+  for (const m of code.matchAll(re)) {
+    if (m.index! > last) {
+      push("", code.slice(last, m.index));
+    }
+    if (m[1] !== undefined) {
+      push("com", m[1]);
+    } else if (m[2] !== undefined) {
+      push("str", m[2]);
+    } else if (m[3] !== undefined) {
+      push("num", m[3]);
+    } else {
+      push(KEYWORDS.has(m[4]) ? "kw" : "", m[4]);
+    }
+    last = m.index! + m[0].length;
+  }
+  if (last < code.length) {
+    push("", code.slice(last));
+  }
   return out;
 }

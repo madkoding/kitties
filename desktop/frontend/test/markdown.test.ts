@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { artifactName, inline, markdown } from "../src/markdown.ts";
+import { artifactName, highlight, inline, markdown } from "../src/markdown.ts";
 
 const wails = "http://wails.localhost/v1/artifacts/borrador-CV-continuum-backend-go-gcp.md";
 
@@ -78,7 +78,7 @@ test("markdown: every block", () => {
     { t: "p", text: "one two" },
     { t: "ul", items: ["a more", "b"] },
     { t: "ol", items: ["x", "y"] },
-    { t: "code", text: "fmt.Println()" },
+    { t: "code", text: "fmt.Println()", lang: "go" },
     { t: "quote", text: "quoted text" },
     { t: "hr" },
     {
@@ -91,11 +91,48 @@ test("markdown: every block", () => {
     },
     { t: "p", text: "tail" },
   ]);
-  assert.deepEqual(markdown("```\nunclosed"), [{ t: "code", text: "unclosed" }]);
+  assert.deepEqual(markdown("```\nunclosed"), [{ t: "code", text: "unclosed", lang: "" }]);
   assert.deepEqual(markdown(""), []);
 });
 
 test("markdown: a chat message keeps its line breaks", () => {
   assert.deepEqual(markdown("one\ntwo", true), [{ t: "p", text: "one\ntwo" }]);
   assert.deepEqual(markdown("one\ntwo"), [{ t: "p", text: "one two" }]);
+});
+
+test("highlight: comments, strings, numbers and keywords by the fence's language", () => {
+  assert.deepEqual(highlight('// hi\nfunc main() { s := "a\\"b"; n := 4.2 }', "go"), [
+    { k: "com", v: "// hi" },
+    { k: "", v: "\n" },
+    { k: "kw", v: "func" },
+    { k: "", v: " main() { s := " },
+    { k: "str", v: '"a\\"b"' },
+    { k: "", v: "; n := " },
+    { k: "num", v: "4.2" },
+    { k: "", v: " }" },
+  ]);
+  assert.deepEqual(highlight("x = 1 # c\nprint('s')", "py"), [
+    { k: "", v: "x = " },
+    { k: "num", v: "1" },
+    { k: "", v: " " },
+    { k: "com", v: "# c" },
+    { k: "", v: "\nprint(" },
+    { k: "str", v: "'s'" },
+    { k: "", v: ")" },
+  ]);
+  assert.deepEqual(highlight("SELECT 1 -- c", "sql"), [
+    { k: "kw", v: "SELECT" },
+    { k: "", v: " " },
+    { k: "num", v: "1" },
+    { k: "", v: " " },
+    { k: "com", v: "-- c" },
+  ]);
+  assert.deepEqual(highlight("/* a */ `t`", "js"), [
+    { k: "com", v: "/* a */" },
+    { k: "", v: " " },
+    { k: "str", v: "`t`" },
+  ]);
+  assert.deepEqual(highlight("<b>x</b>", ""), [{ k: "", v: "<b>x</b>" }]);
+  assert.deepEqual(highlight("", ""), []);
+  assert.deepEqual(highlight("a ", "js"), [{ k: "", v: "a " }]);
 });

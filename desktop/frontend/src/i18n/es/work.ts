@@ -269,6 +269,9 @@ const dict: Dictionary = {
   source: "fuente",
   copied: "copiado",
   copy: "copiar",
+  "Copy a link that opens this file in Kitties": "Copiar un link que abre este archivo en Kitties",
+  "link copied": "link copiado",
+  "copy link": "copiar link",
   "Close the artifact": "Cerrar el archivo",
   "This file is not in the library.": "Este archivo no está en la biblioteca.",
 

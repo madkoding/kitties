@@ -274,6 +274,22 @@ test("the library: skills with a proposal, and the artifacts", async ({ page }) 
   await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
 });
 
+test("#artifact/<name> opens the reader, with the code in colour", async ({ page }) => {
+  await open(page, "#artifact/competitor-notes.md");
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.locator("h2", { hasText: "Competitor notes" })).toBeVisible();
+  await expect(reader.locator('pre[data-lang="sh"] .hl-com')).toHaveText(
+    "# the prices, once a week",
+  );
+  await expect(reader.getByTestId("artifact-share")).toBeVisible();
+  await reader.locator("pre[data-lang]").scrollIntoViewIfNeeded();
+  await shot(page, "61-artifact-code");
+  // Closing it takes the reader out of the address.
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+  expect(await page.evaluate(() => location.hash)).not.toContain("artifact");
+});
+
 test("an artifact tag in a chat opens the reader", async ({ page }) => {
   await open(page, `#chat/${ids.single}`);
   await page.getByTestId("artifact-tag").first().click();

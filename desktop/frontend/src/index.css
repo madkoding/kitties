@@ -2092,3 +2092,18 @@ html.mac-inset .live-head {
 .md-chat h4 {
   font-size: 0.975rem;
 }
+
+/* The colours of a code block: a keyword, a string, a comment, a number. */
+.hl-kw {
+  color: var(--neon-magenta, #e879f9);
+}
+.hl-str {
+  color: var(--c-green, #4ade80);
+}
+.hl-com {
+  color: var(--t4);
+  font-style: italic;
+}
+.hl-num {
+  color: var(--c-amber, #fbbf24);
+}

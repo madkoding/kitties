@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import { artifactText, shotURL } from "./api";
-import { inline, markdown, type Inline } from "./markdown";
+import { highlight, inline, markdown, type Inline } from "./markdown";
 import { t } from "./i18n";
 import { Modal } from "./Modal";
 
@@ -43,6 +43,28 @@ export function Inlines({ text, onOpen }: { text: string; onOpen?: (name: string
   );
 }
 
+// Code draws a code block with the colours of its language: each token is a span of text.
+export function Code({ text, lang }: { text: string; lang: string }) {
+  return (
+    <code>
+      {highlight(text, lang).map((tok, i) =>
+        tok.k ? (
+          <span key={i} class={`hl-${tok.k}`}>
+            {tok.v}
+          </span>
+        ) : (
+          tok.v
+        ),
+      )}
+    </code>
+  );
+}
+
+// artifactLink is the page's own address for an artifact: #artifact/<name> opens it in the reader.
+export function artifactLink(name: string): string {
+  return `${location.origin}${location.pathname}${location.search}#artifact/${encodeURIComponent(name)}`;
+}
+
 // Markdown draws a document the page cut into blocks, never as HTML.
 export function Markdown({
   text,
@@ -80,7 +102,11 @@ export function Markdown({
             );
           }
           case "code":
-            return <pre key={i}>{b.text}</pre>;
+            return (
+              <pre key={i} data-lang={b.lang || undefined}>
+                <Code text={b.text} lang={b.lang} />
+              </pre>
+            );
           case "quote":
             return (
               <blockquote key={i}>
@@ -158,14 +184,14 @@ export default function ArtifactReader({ name, onClose }: { name: string; onClos
     };
   }, [current]);
   const [raw, setRaw] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const copy = () =>
-    text !== null &&
+  // copied says which of the two copies just went to the clipboard: the text or the link.
+  const [copied, setCopied] = useState<"" | "text" | "link">("");
+  const copy = (what: "text" | "link", value: string) =>
     navigator.clipboard
-      ?.writeText(text)
+      ?.writeText(value)
       .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
+        setCopied(what);
+        setTimeout(() => setCopied(""), 1500);
       })
       .catch(() => undefined);
   const lower = current.toLowerCase();
@@ -199,10 +225,22 @@ export default function ArtifactReader({ name, onClose }: { name: string; onClos
             </button>
           )}
           {text !== null && (
-            <button class="btn-ghost px-2 py-1 text-xs" data-testid="artifact-copy" onClick={copy}>
-              {copied ? t("copied") : t("copy")}
+            <button
+              class="btn-ghost px-2 py-1 text-xs"
+              data-testid="artifact-copy"
+              onClick={() => copy("text", text)}
+            >
+              {copied === "text" ? t("copied") : t("copy")}
             </button>
           )}
+          <button
+            class="btn-ghost px-2 py-1 text-xs"
+            data-testid="artifact-share"
+            title={t("Copy a link that opens this file in Kitties")}
+            onClick={() => copy("link", artifactLink(current))}
+          >
+            {copied === "link" ? t("link copied") : t("copy link")}
+          </button>
           <a
             class="btn-ghost px-2 py-1 text-xs"
             href={shotURL(`/v1/artifacts/${encodeURIComponent(current)}`)}

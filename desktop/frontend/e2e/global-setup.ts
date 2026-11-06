@@ -114,7 +114,7 @@ export default async function globalSetup(): Promise<() => Promise<void>> {
   await api(
     "PUT",
     "/v1/artifacts/competitor-notes.md",
-    "# Competitor notes\n\nWhat the **three** closest tools charge, and where we win. Sources in `notes/`.\n\n| Name | Price | Notes |\n| --- | --- | --- |\n| Acme | 12 | fast |\n| Globex | 20 | no desktop |\n\n## Next steps\n\n- Ask Luna for the launch plan: /v1/artifacts/launch-plan.md\n- Keep the price under *15*\n\n> Draft: check the prices again on Friday.",
+    "# Competitor notes\n\nWhat the **three** closest tools charge, and where we win. Sources in `notes/`.\n\n| Name | Price | Notes |\n| --- | --- | --- |\n| Acme | 12 | fast |\n| Globex | 20 | no desktop |\n\n## Next steps\n\n- Ask Luna for the launch plan: /v1/artifacts/launch-plan.md\n- Keep the price under *15*\n\n> Draft: check the prices again on Friday.\n\n```sh\n# the prices, once a week\ncurl -s https://acme.example/pricing | grep 12\n```",
     "text/markdown",
   );
   fs.mkdirSync(path.join(dataDir, "skills/proposed"), { recursive: true });
