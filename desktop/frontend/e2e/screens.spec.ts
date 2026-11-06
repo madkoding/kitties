@@ -278,6 +278,13 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   await expect(page.locator(".service-btn", { hasText: "Slack" })).toHaveCount(0);
   await page.locator(".service-btn", { hasText: "Google Workspace" }).click();
   await expect(page.getByText("Gmail, Calendar, Drive, Sheets and Docs").first()).toBeVisible();
+  // The services to reach are boxes, all ticked: the sign-in asks Google only for those.
+  const services = page.getByTestId("options-services");
+  await expect(services.locator(".chip.on")).toHaveCount(7);
+  await services.locator(".chip", { hasText: "Contacts" }).click();
+  await expect(services.locator(".chip.on")).toHaveCount(6);
+  await services.locator(".chip", { hasText: "Contacts" }).click();
+  await expect(services.locator(".chip.on")).toHaveCount(7);
   // Without an app built into Kitties, signing in asks for the person's own, and says where.
   const signInBox = page.getByTestId("connection-sign-in");
   await expect(signInBox).toContainText("needs an app of your own");
@@ -340,7 +347,16 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
     headers: { Authorization: "Bearer e2e-token" },
   });
   expect(res.ok()).toBeTruthy();
-  expect(((await res.json()) as { url: string }).url).toContain("accounts.google.com");
+  const consent = new URL(((await res.json()) as { url: string }).url);
+  expect(consent.host).toBe("accounts.google.com");
+  // Back to this computer's loopback IP, with PKCE, a refresh token and the account chooser.
+  expect(consent.searchParams.get("redirect_uri")).toMatch(
+    /^http:\/\/127\.0\.0\.1:\d+\/v1\/oauth\/callback$/,
+  );
+  expect(consent.searchParams.get("code_challenge_method")).toBe("S256");
+  expect(consent.searchParams.get("access_type")).toBe("offline");
+  expect(consent.searchParams.get("prompt")).toBe("consent select_account");
+  expect(consent.searchParams.get("scope")).toContain("gmail.send");
 });
 
 // hooked is what the outside world (the Slack webhook, the ntfy topic) has received so far.

@@ -39,6 +39,15 @@ type Provider struct {
 	AuthURL  string   `json:"auth_url"`
 	TokenURL string   `json:"token_url"`
 	Scopes   []string `json:"scopes"`
+	// ScopesFor picks the scopes from the connection's settings instead of Scopes (Google asks
+	// only for the services the person ticked).
+	ScopesFor func(settings map[string]string) []string `json:"-"`
+	// LoginHint sends the account signed in before as login_hint, so signing in again lands on
+	// the same account while a new connection gets the account chooser.
+	LoginHint bool `json:"-"`
+	// LoopbackOrHTTPS refuses, before the consent page does, a redirect address the service does
+	// not take: only http://127.0.0.1 (or localhost) and https (Google's rule for its clients).
+	LoopbackOrHTTPS bool `json:"-"`
 	// Extra are query parameters the consent page needs (Google's offline access).
 	Extra map[string]string `json:"-"`
 	// ScopeSep joins the scopes in the consent URL; a space unless the service wants commas.
@@ -133,6 +142,10 @@ type Credentials struct {
 	Expiry       time.Time `json:"expiry"`
 	// Account is who signed in, when the service said.
 	Account string `json:"account,omitempty"`
+	// IDToken and Scope are what the token answer said besides the token (OpenID's identity,
+	// the scopes granted): read by a provider's Finish, not kept.
+	IDToken string `json:"-"`
+	Scope   string `json:"-"`
 	// Answer is the token answer as the service sent it, for a Finish that reads more of it
 	// (Discord's webhook); never saved.
 	Answer json.RawMessage `json:"-"`
@@ -284,6 +297,23 @@ func RedirectFor(provider, redirect string) string {
 	return u.String()
 }
 
+// loopbackOrHTTPS says why the service would refuse redirect: it takes https, or plain http
+// back to this computer only (a desktop client's loopback), not a LAN address or a name.
+func loopbackOrHTTPS(p Provider, redirect string) error {
+	u, err := url.Parse(redirect)
+	if err != nil {
+		return fmt.Errorf("bad redirect address %q: %w", redirect, err)
+	}
+	if u.Scheme == "https" {
+		return nil
+	}
+	switch strings.ToLower(u.Hostname()) {
+	case "127.0.0.1", "::1", "localhost":
+		return nil
+	}
+	return fmt.Errorf("%s only signs in back to http://127.0.0.1 or an https address, not %s: open Settings on the computer that runs the gateway, or give the gateway a public https address", p.Label, u.Scheme+"://"+u.Host)
+}
+
 // Redirect is the redirect address a connector's sign-in sends for a gateway reached at
 // redirect, or redirect itself when the connector has no sign-in.
 func (m *Manager) Redirect(connector, redirect string) string {
@@ -308,6 +338,11 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 		return m.startLoginFlow(connector, p, app)
 	}
 	redirect = RedirectFor(app.Provider, redirect)
+	if p.LoopbackOrHTTPS {
+		if err := loopbackOrHTTPS(p, redirect); err != nil {
+			return "", err
+		}
+	}
 	authURL, err := p.address(p.AuthURL, app.Settings)
 	if err != nil {
 		return "", err
@@ -333,11 +368,18 @@ func (m *Manager) Start(connector, redirect string) (string, error) {
 		"client_id": {clientID}, "redirect_uri": {redirect}, "response_type": {"code"},
 		"state": {state}, "code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "code_challenge_method": {"S256"},
 	}
-	if len(p.Scopes) > 0 {
-		q.Set("scope", strings.Join(p.Scopes, sep))
+	scopes := p.Scopes
+	if p.ScopesFor != nil {
+		scopes = p.ScopesFor(app.Settings)
+	}
+	if len(scopes) > 0 {
+		q.Set("scope", strings.Join(scopes, sep))
 	}
 	for k, v := range p.Extra {
 		q.Set(k, v)
+	}
+	if hint := strings.TrimSpace(app.Settings[KeyAccount]); p.LoginHint && hint != "" {
+		q.Set("login_hint", hint)
 	}
 	return authURL + "?" + q.Encode(), nil
 }
@@ -451,6 +493,8 @@ func (m *Manager) token(ctx context.Context, p Provider, app App, secret string,
 			Name string `json:"name"`
 		} `json:"team"`
 		WorkspaceName string `json:"workspace_name"`
+		IDToken       string `json:"id_token"`
+		Scope         string `json:"scope"`
 	}
 	_ = json.Unmarshal(data, &answer)
 	if resp.StatusCode >= 400 || (answer.Error != nil && answer.Error != false && answer.Error != "") {
@@ -461,7 +505,8 @@ func (m *Manager) token(ctx context.Context, p Provider, app App, secret string,
 		if msg == "" {
 			msg = strings.TrimSpace(string(data))
 		}
-		return Credentials{}, fmt.Errorf("%s refused: %s", p.Label, msg)
+		code, _ := answer.Error.(string)
+		return Credentials{}, &RefusedError{Service: p.Label, Code: code, Message: msg}
 	}
 	if answer.AccessToken == "" {
 		return Credentials{}, fmt.Errorf("%s returned no token", p.Label)
@@ -478,8 +523,23 @@ func (m *Manager) token(ctx context.Context, p Provider, app App, secret string,
 	if account == "" {
 		account = answer.WorkspaceName
 	}
-	return Credentials{AccessToken: answer.AccessToken, RefreshToken: answer.RefreshToken, Expiry: m.now().Add(ttl), Account: account, Answer: data}, nil
+	return Credentials{AccessToken: answer.AccessToken, RefreshToken: answer.RefreshToken, Expiry: m.now().Add(ttl), Account: account,
+		IDToken: answer.IDToken, Scope: answer.Scope, Answer: data}, nil
 }
+
+// RefusedError is a token request the service answered with an error.
+type RefusedError struct {
+	Service string
+	// Code is the OAuth error code ("invalid_grant"), when the service gave one.
+	Code    string
+	Message string
+}
+
+func (e *RefusedError) Error() string { return e.Service + " refused: " + e.Message }
+
+// ErrSignedOut is a refresh token the service no longer takes (revoked, expired, or a Google
+// app still in Testing, whose sign-ins last seven days): the person has to sign in again.
+var ErrSignedOut = errors.New("not signed in any more: the sign-in expired or was revoked; sign in again from Settings")
 
 // refreshAhead is how long before expiry a token is refreshed: before it fails, not after.
 const refreshAhead = 10 * time.Minute
@@ -552,6 +612,15 @@ func (m *Manager) refresh(ctx context.Context, connector string, creds Credentia
 		clientID, secret = Builtin(p.Name)
 	}
 	fresh, err := m.token(ctx, p, app, secret, map[string]string{"grant_type": "refresh_token", "refresh_token": creds.RefreshToken, "client_id": clientID})
+	var refused *RefusedError
+	if errors.As(err, &refused) && refused.Code == "invalid_grant" {
+		// The refresh token is dead: forget it, so Settings asks for a sign-in instead of
+		// failing on every use.
+		if serr := m.store.SaveOAuthCredentials(connector, Credentials{Account: creds.Account}); serr != nil {
+			return "", serr
+		}
+		return "", fmt.Errorf("%s: %w (%s)", p.Label, ErrSignedOut, refused.Message)
+	}
 	if err != nil {
 		return "", err
 	}

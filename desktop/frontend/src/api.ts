@@ -342,6 +342,8 @@ export interface ConnectorField {
   key?: string;
   // lifetime is how long, in seconds, a token typed in the field lasts.
   lifetime?: number;
+  // options are the values the field picks several of, saved joined by commas.
+  options?: string[];
 }
 
 export interface ConnectorKind {

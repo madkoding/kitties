@@ -35,6 +35,9 @@ type Field struct {
 	// Lifetime is how long, in seconds, a token typed in the field lasts (X's OAuth 2.0 access
 	// token: two hours), so the page can say when it no longer works.
 	Lifetime int `json:"lifetime,omitempty"`
+	// Options are the values the field picks from, several at once: the page shows a box per
+	// option and saves the ticked ones joined by commas (Google's services).
+	Options []string `json:"options,omitempty"`
 }
 
 // Action is one thing a kind can do, as the model and the page see it.
@@ -94,6 +97,16 @@ func f(name, label, help string, required, secret bool) Field {
 func fApp(where string) []Field {
 	return []Field{f("client_id", "Client id of your own app", "only to sign in through an app of your own at "+where+"; empty: Kitties' own", false, false),
 		f("client_secret", "Client secret of your own app", "", false, true)}
+}
+
+// GoogleServices are the parts of a Google account a Google Workspace connection can reach;
+// the sign-in asks only for the scopes of the ones ticked (oauth.GoogleServices).
+var GoogleServices = []string{"gmail", "calendar", "drive", "sheets", "docs", "contacts", "tasks"}
+
+func googleServicesField() Field {
+	fd := f("services", "Services", "what the kitties may reach; the sign-in asks Google only for these (all when none is ticked)", false, false)
+	fd.Options = GoogleServices
+	return fd
 }
 
 // signIn is a kind's sign-in fields after its own: the person's token (instead of signing in),
@@ -220,7 +233,7 @@ func catalog() []Kind {
 			Fields: []Field{f("url", "Webhook URL", "", true, true)}, Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeTeams},
 		// ── office ─────────────────────────────────────────────────────────────────────────────
 		{Name: "google-workspace", Category: CatOffice, Label: "Google Workspace", Help: "Gmail, Calendar, Drive, Sheets and Docs of a Google account, signed in with OAuth",
-			Fields: fApp("console.cloud.google.com (a Desktop or Web client)"),
+			Fields: append([]Field{googleServicesField()}, fApp("console.cloud.google.com (a Desktop app client: see docs/GOOGLE.md)")...),
 			Actions: []Action{
 				{Name: "send_mail", Help: "send a mail from the account", Args: []string{"to", "subject", fText}},
 				{Name: "create_event", Help: "add a calendar event; with attendees it invites them (that asks you first)", Args: []string{"summary", "start (RFC 3339)", "end (RFC 3339)", "description (optional)", "attendees (optional emails)"}},

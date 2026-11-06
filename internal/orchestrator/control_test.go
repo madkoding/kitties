@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -207,4 +208,68 @@ func TestVoxl(t *testing.T) {
 func watching(m *Manager, id string) bool {
 	_, streams := m.use.running(id)
 	return streams > 0
+}
+
+// bootingContainers is a desktop whose voxl writes its password only after a few looks.
+type bootingContainers struct {
+	*fakeContainers
+	looks, ready int
+}
+
+func (b *bootingContainers) Exec(ctx context.Context, n string, argv ...string) (string, error) {
+	if argv[0] == "cat" {
+		b.looks++
+		if b.looks <= b.ready {
+			return "", errors.New("cat: /tmp/voxl.pw: No such file")
+		}
+		return "0123456789abcdef0123456789abcdef\n", nil
+	}
+	return b.fakeContainers.Exec(ctx, n, argv...)
+}
+
+// A machine just brought up has not written its voxl password yet: the live view waits for it,
+// instead of taking the desktop for one without voxl. Long after the start, it does not wait.
+func TestVoxlWaitsForABootingDesktop(t *testing.T) {
+	defer func(w, p, win time.Duration) { voxlBootWait, voxlBootPoll, voxlBootWindow = w, p, win }(voxlBootWait, voxlBootPoll, voxlBootWindow)
+	voxlBootWait, voxlBootPoll = 50*time.Millisecond, time.Millisecond
+	ctx := context.Background()
+	b := &bootingContainers{fakeContainers: newFake(), ready: 3}
+	m, err := New(testConfig(t), WithContainers(b, nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	m.now = func() time.Time { return now }
+	_, _ = m.Create(ctx, Spec{Name: "mimi"})
+
+	// Not started by this gateway: one look, and no live view.
+	if _, err := m.Voxl(ctx, "mimi"); err == nil || b.looks != 1 {
+		t.Fatalf("not booting: %v after %d looks", err, b.looks)
+	}
+	// Just started: it waits until the password is there.
+	if err := m.Start(ctx, "mimi"); err != nil {
+		t.Fatal(err)
+	}
+	b.looks = 0
+	v, err := m.Voxl(ctx, "mimi")
+	if err != nil || v.Password == "" || b.looks != 4 {
+		t.Fatalf("booting: %+v %v after %d looks", v, err, b.looks)
+	}
+	// It gives up after voxlBootWait.
+	b.looks, b.ready = 0, 1000
+	if _, err := m.Voxl(ctx, "mimi"); err == nil || b.looks != int(voxlBootWait/voxlBootPoll)+1 {
+		t.Fatalf("never ready: %v after %d looks", err, b.looks)
+	}
+	// A cancelled request stops waiting.
+	cctx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := m.Voxl(cctx, "mimi"); !errors.Is(err, context.Canceled) {
+		t.Errorf("cancelled: %v", err)
+	}
+	// Long after the start, a missing password is an image without voxl again.
+	now = now.Add(voxlBootWindow + time.Second)
+	b.looks = 0
+	if _, err := m.Voxl(ctx, "mimi"); err == nil || b.looks != 1 {
+		t.Errorf("long after the start: %v after %d looks", err, b.looks)
+	}
 }

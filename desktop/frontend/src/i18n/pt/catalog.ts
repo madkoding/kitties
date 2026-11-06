@@ -2,6 +2,13 @@ import type { Dictionary } from "../../i18n";
 
 // The service catalogue: the services, their fields and what the kitties can do with them.
 const dict: Dictionary = {
+  Services: "Serviços",
+  "what the kitties may reach; the sign-in asks Google only for these (all when none is ticked)":
+    "o que os kitties podem usar; o login pede ao Google só estes (todos se nenhum estiver marcado)",
+  Gmail: "Gmail",
+  Drive: "Drive",
+  Sheets: "Planilhas",
+  Docs: "Documentos",
   // Services, their fields and what they do.
   "!abc:matrix.org": "!abc:matrix.org",
   "#general: where the messages go": "#general: para onde vão as mensagens",
@@ -283,8 +290,8 @@ const dict: Dictionary = {
     "só para fazer login com um app seu em Admin Center → Apps and integrations → APIs → OAuth clients; vazio: o do Kitties",
   "only to sign in through an app of your own at airtable.com/create/oauth; empty: Kitties' own":
     "só para fazer login com um app seu em airtable.com/create/oauth; vazio: o do Kitties",
-  "only to sign in through an app of your own at console.cloud.google.com (a Desktop or Web client); empty: Kitties' own":
-    "só para fazer login com um app seu em console.cloud.google.com (um cliente Desktop ou Web); vazio: o do Kitties",
+  "only to sign in through an app of your own at console.cloud.google.com (a Desktop app client: see docs/GOOGLE.md); empty: Kitties' own":
+    "só para fazer login com um app seu em console.cloud.google.com (um cliente «App para computador»: ver docs/GOOGLE.md); vazio: o do Kitties",
   "only to sign in through an app of your own at developer.atlassian.com/console/myapps; empty: Kitties' own":
     "só para fazer login com um app seu em developer.atlassian.com/console/myapps; vazio: o do Kitties",
   "only to sign in through an app of your own at developer.spotify.com (redirect: this gateway's /v1/oauth/callback); empty: Kitties' own":
