@@ -1209,7 +1209,11 @@ export const sharedPath = (kitty: string, path: string, verb = "shared") =>
 // importKitty puts a kitty's files back from an export (.tar.gz), straight to the gateway: the
 // file can be big, and binary.
 export async function importKitty(ref: string, file: Blob): Promise<void> {
-  const res = await fetch(shotURL(`/v1/kitties/${encodeURIComponent(ref)}/import`), {
+  // A kitty's id is letters, digits, dashes and underscores: nothing else goes into an address.
+  if (!/^[\w-]+$/.test(ref)) {
+    throw new ApiError(400, "not a kitty");
+  }
+  const res = await fetch(shotURL(`/v1/kitties/${ref}/import`), {
     method: "POST",
     body: file,
   });
