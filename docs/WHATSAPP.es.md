@@ -58,8 +58,9 @@ olvida la sesión.
   el mensaje al que responde.
 - **Horario de silencio.** De una hora a otra (el reloj del gateway, `TZ`), un mensaje recibe un
   aviso corto en el idioma del kitty ("🌙 luna descansa hasta las 08:00…") y su respuesta al
-  terminar; los envíos y reacciones de los kitties también esperan. Los mensajes en espera quedan en
-  memoria: un reinicio durante el silencio los pierde.
+  terminar; los envíos y reacciones de los kitties también esperan. Los mensajes en espera quedan
+  sellados (`queue.bin`), así que un reinicio no los pierde: se responden en la siguiente conexión
+  pasado el silencio.
 - **Un kitty por número o grupo.** Cada número o grupo puede tener su propio kitty; los demás van al
   kitty que responde. Cambiar uno de kitty abre un chat nuevo con él.
 - **Un límite por hora.** Cuenta todo mensaje, archivo y reacción que sale; pasado el límite una
@@ -125,6 +126,7 @@ El código QR se sigue escaneando desde Ajustes, o se lee con `GET /v1/whatsapp`
 | Qué | Dónde | Cómo |
 | --- | --- | --- |
 | Encendido o no, la lista, el kitty, el chat de cada número | `<data>/whatsapp/settings.json` | modo 0600, sin secretos |
+| Los mensajes que esperan el fin del silencio | `<data>/whatsapp/queue.bin` | **sellados** como la sesión; se borran al responderlos |
 | La sesión del dispositivo vinculado (sus llaves, las sesiones Signal, los contactos) | `<data>/whatsapp/session.bin` | **sellada** con la llave del vault (AES-256-GCM, atada a su uso); nunca en claro |
 
 La sesión es el estado de la librería guardado en memoria y sellado entero: el gateway no usa un

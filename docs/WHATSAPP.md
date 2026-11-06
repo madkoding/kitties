@@ -55,8 +55,8 @@ session, without a new code. **Unlink** removes the device from the phone and fo
   the message it answers.
 - **Quiet hours.** From one time to another (the gateway's clock, `TZ`), a message gets one short
   note in the kitty's language ("🌙 luna is resting until 08:00…") and its answer when they end; the
-  kitties' own sends and reactions wait too. Messages waiting are kept in memory: a restart in the
-  quiet hours loses them.
+  kitties' own sends and reactions wait too. Messages waiting are kept sealed (`queue.bin`), so a
+  restart does not lose them: they are answered on the next connection after the quiet hours.
 - **A kitty per number or group.** Each number or group may have its own kitty; the others go to
   the kitty that answers. Moving one to another kitty starts a new chat with it.
 - **An hourly limit.** Every message, file and reaction that goes out counts; past the limit a
@@ -119,6 +119,7 @@ The QR code is still scanned from Settings, or read with `GET /v1/whatsapp` (`qr
 | What | Where | How |
 | --- | --- | --- |
 | On or off, the list, the kitty, the chat of each number | `<data>/whatsapp/settings.json` | mode 0600, no secrets |
+| The messages waiting for the quiet hours to end | `<data>/whatsapp/queue.bin` | **sealed** like the session; gone once they are answered |
 | The session of the linked device (its keys, the Signal sessions, the contacts) | `<data>/whatsapp/session.bin` | **sealed** with the vault's key (AES-256-GCM, bound to its use); never in the clear |
 
 The session is a blob of the library's state kept in memory and sealed as a whole: the gateway uses
