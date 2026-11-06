@@ -27,7 +27,9 @@ A kitty is not only something you talk to. Each one has an agenda:
 - **Recovery.** A brain that is down for a while (busy, failing, unreachable) is waited for,
   up to half an hour, ever longer between tries, instead of failing the attempt; each wait shows
   in the chat. A failed attempt is retried with a different approach. When a kitty gives up,
-  its **backup** kitty takes the task over; without one, the kitty asks you (the chat is
+  its **backup** kitty takes the task over; without one, a free kitty of the fleet that can do
+  the same (a desktop if the task needs one, not in error, not at work) stands in; when none is
+  free (or the kitty is *attended*), the kitty asks you (the chat is
   marked *help* until you answer). A watchdog brings a stopped container back and retries a
   kitty in error.
 - **Follow-ups.** A goal whose run did not finish (blocked, escalated to you, or it could not

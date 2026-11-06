@@ -262,12 +262,20 @@ func (s *Service) askKitty(ctx context.Context, did string, from, to *kitty.Kitt
 }
 
 // giveUp is what happens when a task is given up on: the backup kitty takes it over when
-// there is one and the thread is not too deep already, else the person is asked. It returns
+// there is one (unattended without one, a free kitty of the fleet: standIn) and the thread is
+// not too deep already, else the person is asked. It returns
 // the goal result, whether the person is needed, and what to add to the turn.
 func (s *Service) giveUp(id string, index int, k *kitty.Kitty, fail string) (result string, needsHelp bool, text string) {
 	request := s.lastRequest(id, index)
-	if k.Backup != "" && s.depthOf(id) < s.MaxDepth {
-		if target, err := s.fleet.Get(k.Backup); err == nil && target.ID != k.ID {
+	backup := k.Backup
+	if backup == "" && !k.Limits.Or(s.DefaultLimits).Attended {
+		// No backup named: a kitty of the fleet that is free and can do the same takes it.
+		if other := s.standIn(k); other != nil {
+			backup = other.Name
+		}
+	}
+	if backup != "" && s.depthOf(id) < s.MaxDepth {
+		if target, err := s.fleet.Get(backup); err == nil && target.ID != k.ID {
 			task := fmt.Sprintf("I am %s and I could not finish a task: %s.\nThe task: %s\nPlease take it over and tell me what you achieve.", k.Name, fail, request)
 			var turn Turn
 			o := s.delegate(context.Background(), id, action{kind: "delegate", name: target.Name, args: map[string]any{"task": task}, raw: "@delegate " + target.Name}, k, &turn)
@@ -280,6 +288,18 @@ func (s *Service) giveUp(id string, index int, k *kitty.Kitty, fail string) (res
 	}
 	s.note(k, agenda.KindEscalated, "", id, fail)
 	return "escalated", true, "(" + k.Name + " needs help: " + Plain(fail) + ")"
+}
+
+// standIn is the kitty that takes over a task k gave up on when k names no backup: another one
+// with a desktop as k has, not in error and not at work on something else; nil when none is free.
+func (s *Service) standIn(k *kitty.Kitty) *kitty.Kitty {
+	for _, other := range s.fleet.List() {
+		if other.ID == k.ID || other.Desktop != k.Desktop || other.Status == kitty.StatusError || s.KittyBusy(other.ID) {
+			continue
+		}
+		return other
+	}
+	return nil
 }
 
 // lastRequest is what the thread asked for before the turn at index: the last message that
