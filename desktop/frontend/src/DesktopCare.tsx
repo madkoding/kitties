@@ -4,7 +4,7 @@ import { api, errText, importKitty, shotURL } from "./api";
 import { ask } from "./Confirm";
 import { when } from "./format";
 import { t } from "./i18n";
-import { bytes } from "./library";
+import { bytes } from "./artifacts";
 
 // LOOKING AFTER A KITTY'S DESKTOP.
 //

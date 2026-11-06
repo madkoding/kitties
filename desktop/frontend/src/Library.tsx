@@ -6,7 +6,7 @@ import { ask } from "./Confirm";
 import { when } from "./format";
 import { t } from "./i18n";
 import { IconPlus, IconTrash, IconX } from "./icons";
-import { bytes, facets, filterArtifacts, type Kind, type Sort } from "./library";
+import { bytes, facets, filterArtifacts, type Kind, type Sort } from "./artifacts";
 import { Missing, Required } from "./Required";
 
 type Tab = "skills" | "artifacts" | "shared";

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { facets, filterArtifacts, kindOf } from "../src/library.ts";
+import { facets, filterArtifacts, kindOf } from "../src/artifacts.ts";
 
 const list = [
   {
@@ -57,7 +57,7 @@ test("facets: only the kinds and kitties the library has", () => {
 });
 
 test("previewOf: pictures, text, and what has no preview", async () => {
-  const { previewOf } = await import("../src/library.ts");
+  const { previewOf } = await import("../src/artifacts.ts");
   assert.equal(previewOf("cat.PNG"), "image");
   assert.equal(previewOf("photo.jpeg"), "image");
   assert.equal(previewOf("notes.md"), "text");
@@ -68,7 +68,7 @@ test("previewOf: pictures, text, and what has no preview", async () => {
 });
 
 test("bytes: sizes a person reads", async () => {
-  const { bytes } = await import("../src/library.ts");
+  const { bytes } = await import("../src/artifacts.ts");
   assert.equal(bytes(0), "0 B");
   assert.equal(bytes(-5), "0 B");
   assert.equal(bytes(812), "812 B");
