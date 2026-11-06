@@ -245,6 +245,7 @@ const dict: Dictionary = {
     "https://contacts.icloud.com, https://carddav.fastmail.com, https://cloud.example.com/remote.php/dav",
   "https://gitlab.com when empty": "https://gitlab.com si está vacío",
   "https://kroki.io (the default)": "https://kroki.io (el predeterminado)",
+  "https://codeberg.org": "https://codeberg.org",
   "https://mastodon.social": "https://mastodon.social",
   "https://matrix.org": "https://matrix.org",
   "https://ntfy.sh when empty": "https://ntfy.sh si está vacío",
@@ -305,6 +306,8 @@ const dict: Dictionary = {
     "solo para iniciar sesión con una app tuya en linkedin.com/developers; vacío: la de Kitties",
   "only to sign in through an app of your own at notion.so/my-integrations (a public integration); empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en notion.so/my-integrations (una integración pública); vacío: la de Kitties",
+  "only to sign in through an app of your own at your instance: Settings → Applications → OAuth2 applications; empty: Kitties' own":
+    "solo para iniciar sesión con una app tuya en tu instancia: Settings → Applications → OAuth2 applications; vacío: la de Kitties",
   "only to sign in through an app of your own at your GitLab: Preferences → Applications; empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en tu GitLab: Preferences → Applications; vacío: la de Kitties",
   "open a pull request": "abrir un pull request",

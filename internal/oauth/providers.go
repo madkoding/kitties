@@ -107,6 +107,12 @@ var Providers = map[string]Provider{
 		Name: "discord", Label: "Discord", AuthURL: "https://discord.com/oauth2/authorize", TokenURL: "https://discord.com/api/oauth2/token",
 		Scopes: []string{"webhook.incoming"}, Finish: discordFinish,
 	},
+	"gitea": {
+		// Gitea and Forgejo (Codeberg too) are their own identity service: the app is made on the
+		// instance, under Settings → Applications.
+		Name: "gitea", Label: "Gitea", AuthURL: "{url}/login/oauth/authorize", TokenURL: "{url}/login/oauth/access_token",
+		Scopes: []string{"write:repository", "write:issue", "read:user"},
+	},
 	"home-assistant": {
 		Name: "home-assistant", Label: "Home Assistant", AuthURL: "{url}/auth/authorize", TokenURL: "{url}/auth/token", SelfClient: true,
 	},

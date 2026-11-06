@@ -125,6 +125,7 @@ required.
 | Signs in | How |
 | --- | --- |
 | Mastodon, Home Assistant | nothing to set up: Kitties registers itself on the instance, or uses the gateway's own address as its app |
+| Gitea, Forgejo (Codeberg) | an OAuth2 app made on your instance (Settings → Applications), with this gateway's `/v1/oauth/callback` as its redirect |
 | Google, Microsoft, Slack, Discord, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
 
 **The redirect address.** The service matches it to the letter, so register exactly the one Settings shows

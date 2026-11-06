@@ -186,8 +186,9 @@ func catalog() []Kind {
 				{Name: "comment", Help: "comment on an issue", Args: []string{"project", "iid", fText}},
 			}, make: makeGitLab, oauth: "gitlab"},
 		{Name: "gitea", Category: CatGit, Label: "Gitea / Forgejo", Help: "issues on a Gitea or Forgejo server",
-			Fields:  []Field{fURL, fToken, f("repo", "Default repository", "owner/name", false, false)},
-			Actions: []Action{{Name: "create_issue", Help: "open an issue", Args: []string{fRepo, fTitle, fBody}}}, make: makeGitea},
+			Fields: signIn([]Field{f("url", "Instance", "https://codeberg.org", true, false), f("repo", "Default repository", "owner/name", false, false)},
+				f("token", "Token", "", false, true), "your instance: Settings → Applications → OAuth2 applications"),
+			Actions: []Action{{Name: "create_issue", Help: "open an issue", Args: []string{fRepo, fTitle, fBody}}}, make: makeGitea, oauth: "gitea"},
 		{Name: "motita", Category: CatGit, Label: "Motita", Help: "runs a coding task in motita (an agent that proves it is done) and returns the result",
 			Fields:  []Field{f("url", "Gateway", "http://127.0.0.1:7477", false, false), fOptTok},
 			Actions: []Action{{Name: "run", Help: "run a task", Args: []string{"task"}}}},
@@ -1202,7 +1203,12 @@ func makeGitea(s Settings) Connector {
 		if err != nil {
 			return request{}, err
 		}
-		return request{method: "POST", url: base(s, "") + "/api/v1/repos/" + repo + "/issues", headers: map[string]string{"Authorization": "token " + s["token"]},
+		// A typed token goes as Gitea's own "token"; without one the sign-in's bearer token does.
+		headers := map[string]string{}
+		if tok := strings.TrimSpace(s["token"]); tok != "" {
+			headers["Authorization"] = "token " + tok
+		}
+		return request{method: "POST", url: base(s, "") + "/api/v1/repos/" + repo + "/issues", headers: headers,
 			body: map[string]any{"title": title, "body": str(a, "body", "text")}}, nil
 	}}, "create_issue")
 }

@@ -756,6 +756,7 @@ const OAUTH_LABEL: Record<string, string> = {
   discord: "Discord",
   github: "GitHub",
   gitlab: "GitLab",
+  gitea: "Gitea",
   spotify: "Spotify",
   tidal: "TIDAL",
   dropbox: "Dropbox",

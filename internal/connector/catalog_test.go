@@ -595,3 +595,28 @@ func TestDiscordSignsInForAWebhook(t *testing.T) {
 		t.Errorf("sent = %v", cp.reqs)
 	}
 }
+
+func TestGiteaTakesATokenOrTheSignIn(t *testing.T) {
+	k, _ := LookupKind("gitea")
+	if k.OAuth != "gitea" || k.Validate(Settings{}) == nil || !k.KeySet(Settings{"token": "t"}) || k.KeySet(Settings{"url": "u"}) {
+		t.Errorf("gitea = %+v", k)
+	}
+	var cp capture
+	cp.install(t)
+	args := map[string]any{"repo": "o/r", "title": "T"}
+	c, _ := Build("gitea", Settings{"url": "https://g", "token": "pat"}, "")
+	if _, err := c.Call(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+	src := TokenSource(func(context.Context) (string, error) { return "oauth", nil })
+	c, _ = Build("gitea", WithTokenSource(Settings{"url": "https://g"}, src), "")
+	if _, err := c.Call(context.Background(), args); err != nil {
+		t.Fatal(err)
+	}
+	if got := []string{cp.reqs[0].Header.Get("Authorization"), cp.reqs[1].Header.Get("Authorization")}; got[0] != "token pat" || got[1] != "Bearer oauth" {
+		t.Errorf("auth = %v", got)
+	}
+	if cp.reqs[1].URL.String() != "https://g/api/v1/repos/o/r/issues" {
+		t.Errorf("url = %s", cp.reqs[1].URL)
+	}
+}

@@ -389,3 +389,21 @@ func TestDiscordKeepsTheWebhook(t *testing.T) {
 		}
 	}
 }
+
+func TestGiteaSignsInOnItsInstance(t *testing.T) {
+	st := &memStore{provider: "gitea", id: "gt", secret: "s", settings: map[string]string{"url": "https://codeberg.org/"}}
+	r := &routes{answers: map[string]string{"codeberg.org/login/oauth/access_token": `{"access_token":"at","refresh_token":"rt","expires_in":3600}`}}
+	m := New(st)
+	m.httpDo = r.do
+	link, err := m.Start("c", "http://127.0.0.1:7488/v1/oauth/callback")
+	if err != nil || !strings.HasPrefix(link, "https://codeberg.org/login/oauth/authorize?") || !strings.Contains(link, "write%3Aissue") {
+		t.Fatalf("start = %s %v", link, err)
+	}
+	u, _ := url.Parse(link)
+	if _, err := m.Exchange(context.Background(), u.Query().Get("state"), "code"); err != nil || st.creds.RefreshToken != "rt" {
+		t.Errorf("exchange = %v %+v", err, st.creds)
+	}
+	if _, err := New(&memStore{provider: "gitea", id: "gt"}).Start("c", "http://gw/cb"); err == nil {
+		t.Error("no instance, no sign-in")
+	}
+}
