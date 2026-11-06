@@ -248,6 +248,47 @@ const dict: Dictionary = {
   "I understand the risk": "Entendo o risco",
   "Saved: restarting Kitties…": "Salvo: reiniciando o Kitties…",
   "Apply and restart": "Aplicar e reiniciar",
+  // Claude connector (MCP)
+  "Kitties did not come back after the change: reload this page.":
+    "O Kitties não voltou após a mudança: recarregue esta página.",
+  "Copied: {what}.": "Copiado: {what}.",
+  "the token": "o token",
+  "the command": "o comando",
+  "This page cannot reach the clipboard: select the text and copy it by hand.":
+    "Esta página não acessa a área de transferência: selecione o texto e copie à mão.",
+  "A new token replaces the old one and every connection that used it stops working, claude.ai sign-ins too. Continue?":
+    "Um novo token substitui o anterior e toda conexão que o usava deixa de funcionar, inclusive os acessos do claude.ai. Continuar?",
+  "Rotate token": "Girar token",
+  "{name} will lose access at once and has to sign in again. Revoke?":
+    "{name} perderá o acesso na hora e terá que entrar de novo. Revogar?",
+  Revoke: "Revogar",
+  "Claude connector": "Conector do Claude",
+  "Lets Claude list, create and drive your kitties through {url}.":
+    "Permite que o Claude liste, crie e controle seus kitties por {url}.",
+  "Allow commands in a kitty": "Permitir comandos em um kitty",
+  "Adds kitty_exec: Claude may run commands inside a kitty's container.":
+    "Adiciona kitty_exec: o Claude pode executar comandos dentro do contêiner de um kitty.",
+  "Allow Claude to approve": "Permitir que o Claude aprove",
+  "Adds approval_approve: Claude may say yes, once, to an action held for you.":
+    "Adiciona approval_approve: o Claude pode dizer sim, uma vez, a uma ação retida para você.",
+  "Sign-in for claude.ai": "Acesso para o claude.ai",
+  "Remote clients sign in with OAuth. It needs https in front (public address).":
+    "Clientes remotos entram com OAuth. Precisa de https na frente (endereço público).",
+  "Claude (MCP)": "Claude (MCP)",
+  "Let Claude run the fleet as an orchestrator. Off until you turn it on.":
+    "Deixe o Claude conduzir a frota como orquestrador. Desligado até você ativar.",
+  "This gives Claude more power": "Isso dá mais poder ao Claude",
+  "Commands run inside the kitty and an approval lets a held action go ahead without you. Turn it on only if you trust the client that holds the token.":
+    "Os comandos rodam dentro do kitty e uma aprovação deixa uma ação retida seguir sem você. Ative só se confiar no cliente que tem o token.",
+  "Connect Claude Code": "Conectar o Claude Code",
+  "Run this where Claude Code is. It reads the token from its file; the token is not shown here.":
+    "Execute onde o Claude Code está. Ele lê o token do arquivo; aqui ele não é mostrado.",
+  "Copy command": "Copiar comando",
+  "Copy token": "Copiar token",
+  "Signed-in clients": "Clientes conectados",
+  "Nobody has signed in yet.": "Ninguém entrou ainda.",
+  "since {when}": "desde {when}",
+  Revoked: "Revogado",
 };
 
 export default dict;

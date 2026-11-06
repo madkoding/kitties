@@ -755,6 +755,17 @@ export const api = {
   exposure: () => request<Exposure>("GET", "/v1/exposure"),
   setExposure: (mode: ExposureMode, acceptRisk = false) =>
     request<{ restarting: boolean }>("PUT", "/v1/exposure", { mode, accept_risk: acceptRisk }),
+  // mcp is the MCP connector for Claude; setMcp keeps the switches and the gateway restarts
+  // (exec and approve need acceptRisk); mcpToken is the explicit way to read its token;
+  // rotateMcpToken replaces it (and restarts); the clients are the OAuth sign-ins, revocable.
+  mcp: () => request<McpInfo>("GET", "/v1/mcp"),
+  setMcp: (s: McpSettings, acceptRisk = false) =>
+    request<{ restarting: boolean }>("PUT", "/v1/mcp", { ...s, accept_risk: acceptRisk }),
+  mcpToken: () => request<{ token: string }>("GET", "/v1/mcp/token"),
+  rotateMcpToken: () => request<{ restarting: boolean }>("POST", "/v1/mcp/token"),
+  mcpClients: () => request<{ clients: McpClient[] }>("GET", "/v1/mcp/clients"),
+  revokeMcpClient: (id: string) =>
+    request<{ revoked: string }>("DELETE", `/v1/mcp/clients/${encodeURIComponent(id)}`),
   // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
   // up; backupKitty backs them up now; updateKitty moves the desktop to the newest image.
   desktopInfo: (ref: string) => request<DesktopInfo>("GET", `/v1/kitties/${ref}/desktop`),
@@ -1155,6 +1166,33 @@ export type Exposure = {
   lan_ip?: string;
   can_change: boolean;
   why?: string;
+};
+
+// McpInfo is the MCP connector (docs/MCP.md) as Settings shows it. It never carries the token:
+// the command reads it from token_file, and mcpToken is the explicit way to get it.
+export type McpInfo = {
+  enabled: boolean;
+  allow_exec: boolean;
+  allow_approve: boolean;
+  oauth: boolean;
+  url: string;
+  token_file: string;
+  command: string;
+  token_managed: boolean;
+  can_change: boolean;
+  why?: string;
+};
+
+export type McpSettings = Pick<McpInfo, "enabled" | "allow_exec" | "allow_approve" | "oauth">;
+
+// McpClient is a remote client (claude.ai) that signed in to the connector with OAuth.
+export type McpClient = {
+  id: string;
+  name: string;
+  host: string;
+  since: string;
+  last_token?: string;
+  revoked?: boolean;
 };
 
 // UpdateStatus says which version of Kitties runs, whether a newer one is out, and whether this

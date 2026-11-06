@@ -36,6 +36,7 @@ import { AccountSignIn } from "./SignIn";
 import { ask } from "./Confirm";
 import Secrets from "./Secrets";
 import Exposure from "./Exposure";
+import McpConnector from "./McpConnector";
 import Updates from "./Updates";
 import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 
@@ -2034,6 +2035,7 @@ export default function SettingsModal({
           <>
             <Preferences />
             <Exposure />
+            <McpConnector />
             <Updates />
           </>
         )}
