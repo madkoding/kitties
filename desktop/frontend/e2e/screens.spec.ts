@@ -1808,6 +1808,7 @@ test("how long the kitties keep at a task on their own: checked, saved and kept"
   await expect(box).toContainText("autonomy.brain_wait");
   await box.locator("#auto-follow-ups").fill("15m 1h 4h");
   await box.locator("#auto-brain-wait").fill("45m");
+  await box.locator("#auto-stand-ins").fill("2");
   await box.getByTestId("autonomy-save").click();
   await expect(box.getByText("Saved.")).toBeVisible();
   await box.scrollIntoViewIfNeeded();
@@ -1817,8 +1818,10 @@ test("how long the kitties keep at a task on their own: checked, saved and kept"
   await page.locator("aside").getByRole("button", { name: "Settings" }).click();
   await page.getByRole("tab", { name: "Preferences" }).click();
   await expect(box.locator("#auto-follow-ups")).toHaveValue("15m 1h 4h");
+  await expect(box.locator("#auto-stand-ins")).toHaveValue("2");
   await box.locator("#auto-follow-ups").fill("");
   await box.locator("#auto-brain-wait").fill("");
+  await box.locator("#auto-stand-ins").fill("");
   await box.getByTestId("autonomy-save").click();
   await expect(box.getByText("Saved.")).toBeVisible();
 });

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -11,11 +12,13 @@ import (
 //	autonomy:
 //	  follow_ups: 10m 30m 2h   # waits before a goal that did not finish runs again; "off": never
 //	  brain_wait: 30m          # how long a task waits for a model that is down; "off": not at all
+//	  stand_ins: 3             # tasks a day a kitty without a backup hands to a free one; "off": none
 //
 // Empty takes the defaults.
 type Autonomy struct {
 	FollowUps string `yaml:"follow_ups" json:"follow_ups"`
 	BrainWait string `yaml:"brain_wait" json:"brain_wait"`
+	StandIns  string `yaml:"stand_ins" json:"stand_ins"`
 }
 
 // maxWait is the longest single wait either setting takes.
@@ -32,8 +35,33 @@ func (a Autonomy) Validate() error {
 	if _, err := a.followUps(nil); err != nil {
 		return err
 	}
-	_, err := a.brainWait(0)
+	if _, err := a.brainWait(0); err != nil {
+		return err
+	}
+	_, err := a.standIns(0)
 	return err
+}
+
+// StandInsOr is how many tasks a day a kitty without a backup hands to a free kitty: def when
+// unset, zero when off.
+func (a Autonomy) StandInsOr(def int) int {
+	n, _ := a.standIns(def)
+	return n
+}
+
+func (a Autonomy) standIns(def int) (int, error) {
+	switch s := strings.TrimSpace(a.StandIns); {
+	case s == "":
+		return def, nil
+	case off(s):
+		return 0, nil
+	default:
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 || n > 100 {
+			return def, fmt.Errorf("autonomy.stand_ins: %q is not a number between 1 and 100 (or off)", s)
+		}
+		return n, nil
+	}
 }
 
 // FollowUpWaits are the waits before the follow-ups of a goal that did not finish: def when

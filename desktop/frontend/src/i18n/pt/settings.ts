@@ -63,6 +63,9 @@ const dict: Dictionary = {
   "Only to reach it through a proxy or a compatible service.":
     "Só para chegar a ele por um proxy ou um serviço compatível.",
   "Longest answer (tokens)": "Resposta mais longa (tokens)",
+  "Tasks a day another kitty may take over": "Tarefas por dia que outro kitty pode assumir",
+  "When a kitty with no backup gives up, the free kitty most like it takes the task over, up to this many times a day. Write off to be asked instead.":
+    "Quando um kitty sem reserva desiste, o kitty livre mais parecido assume a tarefa, até este número de vezes por dia. Escreva off para que perguntem a você.",
   "Working on their own": "Trabalho por conta própria",
   "Try an unfinished goal again after": "Tentar de novo um objetivo inacabado após",
   "A goal that ended blocked or waiting for you runs again by itself after each of these waits. Write off to never try again on its own.":

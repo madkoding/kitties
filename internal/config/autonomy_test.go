@@ -18,6 +18,9 @@ func TestAutonomy(t *testing.T) {
 	if w := a.FollowUpWaits(def); len(w) != 3 || w[0] != 5*time.Minute || w[2] != 150*time.Minute || a.BrainWaitOr(time.Hour) != 45*time.Minute {
 		t.Errorf("waits = %v %v", w, a.BrainWaitOr(time.Hour))
 	}
+	if (Autonomy{}).StandInsOr(3) != 3 || (Autonomy{StandIns: "5"}).StandInsOr(3) != 5 || (Autonomy{StandIns: "off"}).StandInsOr(3) != 0 || (Autonomy{StandIns: "x"}).StandInsOr(3) != 3 {
+		t.Error("stand-ins")
+	}
 	for _, o := range []string{"off", "OFF", "0", "none"} {
 		a := Autonomy{FollowUps: o, BrainWait: o}
 		if a.Validate() != nil || a.FollowUpWaits(def) == nil || len(a.FollowUpWaits(def)) != 0 || a.BrainWaitOr(time.Hour) != 0 {
@@ -32,6 +35,8 @@ func TestAutonomy(t *testing.T) {
 		{Autonomy{FollowUps: "10s"}, "between 1m and 168h"},
 		{Autonomy{FollowUps: "1m 1m 1m 1m 1m 1m 1m 1m 1m 1m 1m"}, "10 at most"},
 		{Autonomy{BrainWait: "200h"}, "autonomy.brain_wait"},
+		{Autonomy{StandIns: "many"}, "autonomy.stand_ins"},
+		{Autonomy{StandIns: "500"}, "between 1 and 100"},
 	} {
 		if err := c.a.Validate(); err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%+v: %v", c.a, err)

@@ -291,15 +291,74 @@ func (s *Service) giveUp(id string, index int, k *kitty.Kitty, fail string) (res
 }
 
 // standIn is the kitty that takes over a task k gave up on when k names no backup: another one
-// with a desktop as k has, not in error and not at work on something else; nil when none is free.
+// with a desktop as k has, not in error and not at work on something else, the most like k
+// (the connectors k uses, the skills of its soul); nil when none is free, or when k has handed
+// over as many tasks today as its stand-ins allow.
 func (s *Service) standIn(k *kitty.Kitty) *kitty.Kitty {
+	var best *kitty.Kitty
+	bestScore := -1
 	for _, other := range s.fleet.List() {
 		if other.ID == k.ID || other.Desktop != k.Desktop || other.Status == kitty.StatusError || s.KittyBusy(other.ID) {
 			continue
 		}
-		return other
+		if score := likeness(k, other); score > bestScore {
+			best, bestScore = other, score
+		}
 	}
-	return nil
+	if best == nil || !s.standInLeft(k.ID) {
+		return nil
+	}
+	return best
+}
+
+// likeness is how well other can do k's work: two points for each connector of k it may use
+// too (a kitty with no list may use every one), one for each skill their souls share, and one
+// for a machine that is on.
+func likeness(k, other *kitty.Kitty) int {
+	score := 0
+	for _, c := range k.Connectors {
+		if len(other.Connectors) == 0 || contains(other.Connectors, c) {
+			score += 2
+		}
+	}
+	for _, a := range k.Soul.Skills {
+		for _, b := range other.Soul.Skills {
+			if strings.EqualFold(strings.TrimSpace(a), strings.TrimSpace(b)) {
+				score++
+				break
+			}
+		}
+	}
+	if other.Status == kitty.StatusRunning {
+		score++
+	}
+	return score
+}
+
+// DefaultStandIns is how many tasks a day a kitty without a backup may hand to a stand-in.
+const DefaultStandIns = 3
+
+// SetStandIns has the stand-ins a kitty may use a day read from fn (the settings); zero: none.
+func (s *Service) SetStandIns(fn func() int) { s.standInsFrom = fn }
+
+// standInLeft takes one of the kitty's stand-ins for today, and reports whether there was one.
+// The count starts again each day, so a task nobody can do does not go round the whole fleet.
+func (s *Service) standInLeft(kittyID string) bool {
+	limit := DefaultStandIns
+	if s.standInsFrom != nil {
+		limit = s.standInsFrom()
+	}
+	day := s.now().Format("2006-01-02")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.standIns == nil || s.standInsDay != day {
+		s.standIns, s.standInsDay = map[string]int{}, day
+	}
+	if s.standIns[kittyID] >= limit {
+		return false
+	}
+	s.standIns[kittyID]++
+	return true
 }
 
 // lastRequest is what the thread asked for before the turn at index: the last message that

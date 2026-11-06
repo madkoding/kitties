@@ -27,8 +27,9 @@ A kitty is not only something you talk to. Each one has an agenda:
 - **Recovery.** A brain that is down for a while (busy, failing, unreachable) is waited for,
   up to half an hour, ever longer between tries, instead of failing the attempt; each wait shows
   in the chat. A failed attempt is retried with a different approach. When a kitty gives up,
-  its **backup** kitty takes the task over; without one, a free kitty of the fleet that can do
-  the same (a desktop if the task needs one, not in error, not at work) stands in; when none is
+  its **backup** kitty takes the task over; without one, the free kitty of the fleet most like it
+  (a desktop if the task needs one, not in error, not at work; then the connectors it uses and
+  the skills of its soul) stands in, up to `stand_ins` tasks a day (3 by default); when none is
   free (or the kitty is *attended*), the kitty asks you (the chat is
   marked *help* until you answer). A watchdog brings a stopped container back and retries a
   kitty in error.
@@ -58,6 +59,7 @@ In the YAML, under a kitty:
 autonomy:                        # Settings → Preferences → Working on their own
   follow_ups: 10m 30m 2h         # waits before an unfinished goal runs again; off: never
   brain_wait: 30m                # how long a task waits for a model that is down; off: not at all
+  stand_ins: 3                   # tasks a day a kitty without a backup hands to a free one; off: none
 kitties:
   - name: mimi
     backup: luna                 # takes over what mimi gives up on

@@ -306,6 +306,7 @@ func (a *app) open(cmd string) error {
 	// How long a kitty keeps at a task on its own follows the settings as they change.
 	ag.Scheduler.SetFollowUps(func() []time.Duration { return fleet.Autonomy().FollowUpWaits(agenda.DefaultFollowUps) })
 	chats.SetBrainWait(func() time.Duration { return fleet.Autonomy().BrainWaitOr(chat.DefaultBrainWait) })
+	chats.SetStandIns(func() int { return fleet.Autonomy().StandInsOr(chat.DefaultStandIns) })
 	a.agenda = ag
 	dataDir := a.cfg.DataDirOr()
 	if a.approvals, err = approvals.Open(filepath.Join(dataDir, "approvals.json")); err != nil {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/soul"
@@ -55,5 +56,43 @@ func TestStandIn(t *testing.T) {
 	_, _ = s2.Send(context.Background(), c.ID, "go")
 	if turn := waitDone(t, s2, c.ID).Turns[1]; !turn.NeedsHelp {
 		t.Errorf("attended: %+v", turn)
+	}
+}
+
+func TestStandInIsTheMostAlikeAndCappedADay(t *testing.T) {
+	s, d, _ := deskService(t)
+	ana, _ := d.Get("ana") // connectors: echo
+	ana.Soul.Skills = []string{"Research", "writing"}
+	// cy has nothing in common; dee shares a skill; eve may use every connector and is on.
+	d.kitties["c1"] = &kitty.Kitty{ID: "c1", Name: "cy", Desktop: true, Connectors: []string{"other"}}
+	d.kitties["d1"] = &kitty.Kitty{ID: "d1", Name: "dee", Desktop: true, Connectors: []string{"other"}, Soul: soul.Soul{Skills: []string{" research "}}}
+	d.kitties["e1"] = &kitty.Kitty{ID: "e1", Name: "eve", Desktop: true, Status: kitty.StatusRunning}
+	if got := s.standIn(ana); got == nil || got.Name != "eve" {
+		t.Fatalf("most alike = %v", got)
+	}
+	if likeness(ana, d.kitties["d1"]) != 1 || likeness(ana, d.kitties["e1"]) != 3 || likeness(ana, d.kitties["c1"]) != 0 {
+		t.Error("likeness")
+	}
+	// Three a day by default (one already taken above), then nobody; a new day starts again.
+	now := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+	s.standIns = nil
+	for i := 0; i < DefaultStandIns; i++ {
+		if s.standIn(ana) == nil {
+			t.Fatalf("stand-in %d refused", i+1)
+		}
+	}
+	if s.standIn(ana) != nil {
+		t.Error("past the day's stand-ins")
+	}
+	now = now.Add(24 * time.Hour)
+	if s.standIn(ana) == nil {
+		t.Error("a new day")
+	}
+	// From the settings: off means none.
+	s.SetStandIns(func() int { return 0 })
+	now = now.Add(24 * time.Hour)
+	if s.standIn(ana) != nil {
+		t.Error("off in the settings")
 	}
 }

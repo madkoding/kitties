@@ -185,6 +185,11 @@ type Service struct {
 	vault *vault.Store
 	// helps are the kitties waiting for the person's answer, by turn (help.go).
 	helps map[string]chan HelpAnswer
+	// standIns counts, for the day standInsDay, the tasks each kitty handed to a stand-in;
+	// standInsFrom gives how many it may (autonomy.go).
+	standIns     map[string]int
+	standInsDay  string
+	standInsFrom func() int
 	// resuming are the parked chats being woken up (resume.go).
 	resuming map[string]bool
 	now      func() time.Time

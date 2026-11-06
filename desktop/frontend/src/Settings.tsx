@@ -1763,13 +1763,18 @@ function AutonomyForm({
 }) {
   const [followUps, setFollowUps] = useState(view.autonomy?.follow_ups || "");
   const [brainWait, setBrainWait] = useState(view.autonomy?.brain_wait || "");
+  const [standIns, setStandIns] = useState(view.autonomy?.stand_ins || "");
   const [msg, flash] = useFlash();
   const [err, setErr] = useState("");
   const save = async () => {
     setErr("");
     try {
       onSaved(
-        await api.setAutonomy({ follow_ups: followUps.trim(), brain_wait: brainWait.trim() }),
+        await api.setAutonomy({
+          follow_ups: followUps.trim(),
+          brain_wait: brainWait.trim(),
+          stand_ins: standIns.trim(),
+        }),
       );
       flash(t("Saved."));
     } catch (e) {
@@ -1807,6 +1812,21 @@ function AutonomyForm({
       <p class={HELP}>
         {t(
           "How long a task waits for its model to answer again (busy, failing, unreachable) before giving up. Write off to not wait.",
+        )}
+      </p>
+      <label class={LABEL} for="auto-stand-ins">
+        {t("Tasks a day another kitty may take over")}
+      </label>
+      <input
+        id="auto-stand-ins"
+        class={`${INPUT} !w-56 font-mono`}
+        value={standIns}
+        onInput={(e) => setStandIns((e.target as HTMLInputElement).value)}
+        placeholder="3"
+      />
+      <p class={HELP}>
+        {t(
+          "When a kitty with no backup gives up, the free kitty most like it takes the task over, up to this many times a day. Write off to be asked instead.",
         )}
       </p>
       <div class="flex items-center gap-2 mt-4 flex-wrap">

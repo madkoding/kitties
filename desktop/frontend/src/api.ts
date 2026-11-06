@@ -373,7 +373,7 @@ export interface SettingsView {
   notify: { connector: string; on: string[]; digest?: string; day?: boolean };
   notify_events: string[];
   // autonomy is how long the kitties keep at a task on their own: empty takes the defaults.
-  autonomy?: { follow_ups: string; brain_wait: string };
+  autonomy?: { follow_ups: string; brain_wait: string; stand_ins?: string };
   accounts: Account[];
   // oauth_ready are the services a connection signs in to without an app of the person's own.
   oauth_ready?: string[];
@@ -940,7 +940,7 @@ export const api = {
     request("POST", `/v1/chats/${chat}/turns/${index}/feedback`, { rating, note }),
   setNotify: (c: { connector: string; on: string[]; digest?: string }) =>
     request<SettingsView>("PUT", "/v1/settings/notify", c),
-  setAutonomy: (a: { follow_ups: string; brain_wait: string }) =>
+  setAutonomy: (a: { follow_ups: string; brain_wait: string; stand_ins: string }) =>
     request<SettingsView>("PUT", "/v1/settings/autonomy", a),
   testNotify: (connector = "") =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),
