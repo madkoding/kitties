@@ -7,6 +7,7 @@ import (
 	"strconv"
 
 	"github.com/madkoding/kitties/internal/chat"
+	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/memory"
 	"github.com/madkoding/kitties/internal/notify"
 )
@@ -58,6 +59,7 @@ func (s *Server) memoryRoutes() {
 	s.mux.Handle("POST /v1/kitties/{ref}/memory/distill", api(s.handleDistill))
 	s.mux.Handle("POST /v1/chats/{id}/turns/{index}/feedback", api(s.handleFeedback))
 	s.mux.Handle("PUT /v1/settings/notify", api(s.handleSetNotify))
+	s.mux.Handle("PUT /v1/settings/autonomy", api(s.handleSetAutonomy))
 	s.mux.Handle("POST /v1/settings/notify/test", api(s.handleTestNotify))
 	s.mux.Handle("POST /v1/settings/notify/digest", api(s.handleSendDigest))
 }
@@ -184,6 +186,19 @@ func (s *Server) handleSetNotify(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.fleet.SetNotify(c); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, s.fleet.Settings())
+}
+
+func (s *Server) handleSetAutonomy(w http.ResponseWriter, r *http.Request) {
+	var a config.Autonomy
+	if err := decode(r, &a); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.fleet.SetAutonomy(a); err != nil {
 		fail(w, codeFor(err), err)
 		return
 	}

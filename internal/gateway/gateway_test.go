@@ -36,6 +36,7 @@ type fakeFleet struct {
 	fail    error
 	calls   []string
 	notify  notify.Config
+	auto    config.Autonomy
 	// signingIn and cleared are what the last SetConnector was told.
 	signingIn bool
 	cleared   []string
@@ -273,6 +274,13 @@ func (f *fakeFleet) SetNotify(c notify.Config) error {
 		return errors.New("notify.connector: no such connector \"bad\"")
 	}
 	f.notify = c
+	return nil
+}
+func (f *fakeFleet) SetAutonomy(a config.Autonomy) error {
+	if err := a.Validate(); err != nil {
+		return err
+	}
+	f.auto = a
 	return nil
 }
 func (f *fakeFleet) InboundSecret(name string) (string, error) {

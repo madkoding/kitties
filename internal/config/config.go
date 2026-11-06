@@ -50,6 +50,8 @@ type Config struct {
 	Connectors map[string]Connector `yaml:"connectors"`
 	// Notify says where the person is told, outside the interface, when a kitty needs them.
 	Notify notify.Config `yaml:"notify"`
+	// Autonomy tunes how long a kitty keeps at a task on its own (autonomy.go).
+	Autonomy Autonomy `yaml:"autonomy"`
 }
 
 // Provider is one AI profile.
@@ -549,6 +551,9 @@ func (c *Config) Validate() error {
 		return errors.New("gateway.listen cannot be empty")
 	}
 	if err := c.Notify.Validate(nil); err != nil {
+		return err
+	}
+	if err := c.Autonomy.Validate(); err != nil {
 		return err
 	}
 	if c.Notify.Connector != "" {

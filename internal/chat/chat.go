@@ -201,6 +201,9 @@ type Service struct {
 	// BrainWait is how long, in all, an unattended task waits for a brain that is down (busy,
 	// failing or unreachable) before the attempt fails; zero does not wait.
 	BrainWait time.Duration
+	// brainWaitFrom, when set, gives BrainWait, read at each outage so a change in the settings
+	// applies at once.
+	brainWaitFrom func() time.Duration
 	// brainEvery is the first wait before trying a brain that is down again; it doubles.
 	brainEvery time.Duration
 	// MaxTurns is how many turns of the thread a kitty is shown; zero (the default) shows all of
@@ -305,7 +308,7 @@ func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
 		now: time.Now, newID: randomID, MaxRounds: 4, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
 		DefaultLimits: kitty.Limits{MaxTokens: 0, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
-		BrainWait: 30 * time.Minute, brainEvery: 15 * time.Second,
+		BrainWait: DefaultBrainWait, brainEvery: 15 * time.Second,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
 	if err := s.load(); err != nil {
 		return nil, err
@@ -1467,7 +1470,7 @@ func (s *Service) askPatiently(ctx context.Context, id string, index int, p *pen
 	wait, waited := s.brainEvery, time.Duration(0)
 	for {
 		answer, err := ask(ctx, p.brain, p.native, messages, p.tools)
-		if err == nil || limits.Attended || ctx.Err() != nil || !provider.Transient(err) || waited+wait > s.BrainWait {
+		if err == nil || limits.Attended || ctx.Err() != nil || !provider.Transient(err) || waited+wait > s.brainWait() {
 			return answer, err
 		}
 		s.appendStep(id, index, Step{At: s.now(), Action: "wait", Error: clip(err.Error(), 300),
@@ -1480,6 +1483,19 @@ func (s *Service) askPatiently(ctx context.Context, id string, index int, p *pen
 		waited += wait
 		wait = min(wait*2, brainWaitMax)
 	}
+}
+
+// DefaultBrainWait is how long an unattended task waits for a brain that is down, by default.
+const DefaultBrainWait = 30 * time.Minute
+
+// SetBrainWait has the wait for a brain that is down read from fn (the settings).
+func (s *Service) SetBrainWait(fn func() time.Duration) { s.brainWaitFrom = fn }
+
+func (s *Service) brainWait() time.Duration {
+	if s.brainWaitFrom != nil {
+		return s.brainWaitFrom()
+	}
+	return s.BrainWait
 }
 
 // brainWaitMax is the longest wait between two tries of a brain that is down.

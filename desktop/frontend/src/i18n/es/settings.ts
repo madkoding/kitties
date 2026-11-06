@@ -63,6 +63,13 @@ const dict: Dictionary = {
   "Only to reach it through a proxy or a compatible service.":
     "Solo para llegar a él a través de un proxy o un servicio compatible.",
   "Longest answer (tokens)": "Respuesta más larga (tokens)",
+  "Working on their own": "Trabajo por su cuenta",
+  "Try an unfinished goal again after": "Reintentar un objetivo sin terminar tras",
+  "A goal that ended blocked or waiting for you runs again by itself after each of these waits. Write off to never try again on its own.":
+    "Un objetivo que terminó bloqueado o esperándote vuelve a ejecutarse solo tras cada una de estas esperas. Escribe off para que nunca lo reintente solo.",
+  "Wait for a model that is down": "Esperar a un modelo caído",
+  "How long a task waits for its model to answer again (busy, failing, unreachable) before giving up. Write off to not wait.":
+    "Cuánto espera una tarea a que su modelo vuelva a responder (ocupado, con fallas, sin conexión) antes de rendirse. Escribe off para no esperar.",
   "If it is down, think with": "Si está caído, pensar con",
   "nothing else (wait for it)": "nada más (esperarlo)",
   "While this model is busy or unreachable, the kitties go on with this one instead of waiting.":

@@ -34,7 +34,10 @@ A kitty is not only something you talk to. Each one has an agenda:
   even start) is picked up again by itself: after 10 minutes, then 30, then 2 hours, in the same
   thread, told to go on from where it stopped. A run that finishes starts the count again; past
   the third the goal waits for its schedule, an event or you. The journal says when the next one
-  is due, and the goal shows *tries again …*.
+  is due, and the goal shows *tries again …*. Both waits are set in *Settings → Preferences →
+  Working on their own* (or `autonomy:` in the YAML).
+- **A spare brain.** A model profile can name a `fallback`: while it is down the kitties think
+  with the spare instead of waiting ([Configuration](CONFIGURATION.md#a-spare-brain)).
 - **Delegation.** A kitty can hand a subtask to another (`@delegate luna {"task": "..."}`,
   or the native `delegate` tool), waits for the answer and goes on. Hand-overs are bounded in
   depth so two kitties cannot bounce a task back and forth.
@@ -44,11 +47,15 @@ A kitty is not only something you talk to. Each one has an agenda:
 | | |
 | --- | --- |
 | ![A kitty's goals and journal](screenshots/21-goals-journal.png) | ![A goal's thread: the scheduler's call and the answer](screenshots/22-goal-chat.png) |
-| ![A kitty hands a subtask to another](screenshots/20-delegation.png) | |
+| ![A kitty hands a subtask to another](screenshots/20-delegation.png) | ![How long they keep at it on their own](screenshots/60-autonomy.png) |
 
 In the YAML, under a kitty:
 
 ```yaml
+autonomy:                        # Settings → Preferences → Working on their own
+  follow_ups: 10m 30m 2h         # waits before an unfinished goal runs again; off: never
+  brain_wait: 30m                # how long a task waits for a model that is down; off: not at all
+kitties:
   - name: mimi
     backup: luna                 # takes over what mimi gives up on
     limits: {max_tokens: 200000, max_seconds: 900, retries: 2, day_tokens: 2000000, day_actions: 20}

@@ -88,6 +88,11 @@ func TestBrainOutageLimits(t *testing.T) {
 	if len(waits(turn)) != 0 {
 		t.Errorf("no wait configured: %+v", turn)
 	}
+	// Off in the settings: no waiting either.
+	turn = runWithBrain(t, downFor(1, outage), func(s *Service) { s.SetBrainWait(func() time.Duration { return 0 }) })
+	if len(waits(turn)) != 0 {
+		t.Errorf("off in the settings: %+v", turn)
+	}
 }
 
 func TestBrainOutageWaitIsCancelled(t *testing.T) {

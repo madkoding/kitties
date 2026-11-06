@@ -156,3 +156,22 @@ func TestFollowUpWhileBusyAndOnFailure(t *testing.T) {
 		t.Errorf("failed start: %+v", got)
 	}
 }
+
+func TestFollowUpsFromTheSettings(t *testing.T) {
+	s := store(t)
+	j := NewJournal(filepath.Join(t.TempDir(), "j"))
+	sched := New(s, j, &fakeRunner{})
+	sched.now = fixed
+	waits := []time.Duration{time.Hour}
+	sched.SetFollowUps(func() []time.Duration { return waits })
+	g, _ := s.Add(Goal{Kitty: "k1", Title: "G", On: []string{"x"}, Enabled: true})
+	sched.Report(g.ID, "blocked")
+	if got, _ := s.Get(g.ID); !got.FollowUpAt.Equal(fixed().Add(time.Hour)) {
+		t.Errorf("from the settings: %+v", got)
+	}
+	waits = nil
+	sched.Report(g.ID, "blocked")
+	if got, _ := s.Get(g.ID); !got.FollowUpAt.IsZero() {
+		t.Error("turned off in the settings")
+	}
+}

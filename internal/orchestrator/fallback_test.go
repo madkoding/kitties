@@ -42,3 +42,26 @@ func TestBrainWithFallback(t *testing.T) {
 		t.Error("unknown profile")
 	}
 }
+
+func TestSettingsAutonomy(t *testing.T) {
+	cfg := testConfig(t)
+	m, err := New(cfg, WithContainers(newFake(), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetAutonomy(config.Autonomy{BrainWait: "later"}); err == nil {
+		t.Error("a bad wait is refused")
+	}
+	a := config.Autonomy{FollowUps: "5m 1h", BrainWait: "off"}
+	if err := m.SetAutonomy(a); err != nil {
+		t.Fatal(err)
+	}
+	if m.Autonomy() != a || m.Settings().Autonomy != a {
+		t.Errorf("autonomy = %+v", m.Autonomy())
+	}
+	// It is kept across a restart, over the file.
+	m2, err := New(cfg, WithContainers(newFake(), nil))
+	if err != nil || m2.Autonomy() != a {
+		t.Errorf("after a restart: %+v %v", m2.Autonomy(), err)
+	}
+}

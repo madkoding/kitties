@@ -68,7 +68,10 @@ type Scheduler struct {
 	// (blocked, escalated, failed): the first wait after the first such run, and so on; once
 	// they are used up the goal waits for its schedule, an event or a person. Empty: none.
 	FollowUps []time.Duration
-	mu        sync.Mutex
+	// followUpsFrom, when set, gives the waits instead of FollowUps, read at each report so a
+	// change in the settings applies at once.
+	followUpsFrom func() []time.Duration
+	mu            sync.Mutex
 	// busy are the goals with a run in flight, so a slow one is not stacked.
 	busy map[string]bool
 	logf func(string, ...any)
@@ -193,17 +196,29 @@ func (s *Scheduler) run(ctx context.Context, g *Goal, t Trigger) (string, error)
 // Report is how the runner says a run ended (done, blocked, escalated, delegated, failed). A run
 // that did not finish gets a follow-up, which the journal tells.
 func (s *Scheduler) Report(goalID, result string) {
-	g := s.store.report(goalID, result, s.FollowUps)
-	if g == nil || !unfinished(result) || len(s.FollowUps) == 0 {
+	waits := s.waits()
+	g := s.store.report(goalID, result, waits)
+	if g == nil || !unfinished(result) || len(waits) == 0 {
 		return
 	}
 	text := g.Title + ": " + result + "; no follow-up left, it waits for its schedule, an event or you"
 	if !g.FollowUpAt.IsZero() {
-		text = fmt.Sprintf("%s: %s; follow-up %d of %d at %s", g.Title, result, g.FollowUps, len(s.FollowUps), g.FollowUpAt.Format("15:04"))
+		text = fmt.Sprintf("%s: %s; follow-up %d of %d at %s", g.Title, result, g.FollowUps, len(waits), g.FollowUpAt.Format("15:04"))
 	} else if !g.Enabled {
 		return
 	}
 	_ = s.journal.Add(Entry{Kitty: g.Kitty, Kind: KindRetry, Goal: g.ID, Chat: g.Chat, Text: text})
+}
+
+// SetFollowUps has the follow-up waits read from fn at each report (the settings).
+func (s *Scheduler) SetFollowUps(fn func() []time.Duration) { s.followUpsFrom = fn }
+
+// waits are the follow-up waits in force.
+func (s *Scheduler) waits() []time.Duration {
+	if s.followUpsFrom != nil {
+		return s.followUpsFrom()
+	}
+	return s.FollowUps
 }
 
 // Wait blocks until every run in flight has started its work.
