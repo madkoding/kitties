@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
@@ -24,6 +25,7 @@ type fakeClient struct {
 	session []byte
 	emit    func(Event)
 	sent    []string
+	typing  []string
 	sendErr error
 	logout  int
 	runErr  error
@@ -67,6 +69,19 @@ func (f *fakeClient) Send(_ context.Context, phone, text string) error {
 	}
 	f.sent = append(f.sent, phone+": "+text)
 	return nil
+}
+
+func (f *fakeClient) Typing(_ context.Context, to string, on bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.typing = append(f.typing, fmt.Sprintf("%s:%v", to, on))
+	return nil
+}
+
+func (f *fakeClient) typings() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.typing...)
 }
 
 func (f *fakeClient) Logout(context.Context) error {
@@ -116,6 +131,8 @@ type fakeChats struct {
 	reply    func(text string) ([]chat.Turn, error)
 	created  int
 	failNew  bool
+	files    []string
+	texts    []string
 }
 
 func newChats() *fakeChats {
@@ -156,10 +173,20 @@ func (c *fakeChats) Send(_ context.Context, id, text string) ([]chat.Turn, error
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.texts = append(c.texts, text)
 	s := c.sessions[id]
 	s.Turns = append(s.Turns, chat.Turn{From: "user", Text: text})
 	s.Turns = append(s.Turns, turns...)
 	return turns, nil
+}
+
+func (c *fakeChats) SendFiles(ctx context.Context, id, text string, files []attach.Upload) ([]chat.Turn, error) {
+	c.mu.Lock()
+	for _, f := range files {
+		c.files = append(c.files, f.Name+"|"+f.MIME+"|"+string(f.Data))
+	}
+	c.mu.Unlock()
+	return c.Send(ctx, id, text)
 }
 
 func (c *fakeChats) Subscribe(id string) (<-chan chat.Event, func()) {
@@ -206,6 +233,10 @@ func kittyOf(ref string) (*kitty.Kitty, error) {
 	switch ref {
 	case "mimi", "k1":
 		return &kitty.Kitty{ID: "k1", Name: "mimi"}, nil
+	case "luna", "k2":
+		k := &kitty.Kitty{ID: "k2", Name: "luna"}
+		k.Soul.Language = "Spanish"
+		return k, nil
 	}
 	return nil, fmt.Errorf("no kitty %q", ref)
 }
@@ -745,5 +776,180 @@ func TestSaveFails(t *testing.T) {
 	}
 	if _, err := r.b.loadSession(); err == nil {
 		t.Fatal("a session read from a file was accepted")
+	}
+}
+
+func TestTypingWhileTheKittyThinks(t *testing.T) {
+	old := typingEvery
+	typingEvery = 5 * time.Millisecond
+	t.Cleanup(func() { typingEvery = old })
+	r := newRig(t)
+	f := r.linked(t)
+	release := make(chan struct{})
+	r.chats.reply = func(string) ([]chat.Turn, error) {
+		<-release
+		return []chat.Turn{{Text: "ok"}}, nil
+	}
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "think"})
+	eventually(t, "typing shown again", func() bool { return len(f.typings()) >= 2 })
+	close(release)
+	eventually(t, "the reply", func() bool { return len(f.messages()) == 1 })
+	got := f.typings()
+	if got[0] != "56912345678:true" || got[len(got)-1] != "56912345678:false" {
+		t.Fatalf("typing = %v", got)
+	}
+}
+
+func TestBusyInTheKittysLanguage(t *testing.T) {
+	r := newRig(t)
+	r.b.Start(context.Background())
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "luna", Allow: []string{"+56912345678"}}); err != nil {
+		t.Fatal(err)
+	}
+	f := r.next(t)
+	f.push(Event{Kind: EvConnected})
+	r.chats.reply = func(string) ([]chat.Turn, error) { return nil, chat.ErrBusy }
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "hello"})
+	eventually(t, "the busy note", func() bool { return len(f.messages()) == 1 })
+	if !strings.Contains(f.messages()[0], "Sigo con tu mensaje") {
+		t.Fatalf("busy = %q", f.messages()[0])
+	}
+}
+
+func TestLanguageOf(t *testing.T) {
+	for _, tc := range []struct{ lang, text, want string }{
+		{"Spanish", "", "es"}, {"es-CL", "", "es"}, {"Português", "", "pt"}, {"pt-BR", "", "pt"}, {"French", "hola", "en"},
+		{"", "hola, ¿puedes ayudarme?", "es"}, {"", "olá, você pode ver isso?", "pt"}, {"", "hi, can you help", "en"}, {"", "ok", "en"},
+	} {
+		if got := LanguageOf(tc.lang, tc.text); got != tc.want {
+			t.Fatalf("%q %q = %s", tc.lang, tc.text, got)
+		}
+	}
+}
+
+func TestGroups(t *testing.T) {
+	r := newRig(t)
+	f := r.linked(t)
+	group := Event{Kind: EvMessage, From: "56912345678", Name: "Mad", Group: true, Chat: "120363@g.us"}
+	// Groups are off: nothing.
+	g := group
+	g.Text = "mimi, hola"
+	f.push(g)
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Groups: true, Allow: []string{"+56912345678"}}); err != nil {
+		t.Fatal(err)
+	}
+	// On, but nobody names the kitty, or someone off the list does: nothing.
+	g.Text = "hola a todos, mimimi"
+	f.push(g)
+	o := group
+	o.From, o.Text = "4411112222", "mimi?"
+	f.push(o)
+	if st := r.b.Status(); st.Ignored != 1 || !st.Groups {
+		t.Fatalf("status = %+v", st)
+	}
+	// Named, or @mentioned: answered in the group, with who wrote.
+	g.Text = "¿Qué opinas, Mimi?"
+	f.push(g)
+	eventually(t, "the group reply", func() bool { return len(f.messages()) == 1 })
+	m := group
+	m.Text, m.Mentioned = "@15550001 dime", true
+	f.push(m)
+	eventually(t, "the mention reply", func() bool { return len(f.messages()) == 2 })
+	if got := f.messages()[0]; !strings.HasPrefix(got, "120363@g.us: ") {
+		t.Fatalf("reply = %q", got)
+	}
+	r.chats.mu.Lock()
+	texts := append([]string(nil), r.chats.texts...)
+	r.chats.mu.Unlock()
+	if texts[0] != "Mad: ¿Qué opinas, Mimi?" || r.chats.created != 1 {
+		t.Fatalf("texts = %q, chats = %d", texts, r.chats.created)
+	}
+	s, _ := r.chats.Get("c1")
+	if s.Title != "WhatsApp group 120363" {
+		t.Fatalf("title = %q", s.Title)
+	}
+	// A group message without a name still says who.
+	n := group
+	n.Name, n.Text, n.Mentioned = "", "hey", true
+	f.push(n)
+	eventually(t, "the third reply", func() bool { return len(f.messages()) == 3 })
+	r.chats.mu.Lock()
+	defer r.chats.mu.Unlock()
+	if r.chats.texts[2] != "+56912345678: hey" {
+		t.Fatalf("text = %q", r.chats.texts[2])
+	}
+}
+
+func TestMentions(t *testing.T) {
+	for text, want := range map[string]bool{"mimi": true, "Hola @mimi!": true, "mimimi": false, "xmimi": false, "mimi2": false, "a mimi y b": true, "mimimi y mimi": true} {
+		if got := mentions(text, "mimi"); got != want {
+			t.Fatalf("%q = %v", text, got)
+		}
+	}
+	if mentions("mimi", "") {
+		t.Fatal("no name matched")
+	}
+}
+
+func TestFilesAndVoiceNotes(t *testing.T) {
+	r := newRig(t)
+	var heard []string
+	r.b.opt.Transcribe = func(_ context.Context, f File) (string, error) {
+		if string(f.Data) == "mumble" {
+			return "", errors.New("unclear")
+		}
+		heard = append(heard, f.Name)
+		return "buy milk", nil
+	}
+	f := r.linked(t)
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "look", Files: []File{
+		{Name: "picture.jpg", MIME: "image/jpeg", Data: []byte("jpg")},
+		{MIME: "application/pdf", Data: []byte("pdf")},
+	}})
+	eventually(t, "the reply", func() bool { return len(f.messages()) == 1 })
+	f.push(Event{Kind: EvMessage, From: "56912345678", Files: []File{{Name: "audio.ogg", MIME: "audio/ogg", Data: []byte("voice"), Voice: true}}})
+	eventually(t, "the voice reply", func() bool { return len(f.messages()) == 2 })
+	f.push(Event{Kind: EvMessage, From: "56912345678", Files: []File{{Name: "audio.ogg", MIME: "audio/ogg", Data: []byte("mumble"), Voice: true}}})
+	eventually(t, "the third reply", func() bool { return len(f.messages()) == 3 })
+	r.chats.mu.Lock()
+	defer r.chats.mu.Unlock()
+	if strings.Join(r.chats.files, ",") != "picture.jpg|image/jpeg|jpg,whatsapp-2|application/pdf|pdf,audio.ogg|audio/ogg|mumble" {
+		t.Fatalf("files = %q", r.chats.files)
+	}
+	if r.chats.texts[1] != "(voice note) buy milk" || len(heard) != 1 {
+		t.Fatalf("texts = %q", r.chats.texts)
+	}
+	if !strings.Contains(r.logString(), "could not be transcribed") {
+		t.Fatal("the failed transcription is not logged")
+	}
+}
+
+func TestDefaultsFromTheFile(t *testing.T) {
+	dir := t.TempDir()
+	b, err := New(Options{Dir: dir, Box: box{}, NewClient: func() Client { return newFake() }, Kitty: kittyOf,
+		Defaults: &Settings{Enabled: true, Kitty: "mimi", Groups: true, Allow: []string{"+56 9 1234 5678"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st := b.Status(); !st.Enabled || !st.Groups || st.Allow[0] != "56912345678" {
+		t.Fatalf("status = %+v", st)
+	}
+	// Without a vault the file cannot turn it on.
+	var logs []string
+	b, err = New(Options{Dir: dir, Defaults: &Settings{Enabled: true}, Log: func(f string, a ...any) { logs = append(logs, fmt.Sprintf(f, a...)) }})
+	if err != nil || b.Status().Enabled || len(logs) != 1 {
+		t.Fatalf("no vault = %v %v", err, logs)
+	}
+	if _, err := New(Options{Dir: dir, Defaults: &Settings{Allow: []string{"12"}}}); err == nil {
+		t.Fatal("a bad number in the file was accepted")
+	}
+	// Once saved from Settings, the file no longer counts.
+	b, _ = New(Options{Dir: dir, Box: box{}, NewClient: func() Client { return newFake() }, Kitty: kittyOf})
+	if err := b.Apply(Settings{Kitty: "mimi"}); err != nil {
+		t.Fatal(err)
+	}
+	b, _ = New(Options{Dir: dir, Box: box{}, Defaults: &Settings{Enabled: true, Kitty: "mimi"}})
+	if b.Status().Enabled {
+		t.Fatal("the file won over Settings")
 	}
 }

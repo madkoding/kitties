@@ -26,6 +26,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/kitty"
@@ -81,11 +82,25 @@ type Event struct {
 	Name string
 	Text string
 	ID   string
-	// Group is true for a message in a group (they are not answered).
-	Group bool
+	// Group is true for a message in a group, Chat the group (a JID); Mentioned says the message
+	// names this number (an @mention or a reply to it).
+	Group     bool
+	Chat      string
+	Mentioned bool
+	// Files are the pictures, documents and audios of the message (Text is their caption).
+	Files []File
 	// Session is the whole state of the linked device, to keep sealed (EvSession).
 	Session []byte
 	Err     string
+}
+
+// File is a picture, document, video or audio that came in a message.
+type File struct {
+	Name string
+	MIME string
+	Data []byte
+	// Voice is true for a voice note (an audio recorded in the chat).
+	Voice bool
 }
 
 // Client is a WhatsApp connection as a linked device.
@@ -93,8 +108,10 @@ type Client interface {
 	// Run connects with the kept session (nil links a new device with QR codes) and tells
 	// every event to emit until ctx ends or the link is over (logged out, codes expired).
 	Run(ctx context.Context, session []byte, emit func(Event)) error
-	// Send writes text to a number (digits with the country code).
-	Send(ctx context.Context, phone, text string) error
+	// Send writes text to a number (digits with the country code) or a group (its JID).
+	Send(ctx context.Context, to, text string) error
+	// Typing shows (on) or stops showing that the number is writing to to.
+	Typing(ctx context.Context, to string, on bool) error
 	// Logout removes this device from the phone.
 	Logout(ctx context.Context) error
 }
@@ -110,6 +127,7 @@ type Chats interface {
 	Create(title string, members []string) (*chat.Session, error)
 	Get(id string) (*chat.Session, error)
 	Send(ctx context.Context, id, text string) ([]chat.Turn, error)
+	SendFiles(ctx context.Context, id, text string, files []attach.Upload) ([]chat.Turn, error)
 	Subscribe(id string) (<-chan chat.Event, func())
 }
 
@@ -126,6 +144,8 @@ type Settings struct {
 	Allow []string `json:"allow"`
 	// Kitty answers the messages (id or name).
 	Kitty string `json:"kitty"`
+	// Groups lets the kitty answer in groups, when someone on the list mentions it.
+	Groups bool `json:"groups"`
 }
 
 // Status is the link as Settings shows it.
@@ -166,6 +186,10 @@ type Options struct {
 	Registry Registry
 	// QRImage draws a code as a PNG data URL (optional).
 	QRImage func(code string) (string, error)
+	// Transcribe turns a voice note into text (optional: without it the audio is attached as it is).
+	Transcribe func(ctx context.Context, f File) (string, error)
+	// Defaults are the settings while none were saved from Settings (the configuration file's).
+	Defaults *Settings
 	// Log reports what happens (optional).
 	Log func(format string, args ...any)
 }
@@ -216,6 +240,21 @@ func New(opt Options) (*Bridge, error) {
 	data, err := os.ReadFile(b.settingsPath())
 	switch {
 	case errors.Is(err, os.ErrNotExist):
+		if opt.Defaults != nil {
+			b.set = *opt.Defaults
+			b.set.Allow = []string{}
+			for _, n := range opt.Defaults.Allow {
+				d, err := Normalize(n)
+				if err != nil {
+					return nil, err
+				}
+				b.set.Allow = append(b.set.Allow, d)
+			}
+			if b.set.Enabled && !b.usable() {
+				b.set.Enabled = false
+				opt.Log("whatsapp: %v", ErrNoVault)
+			}
+		}
 	case err != nil:
 		return nil, err
 	default:
@@ -312,7 +351,7 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 	if len(s.Allow) > MaxAllow {
 		return Settings{}, fmt.Errorf("the allow list holds at most %d numbers", MaxAllow)
 	}
-	out := Settings{Enabled: s.Enabled, Kitty: strings.TrimSpace(s.Kitty), Allow: []string{}}
+	out := Settings{Enabled: s.Enabled, Kitty: strings.TrimSpace(s.Kitty), Groups: s.Groups, Allow: []string{}}
 	seen := map[string]bool{}
 	for _, n := range s.Allow {
 		d, err := Normalize(n)
@@ -541,44 +580,109 @@ func (b *Bridge) allowedLocked(n string) bool {
 
 func (b *Bridge) receiveLocked(c Client, ev Event) {
 	text := strings.TrimSpace(ev.Text)
-	if ev.Group || text == "" || ev.From == "" {
+	if (text == "" && len(ev.Files) == 0) || ev.From == "" {
+		return
+	}
+	if ev.Group && (!b.set.Groups || ev.Chat == "") {
 		return
 	}
 	if !b.allowedLocked(ev.From) {
 		b.status.Ignored++
 		return
 	}
+	in := inbound{from: ev.From, name: ev.Name, text: text, files: ev.Files, key: ev.From, to: ev.From}
+	if ev.Group {
+		name := b.kittyNameLocked()
+		if !ev.Mentioned && !mentions(text, name) {
+			return
+		}
+		who := ev.Name
+		if who == "" {
+			who = "+" + ev.From
+		}
+		in.key, in.to, in.group = "g:"+ev.Chat, ev.Chat, true
+		in.text = who + ": " + text
+	} else {
+		b.last = ev.From
+	}
 	b.status.LastMessage = time.Now()
-	b.last = ev.From
-	lock := b.numbers[ev.From]
+	lock := b.numbers[in.key]
 	if lock == nil {
 		lock = &sync.Mutex{}
-		b.numbers[ev.From] = lock
+		b.numbers[in.key] = lock
 	}
 	ctx := b.base
 	b.wg.Add(1)
 	go func() {
 		defer b.wg.Done()
-		// One message of a number at a time, in order.
+		// One message of a chat at a time, in order.
 		lock.Lock()
 		defer lock.Unlock()
-		b.answer(ctx, c, ev.From, ev.Name, text)
+		b.answer(ctx, c, in)
 	}()
 }
 
-// chatFor is the chat of a number, made the first time it writes.
-func (b *Bridge) chatFor(from, name string) (string, error) {
+// inbound is a message to answer: key names its chat (a number, or "g:" and a group), to is
+// where the answer goes.
+type inbound struct {
+	from, name, text string
+	files            []File
+	key, to          string
+	group            bool
+}
+
+func (b *Bridge) kittyNameLocked() string {
+	if b.opt.Kitty == nil || b.set.Kitty == "" {
+		return ""
+	}
+	if k, err := b.opt.Kitty(b.set.Kitty); err == nil {
+		return k.Name
+	}
+	return ""
+}
+
+// mentions reports whether a message in a group names the kitty ("mimi, ..." or "@mimi").
+func mentions(text, name string) bool {
+	if name == "" {
+		return false
+	}
+	lower, name := strings.ToLower(text), strings.ToLower(name)
+	for i := strings.Index(lower, name); i >= 0; {
+		end := i + len(name)
+		before := i == 0 || !isWordByte(lower[i-1])
+		after := end == len(lower) || !isWordByte(lower[end])
+		if before && after {
+			return true
+		}
+		next := strings.Index(lower[i+1:], name)
+		if next < 0 {
+			break
+		}
+		i += 1 + next
+	}
+	return false
+}
+
+func isWordByte(c byte) bool {
+	return c == '_' || c == '-' || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c >= 0x80
+}
+
+// chatFor is the chat of a number or a group, made the first time it writes.
+func (b *Bridge) chatFor(in inbound) (string, error) {
 	b.mu.Lock()
-	id, kittyRef := b.chats[from], b.set.Kitty
+	id, kittyRef := b.chats[in.key], b.set.Kitty
 	b.mu.Unlock()
 	if id != "" {
 		if _, err := b.opt.Chats.Get(id); err == nil {
 			return id, nil
 		}
 	}
-	title := "WhatsApp +" + from
-	if name != "" {
-		title = "WhatsApp: " + name
+	title := "WhatsApp +" + in.from
+	switch {
+	case in.group:
+		title = "WhatsApp group " + strings.TrimSuffix(in.to, "@g.us")
+	case in.name != "":
+		title = "WhatsApp: " + in.name
 	}
 	sess, err := b.opt.Chats.Create(title, []string{kittyRef})
 	if err != nil {
@@ -586,27 +690,85 @@ func (b *Bridge) chatFor(from, name string) (string, error) {
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	b.chats[from] = sess.ID
+	b.chats[in.key] = sess.ID
 	return sess.ID, b.saveLocked()
 }
 
-// answer posts a message in the number's chat and writes the kitty's replies back. A reply that
-// goes on working on the desktop is followed until it is done.
-func (b *Bridge) answer(ctx context.Context, c Client, from, name, text string) {
-	id, err := b.chatFor(from, name)
+// typingEvery is how often "writing…" is shown again while the kitty thinks (WhatsApp drops it
+// after some 25 seconds).
+var typingEvery = 10 * time.Second
+
+// typing shows that the kitty is writing until the returned func is called.
+func (b *Bridge) typing(ctx context.Context, c Client, to string) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		t := time.NewTicker(typingEvery)
+		defer t.Stop()
+		for {
+			_ = c.Typing(ctx, to, true)
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+		_ = c.Typing(context.WithoutCancel(ctx), to, false)
+	}
+}
+
+// uploads are the files of a message as the chat takes them; a voice note becomes its words
+// when it can be transcribed.
+func (b *Bridge) uploads(ctx context.Context, in *inbound) []attach.Upload {
+	var out []attach.Upload
+	for i, f := range in.files {
+		if f.Voice && b.opt.Transcribe != nil {
+			words, err := b.opt.Transcribe(ctx, f)
+			if err == nil && strings.TrimSpace(words) != "" {
+				in.text = strings.TrimSpace(in.text + "\n(voice note) " + strings.TrimSpace(words))
+				continue
+			}
+			b.opt.Log("whatsapp: the voice note could not be transcribed: %v", err)
+		}
+		name := f.Name
+		if name == "" {
+			name = fmt.Sprintf("whatsapp-%d", i+1)
+		}
+		out = append(out, attach.Upload{Name: name, MIME: f.MIME, Data: f.Data})
+	}
+	return out
+}
+
+// answer posts a message in its chat and writes the kitty's replies back. A reply that goes on
+// working on the desktop is followed until it is done.
+func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
+	id, err := b.chatFor(in)
 	if err != nil {
-		b.opt.Log("whatsapp: no chat for +%s: %v", from, err)
+		b.opt.Log("whatsapp: no chat for +%s: %v", in.from, err)
 		return
 	}
+	stopTyping := b.typing(ctx, c, in.to)
+	files := b.uploads(ctx, &in)
 	events, unsubscribe := b.opt.Chats.Subscribe(id)
 	defer unsubscribe()
-	turns, err := b.opt.Chats.Send(ctx, id, text)
+	var turns []chat.Turn
+	if len(files) > 0 {
+		turns, err = b.opt.Chats.SendFiles(ctx, id, in.text, files)
+	} else {
+		turns, err = b.opt.Chats.Send(ctx, id, in.text)
+	}
+	stopTyping()
 	if errors.Is(err, chat.ErrBusy) {
-		b.reply(ctx, c, from, "⏳ I am still on your last message; I will write when it is done.")
+		b.reply(ctx, c, in.to, b.busyText(in.text))
 		return
 	}
 	if err != nil {
-		b.opt.Log("whatsapp: the message of +%s: %v", from, err)
+		b.opt.Log("whatsapp: the message of +%s: %v", in.from, err)
 		return
 	}
 	sess, err := b.opt.Chats.Get(id)
@@ -617,7 +779,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, from, name, text string) 
 	first := len(sess.Turns) - len(turns)
 	working := map[int]string{}
 	for i, t := range turns {
-		b.reply(ctx, c, from, t.Text)
+		b.reply(ctx, c, in.to, t.Text)
 		if t.Working {
 			working[first+i] = t.Text
 		}
@@ -636,9 +798,70 @@ func (b *Bridge) answer(ctx context.Context, c Client, from, name, text string) 
 				continue
 			}
 			delete(working, ev.Index)
-			b.reply(ctx, c, from, strings.TrimSpace(strings.TrimPrefix(ev.Turn.Text, sent)))
+			b.reply(ctx, c, in.to, strings.TrimSpace(strings.TrimPrefix(ev.Turn.Text, sent)))
 		}
 	}
+}
+
+// busy is what a person who writes while the kitty still works on their last message reads, in
+// the kitty's language (or, when it follows the person, the message's).
+var busy = map[string]string{
+	"en": "⏳ I am still on your last message; I will write when it is done.",
+	"es": "⏳ Sigo con tu mensaje anterior; te escribo apenas termine.",
+	"pt": "⏳ Ainda estou na sua mensagem anterior; escrevo assim que terminar.",
+}
+
+func (b *Bridge) busyText(text string) string {
+	b.mu.Lock()
+	ref := b.set.Kitty
+	b.mu.Unlock()
+	lang := ""
+	if b.opt.Kitty != nil && ref != "" {
+		if k, err := b.opt.Kitty(ref); err == nil {
+			lang = k.Soul.Language
+		}
+	}
+	return busy[LanguageOf(lang, text)]
+}
+
+// LanguageOf is en, es or pt: the kitty's language when it has one, else a guess from the text.
+func LanguageOf(lang, text string) string {
+	l := strings.ToLower(strings.TrimSpace(lang))
+	switch {
+	case strings.HasPrefix(l, "es") || strings.HasPrefix(l, "spa") || strings.HasPrefix(l, "cast"):
+		return "es"
+	case strings.HasPrefix(l, "pt") || strings.HasPrefix(l, "por"):
+		return "pt"
+	case l != "":
+		return "en"
+	}
+	words := strings.FieldsFunc(strings.ToLower(text), func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 0xC0)
+	})
+	score := map[string]int{}
+	for _, w := range words {
+		switch w {
+		case "hola", "gracias", "por", "favor", "que", "qué", "el", "los", "las", "una", "es", "está", "puedes", "necesito", "también", "pero", "cómo", "dónde":
+			score["es"]++
+		case "olá", "obrigado", "obrigada", "você", "não", "uma", "pode", "preciso", "também", "mas", "como", "onde", "isso":
+			score["pt"]++
+		case "hello", "hi", "thanks", "please", "the", "is", "are", "you", "can", "need", "what", "where":
+			score["en"]++
+		}
+	}
+	if strings.ContainsAny(text, "¿¡ñ") {
+		score["es"] += 2
+	}
+	if strings.ContainsAny(text, "ãõç") {
+		score["pt"] += 2
+	}
+	best := "en"
+	for _, l := range []string{"es", "pt"} {
+		if score[l] > score[best] {
+			best = l
+		}
+	}
+	return best
 }
 
 // reply writes text to a number, in parts WhatsApp takes.
