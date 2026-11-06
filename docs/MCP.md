@@ -92,6 +92,7 @@ signs in again.
 | `chat_send`, `chat_cancel` | give a task and read the answer; stop it |
 | `kitty_power`, `kitty_compute` | turn a machine on or off; where it runs (local or cloud) and its state |
 | `goal_list`, `goal_add`, `goal_run`, `goal_remove`, `kitty_journal` | goals on a schedule or event, run one now, read the journal |
+| `memory_list`, `memory_remember`, `memory_forget` | what a kitty knows about you and the work (the Memory panel); a note written here is pinned |
 | `approval_list`, `approval_reject` | see and reject actions held for a yes |
 | `approval_approve` | say yes, this once, to a held action; **only with `allow_approve`** (by default approving stays with you) |
 
