@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -375,5 +376,50 @@ func TestGatewayServesMCP(t *testing.T) {
 	}
 	if post(strings.TrimSpace(string(data))) != 200 {
 		t.Error("the connector's own token must open it")
+	}
+}
+
+func TestMCPStdioCommand(t *testing.T) {
+	dir := t.TempDir()
+	cfg := filepath.Join(dir, "kitties.yaml")
+	_ = os.WriteFile(cfg, []byte("data_dir: "+dir+"\n"), 0o600)
+	ping := `{"jsonrpc":"2.0","id":1,"method":"ping"}` + "\n"
+	// No token anywhere.
+	t.Setenv("KITTIES_MCP_TOKEN", "")
+	if code, _, errOut := exec(t, ping, "-config", cfg, "mcp"); code != 1 || !strings.Contains(errOut, "no MCP token") {
+		t.Errorf("no token: %d %s", code, errOut)
+	}
+	if code, _, _ := exec(t, ping, "-config", cfg, "mcp", "-bogus"); code != 2 {
+		t.Error("bad flag")
+	}
+	// Against a gateway that has the connector on, with the token from the file.
+	withRuntime(t, true)
+	gwCfg := writeConfig(t, chatServer(t, "ok"))
+	t.Setenv("KITTIES_MCP", "true")
+	addr, out, _, stop := serve(t, "-config", gwCfg, "gateway")
+	defer stop()
+	line := strings.SplitN(strings.SplitN(out.String(), "MCP connector: ", 2)[1], "\n", 2)[0]
+	path := strings.SplitN(strings.SplitN(line, "(token in ", 2)[1], ")", 2)[0]
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	url := "http://" + addr + "/mcp"
+	if code, got, errOut := exec(t, ping, "-config", cfg, "mcp", "-url", url, "-token", strings.TrimSpace(string(data))); code != 0 || !strings.Contains(got, `"id":1`) || strings.Contains(got, "error") {
+		t.Errorf("bridge = %d %q %s", code, got, errOut)
+	}
+	// The token from the environment, the address from gateway.listen (0.0.0.0 is reached on loopback).
+	t.Setenv("KITTIES_MCP_TOKEN", strings.TrimSpace(string(data)))
+	_, port, _ := net.SplitHostPort(addr)
+	_ = os.WriteFile(cfg, []byte("data_dir: "+dir+"\ngateway:\n  listen: 0.0.0.0:"+port+"\n"), 0o600)
+	if code, got, errOut := exec(t, ping, "-config", cfg, "mcp"); code != 0 || !strings.Contains(got, `"id":1`) {
+		t.Errorf("env token = %d %q %s", code, got, errOut)
+	}
+	// And from the token file of the data directory, the address from public_url.
+	t.Setenv("KITTIES_MCP_TOKEN", "")
+	_ = os.WriteFile(filepath.Join(dir, "mcp.token"), data, 0o600)
+	_ = os.WriteFile(cfg, []byte("data_dir: "+dir+"\ngateway:\n  public_url: http://"+addr+"\n"), 0o600)
+	if code, got, errOut := exec(t, ping, "-config", cfg, "mcp"); code != 0 || !strings.Contains(got, `"id":1`) {
+		t.Errorf("file token = %d %q %s", code, got, errOut)
 	}
 }

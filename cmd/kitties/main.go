@@ -11,6 +11,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -33,6 +34,7 @@ import (
 	"github.com/madkoding/kitties/internal/gateway"
 	"github.com/madkoding/kitties/internal/keep"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/mcp"
 	"github.com/madkoding/kitties/internal/memory"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/orchestrator"
@@ -57,6 +59,7 @@ Commands:
   gateway start|stop|restart|status|logs
                             manage the systemd service installed by scripts/install.sh
   token                     print the gateway's token (to sign in to the web interface)
+  mcp [-url u] [-token t]   MCP over stdio for Claude, bridged to a gateway's /mcp (docs/MCP.md)
   ls                        list the kitties and their state
   create <name> [flags]     create a kitty (-provider, -persona, -soul file, -avatar breed/color, -no-desktop)
   start|stop|rm <name>      manage one kitty
@@ -168,7 +171,7 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	case err != nil && *demoMode && *configPath == "":
 		// No file of their own: the demo brings its kitties. A file that was named must load.
 		cfg, err = demoConfig()
-	case err != nil && errors.Is(err, os.ErrNotExist) && *configPath == "" && os.Getenv("KITTIES_CONFIG") == "" && (cmd == "gateway" || cmd == "token"):
+	case err != nil && errors.Is(err, os.ErrNotExist) && *configPath == "" && os.Getenv("KITTIES_CONFIG") == "" && (cmd == "gateway" || cmd == "token" || cmd == "mcp"):
 		// A server with no file yet: it starts empty and is set up from the web page.
 		cfg, err = config.Defaults(), nil
 		fmt.Fprintf(errOut, "kitties: no configuration file (%s): starting empty; add models and kitties from the web page\n", path)
@@ -186,6 +189,9 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	}
 	if cmd == "token" {
 		return cmdToken(cfg, out, errOut)
+	}
+	if cmd == "mcp" {
+		return cmdMCP(rest, cfg, in, out, errOut)
 	}
 	a := &app{cfg: cfg, in: in, out: out, err: errOut, demo: *demoMode, booted: booted}
 	if err := a.open(cmd); err != nil {
@@ -461,6 +467,49 @@ func mcpToken(cfg config.Config) (token, path string, err error) {
 		err = os.WriteFile(path, []byte(token+"\n"), 0o600)
 	}
 	return token, path, err
+}
+
+// cmdMCP is the stdio side of the connector, for clients that start a command (`claude mcp add
+// kitties -- kitties mcp`): it forwards to the gateway's /mcp with the connector's token, from
+// -token, KITTIES_MCP_TOKEN or the token file of this configuration's data directory.
+func cmdMCP(args []string, cfg config.Config, in io.Reader, out, errOut io.Writer) int {
+	fs := flag.NewFlagSet("mcp", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	url := fs.String("url", "", "the gateway's MCP address (default http://<gateway.listen>/mcp)")
+	token := fs.String("token", "", "the connector's token (default KITTIES_MCP_TOKEN or <data>/mcp.token)")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if *url == "" {
+		host := cfg.Gateway.Listen
+		if h, port, err := net.SplitHostPort(host); err == nil && (h == "" || h == "0.0.0.0" || h == "::") {
+			host = net.JoinHostPort("127.0.0.1", port)
+		}
+		*url = "http://" + host + gateway.MCPPath
+		if cfg.Gateway.PublicURL != "" {
+			*url = cfg.Gateway.PublicURL + gateway.MCPPath
+		}
+	}
+	tok := *token
+	if tok == "" {
+		tok = cfg.Gateway.MCP.Token
+	}
+	if tok == "" {
+		if data, err := os.ReadFile(filepath.Join(cfg.DataDirOr(), "mcp.token")); err == nil {
+			tok = strings.TrimSpace(string(data))
+		}
+	}
+	if tok == "" {
+		fmt.Fprintf(errOut, "kitties: no MCP token: turn the connector on (gateway.mcp.enabled) and start the gateway once, or pass -token\n")
+		return 1
+	}
+	ctx, cancel := notifyContext()
+	defer cancel()
+	if err := mcp.Bridge(ctx, in, out, *url, tok, nil); err != nil {
+		fmt.Fprintf(errOut, "kitties: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 // cmdToken prints the token a gateway of this configuration uses, for signing in to the web page.
