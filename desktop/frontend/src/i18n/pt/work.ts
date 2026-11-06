@@ -262,6 +262,10 @@ const dict: Dictionary = {
   "Delete {name}?": "Excluir {name}?",
   "Nothing saved yet. A kitty saves one with @artifact save, or a connector such as the diagram renderer does.":
     "Nada guardado ainda. Um kitty guarda um com @artifact save, ou uma conexão como o gerador de diagramas faz isso.",
+  formatted: "formatado",
+  source: "fonte",
+  copied: "copiado",
+  copy: "copiar",
   "Close the artifact": "Fechar o arquivo",
   "This file is not in the library.": "Este arquivo não está na biblioteca.",
 

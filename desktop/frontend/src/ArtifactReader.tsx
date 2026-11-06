@@ -44,10 +44,19 @@ export function Inlines({ text, onOpen }: { text: string; onOpen?: (name: string
 }
 
 // Markdown draws a document the page cut into blocks, never as HTML.
-export function Markdown({ text, onOpen }: { text: string; onOpen?: (name: string) => void }) {
+export function Markdown({
+  text,
+  onOpen,
+  chat,
+}: {
+  text: string;
+  onOpen?: (name: string) => void;
+  // chat is a message: its line breaks stay, and it sits in the bubble without outer margins.
+  chat?: boolean;
+}) {
   return (
-    <div class="md" data-testid="markdown">
-      {markdown(text).map((b, i) => {
+    <div class={chat ? "md md-chat" : "md"} data-testid="markdown">
+      {markdown(text, chat).map((b, i) => {
         switch (b.t) {
           case "h": {
             const H = `h${Math.min(b.level + 1, 6)}` as "h2";
@@ -148,16 +157,28 @@ export default function ArtifactReader({ name, onClose }: { name: string; onClos
       alive = false;
     };
   }, [current]);
+  const [raw, setRaw] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const copy = () =>
+    text !== null &&
+    navigator.clipboard
+      ?.writeText(text)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => undefined);
   const lower = current.toLowerCase();
+  const isMd = lower.endsWith(".md") || lower.endsWith(".markdown");
   return (
     <Modal title={current} onClose={onClose} wide>
       <div data-testid="artifact-reader">
         {err && <div class="callout callout-warn">{err}</div>}
         {text === null && !err && <div class="text-sm text-[var(--t3)]">{t("Loading…")}</div>}
         {text !== null &&
-          (lower.endsWith(".md") || lower.endsWith(".markdown") ? (
+          (isMd && !raw ? (
             <Markdown text={text} onOpen={setCurrent} />
-          ) : lower.endsWith(".svg") ? (
+          ) : lower.endsWith(".svg") && !raw ? (
             <img
               class="max-h-96 bg-white"
               src={"data:image/svg+xml;utf8," + encodeURIComponent(text)}
@@ -166,7 +187,22 @@ export default function ArtifactReader({ name, onClose }: { name: string; onClos
           ) : (
             <pre class="skill-body">{text}</pre>
           ))}
-        <div class="mt-3 flex justify-end">
+        <div class="mt-3 flex justify-end gap-1">
+          {text !== null && (isMd || lower.endsWith(".svg")) && (
+            <button
+              class="btn-ghost px-2 py-1 text-xs"
+              data-testid="artifact-raw"
+              aria-pressed={raw}
+              onClick={() => setRaw(!raw)}
+            >
+              {raw ? t("formatted") : t("source")}
+            </button>
+          )}
+          {text !== null && (
+            <button class="btn-ghost px-2 py-1 text-xs" data-testid="artifact-copy" onClick={copy}>
+              {copied ? t("copied") : t("copy")}
+            </button>
+          )}
           <a
             class="btn-ghost px-2 py-1 text-xs"
             href={shotURL(`/v1/artifacts/${encodeURIComponent(current)}`)}

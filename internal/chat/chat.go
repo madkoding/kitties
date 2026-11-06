@@ -324,7 +324,9 @@ func (s *Service) libraryPrompt() string {
 	if s.arts != nil {
 		b.WriteString("You have a library of artifacts (files) shared by every kitty. Keep a result for later " +
 			"with `@artifact save {\"name\": \"report.md\", \"content\": \"…\"}`, read one with " +
-			"`@artifact read <name>`, list them with `@artifact list`.\n")
+			"`@artifact read <name>`, list them with `@artifact list`. To point a person at one, link it as " +
+			"`[report.md](/v1/artifacts/report.md)`: the app opens it from that path; never write a host " +
+			"(localhost, wails.localhost) in front of it.\n")
 		if idx := s.arts.Index(12); idx != "" {
 			b.WriteString("Artifacts:\n" + idx)
 		}

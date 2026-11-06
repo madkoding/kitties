@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Kitty, Session, Step, Turn } from "./api";
 import { api, shotData } from "./api";
-import ArtifactReader, { Inlines } from "./ArtifactReader";
+import ArtifactReader, { Inlines, Markdown } from "./ArtifactReader";
 import { stepArgs, stepSentence, when } from "./format";
 import { actionLabel, plainError } from "./friendly";
 import { gatewayText } from "./gatewayText";
@@ -15,10 +15,24 @@ import HelpModal from "./Help";
 import { Sent } from "./Attachments";
 import LiveDesktop from "./LiveDesktop";
 
-function Text({ text, onOpen }: { text: string; onOpen?: (name: string) => void }) {
+// Text is a message: a kitty's answer is drawn as markdown (lists, tables, code); what the person
+// wrote stays as they typed it.
+function Text({
+  text,
+  onOpen,
+  rich,
+}: {
+  text: string;
+  onOpen?: (name: string) => void;
+  rich?: boolean;
+}) {
   return (
-    <div class="text">
-      <Inlines text={text} onOpen={onOpen} />
+    <div class={rich ? "text text-md" : "text"}>
+      {rich ? (
+        <Markdown text={text} onOpen={onOpen} chat />
+      ) : (
+        <Inlines text={text} onOpen={onOpen} />
+      )}
     </div>
   );
 }
@@ -646,7 +660,13 @@ function TurnCard({
           <IconHand size={14} /> {t("{name} needs your help with this one.", { name: turn.from })}
         </div>
       )}
-      {turn.text && <Text text={mine ? turn.text : gatewayText(turn.text)} onOpen={onArtifact} />}
+      {turn.text && (
+        <Text
+          text={mine ? turn.text : gatewayText(turn.text)}
+          onOpen={onArtifact}
+          rich={!mine && !system}
+        />
+      )}
       {turn.attachments && turn.attachments.length > 0 && (
         <Sent chat={chat} files={turn.attachments} onOpen={onOpen} />
       )}

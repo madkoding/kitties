@@ -84,13 +84,16 @@ const cells = (line: string) =>
 // markdown cuts a document into blocks: headings, paragraphs, lists, fenced code, quotes, rules and
 // tables. The page draws the blocks itself (no HTML comes out of a document), so a file a kitty
 // wrote cannot put markup on the page.
-export function markdown(src: string): Block[] {
+//
+// breaks keeps the line breaks inside a paragraph, the way a chat message reads; a document joins
+// them, the way markdown does.
+export function markdown(src: string, breaks = false): Block[] {
   const lines = src.replace(/\r\n?/g, "\n").split("\n");
   const out: Block[] = [];
   let para: string[] = [];
   const flush = () => {
     if (para.length) {
-      out.push({ t: "p", text: para.join(" ") });
+      out.push({ t: "p", text: para.join(breaks ? "\n" : " ") });
       para = [];
     }
   };

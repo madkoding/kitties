@@ -70,7 +70,7 @@ func TestLibraryInChat(t *testing.T) {
 	if len(turn.Artifacts) != 1 || turn.Artifacts[0] != "plan.md" {
 		t.Errorf("artifacts = %v", turn.Artifacts)
 	}
-	if !strings.Contains(sb.seen[0][0].Content, "Skills:\n- browse-a-site") || !strings.Contains(sb.seen[0][0].Content, "@artifact save") {
+	if !strings.Contains(sb.seen[0][0].Content, "Skills:\n- browse-a-site") || !strings.Contains(sb.seen[0][0].Content, "@artifact save") || !strings.Contains(sb.seen[0][0].Content, "[report.md](/v1/artifacts/report.md)") {
 		t.Errorf("the prompt lists the library: %s", sb.seen[0][0].Content)
 	}
 	fb := func(i int) string { m := sb.seen[i]; return m[len(m)-1].Content }

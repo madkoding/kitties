@@ -2067,3 +2067,28 @@ html.mac-inset .live-head {
 .msg .text .artifact-link {
   font: inherit;
 }
+
+/* A kitty's answer drawn as markdown: it keeps its line breaks and sits in the bubble flush. */
+.msg .text.text-md {
+  white-space: normal;
+}
+.md-chat {
+  font-size: inherit;
+  color: inherit;
+}
+.md-chat p {
+  white-space: pre-wrap;
+}
+.md-chat > :first-child {
+  margin-top: 0;
+}
+.md-chat > :last-child {
+  margin-bottom: 0;
+}
+.md-chat h2 {
+  font-size: 1.05rem;
+}
+.md-chat h3,
+.md-chat h4 {
+  font-size: 0.975rem;
+}

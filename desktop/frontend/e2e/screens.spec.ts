@@ -277,8 +277,30 @@ test("the library: skills with a proposal, and the artifacts", async ({ page }) 
 test("an artifact tag in a chat opens the reader", async ({ page }) => {
   await open(page, `#chat/${ids.single}`);
   await page.getByTestId("artifact-tag").first().click();
-  await expect(page.getByTestId("artifact-reader")).toBeVisible();
-  await expect(page.getByTestId("markdown")).toBeVisible();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader).toBeVisible();
+  await expect(reader.getByTestId("markdown")).toBeVisible();
+  // The source of the file, and back.
+  await reader.getByTestId("artifact-raw").click();
+  await expect(reader.locator("pre", { hasText: "# Launch plan" })).toBeVisible();
+  await reader.getByTestId("artifact-raw").click();
+  await expect(reader.locator("h2", { hasText: "Launch plan" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(reader).toBeHidden();
+});
+
+test("a kitty's answer reads as markdown, and its link to an artifact opens the reader", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.single}`);
+  const answer = page
+    .locator(".msg.agent .md-chat")
+    .filter({ hasText: "Here is how I would split it" });
+  await expect(answer.locator("ol li")).toHaveCount(3);
+  await answer.getByTestId("artifact-link").click();
+  await expect(
+    page.getByTestId("artifact-reader").locator("h2", { hasText: "Launch plan" }),
+  ).toBeVisible();
 });
 
 test("picking a service opens its form; an OAuth kind offers the sign-in", async ({ page }) => {

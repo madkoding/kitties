@@ -94,3 +94,8 @@ test("markdown: every block", () => {
   assert.deepEqual(markdown("```\nunclosed"), [{ t: "code", text: "unclosed" }]);
   assert.deepEqual(markdown(""), []);
 });
+
+test("markdown: a chat message keeps its line breaks", () => {
+  assert.deepEqual(markdown("one\ntwo", true), [{ t: "p", text: "one\ntwo" }]);
+  assert.deepEqual(markdown("one\ntwo"), [{ t: "p", text: "one two" }]);
+});
