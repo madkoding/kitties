@@ -28,7 +28,9 @@ connector.
    code (`+56 9 1234 5678`). The list starts empty: until you add someone, every message is
    ignored. Tick **Answer in groups when someone mentions the kitty** to let it talk in groups too,
    and pick the groups: the ones that wrote lately show up there (WhatsApp gives a linked device no
-   list of groups until they write).
+   list of groups until they write). With more than one kitty, **Who answers each one** gives a
+   number or a group a kitty of its own; **Messages sent per hour** caps what goes out (60 when
+   left empty).
 3. Tick **Turn on WhatsApp**, then **I understand that WhatsApp may ban this number**, and **Save**.
 4. A QR code appears. On the phone of the kitties' number: WhatsApp, Settings, **Linked devices**,
    **Link a device**, and point it at the code. The code changes every few seconds; if they run out,
@@ -45,6 +47,14 @@ off for about two weeks). **Unlink** removes the device from the phone and forge
   page too. The kitty's answer goes back to WhatsApp, with its Markdown turned into WhatsApp's own
   marks (`*bold*`, `_italics_`). A desktop task is followed: the first words go at once and the
   result when it is done.
+- **Read, and reactions.** A message is marked read (blue ticks) when the kitty starts on it. An
+  answer that is only an emoji goes as a reaction to the message, and the kitties can react with
+  the connector.
+- **A kitty per number or group.** Each number or group may have its own kitty; the others go to
+  the kitty that answers. Moving one to another kitty starts a new chat with it.
+- **An hourly limit.** Every message, file and reaction that goes out counts; past the limit a
+  reply is held (and counted in Settings) and a kitty's `send` fails with a clear error. It keeps
+  the number from writing like a bot.
 - **"typing…" while it thinks.** The chat on the phone shows the kitty typing until the answer goes.
   A message that comes while it is still busy gets a short note in the kitty's language (its soul's
   language, else the language of the message: English, Spanish or Portuguese).
@@ -68,6 +78,7 @@ off for about two weeks). **Unlink** removes the device from the phone and forge
   ```
   @connector whatsapp-web {"action": "send", "to": "+56912345678", "text": "The report is ready."}
   @connector whatsapp-web {"action": "send", "to": "Familia", "text": "Here it is.", "file": "report.pdf"}
+  @connector whatsapp-web {"action": "react", "to": "+56912345678", "emoji": "👍"}
   @connector whatsapp-web {"action": "status"}
   ```
 
@@ -88,6 +99,8 @@ whatsapp:
   kitty: mimi                    # empty: the first kitty
   groups: true
   allow_groups: ["120363012345678901@g.us"]   # the ids Settings lists (GET /v1/whatsapp, seen_groups)
+  kitties: {"+1 555 000 1111": luna, "120363012345678901@g.us": tom}
+  max_per_hour: 30               # 0: 60
   transcribe: ""                 # the openai or groq profile for voice notes; empty: the first; off: none
 ```
 
@@ -110,8 +123,8 @@ phone is linked again with a new code.
 
 | Route | What it does |
 | --- | --- |
-| `GET /v1/whatsapp` | The link: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` and `qr_png` (a PNG data URL) while it waits, `phone`, `linked`, `ignored`, `seen_groups` (the groups that wrote lately) |
-| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups"}`; turning it on needs `"accept_risk": true` |
+| `GET /v1/whatsapp` | The link: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` and `qr_png` (a PNG data URL) while it waits, `phone`, `linked`, `ignored`, `seen_groups` (the groups that wrote lately), `sent_last_hour`, `held` |
+| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups", "kitties", "max_per_hour"}`; turning it on needs `"accept_risk": true` |
 | `POST /v1/whatsapp/link` | New QR codes (after they expired or the phone logged the device out) |
 | `POST /v1/whatsapp/unlink` | Removes the device from the phone and forgets the session |
 | `POST /v1/whatsapp/test` | `{"to": "+56912345678"}` sends a short message to a number on the list |

@@ -28,7 +28,9 @@ escribirles con el conector `whatsapp-web`.
    país (`+56 9 1234 5678`). La lista parte vacía: hasta que agregues a alguien, se ignora todo
    mensaje. Marca **Responder en grupos cuando alguien nombra al kitty** para que también hable en
    grupos, y elige los grupos: ahí aparecen los que escribieron hace poco (WhatsApp no le da a un
-   dispositivo vinculado la lista de grupos hasta que escriben).
+   dispositivo vinculado la lista de grupos hasta que escriben). Con más de un kitty, **Quién
+   responde a cada uno** le da a un número o grupo su propio kitty; **Mensajes enviados por hora**
+   limita lo que sale (60 si se deja vacío).
 3. Marca **Activar WhatsApp**, luego **Entiendo que WhatsApp puede bloquear este número**, y
    **Guardar**.
 4. Aparece un código QR. En el teléfono del número de los kitties: WhatsApp, Ajustes,
@@ -47,6 +49,14 @@ olvida la sesión.
   La respuesta vuelve a WhatsApp con su Markdown convertido a las marcas de WhatsApp (`*negrita*`,
   `_cursiva_`). Una tarea en el escritorio se sigue: las primeras palabras van al tiro y el resultado
   cuando termina.
+- **Leído y reacciones.** Un mensaje se marca como leído (ticks azules) cuando el kitty lo toma. Una
+  respuesta que es solo un emoji va como reacción al mensaje, y los kitties pueden reaccionar con
+  el conector.
+- **Un kitty por número o grupo.** Cada número o grupo puede tener su propio kitty; los demás van al
+  kitty que responde. Cambiar uno de kitty abre un chat nuevo con él.
+- **Un límite por hora.** Cuenta todo mensaje, archivo y reacción que sale; pasado el límite una
+  respuesta queda retenida (y se cuenta en Ajustes) y un `send` de un kitty falla con un error
+  claro. Evita que el número escriba como un bot.
 - **"escribiendo…" mientras piensa.** El chat del teléfono muestra al kitty escribiendo hasta que
   sale la respuesta. Un mensaje que llega mientras sigue ocupado recibe un aviso corto en el idioma
   del kitty (el de su alma, o si no el del mensaje: inglés, español o portugués).
@@ -71,6 +81,7 @@ olvida la sesión.
   ```
   @connector whatsapp-web {"action": "send", "to": "+56912345678", "text": "El informe está listo."}
   @connector whatsapp-web {"action": "send", "to": "Familia", "text": "Aquí está.", "file": "informe.pdf"}
+  @connector whatsapp-web {"action": "react", "to": "+56912345678", "emoji": "👍"}
   @connector whatsapp-web {"action": "status"}
   ```
 
@@ -93,6 +104,8 @@ whatsapp:
   kitty: mimi                    # vacío: el primer kitty
   groups: true
   allow_groups: ["120363012345678901@g.us"]   # los ids que lista Ajustes (GET /v1/whatsapp, seen_groups)
+  kitties: {"+1 555 000 1111": luna, "120363012345678901@g.us": tom}
+  max_per_hour: 30               # 0: 60
   transcribe: ""                 # el perfil openai o groq para notas de voz; vacío: el primero; off: ninguno
 ```
 
@@ -115,8 +128,8 @@ el teléfono de nuevo con otro código.
 
 | Ruta | Qué hace |
 | --- | --- |
-| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored`, `seen_groups` (los grupos que escribieron hace poco) |
-| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups"}`; activarlo necesita `"accept_risk": true` |
+| `GET /v1/whatsapp` | El vínculo: `enabled`, `allow`, `kitty`, `state` (`off`, `starting`, `qr`, `qr_expired`, `connected`, `disconnected`, `logged_out`, `error`), `qr` y `qr_png` (un data URL PNG) mientras espera, `phone`, `linked`, `ignored`, `seen_groups` (los grupos que escribieron hace poco), `sent_last_hour`, `held` |
+| `PUT /v1/whatsapp` | `{"enabled", "allow", "kitty", "groups", "allow_groups", "kitties", "max_per_hour"}`; activarlo necesita `"accept_risk": true` |
 | `POST /v1/whatsapp/link` | Códigos QR nuevos (si expiraron o el teléfono quitó el dispositivo) |
 | `POST /v1/whatsapp/unlink` | Quita el dispositivo del teléfono y olvida la sesión |
 | `POST /v1/whatsapp/test` | `{"to": "+56912345678"}` manda un mensaje corto a un número de la lista |
