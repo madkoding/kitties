@@ -1948,6 +1948,83 @@ test("Settings: the Claude connector shows its switches, the command and the sig
   expect(tokenRead).toBe(0);
 });
 
+test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the list", async ({
+  page,
+}) => {
+  const qr = fs
+    .readFileSync(path.join(path.dirname(STATE), "fixtures", "whatsapp-qr.txt"), "utf8")
+    .trim();
+  let wa: Record<string, unknown> = {
+    enabled: false,
+    allow: [],
+    kitty: "",
+    state: "off",
+    linked: false,
+    ignored: 0,
+    can_change: true,
+  };
+  const put: Record<string, unknown>[] = [];
+  const tests: unknown[] = [];
+  await page.route("**/v1/whatsapp", (route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as Record<string, unknown>;
+      put.push(body);
+      const { accept_risk: _risk, ...settings } = body;
+      wa = { ...wa, ...settings, kitty_name: "mimi", state: "qr", qr: "2@demo", qr_png: qr };
+    }
+    return route.fulfill({ json: wa });
+  });
+  await page.route("**/v1/whatsapp/test", (route) => {
+    tests.push(route.request().postDataJSON());
+    return route.fulfill({ json: { ok: true } });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Connections" }).click();
+  const box = page.getByTestId("whatsapp");
+  await expect(box.getByTestId("whatsapp-tos")).toContainText("Cloud API");
+  await expect(box.getByTestId("whatsapp-allow")).toContainText("every message is ignored");
+  await expect(box.getByTestId("whatsapp-save")).toBeDisabled();
+  // A number without its country code is refused; one with it joins the list.
+  await box.getByTestId("whatsapp-number").fill("1234");
+  await box.getByTestId("whatsapp-add").click();
+  await expect(box.getByRole("alert")).toContainText("country code");
+  await box.getByTestId("whatsapp-number").fill("+56 9 1234 5678");
+  await box.getByTestId("whatsapp-add").click();
+  await expect(box.getByTestId("whatsapp-allowed")).toHaveText("+56912345678");
+  await box.getByTestId("whatsapp-kitty").selectOption(ids.mimi);
+  // Turning it on waits for the risk to be accepted.
+  await box.getByTestId("whatsapp-enabled").click();
+  await expect(box.getByTestId("whatsapp-save")).toBeDisabled();
+  await box.getByTestId("whatsapp-accept").check();
+  await box.getByTestId("whatsapp-save").click();
+  await expect(box.getByTestId("whatsapp-qr")).toBeVisible();
+  await expect(box.getByTestId("whatsapp-state")).toContainText("Waiting for the QR code");
+  expect(put).toEqual([
+    { enabled: true, allow: ["56912345678"], kitty: ids.mimi, accept_risk: true },
+  ]);
+  await box.evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await shot(page, "60-settings-whatsapp");
+  // The phone scans it: connected, with a test message and the unlink button.
+  wa = {
+    ...wa,
+    state: "connected",
+    qr: "",
+    qr_png: "",
+    phone: "15550001234",
+    linked: true,
+    ignored: 2,
+  };
+  await expect(box.getByTestId("whatsapp-state")).toContainText("Connected · +15550001234", {
+    timeout: 10_000,
+  });
+  await expect(box).toContainText("2 messages from other numbers were ignored");
+  await box.getByTestId("whatsapp-test").click();
+  await expect(box.getByTestId("whatsapp-note")).toContainText("Sent");
+  expect(tests).toEqual([{ to: "56912345678" }]);
+  await expect(box.getByTestId("whatsapp-unlink")).toBeVisible();
+});
+
 test("Settings: the MCP clients can be revoked and the token is read only on request", async ({
   page,
   context,

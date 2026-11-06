@@ -294,6 +294,53 @@ const dict: Dictionary = {
   "The connector does not answer: {why}": "El conector no responde: {why}",
   "Test connection": "Probar conexión",
   "last used {when}": "último uso {when}",
+
+  // WhatsApp as a linked device
+  "Write the number with its country code, like +56 9 1234 5678.":
+    "Escribe el número con su código de país, como +56 9 1234 5678.",
+  "The phone forgets this device and the kitties stop reading and writing on WhatsApp until you scan a new code. Unlink?":
+    "El teléfono olvida este dispositivo y los kitties dejan de leer y escribir en WhatsApp hasta que escanees un código nuevo. ¿Desvincular?",
+  Unlink: "Desvincular",
+  "Unlinked.": "Desvinculado.",
+  "Sending…": "Enviando…",
+  "Sent: look at that phone.": "Enviado: mira ese teléfono.",
+  "Not sent: {why}": "No se envió: {why}",
+  "Connecting…": "Conectando…",
+  "Waiting for the QR code to be scanned": "Esperando que escanees el código QR",
+  "The code expired": "El código expiró",
+  Connected: "Conectado",
+  "Reconnecting…": "Reconectando…",
+  "The phone removed this device": "El teléfono quitó este dispositivo",
+  "It could not connect": "No se pudo conectar",
+  "WhatsApp (linked device)": "WhatsApp (dispositivo vinculado)",
+  "A number of their own: link a phone as on WhatsApp Web, and the people on the list talk to a kitty from WhatsApp. Off until you turn it on.":
+    "Un número propio: vincula un teléfono como en WhatsApp Web y las personas de la lista conversan con un kitty desde WhatsApp. Apagado hasta que lo actives.",
+  "Not an official WhatsApp API": "No es una API oficial de WhatsApp",
+  "WhatsApp's terms do not allow unofficial clients, and it may ban the number. Use a spare number, not your own. The official way is the WhatsApp Cloud API connection (Meta Business).":
+    "Los términos de WhatsApp no permiten clientes no oficiales y puede bloquear el número. Usa un número de repuesto, no el tuyo. La vía oficial es la conexión WhatsApp Cloud API (Meta Business).",
+  "Turn on WhatsApp": "Activar WhatsApp",
+  "Messages from numbers not on the list are ignored, and the kitties write only to them.":
+    "Los mensajes de números que no están en la lista se ignoran, y los kitties solo escriben a los de la lista.",
+  "The kitty that answers": "El kitty que responde",
+  "Choose a kitty": "Elige un kitty",
+  "Numbers that may write": "Números que pueden escribir",
+  Add: "Agregar",
+  "Nobody yet: every message is ignored until you add a number.":
+    "Nadie todavía: se ignora todo mensaje hasta que agregues un número.",
+  "Remove {number}": "Quitar {number}",
+  "I understand that WhatsApp may ban this number":
+    "Entiendo que WhatsApp puede bloquear este número",
+  "QR code to link WhatsApp": "Código QR para vincular WhatsApp",
+  "Open WhatsApp on the phone of the kitties' number.":
+    "Abre WhatsApp en el teléfono del número de los kitties.",
+  "Go to Settings, Linked devices, Link a device.":
+    "Ve a Ajustes, Dispositivos vinculados, Vincular un dispositivo.",
+  "Point the phone at this code. It changes every few seconds.":
+    "Apunta el teléfono a este código. Cambia cada pocos segundos.",
+  "Show a new code": "Mostrar un código nuevo",
+  "{kitty} answers on WhatsApp; each number has its own chat here.":
+    "{kitty} responde en WhatsApp; cada número tiene su propio chat aquí.",
+  "{n} messages from other numbers were ignored.": "Se ignoraron {n} mensajes de otros números.",
 };
 
 export default dict;

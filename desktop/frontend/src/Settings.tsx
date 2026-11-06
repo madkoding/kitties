@@ -10,7 +10,15 @@ import type {
   ProviderView,
   SettingsView,
 } from "./api";
-import { api, errText, inWails, oauthRedirect, oauthStart, openExternal, savedConnection } from "./api";
+import {
+  api,
+  errText,
+  inWails,
+  oauthRedirect,
+  oauthStart,
+  openExternal,
+  savedConnection,
+} from "./api";
 import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,
@@ -37,6 +45,7 @@ import { ask } from "./Confirm";
 import Secrets from "./Secrets";
 import Exposure from "./Exposure";
 import McpConnector from "./McpConnector";
+import WhatsAppLink from "./WhatsApp";
 import Updates from "./Updates";
 import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 
@@ -2021,6 +2030,7 @@ export default function SettingsModal({
                     <IconPlus size={14} /> {t("Add a connection")}
                   </button>
                 )}
+                <WhatsAppLink kitties={kitties} />
               </>
             )}
           </div>

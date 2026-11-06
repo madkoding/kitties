@@ -765,6 +765,15 @@ export const api = {
   rotateMcpToken: () => request<{ restarting: boolean }>("POST", "/v1/mcp/token"),
   mcpTest: () => request<{ ok: boolean; tools?: number; error?: string }>("POST", "/v1/mcp/test"),
   mcpClients: () => request<{ clients: McpClient[] }>("GET", "/v1/mcp/clients"),
+  // whatsapp is the WhatsApp number linked as a device (docs/WHATSAPP.md): turning it on needs
+  // acceptRisk (an unofficial API); link asks for new QR codes, unlink forgets the session.
+  whatsapp: () => request<WhatsAppStatus>("GET", "/v1/whatsapp"),
+  setWhatsApp: (s: WhatsAppSettings, acceptRisk = false) =>
+    request<WhatsAppStatus>("PUT", "/v1/whatsapp", { ...s, accept_risk: acceptRisk }),
+  linkWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/link"),
+  unlinkWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/unlink"),
+  testWhatsApp: (to: string) =>
+    request<{ ok: boolean; error?: string }>("POST", "/v1/whatsapp/test", { to }),
   revokeMcpClient: (id: string) =>
     request<{ revoked: string }>("DELETE", `/v1/mcp/clients/${encodeURIComponent(id)}`),
   // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
@@ -1185,6 +1194,33 @@ export type McpInfo = {
 };
 
 export type McpSettings = Pick<McpInfo, "enabled" | "allow_exec" | "allow_approve" | "oauth">;
+
+// WhatsAppSettings are what the person chooses: on or off, who may write (numbers with their
+// country code, digits only once kept) and the kitty that answers.
+export type WhatsAppSettings = { enabled: boolean; allow: string[]; kitty: string };
+
+// WhatsAppStatus is the link: qr_png is the code to scan while state is "qr".
+export type WhatsAppStatus = WhatsAppSettings & {
+  kitty_name?: string;
+  state:
+    | "off"
+    | "starting"
+    | "qr"
+    | "qr_expired"
+    | "connected"
+    | "disconnected"
+    | "logged_out"
+    | "error";
+  qr?: string;
+  qr_png?: string;
+  phone?: string;
+  linked: boolean;
+  error?: string;
+  ignored: number;
+  last_message?: string;
+  can_change: boolean;
+  why?: string;
+};
 
 // McpClient is a remote client (claude.ai) that signed in to the connector with OAuth.
 export type McpClient = {
