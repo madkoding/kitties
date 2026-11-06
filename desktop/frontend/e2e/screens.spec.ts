@@ -1880,6 +1880,135 @@ test("Settings: the gateway is exposed local, LAN or WAN, WAN after accepting th
   expect(put).toEqual([{ mode: "wan", accept_risk: true }]);
 });
 
+test("Settings: the Claude connector shows its switches, the command and the signed-in clients", async ({
+  page,
+}) => {
+  let mcp = {
+    enabled: true,
+    allow_exec: false,
+    allow_approve: false,
+    oauth: true,
+    url: "https://kitties.example.com/mcp",
+    token_file: "/home/me/.kitties/mcp.token",
+    command:
+      'claude mcp add --transport http kitties https://kitties.example.com/mcp --header "Authorization: Bearer $(cat /home/me/.kitties/mcp.token)"',
+    token_managed: false,
+    can_change: true,
+  };
+  const put: unknown[] = [];
+  const revoked: string[] = [];
+  let tokenRead = 0;
+  await page.route("**/v1/mcp", (route) => {
+    if (route.request().method() === "PUT") {
+      put.push(route.request().postDataJSON());
+      return route.fulfill({ status: 202, json: { restarting: true } });
+    }
+    return route.fulfill({ json: mcp });
+  });
+  await page.route("**/v1/mcp/token", (route) => {
+    tokenRead++;
+    return route.fulfill({ json: { token: "the-secret-token-value" } });
+  });
+  await page.route("**/v1/mcp/clients", (route) =>
+    route.fulfill({
+      json: {
+        clients: [
+          { id: "c1", name: "claude.ai", host: "claude.ai", since: "2026-11-01T10:00:00Z" },
+        ],
+      },
+    }),
+  );
+  await page.route("**/v1/mcp/clients/c1", (route) => {
+    revoked.push(route.request().method());
+    return route.fulfill({ json: { revoked: "c1" } });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("mcp");
+  await expect(box.getByTestId("mcp-command")).toContainText("claude mcp add --transport http");
+  // The token is never drawn on the page.
+  await expect(box).not.toContainText("the-secret-token-value");
+  await expect(box.getByTestId("mcp-apply")).toBeDisabled();
+  await expect(box.getByTestId("mcp-client-c1")).toContainText("claude.ai");
+  // The section from its title down: switches, the command and the clients.
+  await box.evaluate((el) => el.scrollIntoView({ block: "start" }));
+  await shot(page, "59-settings-mcp");
+  // Exec gives Claude power: it warns and waits for the risk to be accepted.
+  await box.getByTestId("mcp-allow_exec").click();
+  await expect(box.getByTestId("mcp-warning")).toContainText("more power");
+  await expect(box.getByTestId("mcp-apply")).toBeDisabled();
+  await box.getByTestId("mcp-accept").check();
+  mcp = { ...mcp, allow_exec: true };
+  await box.getByTestId("mcp-apply").click();
+  await expect(box.getByTestId("mcp-restarting")).toBeVisible();
+  expect(put).toEqual([
+    { enabled: true, allow_exec: true, allow_approve: false, oauth: true, accept_risk: true },
+  ]);
+  expect(tokenRead).toBe(0);
+});
+
+test("Settings: the MCP clients can be revoked and the token is read only on request", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const mcp = {
+    enabled: true,
+    allow_exec: false,
+    allow_approve: false,
+    oauth: true,
+    url: "http://127.0.0.1:7488/mcp",
+    token_file: "/home/me/.kitties/mcp.token",
+    command: "claude mcp add kitties",
+    token_managed: false,
+    can_change: true,
+  };
+  const calls: string[] = [];
+  await page.route("**/v1/mcp", (route) => route.fulfill({ json: mcp }));
+  await page.route("**/v1/mcp/test", (route) => route.fulfill({ json: { ok: true, tools: 23 } }));
+  await page.route("**/v1/mcp/token", (route) => {
+    calls.push(route.request().method());
+    return route.fulfill({
+      status: route.request().method() === "POST" ? 202 : 200,
+      json: { token: "the-secret-token-value", restarting: true },
+    });
+  });
+  await page.route("**/v1/mcp/clients", (route) =>
+    route.fulfill({
+      json: {
+        clients: [
+          {
+            id: "c1",
+            name: "claude.ai",
+            host: "claude.ai",
+            since: "2026-11-01T10:00:00Z",
+            last_token: "2026-11-05T09:30:00Z",
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/v1/mcp/clients/c1", (route) => {
+    calls.push("DELETE client");
+    return route.fulfill({ json: { revoked: "c1" } });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("mcp");
+  await box.getByTestId("mcp-copy-token").click();
+  await expect(box.getByTestId("mcp-note")).toBeVisible();
+  expect(calls).toEqual(["GET"]);
+  await box.getByTestId("mcp-test").click();
+  await expect(box.getByTestId("mcp-note")).toContainText("23 tools");
+  await expect(box.getByTestId("mcp-client-c1")).toContainText("last used");
+  await box.getByTestId("mcp-revoke").click();
+  await page.getByTestId("confirm").getByRole("button", { name: "Revoke", exact: true }).click();
+  await expect(box.getByTestId("mcp-client-c1")).toContainText("Revoked");
+  expect(calls).toEqual(["GET", "DELETE client"]);
+});
+
 // A kitty that starts working while the person types must not take the focus (or the text).
 test("the composer keeps focus and text when a kitty starts working", async ({ page }) => {
   await page.clock.install();

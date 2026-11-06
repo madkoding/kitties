@@ -40,6 +40,6 @@
 | `GET /v1/update` (`?refresh=1`) · `POST /v1/update/apply` | the version of Kitties and whether a newer one is out; install it and restart |
 | `POST /v1/settings/accounts/{kind}/login` · `GET/DELETE /v1/settings/logins/{id}` · `POST …/paste` · `DELETE /v1/settings/accounts/{kind}` | sign a model in with a subscription, follow it, paste the browser's address, sign out |
 
-`POST /mcp` is the [MCP connector](MCP.md) (off by default, its own bearer token). `GET /v1/mcp/clients` · `DELETE /v1/mcp/clients/{id}` list and revoke the OAuth clients that signed in.
+`POST /mcp` is the [MCP connector](MCP.md) (off by default, its own bearer token). `GET /v1/mcp/clients` · `DELETE /v1/mcp/clients/{id}` list and revoke the OAuth clients that signed in. `GET`/`PUT /v1/mcp` read and change the connector's switches (`accept_risk` to turn on exec or approve; the gateway restarts); `GET /v1/mcp/token` returns its token (explicit, never cached) and `POST /v1/mcp/token` rotates it; `POST /v1/mcp/test` asks the connector for its tools and says whether it answers.
 
 Every other call needs `Authorization: Bearer <token>`; `/` and `/v1/health` are open.
