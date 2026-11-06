@@ -136,6 +136,11 @@ means the dashboard has another address (for example `http://127.0.0.1:8888/call
 Spotify's own docs): add the one from Settings. Behind a proxy or Docker, set `gateway.public_url` (and
 `trust_proxy`) so the address is the one you reach from the browser.
 
+**Google** sends the browser back to `127.0.0.1` (so a *Desktop app* client needs no redirect
+registered) or to an `https` address only, asks only for the scopes of the services ticked in the
+connection, shows the account's email, and lets each connection be another account. Step by step:
+[GOOGLE.md](GOOGLE.md).
+
 Signing in also fills what you would otherwise look up: your Facebook Page and its token (one
 that does not expire), the Instagram account linked to it, your LinkedIn author URN, your X user
 id, your Jira site. Telegram, WhatsApp, email, Stripe, Discord and the webhooks keep their keys:
