@@ -333,6 +333,10 @@ const dict: Dictionary = {
     "Ningún grupo ha escrito todavía: escribe en un grupo con el número de los kitties y aparece aquí.",
   "Groups that wrote lately. The kitty answers only in the ones you pick.":
     "Grupos que escribieron hace poco. El kitty responde solo en los que elijas.",
+  "Messages sent per hour, at most": "Mensajes enviados por hora, como máximo",
+  "{n} messages sent in the last hour.": "{n} mensajes enviados en la última hora.",
+  "{n} were held by the hourly limit.": "{n} quedaron retenidos por el límite por hora.",
+  "Who answers each one": "Quién responde a cada uno",
   "Remove {number}": "Quitar {number}",
   "I understand that WhatsApp may ban this number":
     "Entiendo que WhatsApp puede bloquear este número",

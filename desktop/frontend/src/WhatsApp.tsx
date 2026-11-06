@@ -23,6 +23,8 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     kitty: s.kitty || "",
     groups: !!s.groups,
     allow_groups: [...(s.allow_groups || [])],
+    kitties: { ...(s.kitties || {}) },
+    max_per_hour: s.max_per_hour || 0,
   };
 }
 
@@ -32,8 +34,18 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     a.kitty === b.kitty &&
     a.groups === b.groups &&
     a.allow_groups.join(",") === b.allow_groups.join(",") &&
-    a.allow.join(",") === b.allow.join(",")
+    a.allow.join(",") === b.allow.join(",") &&
+    (a.max_per_hour || 0) === (b.max_per_hour || 0) &&
+    pairs(a.kitties) === pairs(b.kitties)
   );
+}
+
+// pairs is a kitty map as one string, to compare two of them.
+function pairs(m?: Record<string, string>): string {
+  return Object.entries(m || {})
+    .filter(([, v]) => v)
+    .sort()
+    .join(";");
 }
 
 // digits is a number as the gateway keeps it, to compare what was typed with the list.
@@ -265,6 +277,31 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           onChange={(allow_groups) => setWant({ ...want, allow_groups })}
         />
       )}
+      <WhoAnswers
+        want={want}
+        seen={cur.seen_groups || []}
+        kitties={kitties}
+        disabled={disabled}
+        onChange={(m) => setWant({ ...want, kitties: m })}
+      />
+      <label class="flex items-center gap-2 mt-3 text-sm" data-testid="whatsapp-limit">
+        {t("Messages sent per hour, at most")}
+        <input
+          type="number"
+          min={0}
+          max={1000}
+          class="w-20 px-2 py-1 text-sm"
+          value={want.max_per_hour || ""}
+          placeholder="60"
+          disabled={disabled}
+          onInput={(e) =>
+            setWant({
+              ...want,
+              max_per_hour: Math.max(0, parseInt((e.target as HTMLInputElement).value, 10) || 0),
+            })
+          }
+        />
+      </label>
       {turningOn && changed && (
         <label class="flex items-center gap-2 mt-3 text-sm cursor-pointer">
           <input
@@ -378,6 +415,12 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
               })}
               {cur.ignored > 0 &&
                 " " + t("{n} messages from other numbers were ignored.", { n: cur.ignored })}
+              {" " +
+                t("{n} messages sent in the last hour.", {
+                  n: cur.sent_last_hour || 0,
+                })}
+              {(cur.held || 0) > 0 &&
+                " " + t("{n} were held by the hourly limit.", { n: cur.held || 0 })}
             </p>
           )}
         </div>
@@ -438,6 +481,57 @@ function GroupPicker(props: {
             </button>
           );
         })}
+      </div>
+    </div>
+  );
+}
+
+// WhoAnswers gives a number or a group a kitty of its own, when there is more than one kitty.
+function WhoAnswers(props: {
+  want: WhatsAppSettings;
+  seen: WhatsAppGroup[];
+  kitties: Kitty[];
+  disabled: boolean;
+  onChange: (m: Record<string, string>) => void;
+}) {
+  const rows = [
+    ...props.want.allow.map((n) => ({ id: n, label: "+" + n })),
+    ...(props.want.groups ? props.want.allow_groups : []).map((g) => ({
+      id: g,
+      label: props.seen.find((s) => s.id === g)?.name || g.replace(/@g\.us$/, ""),
+    })),
+  ];
+  if (props.kitties.length < 2 || rows.length === 0) return null;
+  const m = props.want.kitties || {};
+  const set = (id: string, k: string) => {
+    const next = { ...m };
+    if (k) next[id] = k;
+    else delete next[id];
+    props.onChange(next);
+  };
+  return (
+    <div class="mt-3 text-sm" data-testid="whatsapp-who">
+      <span class="block text-xs text-[var(--t3)] mb-1">{t("Who answers each one")}</span>
+      <div class="grid gap-1" style="grid-template-columns: max-content minmax(0, 14rem)">
+        {rows.map((r) => (
+          <div key={r.id} class="contents">
+            <span class="self-center pr-3">{r.label}</span>
+            <select
+              class="px-2 py-1 text-sm"
+              value={m[r.id] || ""}
+              disabled={props.disabled}
+              onChange={(e) => set(r.id, (e.target as HTMLSelectElement).value)}
+              data-testid="whatsapp-who-kitty"
+            >
+              <option value="">{t("The kitty that answers")}</option>
+              {props.kitties.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        ))}
       </div>
     </div>
   );

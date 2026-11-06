@@ -2001,6 +2001,10 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
   await expect(box.getByTestId("whatsapp-group")).toHaveText(["Familia", "Trabajo"]);
   await box.getByTestId("whatsapp-group").first().click();
   await expect(box.getByTestId("whatsapp-group").first()).toHaveAttribute("aria-pressed", "true");
+  // The group gets a kitty of its own, and the hourly limit goes down.
+  await expect(box.getByTestId("whatsapp-who")).toContainText("Familia");
+  await box.getByTestId("whatsapp-who-kitty").nth(1).selectOption(ids.tom);
+  await box.getByTestId("whatsapp-limit").locator("input").fill("30");
   // Turning it on waits for the risk to be accepted.
   await box.getByTestId("whatsapp-enabled").click();
   await expect(box.getByTestId("whatsapp-save")).toBeDisabled();
@@ -2015,6 +2019,8 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
       kitty: ids.mimi,
       groups: true,
       allow_groups: ["120363012345678901@g.us"],
+      kitties: { "120363012345678901@g.us": ids.tom },
+      max_per_hour: 30,
       accept_risk: true,
     },
   ]);

@@ -1204,6 +1204,10 @@ export type WhatsAppSettings = {
   kitty: string;
   groups: boolean;
   allow_groups: string[];
+  // kitties gives a number (digits) or a group (its id) a kitty of its own.
+  kitties?: Record<string, string>;
+  // max_per_hour is the most messages sent in an hour (0: 60).
+  max_per_hour?: number;
 };
 
 // WhatsAppGroup is a group that wrote lately, to put on the list.
@@ -1229,6 +1233,8 @@ export type WhatsAppStatus = WhatsAppSettings & {
   ignored: number;
   last_message?: string;
   seen_groups?: WhatsAppGroup[];
+  sent_last_hour?: number;
+  held?: number;
   can_change: boolean;
   why?: string;
 };
