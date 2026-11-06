@@ -327,8 +327,16 @@ func TestOAuthRedirectOnAServer(t *testing.T) {
 	}); got != "https://k.example.com/v1/oauth/callback" {
 		t.Errorf("proxied = %q", got)
 	}
-	if got := redirectOf(newServer("tok"), func(r *http.Request) { r.Header.Set("X-Forwarded-Host", "evil.example") }); got != "http://example.com/v1/oauth/callback" {
+	if got := redirectOf(newServer("tok"), func(r *http.Request) {
+		r.Host = "127.0.0.1:7488"
+		r.Header.Set("X-Forwarded-Host", "evil.example")
+	}); got != "http://127.0.0.1:7488/v1/oauth/callback" {
 		t.Errorf("an untrusted proxy header changes nothing: %q", got)
+	}
+	// Google takes no plain http back to a name or a LAN address: said before the consent page.
+	rec := do(newServer("tok"), "POST", "/v1/oauth/g/start", "", func(r *http.Request) { r.Header.Set("Authorization", "Bearer tok") })
+	if rec.Code != http.StatusBadRequest || !strings.Contains(rec.Body.String(), "127.0.0.1") {
+		t.Errorf("plain http on a name = %d %s", rec.Code, rec.Body)
 	}
 }
 
@@ -345,8 +353,11 @@ func TestOAuthRedirectEndpoint(t *testing.T) {
 		_ = jsonDecode(rec.Body, &out)
 		return out.Redirect
 	}
-	if got := get("/v1/oauth/g/redirect"); got != "http://localhost:7488/v1/oauth/callback" {
-		t.Errorf("google keeps the host typed: %q", got)
+	if got := get("/v1/oauth/g/redirect"); got != "http://127.0.0.1:7488/v1/oauth/callback" {
+		t.Errorf("google gets the loopback IP its desktop clients take: %q", got)
+	}
+	if got := get("/v1/oauth/new/redirect?provider=microsoft"); got != "http://localhost:7488/v1/oauth/callback" {
+		t.Errorf("microsoft keeps the host typed: %q", got)
 	}
 	if got := get("/v1/oauth/new/redirect?provider=spotify"); got != "http://127.0.0.1:7488/v1/oauth/callback" {
 		t.Errorf("spotify gets the loopback IP: %q", got)

@@ -109,7 +109,7 @@ func TestSignInFillsWhatIsMissing(t *testing.T) {
 	if !strings.HasPrefix(cap.reqs[0].URL.String(), "https://graph.instagram.com/v23.0/me/media") {
 		t.Errorf("ig login = %s", cap.reqs[0].URL)
 	}
-	if k, _ := LookupKind("google-workspace"); len(k.Fields) != 2 || k.Fields[0].Required {
+	if k, _ := LookupKind("google-workspace"); len(k.Fields) != 3 || k.Fields[0].Required || k.Fields[1].Required || len(k.Fields[0].Options) != len(GoogleServices) {
 		t.Error("google signs in without an app of the person's when Kitties has one")
 	}
 }

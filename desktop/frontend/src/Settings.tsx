@@ -10,7 +10,15 @@ import type {
   ProviderView,
   SettingsView,
 } from "./api";
-import { api, errText, inWails, oauthRedirect, oauthStart, openExternal, savedConnection } from "./api";
+import {
+  api,
+  errText,
+  inWails,
+  oauthRedirect,
+  oauthStart,
+  openExternal,
+  savedConnection,
+} from "./api";
 import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,
@@ -820,6 +828,65 @@ function gatewayBase(): string {
   return inWails() ? "http://127.0.0.1:7488" : location.origin;
 }
 
+// OPTION_LABEL names the options of a field that picks several (Google's services).
+const OPTION_LABEL: Record<string, string> = {
+  gmail: "Gmail",
+  calendar: "Calendar",
+  drive: "Drive",
+  sheets: "Sheets",
+  docs: "Docs",
+  contacts: "Contacts",
+  tasks: "Tasks",
+};
+
+// OptionsInput is a field that picks several options: a box each, saved joined by commas. An
+// empty value means all of them, so a connection saved before the field existed keeps working;
+// the last box ticked stays ticked.
+function OptionsInput({
+  f,
+  value,
+  onInput,
+}: {
+  f: ConnectorKind["fields"][number];
+  value: string;
+  onInput: (v: string) => void;
+}) {
+  const options = f.options || [];
+  const picked = new Set(
+    value
+      .split(",")
+      .map((v) => v.trim())
+      .filter((v) => options.includes(v)),
+  );
+  const on = (o: string) => picked.size === 0 || picked.has(o);
+  const toggle = (o: string) => {
+    const next = new Set(picked.size === 0 ? options : picked);
+    next.has(o) ? next.delete(o) : next.add(o);
+    // The whole list, not an empty value, so ticking every box again replaces a saved choice.
+    onInput(options.filter((x) => next.has(x)).join(","));
+  };
+  return (
+    <>
+      <label class={LABEL}>{t(f.label)}</label>
+      <div class="flex flex-wrap gap-2" data-testid={`options-${f.name}`}>
+        {options.map((o) => (
+          <label key={o} class={`chip ${on(o) ? "on" : ""}`}>
+            <input
+              type="checkbox"
+              class="sr-only"
+              checked={on(o)}
+              disabled={on(o) && (picked.size === 1 || options.length === 1)}
+              onChange={() => toggle(o)}
+            />
+            {OPTION_LABEL[o] ? t(OPTION_LABEL[o]) : o}
+          </label>
+        ))}
+      </div>
+      {f.help && <div class="text-xs text-[var(--t3)] mt-1">{t(f.help)}</div>}
+    </>
+  );
+}
+
 function FieldInput({
   f,
   value,
@@ -959,8 +1026,10 @@ function ConnectionForm({
   const keyFields = signs ? def.fields.filter((f) => f.key) : [];
   const appFields = signs ? def.fields.filter((f) => APP_FIELDS.includes(f.name)) : [];
   const required = def.fields.filter((f) => f.required);
+  // choices are the fields that pick several options (Google's services): shown open, as boxes.
+  const choices = def.fields.filter((f) => !f.required && f.options?.length);
   const optional = def.fields.filter(
-    (f) => !f.required && !keyFields.includes(f) && !appFields.includes(f),
+    (f) => !f.required && !keyFields.includes(f) && !appFields.includes(f) && !choices.includes(f),
   );
   const [signedIn, setSignedIn] = useState(Boolean(view?.signed_in));
   const [account, setAccount] = useState(view?.account || "");
@@ -1139,6 +1208,14 @@ function ConnectionForm({
         </div>
       </div>
       {required.map((f) => field(f))}
+      {choices.map((f) => (
+        <OptionsInput
+          key={f.name}
+          f={f}
+          value={values[f.name] || ""}
+          onInput={(v) => set(f.name, v)}
+        />
+      ))}
       {ways.length > 1 && (
         <>
           <label class={LABEL}>

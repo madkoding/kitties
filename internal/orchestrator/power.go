@@ -27,12 +27,32 @@ type useTracker struct {
 	last    map[string]time.Time
 	execs   map[string]int
 	streams map[string]int
+	// booted is when each machine was last brought up: its desktop needs a few seconds more.
+	booted map[string]time.Time
 }
 
 func (u *useTracker) init() {
 	if u.last == nil {
 		u.last, u.execs, u.streams = map[string]time.Time{}, map[string]int{}, map[string]int{}
+		u.booted = map[string]time.Time{}
 	}
+}
+
+// boot marks the machine as just brought up.
+func (u *useTracker) boot(id string, at time.Time) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.init()
+	u.booted[id] = at
+}
+
+// booting tells whether the machine was brought up less than within ago.
+func (u *useTracker) booting(id string, now time.Time, within time.Duration) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.init()
+	at, ok := u.booted[id]
+	return ok && now.Sub(at) < within
 }
 
 func (u *useTracker) touch(id string, at time.Time) {
