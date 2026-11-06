@@ -317,6 +317,21 @@ func (r *Router) ImageStale(ctx context.Context, name, image string) (bool, erro
 	return r.Local.ImageStale(ctx, name, image)
 }
 
+// ZoneStale concerns the local desktops, which take the host's time zone; a machine in the cloud
+// is left as it is.
+func (r *Router) ZoneStale(ctx context.Context, name, zone string) (bool, error) {
+	if r.IsCloud != nil && r.IsCloud(name) || r.Local == nil {
+		return false, nil
+	}
+	z, ok := r.Local.(interface {
+		ZoneStale(ctx context.Context, name, zone string) (bool, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	return z.ZoneStale(ctx, name, zone)
+}
+
 // List joins both backends. A backend that cannot answer is left out as long as the other can;
 // when none can, the first error is returned.
 func (r *Router) List(ctx context.Context) ([]container.Info, error) {

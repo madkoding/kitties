@@ -59,6 +59,12 @@ Open `https://<your domain>` and sign in with the token. The image is
 The data folder is mounted at the same path inside and outside the container on purpose: the
 kitties' containers mount their workspaces by host path.
 
+The desktops show the host's hour: the gateway passes the host's time zone to each desktop
+(`TZ`), read from `TZ` in `deploy/.env` or, when empty, from the host's `/etc/localtime` and zone
+files, mounted read-only. A desktop made in another zone (the host moved) is made anew, its
+sessions kept, the next time it starts while no one uses it. The clock itself is the host's:
+containers share its kernel, so there is nothing to sync inside them.
+
 ## 2. A binary and systemd
 
 The quick way is the installer (`curl -fsSL .../scripts/install.sh | sudo sh`,

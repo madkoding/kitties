@@ -301,3 +301,33 @@ func TestRouterListToleratesOneSideDown(t *testing.T) {
 		t.Error("every side down is an error")
 	}
 }
+
+// zonedRecorder is a local side that tells time zones.
+type zonedRecorder struct {
+	recorder
+	asked []string
+}
+
+func (z *zonedRecorder) ZoneStale(_ context.Context, name, zone string) (bool, error) {
+	z.asked = append(z.asked, name+" "+zone)
+	return true, nil
+}
+
+func TestRouterAsksTheLocalSideForZones(t *testing.T) {
+	ctx := context.Background()
+	local := &zonedRecorder{}
+	r := &Router{Local: local, Cloud: &recorder{}, IsCloud: func(n string) bool { return strings.HasPrefix(n, "far-") }}
+	if s, err := r.ZoneStale(ctx, "home", "America/Santiago"); err != nil || !s || len(local.asked) != 1 {
+		t.Errorf("local: %v %v %v", s, err, local.asked)
+	}
+	if s, _ := r.ZoneStale(ctx, "far-1", "America/Santiago"); s || len(local.asked) != 1 {
+		t.Error("a cloud machine's zone is left as it is")
+	}
+	// A local side that cannot tell, or none: never moved.
+	if s, _ := (&Router{Local: &recorder{}}).ZoneStale(ctx, "home", "UTC"); s {
+		t.Error("a side without zones")
+	}
+	if s, _ := (&Router{}).ZoneStale(ctx, "home", "UTC"); s {
+		t.Error("no local side")
+	}
+}
