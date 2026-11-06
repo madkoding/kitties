@@ -31,9 +31,10 @@ prints the address and where the token is when it starts (`MCP connector: http:/
 - The `claude mcp add` command, ready to copy. It reads the token from its file: **the token is
   never drawn on the page.** *Copy token* and *Rotate token* are explicit buttons (rotating cuts off
   every connection; a token set in the configuration or `KITTIES_MCP_TOKEN` is not rotated here).
-- With OAuth on, the clients that signed in, each with a *Revoke* button.
+- *Test connection* asks the connector for its tools, with its own token, and says how many Claude gets.
+- With OAuth on, the clients that signed in (and when each was last used), each with a *Revoke* button.
 
-The same through the API (gateway token): `GET`/`PUT /v1/mcp`, `GET`/`POST /v1/mcp/token`.
+The same through the API (gateway token): `GET`/`PUT /v1/mcp`, `GET`/`POST /v1/mcp/token`, `POST /v1/mcp/test`.
 
 ## Connect Claude
 
