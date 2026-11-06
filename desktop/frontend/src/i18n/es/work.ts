@@ -392,8 +392,6 @@ const dict: Dictionary = {
   "Watching live": "Viendo en vivo",
   "Give it back to {name}": "Devolvérselo a {name}",
   "Take control": "Tomar el control",
-  "The desktop is still starting: waiting for it…":
-    "El escritorio aún está arrancando: esperándolo…",
   "Connecting to the desktop…": "Conectando con el escritorio…",
   "Click, drag, scroll and type on the picture; Ctrl+V pastes your own text.":
     "Haz clic, arrastra, usa la rueda y escribe sobre la imagen; Ctrl+V pega tu propio texto.",

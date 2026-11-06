@@ -1,13 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import {
-  api,
-  type Kitty,
-  rectsDesktop,
-  shotData,
-  streamDesktop,
-  voxlReady,
-  voxlSource,
-} from "./api";
+import { api, type Kitty, rectsDesktop, shotData, streamDesktop, voxlSource } from "./api";
 import { plainError } from "./friendly";
 import { t } from "./i18n";
 import { IconExpand, IconReduce, IconX } from "./icons";
@@ -166,8 +158,6 @@ export default function LiveDesktop({
   // changed, whole pictures of a stream, or screenshots when each one before fails.
   const [mode, setMode] = useState<"voxl" | "rects" | "stream" | "poll">("voxl");
   const [voxlUrl, setVoxlUrl] = useState("");
-  // starting: the desktop is still coming up, and the live view is being waited for.
-  const [starting, setStarting] = useState(false);
   const voxlFrame = useRef<HTMLIFrameElement>(null);
   const [loaded, setLoaded] = useState(false);
   const [clip, setClip] = useState("");
@@ -244,28 +234,10 @@ export default function LiveDesktop({
           setMode("rects");
           return;
         }
-        // A desktop just turned on: wait for its live view instead of framing an error.
-        setStarting(true);
-        return voxlReady(src, { alive: () => alive }).then((up) => {
-          if (!alive) {
-            return;
-          }
-          setStarting(false);
-          // Not up in time: the rectangles follow the display instead (and say if it fails).
-          if (!up) {
-            setMode("rects");
-            return;
-          }
-          setVoxlUrl(src);
-          setDims({ w: 1280, h: 800 });
-        });
+        setVoxlUrl(src);
+        setDims({ w: 1280, h: 800 });
       })
-      .catch(() => {
-        if (alive) {
-          setStarting(false);
-          setMode("rects");
-        }
-      });
+      .catch(() => alive && setMode("rects"));
     return () => {
       alive = false;
     };
@@ -889,10 +861,7 @@ export default function LiveDesktop({
         )}
         {!loaded && (
           <div class="text-sm text-[var(--t3)] py-20">
-            <span class="spinner" />{" "}
-            {starting
-              ? t("The desktop is still starting: waiting for it…")
-              : t("Connecting to the desktop…")}
+            <span class="spinner" /> {t("Connecting to the desktop…")}
           </div>
         )}
       </div>
