@@ -19,6 +19,22 @@ gateway:
 Or by environment: `KITTIES_MCP=true`, `KITTIES_MCP_TOKEN`, `KITTIES_MCP_EXEC=true`, `KITTIES_MCP_OAUTH=true`, `KITTIES_MCP_APPROVE=true`. The gateway
 prints the address and where the token is when it starts (`MCP connector: http://127.0.0.1:7488/mcp`).
 
+## From Settings
+
+**Settings → Preferences → Claude (MCP)** shows and changes all of this without editing files:
+
+![The Claude (MCP) section of Settings: the switches, the claude mcp add command and the signed-in clients](screenshots/59-settings-mcp.png)
+
+- Switches: the connector, `kitty_exec`, `approval_approve` and OAuth sign-in. Turning on exec or
+  approve asks for an explicit yes. The choice is kept in `<data>/mcp-settings.json`, wins over the
+  file and the environment, and the gateway restarts to apply it.
+- The `claude mcp add` command, ready to copy. It reads the token from its file: **the token is
+  never drawn on the page.** *Copy token* and *Rotate token* are explicit buttons (rotating cuts off
+  every connection; a token set in the configuration or `KITTIES_MCP_TOKEN` is not rotated here).
+- With OAuth on, the clients that signed in, each with a *Revoke* button.
+
+The same through the API (gateway token): `GET`/`PUT /v1/mcp`, `GET`/`POST /v1/mcp/token`.
+
 ## Connect Claude
 
 ```sh
