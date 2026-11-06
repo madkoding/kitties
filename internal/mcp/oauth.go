@@ -368,7 +368,28 @@ func (o *OAuth) parse(v url.Values) (authReq, string, string) {
 }
 
 func redirectTo(w http.ResponseWriter, r *http.Request, base string, q map[string]string) {
-	u, _ := url.Parse(base)
+	// Normalize backslashes because some user agents treat them as path separators.
+	base = strings.ReplaceAll(base, "\\", "/")
+
+	u, err := url.Parse(base)
+	if err != nil {
+		http.Error(w, "invalid redirect URL", http.StatusBadRequest)
+		return
+	}
+
+	// Allow either:
+	//   1) absolute HTTP(S) URLs with a host (OAuth client callback URLs), or
+	//   2) local absolute-path redirects ("/...") with no scheme/host.
+	if u.Host == "" {
+		if u.Scheme != "" || !strings.HasPrefix(u.Path, "/") {
+			http.Error(w, "invalid redirect URL", http.StatusBadRequest)
+			return
+		}
+	} else if u.Scheme != "http" && u.Scheme != "https" {
+		http.Error(w, "invalid redirect URL", http.StatusBadRequest)
+		return
+	}
+
 	vals := u.Query()
 	for k, v := range q {
 		if v != "" {
