@@ -170,6 +170,14 @@ const VoxlPasswordFile = "/tmp/voxl.pw"
 // voxlPassword is what the entrypoint writes: random hexadecimal.
 var voxlPassword = regexp.MustCompile(`^[0-9a-f]{32,}$`)
 
+// How long after a machine is brought up its voxl is waited for: the window in which a missing
+// password means "not yet", how long the wait lasts at most, and how often it looks.
+var (
+	voxlBootWindow = 60 * time.Second
+	voxlBootWait   = 20 * time.Second
+	voxlBootPoll   = 500 * time.Millisecond
+)
+
 // Voxl is how to reach a kitty's voxl, the H.264 live view that runs inside its container.
 type Voxl struct {
 	// Dial opens a connection to it (through the container engine: the loopback port it published, or `exec`).
@@ -189,10 +197,24 @@ func (m *Manager) Voxl(ctx context.Context, ref string) (Voxl, error) {
 		return Voxl{}, fmt.Errorf("%s has no desktop", k.Name)
 	}
 	ctr := m.ctr()
-	pw, err := ctr.Exec(ctx, k.Container, "cat", VoxlPasswordFile)
-	pw = strings.TrimSpace(pw)
-	if err != nil || !voxlPassword.MatchString(pw) {
-		return Voxl{}, errors.New("this desktop has no voxl live view")
+	// A machine just brought up has not written its password yet: wait for it (a few seconds at
+	// most) instead of taking it for an image without voxl, which would send the page to the
+	// slower rectangles for good.
+	var pw string
+	for attempt := 0; ; attempt++ {
+		out, err := ctr.Exec(ctx, k.Container, "cat", VoxlPasswordFile)
+		pw = strings.TrimSpace(out)
+		if err == nil && voxlPassword.MatchString(pw) {
+			break
+		}
+		if attempt >= int(voxlBootWait/voxlBootPoll) || !m.use.booting(k.ID, m.now(), voxlBootWindow) {
+			return Voxl{}, errors.New("this desktop has no voxl live view")
+		}
+		select {
+		case <-ctx.Done():
+			return Voxl{}, ctx.Err()
+		case <-time.After(voxlBootPoll):
+		}
 	}
 	return Voxl{Password: pw, Dial: func(ctx context.Context) (net.Conn, error) {
 		c, err := ctr.Tunnel(ctx, k.Container, container.VoxlPort)
