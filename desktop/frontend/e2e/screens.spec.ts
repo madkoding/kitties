@@ -2005,6 +2005,8 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
   await expect(box.getByTestId("whatsapp-who")).toContainText("Familia");
   await box.getByTestId("whatsapp-who-kitty").nth(1).selectOption(ids.tom);
   await box.getByTestId("whatsapp-limit").locator("input").fill("30");
+  await box.getByLabel("Quiet hours start").fill("22:00");
+  await box.getByLabel("Quiet hours end").fill("08:00");
   // Turning it on waits for the risk to be accepted.
   await box.getByTestId("whatsapp-enabled").click();
   await expect(box.getByTestId("whatsapp-save")).toBeDisabled();
@@ -2021,6 +2023,8 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
       allow_groups: ["120363012345678901@g.us"],
       kitties: { "120363012345678901@g.us": ids.tom },
       max_per_hour: 30,
+      quiet_from: "22:00",
+      quiet_to: "08:00",
       accept_risk: true,
     },
   ]);
@@ -2044,6 +2048,18 @@ test("Settings: WhatsApp links with a QR code, asks for the risk and keeps the l
   await expect(box.getByTestId("whatsapp-note")).toContainText("Sent");
   expect(tests).toEqual([{ to: "56912345678" }]);
   await expect(box.getByTestId("whatsapp-unlink")).toBeVisible();
+  // The connection drops: it reconnects with the kept session, without a new code.
+  const reconnects: string[] = [];
+  await page.route("**/v1/whatsapp/reconnect", (route) => {
+    reconnects.push(route.request().method());
+    wa = { ...wa, state: "starting" };
+    return route.fulfill({ json: wa });
+  });
+  wa = { ...wa, state: "disconnected" };
+  await expect(box.getByTestId("whatsapp-reconnect")).toBeVisible({ timeout: 20_000 });
+  await expect(box.getByTestId("whatsapp-relink")).toHaveCount(0);
+  await box.getByTestId("whatsapp-reconnect").click();
+  expect(reconnects).toEqual(["POST"]);
 });
 
 test("Settings: the MCP clients can be revoked and the token is read only on request", async ({

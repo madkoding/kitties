@@ -771,6 +771,7 @@ export const api = {
   setWhatsApp: (s: WhatsAppSettings, acceptRisk = false) =>
     request<WhatsAppStatus>("PUT", "/v1/whatsapp", { ...s, accept_risk: acceptRisk }),
   linkWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/link"),
+  reconnectWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/reconnect"),
   unlinkWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/unlink"),
   testWhatsApp: (to: string) =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/whatsapp/test", { to }),
@@ -1208,6 +1209,9 @@ export type WhatsAppSettings = {
   kitties?: Record<string, string>;
   // max_per_hour is the most messages sent in an hour (0: 60).
   max_per_hour?: number;
+  // quiet_from and quiet_to ("22:00", "08:00") are the quiet hours; empty: none.
+  quiet_from?: string;
+  quiet_to?: string;
 };
 
 // WhatsAppGroup is a group that wrote lately, to put on the list.
@@ -1235,6 +1239,8 @@ export type WhatsAppStatus = WhatsAppSettings & {
   seen_groups?: WhatsAppGroup[];
   sent_last_hour?: number;
   held?: number;
+  quiet?: boolean;
+  waiting?: number;
   can_change: boolean;
   why?: string;
 };

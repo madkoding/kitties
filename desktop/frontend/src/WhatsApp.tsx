@@ -25,6 +25,8 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     allow_groups: [...(s.allow_groups || [])],
     kitties: { ...(s.kitties || {}) },
     max_per_hour: s.max_per_hour || 0,
+    quiet_from: s.quiet_from || "",
+    quiet_to: s.quiet_to || "",
   };
 }
 
@@ -36,6 +38,8 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     a.allow_groups.join(",") === b.allow_groups.join(",") &&
     a.allow.join(",") === b.allow.join(",") &&
     (a.max_per_hour || 0) === (b.max_per_hour || 0) &&
+    (a.quiet_from || "") === (b.quiet_from || "") &&
+    (a.quiet_to || "") === (b.quiet_to || "") &&
     pairs(a.kitties) === pairs(b.kitties)
   );
 }
@@ -75,17 +79,21 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
       // A gateway without it (an older one) shows nothing.
       .catch(() => setCur(null));
   }, []);
-  // While it links or reconnects, the code and the state change by themselves.
+  // While it links or reconnects, the code and the state change by themselves; once connected
+  // the page still looks now and then, to see a dropped connection.
   useEffect(() => {
-    if (!cur || !cur.enabled || !MOVING.includes(cur.state)) {
+    if (!cur || !cur.enabled || !(MOVING.includes(cur.state) || cur.state === "connected")) {
       return;
     }
-    const id = setInterval(() => {
-      api
-        .whatsapp()
-        .then((s) => take(s, true))
-        .catch(() => {});
-    }, 2000);
+    const id = setInterval(
+      () => {
+        api
+          .whatsapp()
+          .then((s) => take(s, true))
+          .catch(() => {});
+      },
+      cur.state === "connected" ? 15000 : 2000,
+    );
     return () => clearInterval(id);
   }, [cur?.state, cur?.enabled, cur?.qr]);
   if (!cur || !want) {
@@ -302,6 +310,29 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           }
         />
       </label>
+      <div class="flex flex-wrap items-center gap-2 mt-3 text-sm" data-testid="whatsapp-quiet">
+        {t("Quiet hours")}
+        <input
+          type="time"
+          class="px-2 py-1 text-sm"
+          value={want.quiet_from || ""}
+          disabled={disabled}
+          onInput={(e) => setWant({ ...want, quiet_from: (e.target as HTMLInputElement).value })}
+          aria-label={t("Quiet hours start")}
+        />
+        –
+        <input
+          type="time"
+          class="px-2 py-1 text-sm"
+          value={want.quiet_to || ""}
+          disabled={disabled}
+          onInput={(e) => setWant({ ...want, quiet_to: (e.target as HTMLInputElement).value })}
+          aria-label={t("Quiet hours end")}
+        />
+        <span class="text-xs text-[var(--t3)]">
+          {t("Messages then are answered when they end.")}
+        </span>
+      </div>
       {turningOn && changed && (
         <label class="flex items-center gap-2 mt-3 text-sm cursor-pointer">
           <input
@@ -362,7 +393,18 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
             </p>
           )}
           <div class="flex flex-wrap gap-2 mt-2">
-            {["qr_expired", "logged_out", "error"].includes(cur.state) && (
+            {cur.linked && ["disconnected", "error"].includes(cur.state) && (
+              <button
+                class="btn-outline px-3 py-1.5 text-sm"
+                disabled={busy}
+                onClick={() => run(() => api.reconnectWhatsApp())}
+                data-testid="whatsapp-reconnect"
+              >
+                {t("Reconnect")}
+              </button>
+            )}
+            {(["qr_expired", "logged_out"].includes(cur.state) ||
+              (cur.state === "error" && !cur.linked)) && (
               <button
                 class="btn-outline px-3 py-1.5 text-sm"
                 disabled={busy}
@@ -419,6 +461,12 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
                 t("{n} messages sent in the last hour.", {
                   n: cur.sent_last_hour || 0,
                 })}
+              {cur.quiet &&
+                " " +
+                  t("Quiet hours until {until}: {n} messages wait.", {
+                    until: cur.quiet_to || "",
+                    n: cur.waiting || 0,
+                  })}
               {(cur.held || 0) > 0 &&
                 " " + t("{n} were held by the hourly limit.", { n: cur.held || 0 })}
             </p>

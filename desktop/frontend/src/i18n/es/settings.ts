@@ -337,6 +337,14 @@ const dict: Dictionary = {
   "{n} messages sent in the last hour.": "{n} mensajes enviados en la última hora.",
   "{n} were held by the hourly limit.": "{n} quedaron retenidos por el límite por hora.",
   "Who answers each one": "Quién responde a cada uno",
+  "Quiet hours": "Horario de silencio",
+  to: "a",
+  "Quiet hours start": "Inicio del silencio",
+  "Quiet hours end": "Fin del silencio",
+  "Messages then are answered when they end.": "Los mensajes de ese rato se responden al terminar.",
+  Reconnect: "Reconectar",
+  "Quiet hours until {until}: {n} messages wait.":
+    "Silencio hasta las {until}: {n} mensajes esperan.",
   "Remove {number}": "Quitar {number}",
   "I understand that WhatsApp may ban this number":
     "Entiendo que WhatsApp puede bloquear este número",
