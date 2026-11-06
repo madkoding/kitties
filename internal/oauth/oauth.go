@@ -123,6 +123,9 @@ type Credentials struct {
 	Expiry       time.Time `json:"expiry"`
 	// Account is who signed in, when the service said.
 	Account string `json:"account,omitempty"`
+	// Answer is the token answer as the service sent it, for a Finish that reads more of it
+	// (Discord's webhook); never saved.
+	Answer json.RawMessage `json:"-"`
 }
 
 // Keys of the connector settings the credentials live in.
@@ -448,7 +451,7 @@ func (m *Manager) token(ctx context.Context, p Provider, app App, secret string,
 	if account == "" {
 		account = answer.WorkspaceName
 	}
-	return Credentials{AccessToken: answer.AccessToken, RefreshToken: answer.RefreshToken, Expiry: m.now().Add(ttl), Account: account}, nil
+	return Credentials{AccessToken: answer.AccessToken, RefreshToken: answer.RefreshToken, Expiry: m.now().Add(ttl), Account: account, Answer: data}, nil
 }
 
 // refreshAhead is how long before expiry a token is refreshed: before it fails, not after.

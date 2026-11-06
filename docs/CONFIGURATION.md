@@ -125,7 +125,7 @@ required.
 | Signs in | How |
 | --- | --- |
 | Mastodon, Home Assistant | nothing to set up: Kitties registers itself on the instance, or uses the gateway's own address as its app |
-| Google, Microsoft, Slack, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
+| Google, Microsoft, Slack, Discord, GitHub, GitLab, Notion, Todoist, Linear, Jira, Airtable, Figma, Zendesk, X, LinkedIn, Facebook, Instagram, Spotify, TIDAL, Dropbox | through Kitties' own app when the build has one, else an app of yours (its redirect address is this gateway's `/v1/oauth/callback`) |
 
 **The redirect address.** The service matches it to the letter, so register exactly the one Settings shows
 in the connection (a copy-ready box under "needs an app of your own"): this gateway's `/v1/oauth/callback`,
@@ -138,8 +138,11 @@ Spotify's own docs): add the one from Settings. Behind a proxy or Docker, set `g
 
 Signing in also fills what you would otherwise look up: your Facebook Page and its token (one
 that does not expire), the Instagram account linked to it, your LinkedIn author URN, your X user
-id, your Jira site. Telegram, WhatsApp, email, Stripe, Discord and the webhooks keep their keys:
-those services have no sign-in for this.
+id, your Jira site, your Discord webhook (Discord asks for the server and channel and makes the
+webhook there; a pasted webhook URL still works). Telegram, WhatsApp, email, Stripe and the webhooks
+keep their keys: those services have no sign-in for this.
+
+![Discord: sign in, or paste a webhook](screenshots/60-connector-discord.png)
 
 **X** takes the sign-in (its OAuth 2.0 Client ID and Secret, with this gateway's callback under
 *User authentication settings*), or, without a sign-in, the four **OAuth 1.0 keys** of *Keys and

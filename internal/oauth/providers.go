@@ -101,6 +101,12 @@ var Providers = map[string]Provider{
 		Name: "mastodon", Label: "Mastodon", AuthURL: "{url}/oauth/authorize", TokenURL: "{url}/oauth/token",
 		Scopes: []string{"read", "write"}, NoExpiry: true, Register: mastodonRegister, Finish: mastodonFinish,
 	},
+	"discord": {
+		// webhook.incoming makes Discord ask for the server and channel, and hand back a webhook
+		// for it: the connector posts there, so the token itself is not kept alive.
+		Name: "discord", Label: "Discord", AuthURL: "https://discord.com/oauth2/authorize", TokenURL: "https://discord.com/api/oauth2/token",
+		Scopes: []string{"webhook.incoming"}, Finish: discordFinish,
+	},
 	"home-assistant": {
 		Name: "home-assistant", Label: "Home Assistant", AuthURL: "{url}/auth/authorize", TokenURL: "{url}/auth/token", SelfClient: true,
 	},
@@ -171,6 +177,27 @@ func mastodonFinish(ctx context.Context, do HTTPDo, app App, c Credentials) (Cre
 		c.Account = "@" + me.Acct
 	}
 	return c, nil, nil
+}
+
+// discordFinish keeps the webhook the person made while consenting: the connector posts to it,
+// and it lasts until it is deleted in Discord, so nothing has to be refreshed.
+func discordFinish(ctx context.Context, do HTTPDo, app App, c Credentials) (Credentials, map[string]string, error) {
+	var answer struct {
+		Webhook struct {
+			URL       string `json:"url"`
+			Name      string `json:"name"`
+			ChannelID string `json:"channel_id"`
+		} `json:"webhook"`
+	}
+	if err := json.Unmarshal(c.Answer, &answer); err != nil || answer.Webhook.URL == "" {
+		return c, nil, errors.New("Discord returned no webhook: pick a server and a channel when it asks")
+	}
+	c.Account = answer.Webhook.Name
+	if c.Account == "" {
+		c.Account = "#" + answer.Webhook.ChannelID
+	}
+	c.RefreshToken, c.Expiry = "", time.Now().Add(forever)
+	return c, map[string]string{"url": answer.Webhook.URL}, nil
 }
 
 // xFinish learns the account's id, which mentions and likes need.

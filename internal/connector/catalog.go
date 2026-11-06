@@ -141,8 +141,10 @@ func catalog() []Kind {
 				keyed(f("channel", "Channel", "#general: where the messages go", false, false), keyToken),
 				f("client_id", "OAuth client id", "to sign in instead of pasting a token: a Slack app of your own", false, false), f("client_secret", "OAuth client secret", "", false, true)},
 			Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeSlack, oauth: "slack"},
-		{Name: "discord", Category: CatMessaging, Label: "Discord", Help: "posts messages to a Discord channel",
-			Fields: []Field{f("url", "Webhook URL", "", true, true)}, Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeDiscord},
+		{Name: "discord", Category: CatMessaging, Label: "Discord", Help: "posts messages to a Discord channel, through a webhook or a sign-in",
+			Fields: append([]Field{keyed(f("url", "Webhook URL", "from the channel's settings → Integrations → Webhooks; signing in makes one", false, true), keyWebhook)},
+				fApp("discord.com/developers (redirect: this gateway's /v1/oauth/callback)")...),
+			Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeDiscord, oauth: "discord"},
 		{Name: "telegram", Category: CatMessaging, Label: "Telegram", Help: "sends messages through a bot",
 			Fields:  []Field{f("token", "Bot token", "from @BotFather", true, true), f("chat_id", "Chat id", "", true, false)},
 			Actions: []Action{{Name: "send", Help: "send a message", Args: []string{fText}}}, make: makeTelegram},
@@ -814,7 +816,10 @@ func makeDiscord(s Settings) Connector {
 		if err != nil {
 			return request{}, err
 		}
-		return request{method: "POST", url: s["url"], body: map[string]any{"content": text}}, nil
+		if strings.TrimSpace(s["url"]) == "" {
+			return request{}, errors.New("no webhook yet: sign in to Discord from Settings, or paste a webhook URL")
+		}
+		return request{method: "POST", url: s["url"], body: map[string]any{"content": text}, plain: true}, nil
 	}}, "send")
 }
 

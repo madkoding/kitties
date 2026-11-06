@@ -229,6 +229,8 @@ const dict: Dictionary = {
   "flagged tasks and the ones due soon": "tarefas sinalizadas e as que vencem em breve",
   "for a protected topic": "para um tópico protegido",
   "from @BotFather": "do @BotFather",
+  "from the channel's settings → Integrations → Webhooks; signing in makes one":
+    "das configurações do canal → Integrações → Webhooks; fazer login cria um",
   "from Slack's app settings → Incoming Webhooks; it posts to the one channel it was made for":
     "das configurações do app do Slack → Incoming Webhooks; publica só no canal para o qual foi criado",
   "group/name": "group/name",
@@ -288,6 +290,8 @@ const dict: Dictionary = {
     "só para fazer login com um app seu em developer.todoist.com/appconsole.html; vazio: o do Kitties",
   "only to sign in through an app of your own at developers.facebook.com; empty: Kitties' own":
     "só para fazer login com um app seu em developers.facebook.com; vazio: o do Kitties",
+  "only to sign in through an app of your own at discord.com/developers (redirect: this gateway's /v1/oauth/callback); empty: Kitties' own":
+    "só para fazer login com um app seu em discord.com/developers (redirect: o /v1/oauth/callback deste gateway); vazio: o do Kitties",
   "only to sign in through an app of your own at dropbox.com/developers; empty: Kitties' own":
     "só para fazer login com um app seu em dropbox.com/developers; vazio: o do Kitties",
   "only to sign in through an app of your own at entra.microsoft.com (an app registration); empty: Kitties' own":
@@ -311,7 +315,8 @@ const dict: Dictionary = {
     "tocar o que melhor combinar com uma busca, um uri spotify:, ou retomar",
   "post a message": "publicar uma mensagem",
   "post the arguments": "enviar os argumentos",
-  "posts messages to a Discord channel": "publica mensagens em um canal do Discord",
+  "posts messages to a Discord channel, through a webhook or a sign-in":
+    "publica mensagens em um canal do Discord, com um webhook ou fazendo login",
   "posts messages to a Slack channel, through a webhook, a bot token or a sign-in":
     "publica mensagens em um canal do Slack, por um webhook, um token de bot ou fazendo login",
   "posts the arguments as JSON to a URL": "envia os argumentos como JSON para uma URL",

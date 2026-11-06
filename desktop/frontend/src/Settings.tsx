@@ -753,6 +753,7 @@ const OAUTH_LABEL: Record<string, string> = {
   google: "Google",
   microsoft: "Microsoft",
   slack: "Slack",
+  discord: "Discord",
   github: "GitHub",
   gitlab: "GitLab",
   spotify: "Spotify",

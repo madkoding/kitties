@@ -28,6 +28,9 @@ func (k Kind) AuthOf(s Settings, signedIn bool) string {
 		return AuthKeys
 	case k.Name == "slack" && strings.TrimSpace(s["url"]) != "":
 		return AuthWebhook
+	case k.Name == "discord" && strings.TrimSpace(s["url"]) != "" && !signedIn:
+		// A signed-in Discord posts to the webhook its sign-in made.
+		return AuthWebhook
 	case strings.TrimSpace(s["token"]) != "":
 		return AuthToken
 	case signedIn:

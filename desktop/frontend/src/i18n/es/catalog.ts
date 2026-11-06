@@ -229,6 +229,8 @@ const dict: Dictionary = {
   "flagged tasks and the ones due soon": "tareas marcadas y las que vencen pronto",
   "for a protected topic": "para un tema protegido",
   "from @BotFather": "de @BotFather",
+  "from the channel's settings → Integrations → Webhooks; signing in makes one":
+    "de la configuración del canal → Integraciones → Webhooks; iniciar sesión crea uno",
   "from Slack's app settings → Incoming Webhooks; it posts to the one channel it was made for":
     "de la configuración de la app de Slack → Incoming Webhooks; publica solo en el canal para el que se creó",
   "group/name": "group/name",
@@ -289,6 +291,8 @@ const dict: Dictionary = {
     "solo para iniciar sesión con una app tuya en developer.todoist.com/appconsole.html; vacío: la de Kitties",
   "only to sign in through an app of your own at developers.facebook.com; empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en developers.facebook.com; vacío: la de Kitties",
+  "only to sign in through an app of your own at discord.com/developers (redirect: this gateway's /v1/oauth/callback); empty: Kitties' own":
+    "solo para iniciar sesión con una app tuya en discord.com/developers (redirect: el /v1/oauth/callback de este gateway); vacío: la de Kitties",
   "only to sign in through an app of your own at dropbox.com/developers; empty: Kitties' own":
     "solo para iniciar sesión con una app tuya en dropbox.com/developers; vacío: la de Kitties",
   "only to sign in through an app of your own at entra.microsoft.com (an app registration); empty: Kitties' own":
@@ -312,7 +316,8 @@ const dict: Dictionary = {
     "reproducir lo que mejor coincida con una búsqueda, un uri spotify:, o reanudar",
   "post a message": "publicar un mensaje",
   "post the arguments": "enviar los argumentos",
-  "posts messages to a Discord channel": "publica mensajes en un canal de Discord",
+  "posts messages to a Discord channel, through a webhook or a sign-in":
+    "publica mensajes en un canal de Discord, con un webhook o iniciando sesión",
   "posts messages to a Slack channel, through a webhook, a bot token or a sign-in":
     "publica mensajes en un canal de Slack, mediante un webhook, un token de bot o iniciando sesión",
   "posts the arguments as JSON to a URL": "envía los argumentos como JSON a una URL",

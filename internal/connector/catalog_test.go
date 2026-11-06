@@ -569,3 +569,29 @@ func TestInboundKinds(t *testing.T) {
 		t.Error(err)
 	}
 }
+
+func TestDiscordSignsInForAWebhook(t *testing.T) {
+	k, _ := LookupKind("discord")
+	if k.OAuth != "discord" || !k.KeySet(Settings{"url": "https://d/w"}) || k.KeySet(Settings{}) {
+		t.Errorf("discord = %+v", k)
+	}
+	// Saved before the sign-in made its webhook: it says what to do instead of posting nowhere.
+	c, err := Build("discord", Settings{}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Call(context.Background(), map[string]any{"text": "hi"}); err == nil || !strings.Contains(err.Error(), "sign in to Discord") {
+		t.Errorf("no webhook = %v", err)
+	}
+	// The webhook is posted to as is: the account's token never goes with it.
+	var cp capture
+	cp.install(t)
+	src := TokenSource(func(context.Context) (string, error) { return "secret", nil })
+	c, _ = Build("discord", WithTokenSource(Settings{"url": "https://d/w"}, src), "")
+	if _, err := c.Call(context.Background(), map[string]any{"text": "hi"}); err != nil {
+		t.Fatal(err)
+	}
+	if len(cp.reqs) != 1 || cp.reqs[0].Header.Get("Authorization") != "" || cp.reqs[0].URL.String() != "https://d/w" {
+		t.Errorf("sent = %v", cp.reqs)
+	}
+}
