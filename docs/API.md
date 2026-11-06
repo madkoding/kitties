@@ -42,4 +42,6 @@
 
 `POST /mcp` is the [MCP connector](MCP.md) (off by default, its own bearer token). `GET /v1/mcp/clients` · `DELETE /v1/mcp/clients/{id}` list and revoke the OAuth clients that signed in. `GET`/`PUT /v1/mcp` read and change the connector's switches (`accept_risk` to turn on exec or approve; the gateway restarts); `GET /v1/mcp/token` returns its token (explicit, never cached) and `POST /v1/mcp/token` rotates it; `POST /v1/mcp/test` asks the connector for its tools and says whether it answers.
 
+`GET`/`PUT /v1/whatsapp` read and change the [WhatsApp link](WHATSAPP.md) (on, the allow list, the kitty that answers; `accept_risk` to turn it on) and give the QR code to scan while it waits; `POST /v1/whatsapp/link` asks for new codes, `POST /v1/whatsapp/unlink` removes the device and forgets its session, and `POST /v1/whatsapp/test` writes to a number on the list.
+
 Every other call needs `Authorization: Bearer <token>`; `/` and `/v1/health` are open.
