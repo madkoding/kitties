@@ -107,6 +107,29 @@ var Providers = map[string]Provider{
 		Name: "mastodon", Label: "Mastodon", AuthURL: "{url}/oauth/authorize", TokenURL: "{url}/oauth/token",
 		Scopes: []string{"read", "write"}, NoExpiry: true, Register: mastodonRegister, Finish: mastodonFinish,
 	},
+	"discord": {
+		// webhook.incoming makes Discord ask for the server and channel, and hand back a webhook
+		// for it: the connector posts there, so the token itself is not kept alive.
+		Name: "discord", Label: "Discord", AuthURL: "https://discord.com/oauth2/authorize", TokenURL: "https://discord.com/api/oauth2/token",
+		Scopes: []string{"webhook.incoming"}, Finish: discordFinish,
+	},
+	"gitea": {
+		// Gitea and Forgejo (Codeberg too) are their own identity service: the app is made on the
+		// instance, under Settings → Applications.
+		Name: "gitea", Label: "Gitea", AuthURL: "{url}/login/oauth/authorize", TokenURL: "{url}/login/oauth/access_token",
+		Scopes: []string{"write:repository", "write:issue", "read:user"},
+	},
+	"nextcloud": {
+		// Nextcloud's Login Flow v2 (loginflow.go): nothing to register, an app password back.
+		Name: "nextcloud", Label: "Nextcloud", LoginFlow: true,
+	},
+	"trello": {
+		// The app is an API key (Power-Up admin → API key, with this gateway's origin allowed);
+		// the token never expires.
+		Name: "trello", Label: "Trello", AuthURL: "https://trello.com/1/authorize", Implicit: true, AppKey: "key",
+		Scopes: []string{"read", "write"},
+		Extra:  map[string]string{"expiration": "never", "name": "Kitties", "response_type": "token", "callback_method": "fragment"},
+	},
 	"home-assistant": {
 		Name: "home-assistant", Label: "Home Assistant", AuthURL: "{url}/auth/authorize", TokenURL: "{url}/auth/token", SelfClient: true,
 	},
@@ -275,6 +298,27 @@ func mastodonFinish(ctx context.Context, do HTTPDo, app App, c Credentials) (Cre
 		c.Account = "@" + me.Acct
 	}
 	return c, nil, nil
+}
+
+// discordFinish keeps the webhook the person made while consenting: the connector posts to it,
+// and it lasts until it is deleted in Discord, so nothing has to be refreshed.
+func discordFinish(ctx context.Context, do HTTPDo, app App, c Credentials) (Credentials, map[string]string, error) {
+	var answer struct {
+		Webhook struct {
+			URL       string `json:"url"`
+			Name      string `json:"name"`
+			ChannelID string `json:"channel_id"`
+		} `json:"webhook"`
+	}
+	if err := json.Unmarshal(c.Answer, &answer); err != nil || answer.Webhook.URL == "" {
+		return c, nil, errors.New("Discord returned no webhook: pick a server and a channel when it asks")
+	}
+	c.Account = answer.Webhook.Name
+	if c.Account == "" {
+		c.Account = "#" + answer.Webhook.ChannelID
+	}
+	c.RefreshToken, c.Expiry = "", time.Now().Add(forever)
+	return c, map[string]string{"url": answer.Webhook.URL}, nil
 }
 
 // xFinish learns the account's id, which mentions and likes need.

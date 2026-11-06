@@ -357,3 +357,53 @@ func TestSpotifyRedirectUsesTheLoopbackIP(t *testing.T) {
 		t.Errorf("other services keep the address: %q", got)
 	}
 }
+
+func TestDiscordKeepsTheWebhook(t *testing.T) {
+	// Consenting makes a webhook on the channel picked: it becomes the connector's address, and
+	// the token is not refreshed (the webhook lasts until it is deleted).
+	st := &memStore{provider: "discord", id: "dc", secret: "s", settings: map[string]string{}}
+	r := &routes{answers: map[string]string{"discord.com/api/oauth2/token": `{"access_token":"at","refresh_token":"rt","expires_in":604800,
+		"webhook":{"url":"https://discord.com/api/webhooks/1/abc","name":"Kitties","channel_id":"42"}}`}}
+	m, q := signIn(t, st, r, "http://127.0.0.1:7488/v1/oauth/callback")
+	if q.Get("scope") != "webhook.incoming" || q.Get("code_challenge_method") != "S256" || q.Get("state") == "" {
+		t.Errorf("consent = %v", q)
+	}
+	if _, err := m.Exchange(context.Background(), q.Get("state"), "code"); err != nil {
+		t.Fatal(err)
+	}
+	if st.settings["url"] != "https://discord.com/api/webhooks/1/abc" || st.creds.Account != "Kitties" || st.creds.RefreshToken != "" {
+		t.Errorf("learned = %v %+v", st.settings, st.creds)
+	}
+	if m.Due("c") {
+		t.Error("a Discord sign-in is never refreshed")
+	}
+	// A webhook without a name is shown by its channel.
+	c, _, err := discordFinish(context.Background(), nil, App{}, Credentials{Answer: []byte(`{"webhook":{"url":"u","channel_id":"42"}}`)})
+	if err != nil || c.Account != "#42" {
+		t.Errorf("unnamed = %+v %v", c, err)
+	}
+	// An answer without a webhook (the person closed the picker) fails the sign-in.
+	for _, answer := range []string{`{"access_token":"at"}`, `not json`} {
+		if _, _, err := discordFinish(context.Background(), nil, App{}, Credentials{Answer: []byte(answer)}); err == nil {
+			t.Errorf("%s: no webhook must fail", answer)
+		}
+	}
+}
+
+func TestGiteaSignsInOnItsInstance(t *testing.T) {
+	st := &memStore{provider: "gitea", id: "gt", secret: "s", settings: map[string]string{"url": "https://codeberg.org/"}}
+	r := &routes{answers: map[string]string{"codeberg.org/login/oauth/access_token": `{"access_token":"at","refresh_token":"rt","expires_in":3600}`}}
+	m := New(st)
+	m.httpDo = r.do
+	link, err := m.Start("c", "http://127.0.0.1:7488/v1/oauth/callback")
+	if err != nil || !strings.HasPrefix(link, "https://codeberg.org/login/oauth/authorize?") || !strings.Contains(link, "write%3Aissue") {
+		t.Fatalf("start = %s %v", link, err)
+	}
+	u, _ := url.Parse(link)
+	if _, err := m.Exchange(context.Background(), u.Query().Get("state"), "code"); err != nil || st.creds.RefreshToken != "rt" {
+		t.Errorf("exchange = %v %+v", err, st.creds)
+	}
+	if _, err := New(&memStore{provider: "gitea", id: "gt"}).Start("c", "http://gw/cb"); err == nil {
+		t.Error("no instance, no sign-in")
+	}
+}

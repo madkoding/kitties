@@ -253,7 +253,7 @@ func TestConnectorNeedsAccount(t *testing.T) {
 	if err := m.SetConnector("sp", config.Connector{Kind: "spotify", Description: "music"}, ConnectorChange{}); err != nil {
 		t.Errorf("an edit of a signed-in connector = %v", err)
 	}
-	// Kinds that do not sign in are not asked for one.
+	// A webhook stands for the sign-in: none is asked for.
 	if err := m.SetConnector("dc", config.Connector{Kind: "discord", URL: "https://discord/x"}, ConnectorChange{}); err != nil {
 		t.Errorf("discord = %v", err)
 	}
@@ -374,8 +374,11 @@ func TestOAuthStore(t *testing.T) {
 	if _, err := m.OAuthApp("zz"); err == nil {
 		t.Error("unknown connector")
 	}
-	if _, err := m.OAuthApp("dc"); err == nil {
-		t.Error("discord does not sign in")
+	if _, err := m.OAuthApp("hook"); err == nil {
+		t.Error("a webhook does not sign in")
+	}
+	if app, err := m.OAuthApp("dc"); err != nil || app.Provider != "discord" {
+		t.Errorf("discord signs in: %+v %v", app, err)
 	}
 	if app, err := m.OAuthApp("sl"); err != nil || app.Provider != "slack" {
 		t.Errorf("slack signs in too: %+v %v", app, err)
@@ -390,7 +393,7 @@ func TestOAuthStore(t *testing.T) {
 	if err := m.SaveOAuthSettings("zz", nil); err == nil {
 		t.Error("an unknown connector learns nothing")
 	}
-	if names := m.OAuthConnectors(); strings.Join(names, ",") != "gw,sl" {
+	if names := m.OAuthConnectors(); strings.Join(names, ",") != "dc,gw,sl" {
 		t.Errorf("OAuthConnectors = %v", names)
 	}
 	// The slack connector has a webhook of its own: no sign-in needed; the google one has none.
@@ -400,6 +403,10 @@ func TestOAuthStore(t *testing.T) {
 	}
 	if views["sl"].NeedsSignIn || !views["gw"].NeedsSignIn || views["gw"].SignedIn {
 		t.Errorf("needs_sign_in: sl=%+v gw=%+v", views["sl"], views["gw"])
+	}
+	// A Discord webhook typed in stands for the sign-in.
+	if views["dc"].NeedsSignIn || views["dc"].Auth != connector.AuthWebhook {
+		t.Errorf("discord with a webhook = %+v", views["dc"])
 	}
 	// The refresh loop runs until its context ends, and asks nothing when nothing is due.
 	ctx, cancel := context.WithCancel(context.Background())

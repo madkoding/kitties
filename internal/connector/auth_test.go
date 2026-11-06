@@ -10,6 +10,8 @@ func TestAuthOf(t *testing.T) {
 	sl, _ := LookupKind("slack")
 	gh, _ := LookupKind("github")
 	tg, _ := LookupKind("telegram")
+	dc, _ := LookupKind("discord")
+	nc, _ := LookupKind("nextcloud")
 	keys := Settings{"consumer_key": "ck", "consumer_secret": "cs", "access_token": "1-a", "access_secret": "as", "token": "t"}
 	for _, c := range []struct {
 		kind     Kind
@@ -23,6 +25,11 @@ func TestAuthOf(t *testing.T) {
 		{x, Settings{}, false, ""},
 		{sl, Settings{"url": "https://hooks/x", "token": "t"}, false, AuthWebhook},
 		{gh, Settings{"token": "t"}, false, AuthToken},
+		{dc, Settings{"url": "https://discord/w"}, false, AuthWebhook},
+		{dc, Settings{"url": "https://discord/w"}, true, AuthSignIn},
+		{dc, Settings{}, false, ""},
+		{nc, Settings{"user": "ana", "password": "pw"}, false, AuthPassword},
+		{nc, Settings{"user": "ana", "password": "pw"}, true, AuthSignIn},
 		{tg, Settings{"token": "t"}, false, ""},
 	} {
 		if got := c.kind.AuthOf(c.s, c.signedIn); got != c.want {

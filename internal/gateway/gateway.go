@@ -268,6 +268,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.Handle("GET /v1/oauth/{name}/redirect", api(s.handleOAuthRedirect))
 	s.mux.HandleFunc("GET /v1/oauth/callback", s.handleOAuthCallback)
+	s.mux.HandleFunc("POST /v1/oauth/fragment", s.handleOAuthFragment)
 	s.mux.Handle("GET /v1/skills", api(s.handleSkills))
 	s.mux.Handle("GET /v1/skills/{name}", api(s.handleSkill))
 	s.mux.Handle("PUT /v1/skills/{name}", api(s.handleSaveSkill))
@@ -370,6 +371,13 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprintf(w, oauth.CallbackHTML, "Sign-in refused", html.EscapeString(e+" "+q.Get("error_description")))
 		return
 	}
+	if q.Get("code") == "" && s.fleet.OAuth().Implicit(q.Get("state")) {
+		// The token is in the fragment, which only the browser has: the page posts it back.
+		state, _ := json.Marshal(q.Get("state"))
+		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'")
+		_, _ = fmt.Fprintf(w, oauth.FragmentHTML, state)
+		return
+	}
 	name, err := s.fleet.OAuth().Exchange(r.Context(), q.Get("state"), q.Get("code"))
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -377,6 +385,25 @@ func (s *Server) handleOAuthCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, _ = fmt.Fprintf(w, oauth.CallbackHTML, "Connected", "The connector "+html.EscapeString(name)+" is signed in. You can close this window.")
+}
+
+// handleOAuthFragment takes the token an implicit flow's page read from its fragment; it is open
+// like the callback, and the state ties it to a flow this gateway started.
+func (s *Server) handleOAuthFragment(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		State string `json:"state"`
+		Token string `json:"token"`
+	}
+	if err := json.NewDecoder(io.LimitReader(r.Body, 8<<10)).Decode(&in); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	name, err := s.fleet.OAuth().Deliver(in.State, in.Token)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"name": name})
 }
 
 func (s *Server) noLibrary(w http.ResponseWriter) bool {

@@ -383,6 +383,33 @@ test("picking a service opens its form; an OAuth kind offers the sign-in", async
   await gh.locator("#field-token").fill("ghp_demo");
   await expect(save).toBeEnabled();
   await expect(gh.getByTestId("missing")).toHaveCount(0);
+  // Discord signs in to make a webhook on the channel picked, or takes one pasted.
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("discord");
+  await page.locator(".service-btn", { hasText: "Discord" }).click();
+  const dc = page.getByTestId("connection-form");
+  await expect(dc.getByTestId("way-signin")).toHaveAttribute("aria-checked", "true");
+  await expect(dc.getByTestId("way-webhook")).toBeVisible();
+  await expect(page.getByTestId("connection-sign-in")).toContainText("/v1/oauth/callback");
+  await shot(page, "60-connector-discord");
+  await dc.getByTestId("way-webhook").click();
+  await expect(dc.locator("#field-url")).toBeVisible();
+  await expect(dc.getByTestId("connection-sign-in")).toHaveCount(0);
+  // Nextcloud signs in with its login flow (no app to make); CalDAV offers it after the password.
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("nextcloud");
+  await page.locator(".service-btn", { hasText: "Nextcloud" }).click();
+  const nc = page.getByTestId("connection-form");
+  await expect(nc.getByTestId("way-signin")).toHaveAttribute("aria-checked", "true");
+  await expect(nc.getByTestId("connection-sign-in")).not.toContainText("needs an app of your own");
+  await nc.locator("#field-url").fill("https://cloud.example.com");
+  await shot(page, "61-connector-nextcloud");
+  await page.getByRole("button", { name: "Cancel" }).click();
+  await page.getByLabel("Search services").fill("caldav");
+  await page.locator(".service-btn", { hasText: "CalDAV" }).click();
+  const cal = page.getByTestId("connection-form");
+  await expect(cal.getByTestId("way-password")).toHaveAttribute("aria-checked", "true");
+  await expect(cal.getByTestId("way-signin")).toContainText("Nextcloud");
   // The saved Google connector shows the sign-in button, which asks the gateway for a consent URL.
   await open(page, "#connector/workspace");
   const signIn = page.getByRole("button", { name: "Sign in with Google" });

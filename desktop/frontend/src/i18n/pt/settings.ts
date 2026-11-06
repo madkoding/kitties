@@ -145,6 +145,8 @@ const dict: Dictionary = {
   "What the kitties are told it is for": "Para que você diz aos kitties que ela serve",
   "uses the OAuth 1.0 keys": "usa as chaves OAuth 1.0",
   "uses a token": "usa um token",
+  "uses an app password": "usa uma senha de app",
+  "A user and an app password of the account": "Um usuário e uma senha de app da conta",
   "uses a webhook": "usa um webhook",
   "token expired": "token expirado",
   "token expires in {time}": "o token expira em {time}",
