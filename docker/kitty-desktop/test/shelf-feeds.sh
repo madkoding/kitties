@@ -55,6 +55,11 @@ out="$(KITTY_WEATHER_PLACE= HOME="$work" NOIP=1 TZ=America/Santiago weather)"
 shape "$out" && ok "weather from the time zone's city" || bad "weather from the time zone: $out"
 grep -q 'geocoding.*name=Santiago' "$CURL_LOG" && ok "the time zone's city is looked up" || bad "the time zone fallback"
 
+for zone in Etc/GMT+3 UTC '<+0530>-5:30'; do
+    out="$(KITTY_WEATHER_PLACE= HOME="$work" NOIP=1 TZ="$zone" weather)"
+    [ -z "$out" ] && ! grep -q geocoding "$CURL_LOG" && ok "an offset zone ($zone) names no city" || bad "offset zone $zone: $out"
+done
+
 out="$(KITTY_WEATHER_PLACE=Madrid KITTY_WEATHER_UNITS=f weather)"
 grep -q 'temperature_unit=fahrenheit' "$CURL_LOG" && ok "Fahrenheit on request" || bad "Fahrenheit"
 out="$(KITTY_WEATHER_PLACE=Madrid weather)"

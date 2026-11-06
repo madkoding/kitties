@@ -50,9 +50,14 @@ var checks = map[string]check{
 	"spotify":       {func(s Settings) request { return get("https://api.spotify.com/v1/me", bearer(s["token"])) }, []string{"display_name", "id"}},
 	"linkedin":      {func(s Settings) request { return get("https://api.linkedin.com/v2/userinfo", bearer(s["token"])) }, []string{"name"}},
 	"microsoft-365": {func(s Settings) request { return get("https://graph.microsoft.com/v1.0/me", bearer(s["token"])) }, []string{"userPrincipalName", "displayName"}},
+	// Gmail's profile when Gmail is ticked (a pasted Gmail token has no OpenID scope), else
+	// OpenID's userinfo, which every sign-in asks for.
 	"google-workspace": {func(s Settings) request {
+		if services := strings.TrimSpace(s["services"]); services != "" && !strings.Contains(services, "gmail") {
+			return get("https://openidconnect.googleapis.com/v1/userinfo", bearer(s["token"]))
+		}
 		return get("https://gmail.googleapis.com/gmail/v1/users/me/profile", bearer(s["token"]))
-	}, []string{"emailAddress"}},
+	}, []string{"emailAddress", "email"}},
 	"home-assistant": {func(s Settings) request { return get(strings.TrimRight(s["url"], "/")+"/api/", bearer(s["token"])) }, nil},
 	"telegram": {func(s Settings) request {
 		return request{method: "GET", url: base(s, "https://api.telegram.org") + "/bot" + s["token"] + "/getMe", plain: true}

@@ -141,6 +141,9 @@ export interface Goal {
   runs: number;
   last_result?: string;
   from_file?: boolean;
+  // A run that did not finish is picked up again by itself: how many in a row, and the next one.
+  follow_ups?: number;
+  follow_up_at?: string;
 }
 
 // JournalEntry is one line of a kitty's journal: what it did and where it got stuck.
@@ -288,6 +291,8 @@ export interface ProviderView {
   describe: string;
   from_file: boolean;
   error?: string;
+  // fallback is the model thought with while this one is down.
+  fallback?: string;
 }
 
 export interface ConnectorView {
@@ -344,6 +349,8 @@ export interface ConnectorField {
   key?: string;
   // lifetime is how long, in seconds, a token typed in the field lasts.
   lifetime?: number;
+  // options are the values the field picks several of, saved joined by commas.
+  options?: string[];
 }
 
 export interface ConnectorKind {
@@ -369,6 +376,8 @@ export interface SettingsView {
   // day starts the summary with the person's day: calendar, reminders and weather.
   notify: { connector: string; on: string[]; digest?: string; day?: boolean };
   notify_events: string[];
+  // autonomy is how long the kitties keep at a task on their own: empty takes the defaults.
+  autonomy?: { follow_ups: string; brain_wait: string; stand_ins?: string };
   accounts: Account[];
   // oauth_ready are the services a connection signs in to without an app of the person's own.
   oauth_ready?: string[];
@@ -935,6 +944,8 @@ export const api = {
     request("POST", `/v1/chats/${chat}/turns/${index}/feedback`, { rating, note }),
   setNotify: (c: { connector: string; on: string[]; digest?: string }) =>
     request<SettingsView>("PUT", "/v1/settings/notify", c),
+  setAutonomy: (a: { follow_ups: string; brain_wait: string; stand_ins: string }) =>
+    request<SettingsView>("PUT", "/v1/settings/autonomy", a),
   testNotify: (connector = "") =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),
   // The browser session of a gateway served on a network: who is signed in, and the way in and out.
@@ -1383,6 +1394,12 @@ export async function artifactText(name: string): Promise<string> {
       throw new ApiError(parsed.status, "no artifact");
     }
     return parsed.base64 ? "(binary file)" : parsed.body;
+  }
+  // A link opened on a first visit (#artifact/<name>) can come before the token: it is fetched
+  // first, or the gateway refuses the file.
+  const conn = savedConnection();
+  if (!conn.token) {
+    await fetchLocalToken(conn);
   }
   const res = await fetch(shotURL(path));
   if (!res.ok) {

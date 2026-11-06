@@ -26,11 +26,16 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      # The desktops' clocks show the host's hour: TZ when set in deploy/.env, else the zone the
+      # gateway reads from the host's /etc/localtime (mounted below with its zone files).
+      TZ: ${TZ:-}
     group_add:
       - "${DOCKER_GID:-999}"
     volumes:
       - ${KITTIES_DATA:-/var/lib/kitties}:${KITTIES_DATA:-/var/lib/kitties}
       - /var/run/docker.sock:/var/run/docker.sock
+      - /etc/localtime:/etc/localtime:ro
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro
     # Only Caddy reaches it; nothing is published on the host.
     expose:
       - "7488"
@@ -50,6 +55,8 @@ services:
       WATCHTOWER_CLEANUP: "true"
       WATCHTOWER_SCHEDULE: ${KITTIES_UPDATE_CRON:-0 0 3 * * *}
       WATCHTOWER_ROLLING_RESTART: "true"
+      # The schedule is in the host's zone when TZ is set in deploy/.env (else UTC).
+      TZ: ${TZ:-}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 
