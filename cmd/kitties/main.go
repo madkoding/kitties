@@ -575,7 +575,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	if mt, mpath, err := mcpToken(a.cfg); err != nil {
 		fmt.Fprintf(a.err, "kitties: the MCP connector stays off, its token cannot be kept: %v\n", err)
 	} else if mt != "" {
-		srv.WithMCP(mt, g.MCP.AllowExec)
+		srv.WithMCPOAuth(mt, g.MCP.AllowExec, g.MCP.OAuth)
 		base := "http://" + g.Listen
 		if g.PublicURL != "" {
 			base = g.PublicURL

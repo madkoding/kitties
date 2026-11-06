@@ -28,15 +28,29 @@ const defaultTurns = 10
 // an empty token leaves the connector off. exec lets it run commands inside a kitty's container,
 // which is off unless the person turned it on.
 func (s *Server) WithMCP(token string, exec bool) *Server {
+	return s.WithMCPOAuth(token, exec, false)
+}
+
+// WithMCPOAuth is WithMCP that, with oauth, also lets a remote client such as claude.ai sign in
+// (docs/MCP.md): the person types the connector's token once on a consent page of the gateway and
+// the client gets tokens of its own. Put https in front first (public_url).
+func (s *Server) WithMCPOAuth(token string, exec, oauth bool) *Server {
 	if token == "" {
 		return s
+	}
+	var o *mcp.OAuth
+	if oauth {
+		o = mcp.NewOAuth(token, s.issuer)
+		o.Allow = func(r *http.Request) bool { return s.limit.wait(s.clientIP(r)) == 0 }
+		o.Failed = func(r *http.Request) { s.limit.fail(s.clientIP(r)) }
+		o.Register(s.mux)
 	}
 	srv := mcp.New("kitties", s.version)
 	for _, t := range append(s.mcpTools(exec), s.mcpMoreTools()...) {
 		srv.Add(t)
 	}
 	// Methods are named so the page's "GET /" does not swallow them; GET and DELETE are answered 405.
-	h := s.mcpAuth(token, srv)
+	h := s.mcpAuth(token, o, srv)
 	for _, m := range []string{"POST", "GET", "DELETE"} {
 		s.mux.Handle(m+" "+MCPPath, h)
 	}
@@ -47,7 +61,7 @@ func (s *Server) WithMCP(token string, exec bool) *Server {
 // browser page cannot reach it (a request that names another origin is refused, which stops a
 // page from rebinding its own name to this address), and wrong guesses are counted like the
 // gateway's.
-func (s *Server) mcpAuth(token string, next http.Handler) http.Handler {
+func (s *Server) mcpAuth(token string, o *mcp.OAuth, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if o := r.Header.Get("Origin"); o != "" {
 			if u, err := url.Parse(o); err != nil || u.Host != r.Host {
@@ -61,11 +75,15 @@ func (s *Server) mcpAuth(token string, next http.Handler) http.Handler {
 			return
 		}
 		got := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
-		if got == r.Header.Get("Authorization") || subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 {
+		if got == r.Header.Get("Authorization") || (subtle.ConstantTimeCompare([]byte(got), []byte(token)) != 1 && (o == nil || !o.ValidAccess(got))) {
 			if got != r.Header.Get("Authorization") {
 				s.limit.fail(ip)
 			}
-			w.Header().Set("WWW-Authenticate", `Bearer realm="kitties"`)
+			challenge := `Bearer realm="kitties"`
+			if o != nil {
+				challenge = o.Challenge(r)
+			}
+			w.Header().Set("WWW-Authenticate", challenge)
 			fail(w, http.StatusUnauthorized, errors.New("a valid MCP bearer token is required"))
 			return
 		}
@@ -369,4 +387,16 @@ func (s *Server) lifecycleTool(name, desc string, ann mcp.Annotations, op func(c
 			}
 			return jsonResult(map[string]any{"kitty": k})
 		}}
+}
+
+// issuer is the public address of a request: public_url when set, else what the client typed.
+func (s *Server) issuer(r *http.Request) string {
+	if s.publicURL != "" {
+		return strings.TrimRight(s.publicURL, "/")
+	}
+	scheme := "http"
+	if s.isHTTPS(r) {
+		scheme = "https"
+	}
+	return scheme + "://" + s.requestHost(r)
 }

@@ -453,11 +453,11 @@ func TestApplyEnvMCP(t *testing.T) {
 	if cfg.Gateway.MCP.Enabled || cfg.Gateway.MCP.AllowExec {
 		t.Fatal("the MCP connector is off by default")
 	}
-	env := map[string]string{"KITTIES_MCP": "true", "KITTIES_MCP_TOKEN": "t0ken", "KITTIES_MCP_EXEC": "1"}
+	env := map[string]string{"KITTIES_MCP": "true", "KITTIES_MCP_TOKEN": "t0ken", "KITTIES_MCP_EXEC": "1", "KITTIES_MCP_OAUTH": "yes"}
 	if err := cfg.ApplyEnv(func(k string) string { return env[k] }); err != nil {
 		t.Fatal(err)
 	}
-	if m := cfg.Gateway.MCP; !m.Enabled || m.Token != "t0ken" || !m.AllowExec {
+	if m := cfg.Gateway.MCP; !m.Enabled || m.Token != "t0ken" || !m.AllowExec || !m.OAuth {
 		t.Errorf("env not applied: %+v", m)
 	}
 }

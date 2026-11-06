@@ -1,9 +1,13 @@
 package gateway
 
 import (
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -386,5 +390,80 @@ func TestMCPApprovalsAndGoals(t *testing.T) {
 	ag.entries = map[string][]agenda.Entry{}
 	if text, _, _ = tool(t, s, "kitty_journal", map[string]any{"ref": "ana"}); !strings.Contains(text, "[]") {
 		t.Errorf("empty journal: %q", text)
+	}
+}
+
+func TestMCPOAuth(t *testing.T) {
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": {ID: "a1", Name: "ana", Status: kitty.StatusRunning}}}
+	c := &fakeChats{sessions: map[string]*chat.Session{}}
+	s := New(f, c, "gw-token", "test").WithPublicURL("https://k.example/").WithMCPOAuth(mcpToken, false, true)
+	// The 401 points to the metadata, which names this gateway.
+	rec := do(s, "POST", "/mcp", `{}`, nil)
+	if rec.Code != 401 || !strings.Contains(rec.Header().Get("WWW-Authenticate"), "https://k.example/.well-known/oauth-protected-resource") {
+		t.Fatalf("challenge: %d %q", rec.Code, rec.Header().Get("WWW-Authenticate"))
+	}
+	rec = do(s, "GET", "/.well-known/oauth-authorization-server", "", nil)
+	if !strings.Contains(rec.Body.String(), "https://k.example/oauth/token") {
+		t.Fatalf("metadata: %s", rec.Body)
+	}
+	// Register, approve with the connector's token, trade the code (PKCE) and call a tool.
+	rec = do(s, "POST", "/oauth/register", `{"client_name":"Claude","redirect_uris":["https://claude.ai/api/mcp/auth_callback"]}`, nil)
+	var reg map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &reg)
+	id := reg["client_id"].(string)
+	verifier := "verifier-verifier-verifier-verifier-1234"
+	sum := sha256.Sum256([]byte(verifier))
+	form := url.Values{"client_id": {id}, "redirect_uri": {"https://claude.ai/api/mcp/auth_callback"}, "response_type": {"code"}, "state": {"s"},
+		"code_challenge": {base64.RawURLEncoding.EncodeToString(sum[:])}, "code_challenge_method": {"S256"}, "token": {mcpToken}}
+	post := func(path string, v url.Values) *httptest.ResponseRecorder {
+		return do(s, "POST", path, v.Encode(), func(r *http.Request) { r.Header.Set("Content-Type", "application/x-www-form-urlencoded") })
+	}
+	// A wrong token on the consent page counts against the client, like any wrong token.
+	bad := url.Values{}
+	for k, v := range form {
+		bad[k] = v
+	}
+	bad.Set("token", "nope")
+	if rec = post("/oauth/authorize", bad); !strings.Contains(rec.Body.String(), "not the connector") {
+		t.Errorf("wrong token: %d", rec.Code)
+	}
+	rec = post("/oauth/authorize", form)
+	loc, _ := url.Parse(rec.Header().Get("Location"))
+	code := loc.Query().Get("code")
+	if rec.Code != 302 || code == "" {
+		t.Fatalf("authorize: %d %q", rec.Code, rec.Header().Get("Location"))
+	}
+	rec = post("/oauth/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {id}, "code": {code},
+		"redirect_uri": {"https://claude.ai/api/mcp/auth_callback"}, "code_verifier": {verifier}})
+	var tok map[string]any
+	_ = json.Unmarshal(rec.Body.Bytes(), &tok)
+	access, _ := tok["access_token"].(string)
+	if rec.Code != 200 || access == "" {
+		t.Fatalf("token: %d %s", rec.Code, rec.Body)
+	}
+	body := `{"jsonrpc":"2.0","id":1,"method":"ping"}`
+	if rec = do(s, "POST", "/mcp", body, func(r *http.Request) { r.Header.Set("Authorization", "Bearer "+access) }); rec.Code != 200 {
+		t.Errorf("with the access token: %d", rec.Code)
+	}
+	// The gateway's own token still does not open it, and OAuth off means no endpoints.
+	if rec = do(s, "POST", "/mcp", body, func(r *http.Request) { r.Header.Set("Authorization", "Bearer gw-token") }); rec.Code != 401 {
+		t.Errorf("gateway token: %d", rec.Code)
+	}
+	plain, _, _ := mcpServer(false)
+	if rec = do(plain, "GET", "/.well-known/oauth-authorization-server", "", nil); rec.Code == 200 && strings.Contains(rec.Body.String(), "issuer") {
+		t.Error("oauth is off by default")
+	}
+	// Without a public address the issuer is what the client typed, https when a proxy says so.
+	s2 := New(f, c, "gw", "test").WithProxy(true).WithMCPOAuth(mcpToken, false, true)
+	rec = do(s2, "GET", "/.well-known/oauth-protected-resource", "", func(r *http.Request) {
+		r.Header.Set("X-Forwarded-Proto", "https")
+		r.Header.Set("X-Forwarded-Host", "kitties.example.com")
+	})
+	if !strings.Contains(rec.Body.String(), "https://kitties.example.com/mcp") {
+		t.Errorf("issuer from the request: %s", rec.Body)
+	}
+	rec = do(s2, "GET", "/.well-known/oauth-protected-resource", "", nil)
+	if !strings.Contains(rec.Body.String(), "http://") {
+		t.Errorf("plain http issuer: %s", rec.Body)
 	}
 }

@@ -15,7 +15,7 @@ gateway:
     allow_exec: false  # true adds kitty_exec (commands inside a kitty's container)
 ```
 
-Or by environment: `KITTIES_MCP=true`, `KITTIES_MCP_TOKEN`, `KITTIES_MCP_EXEC=true`. The gateway
+Or by environment: `KITTIES_MCP=true`, `KITTIES_MCP_TOKEN`, `KITTIES_MCP_EXEC=true`, `KITTIES_MCP_OAUTH=true`. The gateway
 prints the address and where the token is when it starts (`MCP connector: http://127.0.0.1:7488/mcp`).
 
 ## Connect Claude
@@ -27,6 +27,29 @@ claude mcp add --transport http kitties http://127.0.0.1:7488/mcp \
 
 The token file is `mcp.token` in the data directory (`~/.kitties` by default, or `data_dir`). For a gateway on another machine put
 https in front (`public_url`, TLS or a proxy): the token travels in a header.
+
+Without sending a header, Claude Code can also start the bridge as a command; it reads the token
+itself and forwards to the running gateway:
+
+```sh
+claude mcp add kitties -- kitties mcp            # or: kitties mcp -url https://k.example/mcp -token ...
+```
+
+### claude.ai (remote connector)
+
+claude.ai reaches the gateway from the internet and signs in with OAuth. Put https in front
+(`public_url`, TLS or a proxy), then:
+
+```yaml
+gateway:
+  public_url: https://kitties.example.com
+  mcp: { enabled: true, oauth: true }
+```
+
+Add `https://kitties.example.com/mcp` as a custom connector in claude.ai. It registers itself,
+opens the gateway's consent page and you type the contents of `mcp.token` once. The gateway
+issues one-hour access tokens and 30-day refresh tokens, signed with a key derived from
+`mcp.token` (nothing is stored), so replacing that token revokes every connection.
 
 ## Tools
 
@@ -40,8 +63,15 @@ https in front (`public_url`, TLS or a proxy): the token travels in a header.
 | `kitty_exec` | a command in its container (only with `allow_exec`) |
 | `chat_create`, `chat_list`, `chat_get` | threads; `chat_get` returns the last turns |
 | `chat_send`, `chat_cancel` | give a task and read the answer; stop it |
+| `kitty_power`, `kitty_compute` | turn a machine on or off; where it runs (local or cloud) and its state |
+| `goal_list`, `goal_add`, `goal_run`, `goal_remove`, `kitty_journal` | goals on a schedule or event, run one now, read the journal |
+| `approval_list`, `approval_reject` | see and reject actions held for a yes; **approving is not offered**: it stays with you |
 
 A desktop task goes on after `chat_send` returns: follow it with `chat_get`.
+
+`kitty_compute` only reports where a desktop runs. Local or cloud follows the configuration
+(`containers.runtime` and each kitty's `compute`); switching it per kitty from the API waits
+for the cloud desktop channel (see [design/cloud-compute.md](design/cloud-compute.md)).
 
 ## Safety
 
