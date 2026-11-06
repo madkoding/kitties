@@ -95,6 +95,12 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
   settings and actions. A kitty writes `@connector github {"action": "create_issue", "title":
   "..."}` in a reply; the runtime runs it and feeds the result back before the kitty answers.
   A connector that answers with a file (a rendered diagram) lands in the artifacts library.
+- **WhatsApp** (`internal/whatsapp`, `internal/whatsapp/wameow`): a number of the kitties' own as a
+  linked device, like WhatsApp Web, linked with a QR code in Settings. The numbers on the allow list
+  (empty by default) talk to the chosen kitty, one chat per number, and the kitties write to them with
+  the `whatsapp-web` connector. The session is kept in memory and sealed with the vault's key. It is
+  the one part with third-party modules ([whatsmeow](https://github.com/tulir/whatsmeow) and what it
+  needs); an unofficial API, off by default: [WHATSAPP.md](WHATSAPP.md).
 - **Skills and artifacts** (`internal/skills`, `internal/artifacts`): a library like motita's.
   Skills are markdown procedures the kitties read with `@skill read <name>` and propose with
   `@skill save` (a person accepts them in the Library); three ship built in. Artifacts are the

@@ -32,7 +32,7 @@ jobs:
           go-version-file: go.mod
           # Keeps the modules and build cache (govulncheck and the desktop module's dependencies).
           cache-dependency-path: |
-            go.mod
+            go.sum
             desktop/go.sum
       - run: go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
       - name: the gateway and the CLI

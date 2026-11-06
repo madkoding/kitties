@@ -12,6 +12,7 @@
 | [KITTY-DESKTOP.md](KITTY-DESKTOP.md) | What the desktop is: Lumen shelf, Numix theme, Lucide icons, what is installed |
 | [API.md](API.md) | The gateway's HTTP API |
 | [MCP.md](MCP.md) | Claude as the orchestrator: the MCP connector |
+| [WHATSAPP.md](WHATSAPP.md) · [es](WHATSAPP.es.md) | WhatsApp as a linked device: a number of the kitties' own, the allow list, the risk |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The packages and how they fit together |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Build, test, end-to-end run, conventions |
 | [RELEASING.md](RELEASING.md) | How releases are tagged, built and signed |

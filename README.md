@@ -107,7 +107,7 @@ Or download the app (it carries its own gateway), from the
 Everything is in [docs/](docs/README.md):
 
 - [Install and first steps](docs/INSTALL.md) · [Desktop and Android apps](docs/APPS.md) · [Run it on a server](docs/DEPLOY.md)
-- [Claude as the orchestrator (MCP)](docs/MCP.md) · [Configuration and connectors](docs/CONFIGURATION.md) · [Autonomy, trust and notifications](docs/AUTONOMY.md)
+- [Claude as the orchestrator (MCP)](docs/MCP.md) · [WhatsApp with a number of their own](docs/WHATSAPP.md) ([español](docs/WHATSAPP.es.md)) · [Configuration and connectors](docs/CONFIGURATION.md) · [Autonomy, trust and notifications](docs/AUTONOMY.md)
 - [How a kitty uses its desktop](docs/DESKTOP.md) ([español](docs/DESKTOP.es.md)) · [The desktop's look and contents](docs/KITTY-DESKTOP.md)
 - [The API](docs/API.md) · [Architecture](docs/ARCHITECTURE.md) · [Development](docs/DEVELOPMENT.md) · [Releases and signing](docs/RELEASING.md)
 

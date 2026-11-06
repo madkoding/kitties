@@ -579,6 +579,11 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 		srv.WithVault(a.vault)
 	}
 	srv.WithShared(shared.New(a.fleet.SharedRoot()), a.fleet.SharedQuotaMB())
+	if wa := a.whatsappBridge(a.err, func(format string, args ...any) { fmt.Fprintf(a.out, format+"\n", args...) }); wa != nil {
+		wa.Start(ctx)
+		defer wa.Stop()
+		srv.WithWhatsApp(wa)
+	}
 	if mt, mpath, err := mcpToken(a.cfg); err != nil {
 		fmt.Fprintf(a.err, "kitties: the MCP connector stays off, its token cannot be kept: %v\n", err)
 	} else if mt != "" {

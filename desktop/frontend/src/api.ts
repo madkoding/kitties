@@ -784,6 +784,16 @@ export const api = {
   rotateMcpToken: () => request<{ restarting: boolean }>("POST", "/v1/mcp/token"),
   mcpTest: () => request<{ ok: boolean; tools?: number; error?: string }>("POST", "/v1/mcp/test"),
   mcpClients: () => request<{ clients: McpClient[] }>("GET", "/v1/mcp/clients"),
+  // whatsapp is the WhatsApp number linked as a device (docs/WHATSAPP.md): turning it on needs
+  // acceptRisk (an unofficial API); link asks for new QR codes, unlink forgets the session.
+  whatsapp: () => request<WhatsAppStatus>("GET", "/v1/whatsapp"),
+  setWhatsApp: (s: WhatsAppSettings, acceptRisk = false) =>
+    request<WhatsAppStatus>("PUT", "/v1/whatsapp", { ...s, accept_risk: acceptRisk }),
+  linkWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/link"),
+  reconnectWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/reconnect"),
+  unlinkWhatsApp: () => request<WhatsAppStatus>("POST", "/v1/whatsapp/unlink"),
+  testWhatsApp: (to: string) =>
+    request<{ ok: boolean; error?: string }>("POST", "/v1/whatsapp/test", { to }),
   revokeMcpClient: (id: string) =>
     request<{ revoked: string }>("DELETE", `/v1/mcp/clients/${encodeURIComponent(id)}`),
   // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
@@ -1265,6 +1275,55 @@ export type McpInfo = {
 };
 
 export type McpSettings = Pick<McpInfo, "enabled" | "allow_exec" | "allow_approve" | "oauth">;
+
+// WhatsAppSettings are what the person chooses: on or off, who may write (numbers with their
+// country code, digits only once kept), the kitty that answers, and whether it answers in groups:
+// only in the groups of allow_groups (their ids, "…@g.us"), when someone there mentions it.
+export type WhatsAppSettings = {
+  enabled: boolean;
+  allow: string[];
+  kitty: string;
+  groups: boolean;
+  allow_groups: string[];
+  // kitties gives a number (digits) or a group (its id) a kitty of its own.
+  kitties?: Record<string, string>;
+  // max_per_hour is the most messages sent in an hour (0: 60).
+  max_per_hour?: number;
+  // quiet_from and quiet_to ("22:00", "08:00") are the quiet hours; empty: none.
+  quiet_from?: string;
+  quiet_to?: string;
+};
+
+// WhatsAppGroup is a group that wrote lately, to put on the list.
+export type WhatsAppGroup = { id: string; name?: string };
+
+// WhatsAppStatus is the link: qr_png is the code to scan while state is "qr".
+export type WhatsAppStatus = WhatsAppSettings & {
+  kitty_name?: string;
+  state:
+    | "off"
+    | "starting"
+    | "qr"
+    | "qr_expired"
+    | "connected"
+    | "disconnected"
+    | "logged_out"
+    | "error";
+  qr?: string;
+  qr_png?: string;
+  phone?: string;
+  linked: boolean;
+  error?: string;
+  ignored: number;
+  last_message?: string;
+  seen_groups?: WhatsAppGroup[];
+  sent_last_hour?: number;
+  held?: number;
+  quiet?: boolean;
+  waiting?: number;
+  can_change: boolean;
+  why?: string;
+};
 
 // McpClient is a remote client (claude.ai) that signed in to the connector with OAuth.
 export type McpClient = {

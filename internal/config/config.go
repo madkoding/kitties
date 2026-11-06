@@ -50,8 +50,43 @@ type Config struct {
 	Connectors map[string]Connector `yaml:"connectors"`
 	// Notify says where the person is told, outside the interface, when a kitty needs them.
 	Notify notify.Config `yaml:"notify"`
+	// WhatsApp is the link to a number of the kitties' own (docs/WHATSAPP.md), used while
+	// nothing was saved from Settings.
+	WhatsApp WhatsApp `yaml:"whatsapp"`
 	// Autonomy tunes how long a kitty keeps at a task on its own (autonomy.go).
 	Autonomy Autonomy `yaml:"autonomy"`
+}
+
+// WhatsApp is the WhatsApp link as the file sets it. Turning it on here is accepting its risk: it
+// is not an official API and WhatsApp may ban the number.
+type WhatsApp struct {
+	Enabled bool `yaml:"enabled"`
+	// Allow are the numbers that may write, with their country code.
+	Allow []string `yaml:"allow"`
+	// Kitty answers the messages (its name).
+	Kitty string `yaml:"kitty"`
+	// Groups lets the kitty answer in the groups of AllowGroups when someone mentions it.
+	Groups bool `yaml:"groups"`
+	// AllowGroups are the groups it answers in (their ids, "…@g.us", as Settings lists them).
+	AllowGroups []string `yaml:"allow_groups"`
+	// Kitties gives a number or a group a kitty of its own: {"+56912345678": luna}.
+	Kitties map[string]string `yaml:"kitties"`
+	// MaxPerHour is the most messages sent in an hour (0: 60).
+	MaxPerHour int `yaml:"max_per_hour"`
+	// Quiet are the quiet hours, {from: "22:00", to: "08:00"} in the gateway's time.
+	Quiet struct {
+		From string `yaml:"from"`
+		To   string `yaml:"to"`
+	} `yaml:"quiet"`
+	// Transcribe is the profile (openai or groq) whose speech API turns voice notes into text;
+	// empty takes the first such profile, "off" none.
+	Transcribe string `yaml:"transcribe"`
+}
+
+// Set reports whether the file says anything about WhatsApp.
+func (w WhatsApp) Set() bool {
+	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != ""
+
 }
 
 // Provider is one AI profile.
