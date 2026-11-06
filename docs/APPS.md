@@ -24,6 +24,7 @@ cd desktop && wails dev   # live reload while working on it
 | ![Settings: the connectors](screenshots/09-settings-connectors.png) | ![The catalogue: one button per service](screenshots/17-connector-catalogue.png) |
 | ![Google Workspace: sign in with OAuth](screenshots/18-connector-oauth.png) | ![A kitty's own display](screenshots/13-tom-display.png) |
 | ![The library: skills](screenshots/15-library-skills.png) | ![The library: artifacts](screenshots/16-library-artifacts.png) |
+| ![The library: what the kitties shared with you](screenshots/62-library-shared.png) | ![A kitty's files on your computer: export and restore](screenshots/64-desktop-kept-files.png) |
 | ![A markdown artifact opened in the reader](screenshots/60-artifact-reader.png) | ![A code block in colour, opened from a #artifact/ link](screenshots/61-artifact-code.png) |
 | ![New kitty: pick its pixel cat](screenshots/07-new-kitty.png) | ![Light mode](screenshots/11-light.png) |
 | ![A real kitty's desktop, live: Chromium and a terminal on Lumen](screenshots/48-live-desktop.png) | ![Taking control: a command typed in the kitty's terminal](screenshots/49-live-desktop-control.png) |

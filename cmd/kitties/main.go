@@ -40,6 +40,7 @@ import (
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/selfupdate"
+	"github.com/madkoding/kitties/internal/shared"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
 	"github.com/madkoding/kitties/internal/vault"
@@ -577,6 +578,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	if a.vault != nil {
 		srv.WithVault(a.vault)
 	}
+	srv.WithShared(shared.New(a.fleet.SharedRoot()), a.fleet.SharedQuotaMB())
 	if wa := a.whatsappBridge(a.err, func(format string, args ...any) { fmt.Fprintf(a.out, format+"\n", args...) }); wa != nil {
 		wa.Start(ctx)
 		defer wa.Stop()

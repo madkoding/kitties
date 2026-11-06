@@ -534,6 +534,11 @@ function fixSettings<T>(path: string, data: T): T {
 // request performs one API call and returns its JSON.
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const app = window.go?.main?.App;
+  // A file (a Blob) goes as it is, never as JSON; the app's bridge only carries text.
+  const raw = body instanceof Blob;
+  if (app && raw) {
+    throw new ApiError(0, "Restoring a file works from the browser: open Kitties at its address.");
+  }
   if (app) {
     // A reading that gets no answer from the app fails with a message instead of leaving the
     // screen waiting for good (a message that never comes back through the webview's bridge).
@@ -570,14 +575,14 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   if (!conn.token) {
     conn = await fetchLocalToken(conn);
   }
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = raw ? {} : { "Content-Type": "application/json" };
   if (conn.token) {
     headers.Authorization = "Bearer " + conn.token;
   }
   const res = await fetch(safeGatewayBase(conn.url) + path, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : raw ? (body as Blob) : JSON.stringify(body),
   });
   if (res.status === 401 && conn.token) {
     // The gateway may have restarted with a new token: the local one is tried once more.
@@ -796,6 +801,15 @@ export const api = {
   desktopInfo: (ref: string) => request<DesktopInfo>("GET", `/v1/kitties/${ref}/desktop`),
   backupKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/backup`),
   updateKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/update`),
+  // shared lists what every kitty left in its Shared folder; keepShared copies one into the
+  // library; deleteShared deletes it.
+  shared: () =>
+    request<{ files: SharedFile[]; quota_mb: number }>("GET", "/v1/shared").then((r) => ({
+      files: r.files || [],
+      quota_mb: r.quota_mb || 0,
+    })),
+  keepShared: (kitty: string, path: string) => request("POST", sharedPath(kitty, path, "keep")),
+  deleteShared: (kitty: string, path: string) => request("DELETE", sharedPath(kitty, path)),
   // vault lists the secrets a kitty may type (names and kitties, never values); saveSecret saves
   // one (with a value) or changes who may use it (without).
   vault: () => request<{ secrets: Secret[] }>("GET", "/v1/vault").then((r) => r.secrets || []),
@@ -1192,7 +1206,46 @@ export type DesktopInfo = {
   update_available: boolean;
   auto_update?: boolean;
   backup?: { saved: string; bytes: number };
+  // storage is what the kitty keeps on this computer, which no update deletes.
+  storage?: Storage;
 };
+
+// Storage is what a kitty keeps on the gateway's computer, by folder: its home (settings and the
+// programs it installed for itself, when its desktop keeps it there), its workspace and its
+// Shared folder.
+export type Storage = {
+  home: boolean;
+  home_bytes: number;
+  work_bytes: number;
+  shared_bytes: number;
+  // shared_quota_mb is the most Shared holds; 0 is no limit.
+  shared_quota_mb: number;
+  // moving is true while an older desktop's home waits to go into the new one.
+  moving?: boolean;
+};
+
+// SharedFile is a file a kitty left in its Shared folder for its person.
+export interface SharedFile {
+  kitty: string;
+  path: string;
+  type: string;
+  size: number;
+  updated_at: string;
+}
+
+// sharedPath is where the gateway serves a kitty's shared file.
+export const sharedPath = (kitty: string, path: string, verb = "shared") =>
+  `/v1/kitties/${encodeURIComponent(kitty)}/${verb}/${path.split("/").map(encodeURIComponent).join("/")}`;
+
+// importKitty puts a kitty's files back from an export (.tar.gz), straight to the gateway: the
+// file can be big, and binary.
+export async function importKitty(ref: string, file: Blob): Promise<void> {
+  // A kitty's id is letters, digits, dashes and underscores: nothing else goes into an address.
+  if (!/^[\w-]+$/.test(ref)) {
+    throw new ApiError(400, "not a kitty");
+  }
+  await request("POST", `/v1/kitties/${ref}/import`, file);
+}
 
 export type ExposureMode = "local" | "lan" | "wan";
 
@@ -1457,9 +1510,13 @@ export function watchChat(id: string, onEvent: (e: ChatEvent) => void): () => vo
 }
 
 // artifactText loads a text artifact for reading in the page.
-export async function artifactText(name: string): Promise<string> {
+export function artifactText(name: string): Promise<string> {
+  return fileText(`/v1/artifacts/${encodeURIComponent(name)}`);
+}
+
+// fileText loads a text file the gateway serves (an artifact, a shared file) for reading in the page.
+export async function fileText(path: string): Promise<string> {
   const app = window.go?.main?.App;
-  const path = `/v1/artifacts/${encodeURIComponent(name)}`;
   if (app) {
     const raw = await app.Request("GET", path, "");
     const parsed = JSON.parse(raw) as { status: number; body: string; base64?: string };

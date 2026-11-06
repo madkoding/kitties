@@ -1,8 +1,13 @@
 #!/bin/sh
 # Run as root through sudo: installs Debian packages, by name only, and nothing else.
 set -eu
+remove=""
+if [ "${1:-}" = "--remove" ]; then
+    remove=1
+    shift
+fi
 if [ "$#" -eq 0 ]; then
-    echo "usage: kitty-apt package..." >&2
+    echo "usage: kitty-apt [--remove] package..." >&2
     exit 2
 fi
 for p in "$@"; do
@@ -12,6 +17,10 @@ for p in "$@"; do
     fi
 done
 export DEBIAN_FRONTEND=noninteractive
+if [ -n "$remove" ]; then
+    apt-get -o DPkg::Lock::Timeout=300 remove -y -qq -- "$@"
+    exit 0
+fi
 # The lists are refreshed when there are none or they are a day old.
 if [ -z "$(find /var/lib/apt/lists -maxdepth 1 -name '*Packages*' -mmin -1440 2>/dev/null | head -n 1)" ]; then
     apt-get -o DPkg::Lock::Timeout=300 update -qq

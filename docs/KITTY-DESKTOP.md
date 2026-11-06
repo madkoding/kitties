@@ -74,8 +74,12 @@ checksum are pinned in the Dockerfile (`LUCIDE_VERSION`, `LUCIDE_SHA256`).
 Chromium, a terminal (xterm), PCManFM, Mousepad, LibreOffice (Writer, Calc, Impress), Inkscape,
 ImageMagick and mtPaint, plus `xdotool`, `wmctrl` and `scrot` for the kitty's hands and eyes.
 `kitty-install` adds programs from Debian (sudo only runs the installer, by package name) and
-remembers them in the workspace, so a container made anew installs them again. Nothing is
-published on the host: the orchestrator reaches a kitty with `docker exec`.
+remembers them in the workspace, so a container made anew installs them again (a plain
+`sudo apt install` is remembered too, by a dpkg hook). The home (`/home/kitty`, with `~/.local` and
+`/opt/kitty-apps`) and `~/Shared` are folders of the host that outlive the container
+([DESKTOP.md](DESKTOP.md#what-outlives-the-desktop-home-programs-and-shared)); `kitty-share` puts a
+file in Shared for the person. Nothing is published on the host: the orchestrator reaches a kitty
+with `docker exec`.
 
 ## Changing it
 

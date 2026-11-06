@@ -31,6 +31,14 @@ const (
 
 	// Workdir is where the kitty's workspace is mounted inside the container.
 	Workdir = "/home/kitty/work"
+	// HomeDir is the kitty's home: its settings and the programs it installed for itself
+	// (~/.local, /opt/kitty-apps) live there, on the host, so a desktop made anew keeps them.
+	HomeDir = "/home/kitty"
+	// SharedDir is the folder the kitty leaves what it made for its person: the page shows it.
+	SharedDir = "/home/kitty/Shared"
+	// HomeLabel marks an image that seeds a home mounted from the host (see entrypoint.sh): an
+	// older one expects its own /home/kitty, and gets no home mount.
+	HomeLabel = "kitties.home"
 	// Display is the Xvfb display the image starts.
 	Display = ":99"
 )
@@ -179,7 +187,11 @@ type Spec struct {
 	Network   string
 	// Workspace is the host folder mounted at Workdir.
 	Workspace string
-	Env       map[string]string
+	// Home is the host folder mounted at HomeDir; empty keeps the image's own home.
+	Home string
+	// Shared is the host folder mounted at SharedDir.
+	Shared string
+	Env    map[string]string
 	// Seccomp is the path of the seccomp profile to run with (see seccomp.go); empty keeps the runtime's default.
 	Seccomp string
 }
@@ -225,8 +237,15 @@ func (s Spec) Args() []string {
 	if s.Seccomp != "" {
 		args = append(args, "--security-opt", "seccomp="+s.Seccomp)
 	}
+	// The home first: the workspace and the shared folder are mounted inside it.
+	if s.Home != "" {
+		args = append(args, "-v", s.Home+":"+HomeDir)
+	}
 	if s.Workspace != "" {
 		args = append(args, "-v", s.Workspace+":"+Workdir)
+	}
+	if s.Shared != "" {
+		args = append(args, "-v", s.Shared+":"+SharedDir)
 	}
 	keys := make([]string, 0, len(s.Env))
 	for k := range s.Env {

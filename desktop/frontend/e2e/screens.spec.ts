@@ -291,6 +291,42 @@ test("the library: skills with a proposal, and the artifacts", async ({ page }) 
   await expect(page.getByText("competitor-notes.md").first()).toBeVisible();
 });
 
+test("the library's Shared tab: what the kitties made, previewed, kept and deleted", async ({
+  page,
+}) => {
+  await open(page, "#new-shared");
+  const list = page.getByTestId("shared-files");
+  await expect(list.getByTestId("shared-row")).toHaveCount(4);
+  await expect(list.getByText("by tom").first()).toBeVisible();
+  await shot(page, "62-library-shared");
+  // A picture opens as a picture, a text as a document, a PDF offers its download.
+  await list.getByRole("button", { name: "screens/app-icon.png", exact: true }).click();
+  const reader = page.getByTestId("artifact-reader");
+  await expect(reader.getByTestId("shared-picture")).toBeVisible();
+  await expect(reader.getByTestId("artifact-share")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await list.getByRole("button", { name: "launch-checklist.md", exact: true }).click();
+  await expect(reader.locator("h2", { hasText: "Launch checklist" })).toBeVisible();
+  await shot(page, "63-shared-reader");
+  await page.keyboard.press("Escape");
+  await list.getByRole("button", { name: "press-kit.pdf", exact: true }).click();
+  await expect(reader).toContainText("There is no preview");
+  await expect(reader.getByRole("link", { name: "download" })).toHaveAttribute(
+    "href",
+    /shared\/press-kit\.pdf\?download=1/,
+  );
+  await page.keyboard.press("Escape");
+  // Kept in the library, where every kitty reads it, as saved by its kitty.
+  const row = list.getByTestId("shared-row").filter({ hasText: "budget.csv" });
+  await row.hover();
+  await row.getByTestId("keep-shared").click();
+  await expect(page.getByText("budget.csv").first()).toBeVisible();
+  const arts = await page.request.get(`${GATEWAY}/v1/artifacts`, {
+    headers: { Authorization: "Bearer e2e-token" },
+  });
+  expect(await arts.text()).toContain('"by":"luna"');
+});
+
 test("#artifact/<name> opens the reader, with the code in colour", async ({ page }) => {
   await open(page, "#artifact/competitor-notes.md");
   const reader = page.getByTestId("artifact-reader");
@@ -1908,6 +1944,13 @@ test("a kitty's cookies, sessions and passwords are backed up, and a newer deskt
   const care = page.getByTestId("desktop-care");
   await expect(care).toBeVisible();
   await expect(care.getByTestId("backup-state")).toContainText("are not backed up yet");
+  // What it keeps on this computer, safe from updates, and its export.
+  const kept = care.getByTestId("kept-files");
+  await expect(kept).toContainText("safe from updates");
+  await expect(kept.getByTestId("export-files")).toHaveAttribute("href", /\/export/);
+  await kept.scrollIntoViewIfNeeded();
+  await shot(page, "64-desktop-kept-files");
+  await care.getByTestId("backup-state").scrollIntoViewIfNeeded();
   await expect(care.getByTestId("update-callout")).toHaveCount(0);
   await expect(care.getByTestId("auto-update")).toContainText(
     "downloaded and installed by themselves",

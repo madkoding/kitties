@@ -1,5 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
-import { artifactText, shotURL } from "./api";
+import { artifactText, fileText, shotData, shotURL } from "./api";
+import { previewOf } from "./library";
 import { headings, highlight, inline, markdown, type Inline } from "./markdown";
 import { t } from "./i18n";
 import { Modal } from "./Modal";
@@ -182,11 +183,24 @@ export function Markdown({
 // ArtifactReader is the window that reads an artifact of the library: a markdown file drawn as a
 // document, a picture as a picture, anything else as text. It loads the file through the same
 // bridge the rest of the page uses, so it also works inside the desktop app.
-export default function ArtifactReader({ name, onClose }: { name: string; onClose: () => void }) {
+//
+// With a path, it reads a file the gateway serves elsewhere (a kitty's Shared folder): a picture
+// is shown, a text read, and anything else (a PDF, an office document) offered for download.
+export default function ArtifactReader({
+  name,
+  path,
+  onClose,
+}: {
+  name: string;
+  path?: string;
+  onClose: () => void;
+}) {
   const [current, setCurrent] = useState(name);
   const [text, setText] = useState<string | null>(null);
+  const [picture, setPicture] = useState("");
   const [err, setErr] = useState("");
   useEffect(() => setCurrent(name), [name]);
+  const look = path ? previewOf(name) : "text";
   // Escape closes the reader only, not the window it was opened from (the library): it is taken
   // before the windows under it see it.
   useEffect(() => {
@@ -202,14 +216,29 @@ export default function ArtifactReader({ name, onClose }: { name: string; onClos
   useEffect(() => {
     let alive = true;
     setText(null);
+    setPicture("");
     setErr("");
-    artifactText(current)
-      .then((x) => alive && setText(x))
-      .catch(() => alive && setErr(t("This file is not in the library.")));
+    if (path && look === "image") {
+      shotData(path, typeOf(name))
+        .then((src) => alive && setPicture(src))
+        .catch(() => alive && setErr(t("This file is not there any more.")));
+    } else if (path && look === "none") {
+      setErr(t("There is no preview for this kind of file: download it."));
+    } else {
+      (path ? fileText(path) : artifactText(current))
+        .then((x) => alive && setText(x))
+        .catch(
+          () =>
+            alive &&
+            setErr(
+              path ? t("This file is not there any more.") : t("This file is not in the library."),
+            ),
+        );
+    }
     return () => {
       alive = false;
     };
-  }, [current]);
+  }, [current, path]);
   const [raw, setRaw] = useState(false);
   // copied says which of the two copies just went to the clipboard: the text or the link.
   const [copied, setCopied] = useState<"" | "text" | "link">("");
@@ -227,7 +256,17 @@ export default function ArtifactReader({ name, onClose }: { name: string; onClos
     <Modal title={current} onClose={onClose} wide>
       <div data-testid="artifact-reader">
         {err && <div class="callout callout-warn">{err}</div>}
-        {text === null && !err && <div class="text-sm text-[var(--t3)]">{t("Loading…")}</div>}
+        {text === null && !picture && !err && (
+          <div class="text-sm text-[var(--t3)]">{t("Loading…")}</div>
+        )}
+        {picture && (
+          <img
+            class="max-h-[70vh] max-w-full mx-auto"
+            src={picture}
+            alt={current}
+            data-testid="shared-picture"
+          />
+        )}
         {text !== null &&
           (isMd && !raw ? (
             <Markdown text={text} onOpen={setCurrent} />
@@ -260,17 +299,21 @@ export default function ArtifactReader({ name, onClose }: { name: string; onClos
               {copied === "text" ? t("copied") : t("copy")}
             </button>
           )}
-          <button
-            class="btn-ghost px-2 py-1 text-xs"
-            data-testid="artifact-share"
-            title={t("Copy a link that opens this file in Kitties")}
-            onClick={() => copy("link", artifactLink(current))}
-          >
-            {copied === "link" ? t("link copied") : t("copy link")}
-          </button>
+          {!path && (
+            <button
+              class="btn-ghost px-2 py-1 text-xs"
+              data-testid="artifact-share"
+              title={t("Copy a link that opens this file in Kitties")}
+              onClick={() => copy("link", artifactLink(current))}
+            >
+              {copied === "link" ? t("link copied") : t("copy link")}
+            </button>
+          )}
           <a
             class="btn-ghost px-2 py-1 text-xs"
-            href={shotURL(`/v1/artifacts/${encodeURIComponent(current)}`)}
+            href={shotURL(
+              path ? `${path}?download=1` : `/v1/artifacts/${encodeURIComponent(current)}`,
+            )}
             download={current}
             target="_blank"
           >
@@ -280,4 +323,9 @@ export default function ArtifactReader({ name, onClose }: { name: string; onClos
       </div>
     </Modal>
   );
+}
+
+function typeOf(name: string): string {
+  const ext = name.toLowerCase().split(".").pop() || "";
+  return ext === "jpg" ? "image/jpeg" : `image/${ext}`;
 }
