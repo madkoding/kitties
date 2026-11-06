@@ -68,6 +68,7 @@ func TestParkedTaskAndResumer(t *testing.T) {
 	// An empty chat is left alone; the parked one goes on through the resumer.
 	_, _ = s.Create("", []string{"ana"})
 	ana.Limits = kitty.Limits{}
+	d.cat = "- [ ] the rest"
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() { s.RunResumer(ctx, time.Millisecond); close(done) }()
@@ -77,6 +78,9 @@ func TestParkedTaskAndResumer(t *testing.T) {
 		if last := got.Turns[len(got.Turns)-1]; len(got.Turns) > 3 && !last.Working {
 			if !strings.Contains(last.Text, "finished") {
 				t.Errorf("resumed: %+v", last)
+			}
+			if call := got.Turns[2].Text; !strings.Contains(call, "Continue where you left off") || !strings.Contains(call, "- [ ] the rest") {
+				t.Errorf("the wake-up call: %q", call)
 			}
 			break
 		}

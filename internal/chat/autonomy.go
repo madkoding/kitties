@@ -67,10 +67,33 @@ func (s *Service) RunGoal(ctx context.Context, g agenda.Goal, t agenda.Trigger) 
 	}
 	text := "Goal: " + g.Title + "\n" + g.Text + "\n\nWhy now: " + t.Text() +
 		"\n\nWork on it now. When you are done, say what you did and what is left. If you are stuck, say what you need."
+	if t.Kind == "follow_up" {
+		text += s.todoNote(ctx, k)
+	}
 	if _, err := s.send(ctx, id, "scheduler", "", text); err != nil {
 		return id, err
 	}
 	return id, nil
+}
+
+// maxTodo is how much of a kitty's TODO.md goes with a follow-up.
+const maxTodo = 4000
+
+// todoNote is the kitty's own list of what is done and left (TODO.md in its workspace), for a
+// run that goes on with unfinished work; empty when it keeps none or its desktop cannot be read.
+func (s *Service) todoNote(ctx context.Context, k *kitty.Kitty) string {
+	runner := s.runner()
+	if runner == nil || !k.Desktop {
+		return ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	out, err := runner.Exec(ctx, k.ID, "cat", workspaceOf(k)+"/TODO.md")
+	if out = strings.TrimSpace(out); err != nil || out == "" {
+		return ""
+	}
+	return "\n\nYour TODO.md (what you wrote down as done and left) says:\n" + clip(out, maxTodo) +
+		"\nStart from the first item left; keep the file up to date as you go."
 }
 
 // goalChat finds the thread a goal is worked in, or opens one.

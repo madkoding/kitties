@@ -18,6 +18,7 @@ const resumeText = "Your tokens for the day are back. Continue where you left of
 // returns the chats it woke up. Each one goes on in the background.
 func (s *Service) ResumeParked(ctx context.Context) []string {
 	var ids []string
+	kittyOf := map[string]string{}
 	s.mu.RLock()
 	for id, sess := range s.sessions {
 		if len(sess.Turns) == 0 || sess.Working() {
@@ -32,6 +33,7 @@ func (s *Service) ResumeParked(ctx context.Context) []string {
 			continue
 		}
 		ids = append(ids, id)
+		kittyOf[id] = k.ID
 	}
 	s.mu.RUnlock()
 	for _, id := range ids {
@@ -49,7 +51,11 @@ func (s *Service) ResumeParked(ctx context.Context) []string {
 				delete(s.resuming, id)
 				s.mu.Unlock()
 			}()
-			_, _ = s.send(ctx, id, "scheduler", "", resumeText)
+			text := resumeText
+			if k, err := s.fleet.Get(kittyOf[id]); err == nil {
+				text += s.todoNote(ctx, k)
+			}
+			_, _ = s.send(ctx, id, "scheduler", "", text)
 		}(id)
 	}
 	return ids

@@ -32,7 +32,8 @@ A kitty is not only something you talk to. Each one has an agenda:
   kitty in error.
 - **Follow-ups.** A goal whose run did not finish (blocked, escalated to you, or it could not
   even start) is picked up again by itself: after 10 minutes, then 30, then 2 hours, in the same
-  thread, told to go on from where it stopped. A run that finishes starts the count again; past
+  thread, told to go on from where it stopped, with its `TODO.md` (what it wrote down as done
+  and left) right in the call. A run that finishes starts the count again; past
   the third the goal waits for its schedule, an event or you. The journal says when the next one
   is due, and the goal shows *tries again …*. Both waits are set in *Settings → Preferences →
   Working on their own* (or `autonomy:` in the YAML).
