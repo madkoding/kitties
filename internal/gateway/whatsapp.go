@@ -14,6 +14,7 @@ type WhatsApp interface {
 	Status() whatsapp.Status
 	Apply(whatsapp.Settings) error
 	Link() error
+	Reconnect() error
 	Unlink(ctx context.Context) error
 	Test(ctx context.Context, to string) error
 }
@@ -28,6 +29,7 @@ func (s *Server) whatsappRoutes() {
 	s.mux.Handle("GET /v1/whatsapp", s.auth(s.handleWhatsApp))
 	s.mux.Handle("PUT /v1/whatsapp", s.auth(s.handleSetWhatsApp))
 	s.mux.Handle("POST /v1/whatsapp/link", s.auth(s.handleWhatsAppLink))
+	s.mux.Handle("POST /v1/whatsapp/reconnect", s.auth(s.handleWhatsAppReconnect))
 	s.mux.Handle("POST /v1/whatsapp/unlink", s.auth(s.handleWhatsAppUnlink))
 	s.mux.Handle("POST /v1/whatsapp/test", s.auth(s.handleWhatsAppTest))
 }
@@ -77,6 +79,19 @@ func (s *Server) handleWhatsAppLink(w http.ResponseWriter, _ *http.Request) {
 		return
 	}
 	if err := s.whatsapp.Link(); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	reply(w, http.StatusOK, s.whatsapp.Status())
+}
+
+// handleWhatsAppReconnect connects again with the kept session, with no new QR code.
+func (s *Server) handleWhatsAppReconnect(w http.ResponseWriter, _ *http.Request) {
+	if s.whatsapp == nil {
+		fail(w, http.StatusNotFound, errNoWhatsApp)
+		return
+	}
+	if err := s.whatsapp.Reconnect(); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}

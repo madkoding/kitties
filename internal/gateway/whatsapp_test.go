@@ -16,6 +16,7 @@ type fakeWhatsApp struct {
 	applied  *whatsapp.Settings
 	applyErr error
 	linkErr  error
+	reconns  int
 	unErr    error
 	testErr  error
 	links    int
@@ -33,6 +34,8 @@ func (f *fakeWhatsApp) Apply(s whatsapp.Settings) error {
 	return nil
 }
 func (f *fakeWhatsApp) Link() error { f.links++; return f.linkErr }
+
+func (f *fakeWhatsApp) Reconnect() error { f.reconns++; return f.linkErr }
 func (f *fakeWhatsApp) Unlink(context.Context) error {
 	f.unlinks++
 	return f.unErr
@@ -47,7 +50,7 @@ func TestWhatsAppRoutes(t *testing.T) {
 	chats := &fakeChats{sessions: map[string]*chat.Session{}}
 	plain := httptest.NewServer(New(fleet, chats, "tok", "test"))
 	defer plain.Close()
-	for _, r := range [][2]string{{"GET", "/v1/whatsapp"}, {"PUT", "/v1/whatsapp"}, {"POST", "/v1/whatsapp/link"}, {"POST", "/v1/whatsapp/unlink"}, {"POST", "/v1/whatsapp/test"}} {
+	for _, r := range [][2]string{{"GET", "/v1/whatsapp"}, {"PUT", "/v1/whatsapp"}, {"POST", "/v1/whatsapp/link"}, {"POST", "/v1/whatsapp/reconnect"}, {"POST", "/v1/whatsapp/unlink"}, {"POST", "/v1/whatsapp/test"}} {
 		if code, _, _ := call(t, plain, r[0], r[1], "tok", map[string]any{}); code != 404 {
 			t.Errorf("%s %s without WhatsApp = %d", r[0], r[1], code)
 		}
@@ -89,7 +92,13 @@ func TestWhatsAppRoutes(t *testing.T) {
 	if code, _, _ := call(t, srv, "POST", "/v1/whatsapp/link", "tok", nil); code != 200 || f.links != 1 {
 		t.Fatalf("link = %d", code)
 	}
+	if code, _, _ := call(t, srv, "POST", "/v1/whatsapp/reconnect", "tok", nil); code != 200 || f.reconns != 1 {
+		t.Fatalf("reconnect = %d", code)
+	}
 	f.linkErr = whatsapp.ErrNotOn
+	if code, _, _ := call(t, srv, "POST", "/v1/whatsapp/reconnect", "tok", nil); code != 400 {
+		t.Fatalf("reconnect while off = %d", code)
+	}
 	if code, _, _ := call(t, srv, "POST", "/v1/whatsapp/link", "tok", nil); code != 400 {
 		t.Fatalf("link off = %d", code)
 	}
