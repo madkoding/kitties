@@ -534,6 +534,11 @@ function fixSettings<T>(path: string, data: T): T {
 // request performs one API call and returns its JSON.
 export async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const app = window.go?.main?.App;
+  // A file (a Blob) goes as it is, never as JSON; the app's bridge only carries text.
+  const raw = body instanceof Blob;
+  if (app && raw) {
+    throw new ApiError(0, "Restoring a file works from the browser: open Kitties at its address.");
+  }
   if (app) {
     // A reading that gets no answer from the app fails with a message instead of leaving the
     // screen waiting for good (a message that never comes back through the webview's bridge).
@@ -570,14 +575,14 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   if (!conn.token) {
     conn = await fetchLocalToken(conn);
   }
-  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const headers: Record<string, string> = raw ? {} : { "Content-Type": "application/json" };
   if (conn.token) {
     headers.Authorization = "Bearer " + conn.token;
   }
   const res = await fetch(safeGatewayBase(conn.url) + path, {
     method,
     headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : raw ? (body as Blob) : JSON.stringify(body),
   });
   if (res.status === 401 && conn.token) {
     // The gateway may have restarted with a new token: the local one is tried once more.
@@ -1229,25 +1234,7 @@ export async function importKitty(ref: string, file: Blob): Promise<void> {
   if (!/^[\w-]+$/.test(ref)) {
     throw new ApiError(400, "not a kitty");
   }
-  let conn = savedConnection();
-  if (!conn.token) {
-    conn = await fetchLocalToken(conn);
-  }
-  // The token goes in a header, as every other call's, never in the address.
-  const res = await fetch(safeGatewayBase(conn.url) + `/v1/kitties/${ref}/import`, {
-    method: "POST",
-    headers: conn.token ? { Authorization: "Bearer " + conn.token } : {},
-    body: file,
-  });
-  if (!res.ok) {
-    let msg = `HTTP ${res.status}`;
-    try {
-      msg = ((await res.json()) as { error?: string }).error || msg;
-    } catch {
-      // not JSON: keep the status
-    }
-    throw new ApiError(res.status, msg);
-  }
+  await request("POST", `/v1/kitties/${ref}/import`, file);
 }
 
 export type ExposureMode = "local" | "lan" | "wan";
