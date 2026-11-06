@@ -1396,6 +1396,34 @@ export async function artifactText(name: string): Promise<string> {
 // page where the browser has no WebCodecs (it needs HTTPS or localhost), and a desktop whose image
 // has no voxl. The caller then follows the display as rectangles, without sound. The desktop app
 // (Wails) frames the gateway it started on this machine; its ticket comes through the app's bridge.
+// voxlReady waits for the live view at src to answer before the page frames it: a desktop just
+// turned on is running a few seconds before voxl listens, and the frame would show the error. The
+// gateway already waits a while on each try; a 503 (still starting) is tried again, up to tries
+// times. false means it did not come up (the caller follows the display another way); a fetch the
+// browser refuses (another origin) says nothing, so the frame is tried as before.
+export async function voxlReady(
+  src: string,
+  opts: { tries?: number; pause?: number; alive?: () => boolean } = {},
+): Promise<boolean> {
+  const { tries = 4, pause = 1500, alive = () => true } = opts;
+  for (let i = 0; i < tries && alive(); i++) {
+    let res: Response;
+    try {
+      res = await fetch(src + "healthz", { cache: "no-store" });
+    } catch {
+      return true;
+    }
+    if (res.ok) {
+      return true;
+    }
+    if (res.status !== 503) {
+      return false;
+    }
+    await new Promise((r) => setTimeout(r, pause));
+  }
+  return false;
+}
+
 export async function voxlSource(ref: string): Promise<string | null> {
   // A kitty's id is letters, digits, dashes and underscores: nothing else goes into an address.
   if (!/^[\w-]+$/.test(ref) || !window.isSecureContext || typeof VideoDecoder === "undefined") {
