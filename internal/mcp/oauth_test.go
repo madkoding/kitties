@@ -91,7 +91,7 @@ func TestOAuthFlow(t *testing.T) {
 	id := register(t, mux)
 	// The consent page names the app and asks for the token.
 	rec := send(mux, "GET", PathAuthorize+"?"+authParams(id).Encode(), nil, "")
-	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Claude") || !strings.Contains(rec.Body.String(), `type=password`) {
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), "Claude") || !strings.Contains(rec.Body.String(), "<code>claude.ai</code>") || !strings.Contains(rec.Body.String(), `type=password`) {
 		t.Errorf("consent: %d %s", rec.Code, rec.Body)
 	}
 	code := approve(t, mux, id)
@@ -237,5 +237,11 @@ func TestChallengeHeader(t *testing.T) {
 	got := o.Challenge(httptest.NewRequest("GET", "/mcp", nil))
 	if !strings.Contains(got, `resource_metadata="https://k.example/.well-known/oauth-protected-resource"`) {
 		t.Errorf("challenge: %s", got)
+	}
+}
+
+func TestHostOf(t *testing.T) {
+	if hostOf("https://claude.ai/cb") != "claude.ai" || hostOf("%zz") != "%zz" {
+		t.Error("hostOf")
 	}
 }

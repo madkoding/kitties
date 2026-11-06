@@ -211,15 +211,18 @@ func (o *OAuth) parse(v url.Values) (authReq, string, string) {
 		return a, "", "unknown client"
 	}
 	a.name = c.Name
-	ok := false
+	// The address used is the registered one itself (signed), never the text of the request.
+	registered := ""
 	for _, u := range c.Redirects {
 		if u == a.redirect {
-			ok = true
+			registered = u
 		}
 	}
-	if !ok {
+	if registered == "" {
+		a.redirect = ""
 		return a, "", "redirect_uri is not one the client registered"
 	}
+	a.redirect = registered
 	switch {
 	case v.Get("response_type") != "code":
 		return a, "unsupported_response_type", ""
@@ -277,10 +280,10 @@ func (o *OAuth) consent(w http.ResponseWriter, r *http.Request, a authReq, oerr,
 	for k, v := range map[string]string{"client_id": a.clientID, "redirect_uri": a.redirect, "state": a.state, "code_challenge": a.challenge} {
 		hidden += fmt.Sprintf(`<input type=hidden name=%s value="%s">`, k, html.EscapeString(v))
 	}
-	o.page(w, http.StatusOK, fmt.Sprintf(`<h1>Connect to Kitties</h1><p><b>%s</b> asks to run your kitties: create and stop them, send them tasks, see their desktops.</p>%s
+	o.page(w, http.StatusOK, fmt.Sprintf(`<h1>Connect to Kitties</h1><p><b>%s</b> asks to run your kitties: create and stop them, send them tasks, see their desktops. It will be sent back to <code>%s</code>; if you do not recognise that address, close this page.</p>%s
 <p>To allow it, type the connector's token (the file <code>mcp.token</code> in the data directory).</p>
 <form method=post action="%s">%s<input type=password name=token autocomplete=off required autofocus placeholder="MCP token"><button>Allow</button></form>
-<p>Close this page to refuse.</p>`, html.EscapeString(who), extra, PathAuthorize, hidden))
+<p>Close this page to refuse.</p>`, html.EscapeString(who), html.EscapeString(hostOf(a.redirect)), extra, PathAuthorize, hidden))
 }
 
 func (o *OAuth) authorizeSubmit(w http.ResponseWriter, r *http.Request) {
@@ -378,4 +381,12 @@ func (o *OAuth) tokenEndpoint(w http.ResponseWriter, r *http.Request) {
 		"expires_in":    int(accessTTL / time.Second),
 		"refresh_token": o.seal(claims{Typ: "refresh", Exp: now.Add(refreshTTL).Unix(), ClientID: id, Nonce: o.nonce()}),
 	})
+}
+
+// hostOf is the host a redirect goes to, shown to the person on the consent page.
+func hostOf(raw string) string {
+	if u, err := url.Parse(raw); err == nil {
+		return u.Host
+	}
+	return raw
 }
