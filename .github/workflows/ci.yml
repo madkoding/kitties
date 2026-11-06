@@ -29,6 +29,7 @@ jobs:
     outputs:
       app: ${{ steps.scope.outputs.app }}
       desktop_image: ${{ steps.scope.outputs.desktop_image }}
+      page: ${{ steps.scope.outputs.page }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,7 +39,7 @@ jobs:
           EVENT: ${{ github.event_name }}
         run: |
           if [ "$EVENT" != "pull_request" ]; then
-            echo "app=true" >> "$GITHUB_OUTPUT"; echo "desktop_image=true" >> "$GITHUB_OUTPUT"; exit 0
+            echo "app=true" >> "$GITHUB_OUTPUT"; echo "desktop_image=true" >> "$GITHUB_OUTPUT"; echo "page=true" >> "$GITHUB_OUTPUT"; exit 0
           fi
           # HEAD is the merge of the pull request into its base: its first parent is the base.
           files="$(git diff --name-only HEAD^1 HEAD)"
@@ -47,7 +48,9 @@ jobs:
           if printf '%s\n' "$files" | grep -qvE '^(docs/|site/|docker/kitty-desktop/)|\.md$|^LICENSE$'; then app=true; else app=false; fi
           # The image: its folder, the fonts it shares with the page, and the workflows that build and scan it.
           if printf '%s\n' "$files" | grep -qE '^(docker/kitty-desktop/|desktop/frontend/public/|\.github/workflows/(ci|security)\.yml$)'; then img=true; else img=false; fi
-          echo "app=$app" >> "$GITHUB_OUTPUT"; echo "desktop_image=$img" >> "$GITHUB_OUTPUT"
+          # The page on macOS and Windows: the desktop app's page and the workflow that builds it.
+          if printf '%s\n' "$files" | grep -qE '^(desktop/frontend/|\.github/workflows/ci\.yml$)'; then page=true; else page=false; fi
+          echo "app=$app" >> "$GITHUB_OUTPUT"; echo "desktop_image=$img" >> "$GITHUB_OUTPUT"; echo "page=$page" >> "$GITHUB_OUTPUT"
 
   check:
     name: fmt · vet · test · coverage
@@ -62,6 +65,10 @@ jobs:
           go-version-file: go.mod
           # The modules (WhatsApp's whatsmeow) and the build cache, keyed by the root module's go.sum.
           cache-dependency-path: go.sum
+      # macOS and Windows builds see Library.tsx and library.ts as one file: no two paths may differ
+      # only in case (that broke the v0.59.0 and v0.60.0 desktop builds).
+      - name: no paths that differ only in case
+        run: scripts/case-collisions.sh
       - name: gofmt
         run: make fmt-check
       - name: go vet
@@ -131,6 +138,29 @@ jobs:
           retention-days: 1
       - name: vet and test the Wails module
         run: cd desktop && go vet ./... && go test -count=1 -cover ./...
+
+  # The page built on macOS and Windows, whose file systems ignore case: what the release's wails
+  # builds would trip on is seen on the pull request, without building the whole app there.
+  page-os:
+    name: desktop app · page · ${{ matrix.os }}
+    needs: changes
+    if: needs.changes.outputs.page == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: desktop/frontend/package-lock.json
+      - name: build the page
+        shell: bash
+        run: cd desktop/frontend && npm ci && npm run build
 
   # Kitties updating itself, with real binaries and a fake GitHub: a signed release is installed and
   # restarted into in place, a bad signature is refused, and a version that does not hold is gone back from.
@@ -420,7 +450,19 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: desktop/go.mod
-          cache-dependency-path: desktop/go.sum
+          cache-dependency-path: |
+            desktop/go.sum
+            go.sum
+      # A runner that cannot reach proxy.golang.org for a moment (v0.60.1 on macOS) gets a few tries
+      # here, so wails build and the gateway build find the modules already downloaded.
+      - name: download the Go modules
+        shell: bash
+        run: |
+          for i in 1 2 3 4; do
+            (cd desktop && go mod download) && go mod download && exit 0
+            echo "::warning::go mod download failed (try $i), retrying in $((i * 10))s"; sleep $((i * 10))
+          done
+          exit 1
       - name: linux build dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev
