@@ -68,6 +68,34 @@ func (s *Server) mcpMemoryTools() []mcp.Tool {
 				}
 				return jsonResult(map[string]any{"note": n})
 			}},
+		{Name: "memory_edit", Description: "Correct one of a kitty's notes (or a shared one) in place; it becomes the person's, pinned. Read the ids with memory_list.",
+			InputSchema: obj([]string{"ref", "id", "text"}, map[string]any{"ref": str("the kitty's id or name"),
+				"id": str("the note's id"), "text": str("the note as it should read, up to 240 characters")}),
+			Annotations: mcp.Annotations{},
+			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					Ref  string `json:"ref"`
+					ID   string `json:"id"`
+					Text string `json:"text"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				if err := need("id", a.ID); err != nil {
+					return mcp.Result{}, err
+				}
+				if err := need("text", a.Text); err != nil {
+					return mcp.Result{}, err
+				}
+				if s.memories == nil {
+					return mcp.Result{}, errNoMemory
+				}
+				n, err := s.memories.EditNote(a.Ref, a.ID, a.Text)
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				return jsonResult(map[string]any{"note": n})
+			}},
 		{Name: "memory_forget", Description: "Drop a kitty's note that is wrong or out of date. Read the ids with memory_list.",
 			InputSchema: obj([]string{"ref", "id"}, map[string]any{"ref": str("the kitty's id or name"), "id": str("the note's id")}),
 			Annotations: mcp.Annotations{Destructive: true},

@@ -529,6 +529,21 @@ const dict: Dictionary = {
   "{name}'s machine turns itself off after this time without use, never in the middle of a task or while you watch its desktop. {name} knows whether it is on, and turns it on by itself when it needs it.":
     "La máquina de {name} se apaga sola tras este tiempo sin uso, nunca en medio de una tarea ni mientras ves su escritorio. {name} sabe si está encendida y la enciende sola cuando la necesita.",
   off: "apagada",
+  "Correct: {note}": "Corregir: {note}",
+  "Edit: {note}": "Editar: {note}",
+  "What every kitty knows about you: your name, your language, how you like to work. It goes into each kitty's prompt; what one kitty learns alone stays in its own memory, in its drawer.":
+    "Lo que todos los kitties saben de ti: tu nombre, tu idioma, cómo te gusta trabajar. Va en las instrucciones de cada kitty; lo que un kitty aprende solo queda en su propia memoria, en su panel.",
+  "Nothing shared yet.": "Aún no hay nada compartido.",
+  "My name is Ana and I work from Madrid": "Me llamo Ana y trabajo desde Madrid",
+  "A note for every kitty": "Una nota para todos los kitties",
+  "That file is not a kitty's memory.": "Ese archivo no es la memoria de un kitty.",
+  "Save the notes in a file, to keep or to give to another kitty":
+    "Guarda las notas en un archivo, para conservarlas o dárselas a otro kitty",
+  Export: "Exportar",
+  Import: "Importar",
+  "Import notes from a file": "Importar notas desde un archivo",
+  "Notes imported: {n}.": "Notas importadas: {n}.",
+  "Shared memory": "Memoria compartida",
 };
 
 export default dict;

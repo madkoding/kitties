@@ -284,6 +284,27 @@ func TestSharedNotes(t *testing.T) {
 	if n := s2.Notes("k9", ScopeShared); len(n) != 1 {
 		t.Errorf("reopened: %+v", n)
 	}
+	if len(s2.Shared()) != 1 {
+		t.Errorf("Shared = %+v", s2.Shared())
+	}
+	// A note is corrected in place, its own or a shared one, and becomes the person's.
+	own, _ := s2.Remember("k9", ScopeWork, "Deploy on Fridays", "kitty", false)
+	if ed, err := s2.Edit("k9", own.ID, "  Never deploy on Fridays "); err != nil || ed.Text != "Never deploy on Fridays" || !ed.Pinned || ed.Source != "person" {
+		t.Errorf("edit own = %+v %v", ed, err)
+	}
+	if ed, err := s2.Edit("k1", sh.ID, "Answer in English"); err != nil || ed.Text != "Answer in English" {
+		t.Errorf("edit shared = %+v %v", ed, err)
+	}
+	if ed, err := s2.Edit("", sh.ID, "Answer in Spanish"); err != nil || ed.Scope != ScopeShared {
+		t.Errorf("edit shared without a kitty = %+v %v", ed, err)
+	}
+	if _, err := s2.Edit("k9", own.ID, "  "); err == nil {
+		t.Error("an empty edit")
+	}
+	if _, err := s2.Edit("k9", "nope", "x"); err == nil {
+		t.Error("editing a missing note")
+	}
+	_ = s2.Forget("k9", own.ID)
 	if err := s2.Forget("k9", sh.ID); err != nil {
 		t.Fatal(err)
 	}

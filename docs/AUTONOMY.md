@@ -59,11 +59,13 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
 - **Memory.** Each kitty keeps what it knows about you and the work: notes in three scopes
   (*you*, *work* and one per project), plus *shared* notes that every kitty knows (kept once, in
   `memory/_shared.json`; a kitty's distillation never rewrites them and removing a kitty keeps
-  them), pinned notes of your own, and a level of how demanding you
+  them; Settings → Shared memory lists them), pinned notes of your own, and a level of how demanding you
   are (1 relaxed to 5 strict) that it learns from the thumbs under its answers. Every few verdicts
   it distils the corrections into lasting notes with its own brain. It writes notes itself
   (`@memory remember {...}` or the native `memory_*` tools) when you say "remember that...". The
-  memory sits in its prompt, so it answers the way you like.
+  memory sits in its prompt, so it answers the way you like. Any note can be corrected in place
+  (it becomes yours), and a kitty's notes go to a JSON file and come back from one (Export and
+  Import in its memory), to keep them or hand them to another kitty.
 - **Action limits.** Nothing is limited by default: a kitty does on a connection what the account
   allows, since that is the service's to limit (the scopes of the sign-in, the permissions of the
   key). Tell a kitty "ask me before posting" or "never delete anything" and it adds the limit to
@@ -98,6 +100,7 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
 | --- | --- |
 | ![An action waits for a yes](screenshots/23-waiting-for-a-yes.png) | ![The Approvals screen](screenshots/24-approvals.png) |
 | ![Thumbs under the answers](screenshots/25-feedback.png) | ![What a kitty knows about you](screenshots/26-memory.png) |
+| ![The memory every kitty shares](screenshots/60-shared-memory.png) | |
 | ![Notifications: a phone channel and its events](screenshots/27-notifications.png) | ![Stripe: invoices and payments as one line each](screenshots/28-stripe.png) |
 | ![The daily summary, sent on demand](screenshots/29-daily-summary.png) | |
 

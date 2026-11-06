@@ -347,6 +347,32 @@ func TestLearningFromApprovalsAndAPI(t *testing.T) {
 	if _, err := s.Remember("zz", "user", "x"); err == nil {
 		t.Error("unknown kitty")
 	}
+	if ed, err := s.EditNote("ana", note.ID, "Invoices are due on the 5th"); err != nil || ed.Text != "Invoices are due on the 5th" {
+		t.Errorf("edit = %+v %v", ed, err)
+	}
+	if _, err := s.EditNote("zz", note.ID, "x"); err == nil {
+		t.Error("edit on an unknown kitty")
+	}
+	if _, err := s.EditNote("ana", "nope", "x"); err == nil {
+		t.Error("edit of an unknown note")
+	}
+	// The shared notes, without a kitty.
+	if notes, err := s.SharedNotes(); err != nil || len(notes) != 0 {
+		t.Errorf("no shared notes yet: %v %v", notes, err)
+	}
+	sh, err := s.RememberShared("Pat works from Santiago")
+	if err != nil || sh.Scope != memory.ScopeShared {
+		t.Fatalf("shared = %+v %v", sh, err)
+	}
+	if ed, err := s.EditShared(sh.ID, "Pat works from Lima"); err != nil || ed.Text != "Pat works from Lima" {
+		t.Errorf("edit shared = %+v %v", ed, err)
+	}
+	if notes, _ := s.SharedNotes(); len(notes) != 1 {
+		t.Errorf("shared = %v", notes)
+	}
+	if err := s.ForgetShared(sh.ID); err != nil {
+		t.Error(err)
+	}
 	if err := s.ForgetNote("ana", note.ID); err != nil {
 		t.Error(err)
 	}
@@ -378,6 +404,11 @@ func TestLearningFromApprovalsAndAPI(t *testing.T) {
 		func() error { _, e := plain.MemoryOf("ana"); return e }(),
 		func() error { _, e := plain.Remember("ana", "user", "x"); return e }(),
 		plain.ForgetNote("ana", "x"),
+		func() error { _, e := plain.EditNote("ana", "x", "y"); return e }(),
+		func() error { _, e := plain.SharedNotes(); return e }(),
+		func() error { _, e := plain.RememberShared("x"); return e }(),
+		func() error { _, e := plain.EditShared("x", "y"); return e }(),
+		plain.ForgetShared("x"),
 		func() error { _, e := plain.SetProfile("ana", 3, true); return e }(),
 		func() error { _, e := plain.Distill(context.Background(), "ana"); return e }(),
 		plain.Feedback("c", 0, "up", ""),

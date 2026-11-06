@@ -241,6 +241,9 @@ func (s *Store) Forget(kitty, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, key := range []string{kitty, sharedKey} {
+		if key == "" {
+			continue
+		}
 		f := s.load(key)
 		for i, n := range f.Notes {
 			if n.ID == id {
@@ -252,6 +255,35 @@ func (s *Store) Forget(kitty, id string) error {
 	}
 	return fmt.Errorf("no such note %q", id)
 }
+
+// Edit rewrites a note, the kitty's own or a shared one. The person wrote it now, so it is
+// pinned and a distillation never drops it.
+func (s *Store) Edit(kitty, id, text string) (*Note, error) {
+	text = clip(strings.Join(strings.Fields(text), " "), 240)
+	if text == "" {
+		return nil, errors.New("a note needs text")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, key := range []string{kitty, sharedKey} {
+		if key == "" {
+			continue
+		}
+		f := s.load(key)
+		for _, n := range f.Notes {
+			if n.ID == id {
+				n.Text, n.Updated, n.Source, n.Pinned = text, s.now(), "person", true
+				s.save(key, f)
+				c := *n
+				return &c, nil
+			}
+		}
+	}
+	return nil, fmt.Errorf("no such note %q", id)
+}
+
+// Shared returns the notes every kitty knows, strongest first.
+func (s *Store) Shared() []Note { return s.Notes(sharedKey, "") }
 
 // ForgetKitty removes everything about a kitty that was removed.
 func (s *Store) ForgetKitty(kitty string) error {

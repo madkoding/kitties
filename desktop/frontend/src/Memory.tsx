@@ -2,7 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { Kitty, MemoryView } from "./api";
 import { api } from "./api";
 import { t } from "./i18n";
-import { IconTrash } from "./icons";
+import { NoteRow } from "./Notes";
 
 // WHAT A KITTY KNOWS ABOUT YOU.
 //
@@ -14,11 +14,46 @@ const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider
 const INPUT = "w-full px-3 py-2 text-sm";
 const LEVELS = ["relaxed", "easygoing", "balanced", "demanding", "strict"];
 
-const SCOPE_TAG: Record<string, string> = {
-  user: "tag-accent",
-  work: "tag-amber",
-  shared: "tag-green",
-};
+// The file a memory is exported to and imported from.
+interface MemoryFile {
+  kitties_memory: 1;
+  kitty: string;
+  notes: { scope: string; text: string }[];
+}
+
+// exportMemory saves a kitty's notes as a JSON file.
+function exportMemory(name: string, view: MemoryView) {
+  const file: MemoryFile = {
+    kitties_memory: 1,
+    kitty: name,
+    notes: view.notes.map((n) => ({ scope: n.scope, text: n.text })),
+  };
+  const url = URL.createObjectURL(
+    new Blob([JSON.stringify(file, null, 2)], { type: "application/json" }),
+  );
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${name}-memory.json`;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// notesIn reads the notes of an exported memory, or fails with a word for the person.
+export function notesIn(raw: string): { scope: string; text: string }[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new Error(t("That file is not a kitty's memory."));
+  }
+  const notes = (data as Partial<MemoryFile>)?.notes;
+  if (!Array.isArray(notes)) {
+    throw new Error(t("That file is not a kitty's memory."));
+  }
+  return notes
+    .filter((n) => n && typeof n.text === "string" && n.text.trim())
+    .map((n) => ({ scope: typeof n.scope === "string" ? n.scope : "user", text: n.text.trim() }));
+}
 
 export function MemoryPanel({ kitty }: { kitty: Kitty }) {
   const [view, setView] = useState<MemoryView | null>(null);
@@ -26,6 +61,7 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
   const [text, setText] = useState("");
   const [scope, setScope] = useState("user");
   const [busy, setBusy] = useState(false);
+  const [info, setInfo] = useState("");
   const load = () => {
     api
       .memory(kitty.id)
@@ -38,6 +74,7 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
   useEffect(load, [kitty.id]);
   const act = async (fn: () => Promise<unknown>) => {
     setErr("");
+    setInfo("");
     setBusy(true);
     try {
       await fn();
@@ -143,27 +180,13 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
       )}
       <div class="flex flex-col gap-1" data-testid="notes">
         {view.notes.map((n) => (
-          <div key={n.id} class="flex items-start gap-2 text-sm">
-            <span
-              class={`tag ${SCOPE_TAG[n.scope] || "tag-magenta"}`}
-              title={n.scope === "shared" ? t("Every kitty knows it") : undefined}
-            >
-              {n.scope.startsWith("project:") ? n.scope.replace("project:", "") : t(n.scope)}
-            </span>
-            <span class="flex-1 min-w-0">{n.text}</span>
-            {n.pinned && (
-              <span class="tag" title={t("You wrote it: a consolidation never drops it")}>
-                {t("yours")}
-              </span>
-            )}
-            <button
-              class="plain text-[var(--t3)] hover:text-[var(--c-red)] p-1"
-              aria-label={t("Forget: {note}", { note: n.text })}
-              onClick={() => act(() => api.forgetNote(kitty.id, n.id))}
-            >
-              <IconTrash size={12} />
-            </button>
-          </div>
+          <NoteRow
+            key={n.id}
+            n={n}
+            busy={busy}
+            onSave={(text) => act(() => api.editNote(kitty.id, n.id, text))}
+            onForget={() => act(() => api.forgetNote(kitty.id, n.id))}
+          />
         ))}
       </div>
       <div class="flex gap-2 mt-2">
@@ -197,15 +220,51 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
           {t("Add note")}
         </button>
       </div>
-      <button
-        class="btn-ghost px-3 py-1.5 text-xs mt-2"
-        disabled={busy || p.up + p.down === 0}
-        onClick={() => act(() => api.distill(kitty.id))}
-        title={t("Its own brain merges the notes and the feedback into a short list")}
-      >
-        {t("Consolidate now")}
-        {p.pending > 0 ? " " + t("({n} new)", { n: p.pending }) : ""}
-      </button>
+      <div class="flex flex-wrap gap-2 mt-2">
+        <button
+          class="btn-ghost px-3 py-1.5 text-xs"
+          disabled={busy || p.up + p.down === 0}
+          onClick={() => act(() => api.distill(kitty.id))}
+          title={t("Its own brain merges the notes and the feedback into a short list")}
+        >
+          {t("Consolidate now")}
+          {p.pending > 0 ? " " + t("({n} new)", { n: p.pending }) : ""}
+        </button>
+        <button
+          class="btn-ghost px-3 py-1.5 text-xs"
+          disabled={busy || view.notes.length === 0}
+          onClick={() => exportMemory(kitty.name, view)}
+          title={t("Save the notes in a file, to keep or to give to another kitty")}
+        >
+          {t("Export")}
+        </button>
+        <label class={`btn-ghost px-3 py-1.5 text-xs cursor-pointer ${busy ? "opacity-50" : ""}`}>
+          {t("Import")}
+          <input
+            type="file"
+            accept="application/json,.json"
+            class="sr-only"
+            aria-label={t("Import notes from a file")}
+            disabled={busy}
+            onChange={(e) => {
+              const input = e.target as HTMLInputElement;
+              const file = input.files?.[0];
+              input.value = "";
+              if (!file) {
+                return;
+              }
+              act(async () => {
+                const notes = notesIn(await file.text());
+                for (const n of notes) {
+                  await api.remember(kitty.id, n.text, n.scope);
+                }
+                setInfo(t("Notes imported: {n}.", { n: notes.length }));
+              });
+            }}
+          />
+        </label>
+      </div>
+      {info && <p class="text-xs text-[var(--t3)] mt-2">{info}</p>}
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
     </div>
   );

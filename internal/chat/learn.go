@@ -181,6 +181,58 @@ func (s *Service) ForgetNote(ref, id string) error {
 	return s.memory.Forget(k.ID, id)
 }
 
+// EditNote rewrites one of a kitty's notes (or a shared one) in the person's words.
+func (s *Service) EditNote(ref, id, text string) (*memory.Note, error) {
+	if s.memory == nil {
+		return nil, ErrNoMemory
+	}
+	k, err := s.fleet.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	n, err := s.memory.Edit(k.ID, id, text)
+	if err == nil {
+		s.note(k, agenda.KindLearned, "", "", "corrected ("+n.Scope+"): "+n.Text)
+	}
+	return n, err
+}
+
+// SharedNotes are the notes every kitty knows.
+func (s *Service) SharedNotes() ([]memory.Note, error) {
+	if s.memory == nil {
+		return nil, ErrNoMemory
+	}
+	notes := s.memory.Shared()
+	if notes == nil {
+		notes = []memory.Note{}
+	}
+	return notes, nil
+}
+
+// RememberShared keeps a note for every kitty, in the person's words.
+func (s *Service) RememberShared(text string) (*memory.Note, error) {
+	if s.memory == nil {
+		return nil, ErrNoMemory
+	}
+	return s.memory.Remember("", memory.ScopeShared, text, "person", true)
+}
+
+// EditShared rewrites a shared note.
+func (s *Service) EditShared(id, text string) (*memory.Note, error) {
+	if s.memory == nil {
+		return nil, ErrNoMemory
+	}
+	return s.memory.Edit("", id, text)
+}
+
+// ForgetShared drops a shared note.
+func (s *Service) ForgetShared(id string) error {
+	if s.memory == nil {
+		return ErrNoMemory
+	}
+	return s.memory.Forget("", id)
+}
+
 // SetProfile sets how demanding the person is, and whether the level keeps following the feedback.
 func (s *Service) SetProfile(ref string, demand int, auto bool) (memory.Profile, error) {
 	if s.memory == nil {

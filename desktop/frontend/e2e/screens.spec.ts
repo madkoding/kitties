@@ -431,9 +431,85 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   await expect(page.getByTestId("level")).toContainText("They are easygoing");
   await memory.getByRole("button", { name: "4 · demanding" }).click();
   await expect(page.getByTestId("level")).toContainText("They are demanding");
+  // A note is corrected in place, and becomes the person's.
+  await memory.getByRole("button", { name: "Edit: I prefer short answers." }).click();
+  const box = memory.getByLabel("Correct: I prefer short answers.");
+  await box.fill("I prefer answers of two lines");
+  await box.press("Enter");
+  await expect(notes).toContainText("I prefer answers of two lines");
+  await expect(notes).not.toContainText("I prefer short answers.");
+  // The notes go to a file and come back from one.
+  const download = page.waitForEvent("download");
+  await memory.getByRole("button", { name: "Export" }).click();
+  const file = await download;
+  expect(file.suggestedFilename()).toBe("mimi-memory.json");
+  const saved = JSON.parse(fs.readFileSync(await file.path(), "utf8"));
+  expect(
+    saved.notes.some((n: { text: string }) => n.text === "I prefer answers of two lines"),
+  ).toBe(true);
+  await memory.getByLabel("Import notes from a file").setInputFiles({
+    name: "luna-memory.json",
+    mimeType: "application/json",
+    buffer: Buffer.from(
+      JSON.stringify({
+        kitties_memory: 1,
+        kitty: "luna",
+        notes: [
+          { scope: "work", text: "Invoices go out on the 1st" },
+          { scope: "user", text: " " },
+        ],
+      }),
+    ),
+  });
+  await expect(memory).toContainText("Notes imported: 1.");
+  await expect(notes).toContainText("Invoices go out on the 1st");
+  await memory.getByLabel("Import notes from a file").setInputFiles({
+    name: "nope.json",
+    mimeType: "application/json",
+    buffer: Buffer.from("not json"),
+  });
+  await expect(memory).toContainText("That file is not a kitty's memory.");
+  await memory.getByRole("button", { name: "Forget: Invoices go out on the 1st" }).click();
+  await expect(notes).not.toContainText("Invoices go out on the 1st");
   await open(page, `#kitty/${ids.tom}`);
   await openConfig(page);
   await expect(page.getByTestId("notes")).toContainText("My name is Mad and I work from Santiago");
+});
+
+test("the memory every kitty shares is tended in Settings", async ({ page }) => {
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Shared memory" }).click();
+  const shared = page.getByTestId("shared-memory");
+  const notes = shared.getByTestId("shared-notes");
+  await expect(notes).toContainText("My name is Mad and I work from Santiago");
+  await shared.getByLabel("A note for every kitty").fill("Dates are written day/month/year");
+  await shared.getByRole("button", { name: "Add note" }).click();
+  await expect(notes).toContainText("Dates are written day/month/year");
+  await shot(page, "60-shared-memory");
+  await shared.getByRole("button", { name: "Edit: Dates are written day/month/year" }).click();
+  const box = shared.getByLabel("Correct: Dates are written day/month/year");
+  await box.fill("Dates are written day-month-year");
+  await box.press("Escape");
+  await expect(notes).toContainText("Dates are written day/month/year");
+  await shared.getByRole("button", { name: "Edit: Dates are written day/month/year" }).click();
+  await shared
+    .getByLabel("Correct: Dates are written day/month/year")
+    .fill("Dates go day-month-year");
+  await shared.getByLabel("Correct: Dates are written day/month/year").press("Enter");
+  await expect(notes).toContainText("Dates go day-month-year");
+  // What is written here, every kitty knows.
+  await open(page, `#kitty/${ids.tom}`);
+  await openConfig(page);
+  await expect(page.getByTestId("notes")).toContainText("Dates go day-month-year");
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Shared memory" }).click();
+  await page
+    .getByTestId("shared-memory")
+    .getByRole("button", { name: "Forget: Dates go day-month-year" })
+    .click();
+  await expect(page.getByTestId("shared-notes")).not.toContainText("Dates go day-month-year");
 });
 
 test("notifications: pick a channel, send a test and be told when something waits", async ({

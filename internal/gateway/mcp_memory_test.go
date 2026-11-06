@@ -17,6 +17,7 @@ func TestMCPMemoryTools(t *testing.T) {
 		{"memory_list", map[string]any{"ref": "ana"}},
 		{"memory_remember", map[string]any{"ref": "ana", "text": "x"}},
 		{"memory_forget", map[string]any{"ref": "ana", "id": "n0"}},
+		{"memory_edit", map[string]any{"ref": "ana", "id": "n0", "text": "x"}},
 	} {
 		if text, isErr, _ := tool(t, s, c.name, c.args); !isErr || !strings.Contains(text, "no memory") {
 			t.Errorf("%s without memory: %v %q", c.name, isErr, text)
@@ -56,6 +57,14 @@ func TestMCPMemoryTools(t *testing.T) {
 		t.Error("memory_list with bad args")
 	}
 
+	if text, isErr, _ := tool(t, s, "memory_edit", map[string]any{"ref": "ana", "id": "n1", "text": "Uses spaces"}); isErr || !strings.Contains(text, "Uses spaces") {
+		t.Errorf("memory_edit: %v %q", isErr, text)
+	}
+	for _, bad := range []any{"nope", map[string]any{"ref": "ana", "text": "x"}, map[string]any{"ref": "ana", "id": "n1"}, map[string]any{"ref": "ana", "id": "zz", "text": "x"}} {
+		if _, isErr, _ := tool(t, s, "memory_edit", bad); !isErr {
+			t.Errorf("memory_edit %v must fail", bad)
+		}
+	}
 	if _, isErr, _ := tool(t, s, "memory_forget", map[string]any{"ref": "ana"}); !isErr {
 		t.Error("memory_forget without id")
 	}
@@ -68,7 +77,7 @@ func TestMCPMemoryTools(t *testing.T) {
 	if text, isErr, _ := tool(t, s, "memory_forget", map[string]any{"ref": "ana", "id": "n0"}); isErr || !strings.Contains(text, "n0") {
 		t.Errorf("memory_forget: %v %q", isErr, text)
 	}
-	if len(mem.notes) != 1 || mem.notes[0].Text != "Uses tabs" {
+	if len(mem.notes) != 1 || mem.notes[0].Text != "Uses spaces" {
 		t.Errorf("notes left: %+v", mem.notes)
 	}
 }

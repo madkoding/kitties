@@ -920,6 +920,17 @@ export const api = {
       (r) => r.note,
     ),
   forgetNote: (kitty: string, id: string) => request("DELETE", `/v1/kitties/${kitty}/memory/${id}`),
+  editNote: (kitty: string, id: string, text: string) =>
+    request<{ note: MemoryNote }>("PUT", `/v1/kitties/${kitty}/memory/${id}`, { text }).then(
+      (r) => r.note,
+    ),
+  sharedNotes: () =>
+    request<{ notes: MemoryNote[] }>("GET", "/v1/memory/shared").then((r) => r.notes),
+  rememberShared: (text: string) =>
+    request<{ note: MemoryNote }>("POST", "/v1/memory/shared", { text }).then((r) => r.note),
+  editShared: (id: string, text: string) =>
+    request<{ note: MemoryNote }>("PUT", `/v1/memory/shared/${id}`, { text }).then((r) => r.note),
+  forgetShared: (id: string) => request("DELETE", `/v1/memory/shared/${id}`),
   setProfile: (kitty: string, demand: number, auto: boolean) =>
     request<{ profile: MemoryProfile }>("PUT", `/v1/kitties/${kitty}/memory/profile`, {
       demand,

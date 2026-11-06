@@ -31,7 +31,8 @@
 | `GET/PUT/DELETE /v1/artifacts/{name}`     | the artifacts library (raw file bodies) |
 | `GET /v1/approvals?status=pending` · `POST /v1/approvals/{id}/approve` `{always}` · `…/reject` `{reason}` | the actions held for a yes, and the answer |
 | `GET /v1/approvals/rules` · `POST /v1/approvals/rules` `{kitty, connector, action, mode}` · `DELETE /v1/approvals/rules/{id}` | the action limits (ask, never, auto; an empty action is all of the connection's), and taking one away |
-| `GET/POST /v1/kitties/{ref}/memory` · `DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes, its picture of you, and a distillation now |
+| `GET/POST /v1/kitties/{ref}/memory` · `PUT/DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes (correct one with `{"text": …}`), its picture of you, and a distillation now |
+| `GET/POST /v1/memory/shared` · `PUT/DELETE /v1/memory/shared/{id}` | the notes every kitty knows |
 | `POST /v1/chats/{id}/turns/{index}/feedback` `{rating, note}` | a thumb under an answer |
 | `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` · `POST …/notify/digest` | where and when kitties tell you; a test; the daily summary now |
 | `GET /v1/chats/{id}/turns/{n}/replay.gif` · `POST …/turns/{n}/help` `{text, secret, enter, save}` | a task as an animated GIF; the person's answer to a kitty that asked for help (a secret is typed on its desktop, not told) |
