@@ -27,6 +27,11 @@ A kitty is not only something you talk to. Each one has an agenda:
   its **backup** kitty takes the task over; without one, the kitty asks you (the chat is
   marked *help* until you answer). A watchdog brings a stopped container back and retries a
   kitty in error.
+- **Follow-ups.** A goal whose run did not finish (blocked, escalated to you, or it could not
+  even start) is picked up again by itself: after 10 minutes, then 30, then 2 hours, in the same
+  thread, told to go on from where it stopped. A run that finishes starts the count again; past
+  the third the goal waits for its schedule, an event or you. The journal says when the next one
+  is due, and the goal shows *tries again …*.
 - **Delegation.** A kitty can hand a subtask to another (`@delegate luna {"task": "..."}`,
   or the native `delegate` tool), waits for the answer and goes on. Hand-overs are bounded in
   depth so two kitties cannot bounce a task back and forth.

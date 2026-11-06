@@ -178,6 +178,9 @@ export function GoalsPanel({
               {g.next_run && g.enabled && g.every && (
                 <span>{t("next {time}", { time: when(g.next_run) })}</span>
               )}
+              {g.follow_up_at && g.enabled && (
+                <span data-testid="follow-up">{t("tries again {time}", { time: when(g.follow_up_at) })}</span>
+              )}
               {g.runs > 0 && <span>{t(g.runs === 1 ? "{n} run" : "{n} runs", { n: g.runs })}</span>}
             </div>
             <div class="flex gap-1 mt-1.5 flex-wrap">

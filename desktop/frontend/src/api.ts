@@ -139,6 +139,9 @@ export interface Goal {
   runs: number;
   last_result?: string;
   from_file?: boolean;
+  // A run that did not finish is picked up again by itself: how many in a row, and the next one.
+  follow_ups?: number;
+  follow_up_at?: string;
 }
 
 // JournalEntry is one line of a kitty's journal: what it did and where it got stuck.
