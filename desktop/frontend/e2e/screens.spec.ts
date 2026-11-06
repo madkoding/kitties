@@ -1966,6 +1966,7 @@ test("Settings: the MCP clients can be revoked and the token is read only on req
   };
   const calls: string[] = [];
   await page.route("**/v1/mcp", (route) => route.fulfill({ json: mcp }));
+  await page.route("**/v1/mcp/test", (route) => route.fulfill({ json: { ok: true, tools: 23 } }));
   await page.route("**/v1/mcp/token", (route) => {
     calls.push(route.request().method());
     return route.fulfill({
@@ -1977,7 +1978,13 @@ test("Settings: the MCP clients can be revoked and the token is read only on req
     route.fulfill({
       json: {
         clients: [
-          { id: "c1", name: "claude.ai", host: "claude.ai", since: "2026-11-01T10:00:00Z" },
+          {
+            id: "c1",
+            name: "claude.ai",
+            host: "claude.ai",
+            since: "2026-11-01T10:00:00Z",
+            last_token: "2026-11-05T09:30:00Z",
+          },
         ],
       },
     }),
@@ -1993,6 +2000,9 @@ test("Settings: the MCP clients can be revoked and the token is read only on req
   await box.getByTestId("mcp-copy-token").click();
   await expect(box.getByTestId("mcp-note")).toBeVisible();
   expect(calls).toEqual(["GET"]);
+  await box.getByTestId("mcp-test").click();
+  await expect(box.getByTestId("mcp-note")).toContainText("23 tools");
+  await expect(box.getByTestId("mcp-client-c1")).toContainText("last used");
   await box.getByTestId("mcp-revoke").click();
   await page.getByTestId("confirm").getByRole("button", { name: "Revoke", exact: true }).click();
   await expect(box.getByTestId("mcp-client-c1")).toContainText("Revoked");

@@ -289,6 +289,11 @@ const dict: Dictionary = {
   "Nobody has signed in yet.": "Nadie ha iniciado sesión aún.",
   "since {when}": "desde {when}",
   Revoked: "Revocado",
+  "The connector answers: {n} tools for Claude.":
+    "El conector responde: {n} herramientas para Claude.",
+  "The connector does not answer: {why}": "El conector no responde: {why}",
+  "Test connection": "Probar conexión",
+  "last used {when}": "último uso {when}",
 };
 
 export default dict;

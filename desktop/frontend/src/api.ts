@@ -763,6 +763,7 @@ export const api = {
     request<{ restarting: boolean }>("PUT", "/v1/mcp", { ...s, accept_risk: acceptRisk }),
   mcpToken: () => request<{ token: string }>("GET", "/v1/mcp/token"),
   rotateMcpToken: () => request<{ restarting: boolean }>("POST", "/v1/mcp/token"),
+  mcpTest: () => request<{ ok: boolean; tools?: number; error?: string }>("POST", "/v1/mcp/test"),
   mcpClients: () => request<{ clients: McpClient[] }>("GET", "/v1/mcp/clients"),
   revokeMcpClient: (id: string) =>
     request<{ revoked: string }>("DELETE", `/v1/mcp/clients/${encodeURIComponent(id)}`),

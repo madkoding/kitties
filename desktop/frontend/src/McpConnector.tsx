@@ -113,6 +113,21 @@ export default function McpConnector() {
       setErr(errText(e));
     }
   };
+  const test = async () => {
+    setErr("");
+    setNote(t("Testing…"));
+    try {
+      const r = await api.mcpTest();
+      setNote(
+        r.ok
+          ? t("The connector answers: {n} tools for Claude.", { n: r.tools ?? 0 })
+          : t("The connector does not answer: {why}", { why: r.error || "" }),
+      );
+    } catch (e) {
+      setNote("");
+      setErr(errText(e));
+    }
+  };
   const rotate = async () => {
     const yes = await ask(
       t(
@@ -271,6 +286,9 @@ export default function McpConnector() {
             >
               {t("Copy token")}
             </button>
+            <button class="btn-outline px-3 py-1.5 text-sm" onClick={test} data-testid="mcp-test">
+              {t("Test connection")}
+            </button>
             {!cur.token_managed && (
               <button
                 class="btn-outline px-3 py-1.5 text-sm"
@@ -305,6 +323,8 @@ export default function McpConnector() {
                 <span class="block text-sm font-semibold truncate">{c.name}</span>
                 <span class="block text-xs text-[var(--t3)] truncate">
                   {c.host} · {t("since {when}", { when: new Date(c.since).toLocaleDateString() })}
+                  {c.last_token &&
+                    ` · ${t("last used {when}", { when: new Date(c.last_token).toLocaleString() })}`}
                 </span>
               </span>
               {c.revoked ? (
