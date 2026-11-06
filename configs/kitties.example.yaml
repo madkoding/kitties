@@ -118,6 +118,7 @@ whatsapp:
   allow_groups: []               # group ids as Settings lists them: ["120363012345678901@g.us"]
   kitties: {}                    # a kitty of its own for a number or a group: {"+56 9 1234 5678": luna}
   max_per_hour: 0                # messages sent in an hour at most (0: 60), so the number does not look like a bot
+  quiet: {from: "", to: ""}      # quiet hours in the gateway's time, like {from: "22:00", to: "08:00"}
   transcribe: ""                 # openai or groq profile for voice notes (empty: the first; off: none)
 
 # External services. A kitty calls one by writing `@connector <name> {...}` in a reply.
