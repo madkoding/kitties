@@ -123,6 +123,8 @@ type Client interface {
 	Send(ctx context.Context, to, text string) error
 	// SendFile sends a picture, video, audio or document, with text as its caption.
 	SendFile(ctx context.Context, to string, f File, caption string) error
+	// SendReply writes text to to as an answer to a message, quoting it (quoted is its text).
+	SendReply(ctx context.Context, to, text string, ref Ref, quoted string) error
 	// MarkRead marks a message as read (the blue ticks).
 	MarkRead(ctx context.Context, ref Ref) error
 	// React puts an emoji on a message ("" takes it off).
@@ -170,6 +172,10 @@ type Settings struct {
 	// MaxPerHour is the most messages sent in an hour (0 is DefaultPerHour), to keep the number
 	// from looking like a bot.
 	MaxPerHour int `json:"max_per_hour,omitempty"`
+	// QuietFrom and QuietTo ("22:00", "08:00", the gateway's time) are the quiet hours: what
+	// comes then is answered when they end, and the kitties do not write. Empty: none.
+	QuietFrom string `json:"quiet_from,omitempty"`
+	QuietTo   string `json:"quiet_to,omitempty"`
 }
 
 // DefaultPerHour is the hourly limit of messages when Settings sets none.
@@ -209,6 +215,9 @@ type Status struct {
 	// start because the hourly limit was reached.
 	SentLastHour int `json:"sent_last_hour"`
 	Held         int `json:"held"`
+	// Quiet is true during the quiet hours; Waiting counts the messages that wait for their end.
+	Quiet   bool `json:"quiet"`
+	Waiting int  `json:"waiting"`
 	// SeenGroups are the groups that wrote lately, newest first, to choose from.
 	SeenGroups []Group `json:"seen_groups"`
 	// CanChange is false when there is no vault to seal the session with; Why says so.
@@ -252,6 +261,10 @@ var (
 	ErrNotAllow = errors.New("that number is not on the allow list")
 	// ErrNotAllowGroup is returned for a group not on the list.
 	ErrNotAllowGroup = errors.New("that group is not on the allow list")
+	// ErrQuiet is returned for a message a kitty sends during the quiet hours.
+	ErrQuiet = errors.New("it is the quiet hours of WhatsApp: nothing is sent until they end")
+	// ErrNoSession is a reconnect without a kept session.
+	ErrNoSession = errors.New("there is no linked session to reconnect: show a new QR code")
 	// ErrLimit is returned while the hourly limit of messages is reached.
 	ErrLimit = errors.New("the hourly limit of WhatsApp messages is reached: try again later, or raise it in Settings")
 )
@@ -266,8 +279,13 @@ type Bridge struct {
 	set     Settings
 	chats   map[string]string // number (or "g:" and a group) -> chat id
 	seen    []Group
-	sent    []time.Time    // when the messages of the last hour went
-	refs    map[string]Ref // the last message of each chat (by key), to react to
+	sent    []time.Time          // when the messages of the last hour went
+	refs    map[string]Ref       // the last message of each chat (by key), to react to
+	noted   map[string]time.Time // the chats told about the quiet hours, until when
+	waiting int
+	// now and sleep are the clock (a fake one in the tests).
+	now     func() time.Time
+	sleep   func(ctx context.Context, d time.Duration)
 	status  Status
 	client  Client
 	cancel  context.CancelFunc
@@ -291,7 +309,8 @@ func New(opt Options) (*Bridge, error) {
 	if opt.Log == nil {
 		opt.Log = func(string, ...any) {}
 	}
-	b := &Bridge{opt: opt, chats: map[string]string{}, numbers: map[string]*sync.Mutex{}, refs: map[string]Ref{}, wait: 2 * time.Hour}
+	b := &Bridge{opt: opt, chats: map[string]string{}, numbers: map[string]*sync.Mutex{}, refs: map[string]Ref{}, noted: map[string]time.Time{}, wait: 2 * time.Hour,
+		now: time.Now, sleep: sleepCtx}
 	data, err := os.ReadFile(b.settingsPath())
 	switch {
 	case errors.Is(err, os.ErrNotExist):
@@ -309,6 +328,9 @@ func New(opt Options) (*Bridge, error) {
 				return nil, err
 			}
 			if b.set.Kitties, err = b.kittiesOf(opt.Defaults.Kitties); err != nil {
+				return nil, err
+			}
+			if b.set.QuietFrom, b.set.QuietTo, err = quietHours(opt.Defaults.QuietFrom, opt.Defaults.QuietTo); err != nil {
 				return nil, err
 			}
 			if b.set.Enabled && !b.usable() {
@@ -373,7 +395,9 @@ func (b *Bridge) Status() Status {
 	for k, v := range b.set.Kitties {
 		st.Kitties[k] = v
 	}
-	st.SentLastHour = b.recentLocked(time.Now())
+	st.SentLastHour = b.recentLocked(b.now())
+	st.Quiet, _ = b.quietLocked(b.now())
+	st.Waiting = b.waiting
 	st.CanChange = b.usable()
 	if b.opt.Box == nil {
 		st.Why = ErrNoVault.Error()
@@ -430,6 +454,9 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 		return Settings{}, fmt.Errorf("the hourly limit goes from 1 to %d messages (0 is %d)", MaxPerHourLimit, DefaultPerHour)
 	}
 	out.MaxPerHour = s.MaxPerHour
+	if out.QuietFrom, out.QuietTo, err = quietHours(s.QuietFrom, s.QuietTo); err != nil {
+		return Settings{}, err
+	}
 	if out.Kitties, err = b.kittiesOf(s.Kitties); err != nil {
 		return Settings{}, err
 	}
@@ -455,6 +482,93 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 		out.Kitty = k.ID
 	}
 	return out, nil
+}
+
+// quietHours checks the quiet hours: both or none, as HH:MM, and not the same.
+func quietHours(from, to string) (string, string, error) {
+	from, to = strings.TrimSpace(from), strings.TrimSpace(to)
+	if from == "" && to == "" {
+		return "", "", nil
+	}
+	f, err1 := time.Parse("15:04", from)
+	t, err2 := time.Parse("15:04", to)
+	if err1 != nil || err2 != nil {
+		return "", "", errors.New(`the quiet hours go from one time to another, like "22:00" and "08:00"`)
+	}
+	if f.Equal(t) {
+		return "", "", errors.New("the quiet hours start and end at the same time")
+	}
+	return f.Format("15:04"), t.Format("15:04"), nil
+}
+
+// quietLocked reports whether now is in the quiet hours, and when they end.
+func (b *Bridge) quietLocked(now time.Time) (bool, time.Time) {
+	if b.set.QuietFrom == "" {
+		return false, time.Time{}
+	}
+	f, _ := time.Parse("15:04", b.set.QuietFrom)
+	t, _ := time.Parse("15:04", b.set.QuietTo)
+	day := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	at := func(d time.Time, h time.Time) time.Time {
+		return d.Add(time.Duration(h.Hour())*time.Hour + time.Duration(h.Minute())*time.Minute)
+	}
+	start, end := at(day, f), at(day, t)
+	if !end.After(start) { // over midnight
+		if now.Before(end) {
+			return true, end
+		}
+		end = at(day.AddDate(0, 0, 1), t)
+	}
+	if !now.Before(start) && now.Before(end) {
+		return true, end
+	}
+	return false, time.Time{}
+}
+
+func sleepCtx(ctx context.Context, d time.Duration) {
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+	case <-t.C:
+	}
+}
+
+// quiet is what a person who writes during the quiet hours reads, once.
+var quiet = map[string]string{
+	"en": "🌙 {kitty} is resting until {until}; it will answer then.",
+	"es": "🌙 {kitty} descansa hasta las {until}; te responde entonces.",
+	"pt": "🌙 {kitty} está descansando até as {until}; responde depois.",
+}
+
+// waitQuiet holds a message until the quiet hours end, telling its chat once.
+func (b *Bridge) waitQuiet(ctx context.Context, c Client, in inbound) {
+	b.mu.Lock()
+	on, until := b.quietLocked(b.now())
+	if !on {
+		b.mu.Unlock()
+		return
+	}
+	note := !b.noted[in.key].Equal(until)
+	b.noted[in.key] = until
+	k := b.kittyLocked(in.who)
+	b.waiting++
+	b.mu.Unlock()
+	if note {
+		name, lang := "", ""
+		if k != nil {
+			name, lang = k.Name, k.Soul.Language
+		}
+		if name == "" {
+			name = "The kitty"
+		}
+		text := strings.NewReplacer("{kitty}", name, "{until}", until.Format("15:04")).Replace(quiet[LanguageOf(lang, in.raw)])
+		b.reply(ctx, c, in.to, text)
+	}
+	b.sleep(ctx, until.Sub(b.now()))
+	b.mu.Lock()
+	b.waiting--
+	b.mu.Unlock()
 }
 
 // kittiesOf checks a map of numbers and groups to kitties, keeping the kitties' ids.
@@ -524,6 +638,23 @@ func IsGroup(s string) bool {
 	return true
 }
 
+// Reconnect connects again with the kept session, without a new QR code.
+func (b *Bridge) Reconnect() error {
+	b.ops.Lock()
+	defer b.ops.Unlock()
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if !b.set.Enabled {
+		return ErrNotOn
+	}
+	if _, err := os.Stat(b.sessionPath()); err != nil {
+		return ErrNoSession
+	}
+	b.stopLocked()
+	b.startLocked()
+	return nil
+}
+
 // Link asks for new QR codes (after they expired, or the phone logged the device out).
 func (b *Bridge) Link() error {
 	b.ops.Lock()
@@ -571,7 +702,16 @@ func (b *Bridge) Unlink(ctx context.Context) error {
 
 // Test sends a message to a number on the list, for the button in Settings.
 func (b *Bridge) Test(ctx context.Context, to string) error {
-	return b.send(ctx, to, "Kitties: WhatsApp is linked. ✓")
+	// The person's own test goes even in the quiet hours.
+	return b.send(context.WithValue(ctx, personKey{}, true), to, "Kitties: WhatsApp is linked. ✓")
+}
+
+type personKey struct{}
+
+// testing reports whether the person (not a kitty) asked for the message.
+func (b *Bridge) testing(ctx context.Context) bool {
+	on, _ := ctx.Value(personKey{}).(bool)
+	return on
 }
 
 func (b *Bridge) saveLocked() error {
@@ -734,7 +874,7 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 	if ev.Group && (!b.set.Groups || !IsGroup(ev.Chat)) {
 		return
 	}
-	in := inbound{from: ev.From, name: ev.Name, text: text, files: ev.Files, key: ev.From, to: ev.From}
+	in := inbound{from: ev.From, name: ev.Name, text: text, raw: text, files: ev.Files, key: ev.From, to: ev.From}
 	if ev.Group {
 		// In a group on the list anyone may talk to the kitty, by naming it.
 		b.sawLocked(ev.Chat, ev.ChatName)
@@ -775,6 +915,10 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 		// One message of a chat at a time, in order.
 		lock.Lock()
 		defer lock.Unlock()
+		b.waitQuiet(ctx, c, in)
+		if ctx.Err() != nil {
+			return
+		}
 		b.answer(ctx, c, in)
 	}()
 }
@@ -783,10 +927,12 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 // where the answer goes.
 type inbound struct {
 	from, name, text string
-	files            []File
-	key, to          string
-	group            bool
-	groupName        string
+	// raw is the text as it came, to quote it.
+	raw       string
+	files     []File
+	key, to   string
+	group     bool
+	groupName string
 	// who is the number or group whose kitty answers; ref the message.
 	who string
 	ref Ref
@@ -1012,7 +1158,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 	first := len(sess.Turns) - len(turns)
 	working := map[int]string{}
 	for i, t := range turns {
-		b.replyTo(ctx, c, in.to, in.ref, t.Text)
+		b.replyTo(ctx, c, in.to, &in, t.Text)
 		b.replyFiles(ctx, c, in.to, t.Artifacts)
 		if t.Working {
 			working[first+i] = t.Text
@@ -1099,12 +1245,21 @@ func LanguageOf(lang, text string) string {
 
 // reply writes text to a number, in parts WhatsApp takes.
 func (b *Bridge) reply(ctx context.Context, c Client, to, text string) {
-	b.replyTo(ctx, c, to, Ref{}, text)
+	b.replyTo(ctx, c, to, nil, text)
 }
 
-// replyTo writes text to a number or a group; an answer that is a single emoji goes as a
-// reaction to ref, when there is one.
-func (b *Bridge) replyTo(ctx context.Context, c Client, to string, ref Ref, text string) {
+// replyTo writes text to a number or a group as the answer to in (nil: none). An answer that
+// is a single emoji goes as a reaction; one in a group, or after newer messages of the chat,
+// quotes the message it answers.
+func (b *Bridge) replyTo(ctx context.Context, c Client, to string, in *inbound, text string) {
+	var ref Ref
+	quote := false
+	if in != nil {
+		ref = in.ref
+		b.mu.Lock()
+		quote = ref.ID != "" && (in.group || b.refs[in.key].ID != ref.ID)
+		b.mu.Unlock()
+	}
 	if e := strings.TrimSpace(text); ref.ID != "" && IsEmoji(e) {
 		if err := b.take(); err != nil {
 			b.opt.Log("whatsapp: react in %s: %v", to, err)
@@ -1115,12 +1270,18 @@ func (b *Bridge) replyTo(ctx context.Context, c Client, to string, ref Ref, text
 		}
 		return
 	}
-	for _, part := range Split(Plain(text), maxPart) {
+	for i, part := range Split(Plain(text), maxPart) {
 		if err := b.take(); err != nil {
 			b.opt.Log("whatsapp: reply to %s: %v", to, err)
 			return
 		}
-		if err := c.Send(ctx, to, part); err != nil {
+		var err error
+		if i == 0 && quote {
+			err = c.SendReply(ctx, to, part, ref, in.raw)
+		} else {
+			err = c.Send(ctx, to, part)
+		}
+		if err != nil {
 			b.opt.Log("whatsapp: reply to +%s: %v", to, err)
 			return
 		}
@@ -1244,9 +1405,13 @@ func (b *Bridge) sendWith(ctx context.Context, to, text, file string) error {
 	}
 	b.mu.Lock()
 	n, err := b.destLocked(to)
+	inQuiet, _ := b.quietLocked(b.now())
 	b.mu.Unlock()
 	if err != nil {
 		return err
+	}
+	if inQuiet && !b.testing(ctx) {
+		return ErrQuiet
 	}
 	text = strings.TrimSpace(text)
 	if text == "" && file == "" {
@@ -1296,9 +1461,13 @@ func (b *Bridge) react(ctx context.Context, to, emoji string) error {
 		key = "g:" + dest
 	}
 	ref := b.refs[key]
+	inQuiet, _ := b.quietLocked(b.now())
 	b.mu.Unlock()
 	if err != nil {
 		return err
+	}
+	if inQuiet {
+		return ErrQuiet
 	}
 	if ref.ID == "" {
 		return errors.New("there is no message of that chat to react to yet")

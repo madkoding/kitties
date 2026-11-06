@@ -83,6 +83,16 @@ func (f *fakeClient) SendFile(_ context.Context, to string, file File, caption s
 	return nil
 }
 
+func (f *fakeClient) SendReply(_ context.Context, to, text string, ref Ref, quoted string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.sendErr != nil {
+		return f.sendErr
+	}
+	f.sent = append(f.sent, to+": > "+ref.ID+" "+quoted+" | "+text)
+	return nil
+}
+
 func (f *fakeClient) MarkRead(_ context.Context, ref Ref) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -1324,5 +1334,149 @@ func TestHourlyLimit(t *testing.T) {
 	}
 	if st := r.b.Status(); st.SentLastHour != 1 {
 		t.Fatalf("sent = %d", st.SentLastHour)
+	}
+}
+
+func TestQuotes(t *testing.T) {
+	r := newRig(t)
+	f := r.linked(t)
+	// A direct answer to the last message does not quote it.
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "hola", Ref: Ref{ID: "m1"}})
+	eventually(t, "the reply", func() bool { return len(f.messages()) == 1 })
+	if got := f.messages()[0]; strings.Contains(got, "> ") {
+		t.Fatalf("quoted = %q", got)
+	}
+	// Once a newer message came, the answer quotes the one it answers.
+	in := &inbound{key: "56912345678", to: "56912345678", raw: "¿y lo otro?", ref: Ref{ID: "m2"}}
+	r.b.mu.Lock()
+	r.b.refs["56912345678"] = Ref{ID: "m3"}
+	r.b.mu.Unlock()
+	r.b.replyTo(context.Background(), f, in.to, in, "Ya va.")
+	if got := f.messages()[1]; got != "56912345678: > m2 ¿y lo otro? | Ya va." {
+		t.Fatalf("quote = %q", got)
+	}
+	// In a group the answer always quotes, only its first part.
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Allow: []string{"+56912345678"}, Groups: true, AllowGroups: []string{"120363@g.us"}}); err != nil {
+		t.Fatal(err)
+	}
+	r.chats.reply = func(string) ([]chat.Turn, error) {
+		return []chat.Turn{{From: "mimi", Text: strings.Repeat("a", maxPart) + " b"}}, nil
+	}
+	f.push(Event{Kind: EvMessage, From: "4411112222", Name: "Ana", Group: true, Chat: "120363@g.us", Text: "mimi, ¿hora?", Ref: Ref{ID: "g1"}})
+	eventually(t, "the group reply", func() bool { return len(f.messages()) == 4 })
+	if got := f.messages(); !strings.HasPrefix(got[2], "120363@g.us: > g1 mimi, ¿hora? | aaa") || got[3] != "120363@g.us: b" {
+		t.Fatalf("group = %q", got[2:])
+	}
+}
+
+func TestQuietHours(t *testing.T) {
+	r := newRig(t)
+	clock := time.Date(2026, 11, 6, 23, 0, 0, 0, time.Local)
+	var slept []time.Duration
+	var mu sync.Mutex
+	r.b.now = func() time.Time { return clock }
+	r.b.sleep = func(_ context.Context, d time.Duration) {
+		mu.Lock()
+		defer mu.Unlock()
+		slept = append(slept, d)
+	}
+	f := r.linked(t)
+	set := Settings{Enabled: true, Kitty: "luna", Allow: []string{"+56912345678"}, QuietFrom: "22:00", QuietTo: "08:00"}
+	if err := r.b.Apply(set); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.b.Status(); !st.Quiet || st.QuietFrom != "22:00" {
+		t.Fatalf("status = %+v", st)
+	}
+	// The kitties do not write; the person's test does.
+	c := connectorOf{r.b}
+	if _, err := c.Call(context.Background(), map[string]any{"to": "+56912345678", "text": "x"}); !errors.Is(err, ErrQuiet) {
+		t.Fatalf("send = %v", err)
+	}
+	if err := r.b.Test(context.Background(), "+56912345678"); err != nil {
+		t.Fatal(err)
+	}
+	// Two messages: one note in luna's language, then both answered when the hours end.
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "hola", Ref: Ref{ID: "m1"}})
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "¿estás?", Ref: Ref{ID: "m2"}})
+	eventually(t, "both answers", func() bool { return len(f.messages()) == 4 })
+	got := f.messages()
+	if got[1] != "56912345678: 🌙 luna descansa hasta las 08:00; te responde entonces." || strings.Contains(got[3], "🌙") {
+		t.Fatalf("sent = %q", got)
+	}
+	if _, err := c.Call(context.Background(), map[string]any{"action": "react", "emoji": "👍"}); !errors.Is(err, ErrQuiet) {
+		t.Fatalf("react = %v", err)
+	}
+	mu.Lock()
+	if len(slept) != 2 || slept[0] != 9*time.Hour {
+		t.Fatalf("slept = %v", slept)
+	}
+	mu.Unlock()
+	if st := r.b.Status(); st.Waiting != 0 {
+		t.Fatalf("waiting = %d", st.Waiting)
+	}
+}
+
+func TestQuietWindow(t *testing.T) {
+	b := &Bridge{}
+	day := func(h, m int) time.Time { return time.Date(2026, 11, 6, h, m, 0, 0, time.UTC) }
+	cases := []struct {
+		from, to string
+		at       time.Time
+		on       bool
+		until    time.Time
+	}{
+		{"22:00", "08:00", day(23, 0), true, day(8, 0).AddDate(0, 0, 1)},
+		{"22:00", "08:00", day(3, 0), true, day(8, 0)},
+		{"22:00", "08:00", day(12, 0), false, time.Time{}},
+		{"13:00", "14:30", day(13, 59), true, day(14, 30)},
+		{"13:00", "14:30", day(14, 30), false, time.Time{}},
+		{"", "", day(1, 0), false, time.Time{}},
+	}
+	for _, tc := range cases {
+		b.set.QuietFrom, b.set.QuietTo = tc.from, tc.to
+		on, until := b.quietLocked(tc.at)
+		if on != tc.on || !until.Equal(tc.until) {
+			t.Fatalf("%s-%s at %s = %v %v", tc.from, tc.to, tc.at, on, until)
+		}
+	}
+	for _, bad := range [][2]string{{"22:00", ""}, {"25:00", "08:00"}, {"08:00", "08:00"}, {"x", "y"}} {
+		if _, _, err := quietHours(bad[0], bad[1]); err == nil {
+			t.Fatalf("%v was taken", bad)
+		}
+	}
+	if f, to, err := quietHours(" 7:05 ", "9:00"); err != nil || f != "07:05" || to != "09:00" {
+		t.Fatalf("unpadded = %s %s %v", f, to, err)
+	}
+	if _, err := New(Options{Dir: t.TempDir(), Defaults: &Settings{QuietFrom: "22:00"}}); err == nil {
+		t.Fatal("half quiet hours in the file were taken")
+	}
+	// sleepCtx ends with its context.
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	sleepCtx(ctx, time.Hour)
+	sleepCtx(context.Background(), time.Millisecond)
+}
+
+func TestReconnect(t *testing.T) {
+	r := newRig(t)
+	if err := r.b.Reconnect(); !errors.Is(err, ErrNotOn) {
+		t.Fatalf("off = %v", err)
+	}
+	f := r.linked(t)
+	if err := r.b.Reconnect(); !errors.Is(err, ErrNoSession) {
+		t.Fatalf("no session = %v", err)
+	}
+	f.push(Event{Kind: EvSession, Session: []byte("state")})
+	eventually(t, "the session", func() bool { return r.b.Status().Linked })
+	if err := r.b.Reconnect(); err != nil {
+		t.Fatal(err)
+	}
+	f2 := r.next(t)
+	f2.mu.Lock()
+	session := string(f2.session)
+	f2.mu.Unlock()
+	if f2 == f || session != "state" {
+		t.Fatalf("reconnected with %q", session)
 	}
 }
