@@ -2233,6 +2233,36 @@ test("Settings: the gateway is exposed local, LAN or WAN, WAN after accepting th
   expect(put).toEqual([{ mode: "wan", accept_risk: true }]);
 });
 
+test("Settings: a first start open to the LAN says so and offers Local", async ({ page }) => {
+  const exposure = {
+    mode: "lan",
+    listen: "192.168.1.20:7488",
+    lan_ip: "192.168.1.20",
+    can_change: true,
+    auto: true,
+  };
+  const put: unknown[] = [];
+  await page.route("**/v1/exposure", (route) => {
+    if (route.request().method() === "PUT") {
+      put.push(route.request().postDataJSON());
+      return route.fulfill({ status: 202, json: { restarting: true } });
+    }
+    return route.fulfill({ json: exposure });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("exposure");
+  await expect(box.getByTestId("exposure-first-start")).toContainText("since the first start");
+  await box.getByTestId("exposure-first-start").scrollIntoViewIfNeeded();
+  await shot(page, "67-settings-exposure-first-start");
+  // This page runs on 127.0.0.1, so going back to Local asks nothing.
+  await box.getByTestId("exposure-local").click();
+  await box.getByTestId("exposure-apply").click();
+  await expect(box.getByTestId("exposure-restarting")).toBeVisible();
+  expect(put).toEqual([{ mode: "local", accept_risk: false }]);
+});
+
 test("in the desktop app, Network access opens Kitties in a browser signed in, and on a phone with a QR code", async ({
   page,
 }) => {

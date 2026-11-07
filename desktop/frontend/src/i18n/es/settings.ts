@@ -261,6 +261,10 @@ const dict: Dictionary = {
   "WAN listens on every interface": "WAN escucha en todas las interfaces",
   "The page and its token travel over plain http and the token is the only password. Use it only behind a firewall or a VPN, or put https in front.":
     "La página y su token viajan por http sin cifrar y el token es la única contraseña. Úsalo solo tras un firewall o una VPN, o pon https delante.",
+  "Open to your local network since the first start":
+    "Abierto a tu red local desde el primer arranque",
+  "Kitties listens on your network so it can be set up from another computer, behind the token. The page travels over plain http: when you are done, choose Local.":
+    "Kitties escucha en tu red para que puedas configurarlo desde otro equipo, protegido por el token. La página viaja por http sin cifrar: cuando termines, elige Local.",
   "I understand the risk": "Entiendo el riesgo",
   "Saved: restarting Kitties…": "Guardado: reiniciando Kitties…",
   "Apply and restart": "Aplicar y reiniciar",

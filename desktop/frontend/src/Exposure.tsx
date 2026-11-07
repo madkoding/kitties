@@ -111,6 +111,18 @@ export default function Exposure() {
       <p class="text-xs text-[var(--t3)] mb-2">
         {t("Where Kitties can be reached from. Now: {addr}.", { addr: cur.listen })}
       </p>
+      {cur.auto && cur.mode === "lan" && (
+        <div class="callout mb-2" role="note" data-testid="exposure-first-start">
+          <div class="font-semibold text-sm text-[var(--c-amber)]">
+            {t("Open to your local network since the first start")}
+          </div>
+          <p class="text-xs text-[var(--t3)] mt-1">
+            {t(
+              "Kitties listens on your network so it can be set up from another computer, behind the token. The page travels over plain http: when you are done, choose Local.",
+            )}
+          </p>
+        </div>
+      )}
       <div class="flex flex-col gap-2" role="radiogroup">
         {options.map((o, i) => (
           <label

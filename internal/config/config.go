@@ -457,7 +457,7 @@ func Defaults() Config {
 			MemoryMB: 2048, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6, AutoOffMinutes: kitty.DefaultAutoOffMinutes,
 		},
 		Cloud:      Cloud{MaxRunning: 5, IdleMinutes: 15, Size: "small", APIKeyEnv: "BOAT_API_KEY"},
-		Gateway:    Gateway{Listen: "127.0.0.1:7488"},
+		Gateway:    Gateway{Listen: DefaultListen},
 		Updates:    Updates{Gateway: UpdateNotify, CheckHours: 12, Repo: "madkoding/kitties", API: "https://api.github.com"},
 		Connectors: map[string]Connector{},
 	}

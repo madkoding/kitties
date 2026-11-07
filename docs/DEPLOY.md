@@ -30,6 +30,17 @@ Settings, Preferences, Network access, which keeps it in `<data dir>/exposure`, 
 and asks for an explicit yes for WAN. That file wins over `KITTIES_LISTEN`; in a container, set
 `KITTIES_LISTEN` and the published port instead (Settings shows it read-only there).
 
+**The first start opens to the local network.** A gateway that never ran (no `<data dir>/gateway.token`
+yet), with nobody's choice saved, the default address `127.0.0.1:7488` and no public URL, https or
+proxy, listens on this machine's LAN address (and `127.0.0.1`) so a server without a screen can be
+set up from another computer. The page asks for the token, which only the console (and the token
+file) has; the console says it opened to the network, and Settings, Preferences, Network access
+shows a notice with the way back to **Local**. It keeps that choice in `<data dir>/exposure` (marked
+by `<data dir>/exposure.auto` until the person picks one). To start on this machine alone, pass
+`-listen 127.0.0.1:7488`, or save `local` in `<data dir>/exposure` before the first start.
+
+<img src="screenshots/67-settings-exposure-first-start.png" alt="Settings, Network access: open to the local network since the first start, with the way back to Local" width="100%">
+
 The settings that matter, as environment variables (they override the `gateway` block of the
 configuration file, and no file is needed):
 

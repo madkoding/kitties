@@ -13,8 +13,8 @@
 #
 # Options (or the environment variable in brackets):
 #   --version vX.Y.Z    release to install; default the latest        [KITTIES_VERSION]
-#   --expose MODE       local (127.0.0.1, default) | lan (this machine's LAN IP) | wan (0.0.0.0) [KITTIES_EXPOSE]
-#   --listen ADDR       exact address of the gateway, instead of --expose; default 127.0.0.1:7488 [KITTIES_LISTEN]
+#   --expose MODE       lan (this machine's LAN IP, default when it has one) | local (127.0.0.1) | wan (0.0.0.0) [KITTIES_EXPOSE]
+#   --listen ADDR       exact address of the gateway, instead of --expose; default <LAN IP>:7488, else 127.0.0.1:7488 [KITTIES_LISTEN]
 #   --public-url URL    where the page is reached from (behind https)  [KITTIES_PUBLIC_URL]
 #   --pubkey KEY        release signing key (base64); with it the signature is required [KITTIES_PUBKEY]
 #   --no-service        install the binary only (no user, no systemd)
@@ -46,6 +46,7 @@ SERVICE=1
 DRY_RUN=0
 OPEN_FW=0; FW_GIVEN=0
 CADDY=0; CADDY_GIVEN=0
+AUTO_LAN=0
 CADDY_DIR="${KITTIES_CADDY_DIR:-/etc/caddy}"
 KEY_VAR=
 KEY_VAL=
@@ -133,16 +134,20 @@ ask_listen() {
         if valid_port "$REPLY_TEXT"; then port="$REPLY_TEXT"; else warn "$(L "not a valid port, using $DEFAULT_PORT" "puerto no válido, uso $DEFAULT_PORT")"; fi
     fi
     ip=$(lan_ip)
+    # The local network is the default when there is one: the page can then be set up from another
+    # computer (behind the token), and Settings takes it back to this machine alone.
+    def=1; [ -z "$ip" ] || def=2
     while :; do
         [ "$NO_ANSWER" -eq 0 ] || die "$(L 'no answer from the terminal, nothing was changed' 'sin respuesta de la terminal, no se cambió nada')"
         echo
         note "$(L 'Where should the gateway be reachable from?' '¿Desde dónde se podrá llegar al gateway?')"
-        note "  1) $(L "Local (127.0.0.1:$port)   - only this machine, safest, the default" "Local (127.0.0.1:$port)   - solo esta máquina, lo más seguro, por defecto")"
-        note "  2) $(L "LAN (${ip:-your LAN IP}:$port)   - other devices at home/office" "LAN (${ip:-IP de tu LAN}:$port)   - otros equipos de tu casa/oficina")"
+        note "  1) $(L "Local (127.0.0.1:$port)   - only this machine, the safest" "Local (127.0.0.1:$port)   - solo esta máquina, lo más seguro")"
+        note "  2) $(L "LAN (${ip:-your LAN IP}:$port)   - other devices at home/office, to set it up from another computer" "LAN (${ip:-IP de tu LAN}:$port)   - otros equipos de tu casa/oficina, para configurarlo desde otro equipo")"
         note "  3) $(L "WAN (0.0.0.0:$port)   - every interface, also the internet if the server is public" "WAN (0.0.0.0:$port)   - todas las interfaces, también internet si el servidor es público")"
-        ask "$(L 'Choose 1-3 [1]: ' 'Elige 1-3 [1]: ')"
+        ask "$(L "Choose 1-3 [$def]: " "Elige 1-3 [$def]: ")"
+        [ -n "$REPLY_TEXT" ] || { REPLY_TEXT=$def; [ "$def" -eq 1 ] || AUTO_LAN=1; }
         case "$REPLY_TEXT" in
-            ''|1) LISTEN="127.0.0.1:$port"; return ;;
+            1) LISTEN="127.0.0.1:$port"; AUTO_LAN=0; return ;;
             2)
                 if [ -z "$ip" ]; then warn "$(L 'could not find the LAN address; pick another option' 'no encontré la dirección de la LAN; elige otra opción')"; continue; fi
                 LISTEN="$ip:$port"; return ;;
@@ -151,7 +156,7 @@ ask_listen() {
                 warn "$(L 'WAN (0.0.0.0) listens on EVERY network interface.' 'WAN (0.0.0.0) escucha en TODAS las interfaces de red.')"
                 note "$(L 'The page and its token travel over plain http, and the token is the only password.' 'La página y su token viajan por http sin cifrar, y el token es la única contraseña.')"
                 note "$(L 'Do it only behind a firewall or a VPN, or put nginx/Caddy with https in front.' 'Hazlo solo tras un firewall o VPN, o pon nginx/Caddy con https delante.')"
-                if confirm "$(L 'Listen on every interface anyway?' '¿Escuchar en todas las interfaces de todos modos?')" n; then LISTEN="0.0.0.0:$port"; return; fi ;;
+                if confirm "$(L 'Listen on every interface anyway?' '¿Escuchar en todas las interfaces de todos modos?')" n; then LISTEN="0.0.0.0:$port"; AUTO_LAN=0; return; fi ;;
             *) warn "$(L 'choose 1, 2 or 3' 'elige 1, 2 o 3')" ;;
         esac
     done
@@ -236,6 +241,14 @@ ask_caddy() {
     if confirm "$(L "Write $CADDY_DIR/conf.d/kitties.caddy and reload Caddy?" "¿Escribir $CADDY_DIR/conf.d/kitties.caddy y recargar Caddy?")" y; then CADDY=1; fi
 }
 
+# Asked nothing (--yes, no terminal) and told no address: the local network when this machine is
+# in one, so the page can be set up from another computer (behind the token); not with a public
+# URL, which a proxy on this machine serves.
+if [ -z "$EXPOSE" ] && [ "$LISTEN_GIVEN" -eq 0 ] && [ "$INTERACTIVE" -eq 0 ] && [ -z "$PUBLIC_URL" ]; then
+    xip=$(lan_ip)
+    if [ -n "$xip" ]; then LISTEN="$xip:${LISTEN##*:}"; AUTO_LAN=1; fi
+fi
+
 if [ -n "$EXPOSE" ]; then
     xport="${LISTEN##*:}"
     case "$EXPOSE" in
@@ -296,10 +309,15 @@ if [ "$INTERACTIVE" -eq 1 ] && [ "$SERVICE" -eq 1 ]; then
     confirm "$(L 'Install now?' '¿Instalar ahora?')" y || die "$(L 'cancelled, nothing was changed' 'cancelado, no se cambió nada')"
 elif [ "$FIRST_INSTALL" -eq 1 ] && [ "$SERVICE" -eq 1 ]; then
     case "$LISTEN" in 127.0.0.1:*|localhost:*) ;; *) warn "$(L "listening on $LISTEN: the page and its token travel over plain http; use a firewall, a VPN or https in front" "escuchando en $LISTEN: la página y su token viajan por http sin cifrar; usa firewall, VPN o https delante")" ;; esac
+    if [ "$AUTO_LAN" -eq 1 ]; then
+        warn "$(L "the gateway listens on your local network ($LISTEN) so you can set it up from another computer; only this machine: --expose local, or Settings, Preferences, Network access" "el gateway escucha en tu red local ($LISTEN) para que lo configures desde otro equipo; solo esta máquina: --expose local, o Ajustes, Preferencias, Acceso de red")"
+        fw=$(fw_kind)
+        [ -z "$fw" ] || [ "$OPEN_FW" -eq 1 ] || warn "$(L "$fw is active: other computers cannot reach port ${LISTEN##*:} until you open it (--open-firewall)" "$fw está activo: otros equipos no llegan al puerto ${LISTEN##*:} hasta que lo abras (--open-firewall)")"
+    fi
 fi
 
 if [ "$DRY_RUN" -eq 1 ]; then
-    say "dry run: LISTEN=$LISTEN PUBLIC_URL=$PUBLIC_URL FIREWALL=$OPEN_FW CADDY=$CADDY KEY=$KEY_VAR"
+    say "dry run: LISTEN=$LISTEN PUBLIC_URL=$PUBLIC_URL FIREWALL=$OPEN_FW CADDY=$CADDY KEY=$KEY_VAR AUTO_LAN=$AUTO_LAN"
     exit 0
 fi
 
@@ -426,6 +444,17 @@ if [ ! -f "$env_file" ]; then
     chown "$USER_NAME:$USER_NAME" "$env_file"
     chmod 0600 "$env_file"
     say "$(L "wrote $env_file" "escribí $env_file")"
+    # Where it listens is kept where Settings changes it (the gateway reads it before KITTIES_LISTEN);
+    # a LAN taken by default is marked so Settings offers going back to this machine alone.
+    case "${LISTEN%:*}" in
+        127.*|localhost) mode=local ;;
+        0.0.0.0|'') mode=wan ;;
+        *) mode=lan ;;
+    esac
+    printf '%s\n' "$mode" > "$DATA_DIR/exposure"
+    if [ "$AUTO_LAN" -eq 1 ]; then printf 'installer\n' > "$DATA_DIR/exposure.auto"; else rm -f "$DATA_DIR/exposure.auto"; fi
+    chown "$USER_NAME:$USER_NAME" "$DATA_DIR/exposure" "$DATA_DIR/exposure.auto" 2>/dev/null || true
+    chmod 0600 "$DATA_DIR/exposure"
 else
     # An older install kept the token in the env file, where Settings cannot replace it: it moves,
     # unchanged, to the gateway's own file (nobody has to sign in again).
@@ -571,7 +600,9 @@ case "$host" in
     0.0.0.0|'')
         note "  1. $(L "Open port $port only to who needs it (firewall/VPN) and put https in front before using it over the internet." "Abre el puerto $port solo a quien lo necesite (firewall/VPN) y pon https delante antes de usarlo por internet.")" ;;
     *)
-        note "  1. $(L "Reachable from your local network. Put https in front before using it over the internet." "Accesible desde tu red local. Pon https delante antes de usarlo por internet.")" ;;
+        note "  1. $(L "Reachable from your local network, so you can set it up from another computer with the token." "Accesible desde tu red local, para configurarlo desde otro equipo con el token.")"
+        note "     $(L 'When you are done, only this machine: Settings, Preferences, Network access, Local.' 'Cuando termines, solo esta máquina: Ajustes, Preferencias, Acceso de red, Local.')"
+        note "     $(L 'Put https in front before using it over the internet.' 'Pon https delante antes de usarlo por internet.')" ;;
 esac
 case "$cur_public" in
     https://*)

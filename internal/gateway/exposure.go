@@ -16,6 +16,9 @@ type ExposureInfo struct {
 	LANIP     string `json:"lan_ip,omitempty"`
 	CanChange bool   `json:"can_change"`
 	Why       string `json:"why,omitempty"`
+	// Auto says the gateway opened itself to the local network on its first start (nobody chose
+	// it), so Settings can offer to go back to this machine alone.
+	Auto bool `json:"auto,omitempty"`
 	// TokenRotate says Settings can replace the gateway's token; TokenWhy why not.
 	TokenRotate bool   `json:"token_rotate"`
 	TokenWhy    string `json:"token_why,omitempty"`

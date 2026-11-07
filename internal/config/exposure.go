@@ -21,6 +21,14 @@ const (
 // holds even where the service's environment file says another address.
 const ExposureFile = "exposure"
 
+// ExposureAutoFile marks an exposure the gateway chose by itself on its first start (the local
+// network, so it can be set up from another computer), not the person. Settings says so and
+// offers to go back to this machine alone; any choice of the person removes it.
+const ExposureAutoFile = "exposure.auto"
+
+// DefaultListen is the gateway's address when nobody set one.
+const DefaultListen = "127.0.0.1:7488"
+
 // ValidExposure reports whether mode is one of the three.
 func ValidExposure(mode string) bool {
 	return mode == ExposureLocal || mode == ExposureLAN || mode == ExposureWAN
@@ -93,7 +101,47 @@ func SaveExposure(dataDir, mode string) error {
 	if err := os.MkdirAll(dataDir, 0o700); err != nil {
 		return err
 	}
+	if err := os.Remove(filepath.Join(dataDir, ExposureAutoFile)); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	return os.WriteFile(filepath.Join(dataDir, ExposureFile), []byte(mode+"\n"), 0o600)
+}
+
+// ExposureAuto reports whether the saved exposure is the one the first start chose by itself.
+func ExposureAuto(dataDir string) bool {
+	_, err := os.Stat(filepath.Join(dataDir, ExposureAutoFile))
+	return err == nil
+}
+
+// FirstStartLAN opens a gateway that never ran to the local network, so a server without a
+// screen can be set up from another computer: the page asks for the token, which only the
+// console (and the token file) has. It does so only where nobody chose: no exposure saved, no
+// token kept yet (the gateway never started with this data directory), the default address,
+// and no public URL, https or proxy in front (those are set up on purpose). lanIP is this
+// machine's address in the local network; without one nothing changes. It keeps the choice,
+// marked as the gateway's own, and reports the new listen address ("" when nothing changed).
+func (c *Config) FirstStartLAN(lanIP string) (string, error) {
+	g := c.Gateway
+	dir := c.DataDirOr()
+	if lanIP == "" || g.Listen != DefaultListen || g.PublicURL != "" || g.TLSCert != "" || g.TrustProxy || SavedExposure(dir) != "" {
+		return "", nil
+	}
+	if _, err := os.Stat(filepath.Join(dir, "gateway.token")); err == nil {
+		return "", nil
+	}
+	_, port, _ := net.SplitHostPort(g.Listen)
+	listen, err := ListenFor(ExposureLAN, port, lanIP)
+	if err != nil {
+		return "", err
+	}
+	if err := SaveExposure(dir, ExposureLAN); err != nil {
+		return "", err
+	}
+	if err := os.WriteFile(filepath.Join(dir, ExposureAutoFile), []byte("first start\n"), 0o600); err != nil {
+		return "", err
+	}
+	c.Gateway.Listen = listen
+	return listen, nil
 }
 
 // ApplyExposure makes the saved choice, if any, the gateway's listen address, keeping the port.

@@ -1272,6 +1272,8 @@ export type Exposure = {
   lan_ip?: string;
   can_change: boolean;
   why?: string;
+  // auto: the gateway opened itself to the local network on its first start, nobody chose it.
+  auto?: boolean;
   token_rotate?: boolean;
   token_why?: string;
 };

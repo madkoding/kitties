@@ -82,3 +82,13 @@ func progName() string {
 	}
 	return name
 }
+
+// printFirstStartLAN says, under the welcome block, that this first start listens on the local
+// network so it can be set up from another computer, and how to go back to this machine alone.
+func printFirstStartLAN(w io.Writer, listen string) {
+	fmt.Fprintf(w, "   First start: Kitties listens on your local network (http://%s) too,\n", listen)
+	fmt.Fprintln(w, "   so you can set it up from another computer with the token above.")
+	fmt.Fprintln(w, "   The page travels over plain http: when you are done, choose Local in")
+	fmt.Fprintln(w, "   Settings, Preferences, Network access (only this machine).")
+	fmt.Fprintln(w)
+}

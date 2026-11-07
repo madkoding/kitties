@@ -24,9 +24,20 @@ func exposureOf(cfg config.Config, listen string) *exposure {
 	return &exposure{dataDir: cfg.DataDirOr(), listen: listen, tokenFixed: cfg.Gateway.Token != ""}
 }
 
+// lanIP is this machine's address in the local network; a variable for the tests.
+var lanIP = config.LANIP
+
+// inContainer reports whether the gateway runs in a container, where the compose file decides
+// where it listens.
+func inContainer() bool {
+	_, err := os.Stat("/.dockerenv")
+	return err == nil || os.Getenv("KITTIES_IN_DOCKER") != ""
+}
+
 func (e *exposure) Exposure() gateway.ExposureInfo {
-	info := gateway.ExposureInfo{Mode: config.ExposureOf(e.listen), Listen: e.listen, LANIP: config.LANIP(), CanChange: true}
-	if _, err := os.Stat("/.dockerenv"); err == nil || os.Getenv("KITTIES_IN_DOCKER") != "" {
+	info := gateway.ExposureInfo{Mode: config.ExposureOf(e.listen), Listen: e.listen, LANIP: lanIP(), CanChange: true}
+	info.Auto = info.Mode == config.ExposureLAN && config.ExposureAuto(e.dataDir)
+	if inContainer() {
 		info.CanChange = false
 		info.Why = "this gateway runs in a container: set KITTIES_LISTEN and the published port in the compose file"
 	}
@@ -45,7 +56,7 @@ func (e *exposure) SetExposure(mode string) error {
 	if err != nil {
 		return err
 	}
-	if _, err := config.ListenFor(mode, port, config.LANIP()); err != nil {
+	if _, err := config.ListenFor(mode, port, lanIP()); err != nil {
 		return err
 	}
 	return config.SaveExposure(e.dataDir, mode)
