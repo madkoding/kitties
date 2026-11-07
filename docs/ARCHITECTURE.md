@@ -161,7 +161,7 @@ commands that need a container say so.
 
 A session is a list of turns and a list of member kitty ids, saved as `<data_dir>/chats/<id>.json`.
 Every save also refreshes the session's **gist** (`gist.go`): the last turn with words, as one
-line of at most 200 characters (the sidebar shows up to three lines), without markdown and with keys, tokens, passwords said with their
+line of at most 140 characters (the sidebar shows up to two lines), without markdown and with keys, tokens, passwords said with their
 name, e-mail addresses, long numbers and link paths masked. It needs no model, so listing chats
 stays free; the sidebar shows it under each chat's title and `chat_list` (MCP) returns it.
 

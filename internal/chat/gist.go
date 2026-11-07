@@ -7,14 +7,14 @@ import (
 	"unicode/utf8"
 )
 
-// A chat's gist is the short text (three lines at most) the sidebar shows under its title, so the person sees what each
+// A chat's gist is the short text (two lines at most) the sidebar shows under its title, so the person sees what each
 // chat is about without opening it. It is made from the chat's last words, without asking any
 // brain: it costs nothing, it is kept on the session and it changes when the chat does (save).
 // A gist leaves the chat (a list, a phone, a screenshot), so whatever looks like a secret or a
 // person's details is masked before it is cut.
 
 // GistLen is the most a gist holds, in characters.
-const GistLen = 200
+const GistLen = 140
 
 // gistScan is how much of a turn a gist reads: the start says what the turn is about.
 const gistScan = 600
@@ -43,7 +43,7 @@ var (
 	gistSpace  = regexp.MustCompile(`\s+`)
 )
 
-// Gist is the text on a single line (the sidebar wraps it to three), without markdown and with whatever looks like a secret, a link's
+// Gist is the text on a single line (the sidebar wraps it to two), without markdown and with whatever looks like a secret, a link's
 // path, an address or a long number masked, at most GistLen characters.
 func Gist(text string) string {
 	if len(text) > gistScan {

@@ -147,7 +147,7 @@ type Session struct {
 	SummaryUpTo int    `json:"summary_up_to,omitempty"`
 	// Reports marks the lead kitty's Reports thread, where the other kitties' news land.
 	Reports bool `json:"reports,omitempty"`
-	// Gist is the chat's last words, up to three lines in the sidebar, with secrets and personal details masked, and
+	// Gist is the chat's last words, up to two lines in the sidebar, with secrets and personal details masked, and
 	// GistBy who said them ("user" or a kitty's name): what the sidebar shows under the title.
 	Gist   string `json:"gist,omitempty"`
 	GistBy string `json:"gist_by,omitempty"`

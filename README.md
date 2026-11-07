@@ -41,7 +41,7 @@ a desktop app and an Android app.
   them, gathers their answers into one report, and the others' news reach you through it
   ([details](docs/AUTONOMY.md#the-lead-kitty)).
 - **A sidebar that tells you what is going on.** Your kitties come first, then the chats; each chat
-  shows up to three lines of its last words (who said it, in a group), made on the gateway without asking
+  shows up to two lines of its last words (who said it, in a group), made on the gateway without asking
   any model, with keys, passwords, addresses and long numbers masked.
 - **Trust and memory.** Notes that persist, thumbs that teach it your standards, action limits and
   approvals that loosen as it earns trust, and notifications to your phone when it needs you.

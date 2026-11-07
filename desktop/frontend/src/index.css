@@ -447,12 +447,12 @@ select:focus {
 .row > .row-actions {
   pointer-events: auto;
 }
-/* A chat's gist: its last words under the title, muted, three lines at most. */
+/* A chat's gist: its last words under the title, muted, two lines at most. */
 .chat-gist {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
   overflow-wrap: anywhere;
   font-size: 0.6875rem;
@@ -461,6 +461,26 @@ select:focus {
 }
 .row.on .chat-gist {
   color: var(--t2);
+}
+
+.row.chat-row {
+  margin-top: 0.625rem;
+  align-items: flex-start;
+}
+/* A chat's tags sit on the top edge of its box, so the title and the gist keep the width. */
+.row > .chat-badges {
+  position: absolute;
+  top: 0;
+  right: 0.5rem;
+  transform: translateY(-50%);
+  display: flex;
+  gap: 0.25rem;
+  /* Solid behind the tags, so the edge of the box does not cross them. */
+  background: rgb(var(--bg-rgb));
+  border-radius: var(--radius-cut);
+}
+.chat-badges .tag {
+  line-height: 1.3;
 }
 
 .section-title {

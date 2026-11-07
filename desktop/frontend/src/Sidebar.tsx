@@ -139,7 +139,7 @@ export default function Sidebar(p: Props) {
             {p.chats.map((c, i) => (
               <div
                 key={c.id}
-                class={`row ${p.current === c.id ? "on" : ""}`}
+                class={`row chat-row ${p.current === c.id ? "on" : ""}`}
                 style={`animation-delay: ${Math.min(i, 10) * 30}ms`}
               >
                 <button
@@ -158,7 +158,7 @@ export default function Sidebar(p: Props) {
                         breed={k.avatar?.breed}
                         color={k.avatar?.color}
                         mood={p.workingChats.has(c.id) ? "working" : moodOf(k)}
-                        size={22}
+                        size={30}
                       />
                     ) : null;
                   })}
@@ -176,12 +176,16 @@ export default function Sidebar(p: Props) {
                     </span>
                   )}
                 </span>
-                {c.needs_help && <span class="tag tag-amber">{t("help")}</span>}
-                {c.goal && !c.needs_help && <span class="tag tag-magenta">{t("goal")}</span>}
-                {c.reports && !c.needs_help && <span class="tag tag-accent">{t("reports")}</span>}
-                <span class="tag">
-                  {c.members.length > 1 ? <IconUsers size={10} /> : null}
-                  {c.members.length > 1 ? c.members.length : (byId.get(c.members[0])?.name ?? "1")}
+                <span class="chat-badges" data-testid="chat-badges">
+                  {c.needs_help && <span class="tag tag-amber">{t("help")}</span>}
+                  {c.goal && !c.needs_help && <span class="tag tag-magenta">{t("goal")}</span>}
+                  {c.reports && !c.needs_help && <span class="tag tag-accent">{t("reports")}</span>}
+                  <span class="tag">
+                    {c.members.length > 1 ? <IconUsers size={10} /> : null}
+                    {c.members.length > 1
+                      ? c.members.length
+                      : (byId.get(c.members[0])?.name ?? "1")}
+                  </span>
                 </span>
               </div>
             ))}
