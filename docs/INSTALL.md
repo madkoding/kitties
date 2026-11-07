@@ -97,6 +97,24 @@ kitties gateway logs       # the last 100 lines, followed; extra arguments go to
 
 Plain `kitties gateway` still runs the gateway in the foreground, which is what the unit runs.
 
+### Setting the gateway up from the terminal
+
+The same choices as Settings, without the page (they need no AI key; with the service installed
+they change it through `sudo` and restart it, `-no-restart` leaves that to you; `-config file`
+changes a gateway of your own instead):
+
+```sh
+kitties expose                      # where it listens and the address to open
+kitties expose local                # this machine alone; also: lan (the local network), wan (every network, asks first; -yes)
+kitties config                      # listen, public_url, trust_proxy, https, token and MCP
+kitties config set public_url https://kitties.example.com
+kitties config set port 8080        # also: trust_proxy true|false; kitties config unset <key>
+kitties token                       # the token; kitties token rotate replaces it (everyone signs in again)
+```
+
+The service keeps these in `/etc/kitties/kitties.env` and `/var/lib/kitties`; `kitties init` writes
+a `kitties.yaml` the service does not read (`kitties init -force` starts it again from the example).
+
 Run it again to update: it replaces the binary and the unit, restarts only if something changed,
 and keeps `kitties.env` and the token. The service cannot replace its own binary (the unit makes
 the system read-only), so updates on a server are this one line, not `updates.gateway: auto`.

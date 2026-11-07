@@ -55,11 +55,15 @@ const usage = `kitties %s: a fleet of autonomous agents, each with its own soul 
 Usage: kitties [-config file] <command> [arguments]
 
 Commands:
-  init                      write an example configuration (and a sample soul) to start from
+  init [-force]             write an example configuration (and a sample soul) to start from
   gateway [-listen addr]    bootstrap the fleet and serve the HTTP API and the web interface
   gateway start|stop|restart|status|logs
                             manage the systemd service installed by scripts/install.sh
-  token                     print the gateway's token (to sign in to the web interface)
+  expose [local|lan|wan]    where the gateway can be reached from: this machine, the local network or
+                            every network (-yes skips the question of wan); alone, it shows it
+  config [set <key> <value> | unset <key>]
+                            show or change the gateway: port, public_url, trust_proxy
+  token [rotate]            print the gateway's token (to sign in to the web interface), or replace it
   mcp [-url u] [-token t]   MCP over stdio for Claude, bridged to a gateway's /mcp (docs/MCP.md)
   ls                        list the kitties and their state
   create <name> [flags]     create a kitty (-provider, -persona, -soul file, -avatar breed/color, -no-desktop)
@@ -80,6 +84,8 @@ Environment: KITTIES_CONFIG names the configuration file (default ./kitties.yaml
 A gateway without a configuration file starts empty: add models and kitties from the web page.
 For a server, KITTIES_LISTEN, KITTIES_TOKEN, KITTIES_PUBLIC_URL, KITTIES_DATA_DIR and KITTIES_TRUST_PROXY
 override the gateway block, which is how a container is configured (see docs/DEPLOY.md).
+With the service of scripts/install.sh installed, expose, config and token change the service (through
+sudo); -config file changes a gateway of your own. They need no AI key.
 `
 
 func main() {
@@ -143,7 +149,11 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 		fmt.Fprintln(out, "kitties", version)
 		return 0
 	case "init":
-		return cmdInit(*configPath, out, errOut)
+		return cmdInit(*configPath, rest, out, errOut)
+	case "expose", "config", "token":
+		if code := cmdSetup(cmd, rest, *configPath, args, in, out, errOut); code >= 0 {
+			return code
+		}
 	case "release-key", "release-sign", "release-verify":
 		return cmdRelease(cmd, rest, out, errOut)
 	case "help", "-h", "--help":
@@ -153,6 +163,10 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 		if len(rest) > 0 && isServiceVerb(rest[0]) {
 			return cmdGatewayService(rest[0], rest[1:], in, out, errOut)
 		}
+	}
+	if !fleetCommands[cmd] {
+		fmt.Fprintf(errOut, "kitties: unknown command %q (run `kitties help`)\n", cmd)
+		return 1
 	}
 	// A gateway that was just updated is counted before anything else can go wrong (even reading
 	// the configuration): one that does not hold goes back to the version before.
@@ -175,7 +189,9 @@ func run(args []string, in io.Reader, out, errOut io.Writer) int {
 	case err != nil && errors.Is(err, os.ErrNotExist) && *configPath == "" && os.Getenv("KITTIES_CONFIG") == "" && (cmd == "gateway" || cmd == "token" || cmd == "mcp"):
 		// A server with no file yet: it starts empty and is set up from the web page.
 		cfg, err = config.Defaults(), nil
-		fmt.Fprintf(errOut, "kitties: no configuration file (%s): starting empty; add models and kitties from the web page\n", path)
+		if cmd == "gateway" {
+			fmt.Fprintf(errOut, "kitties: no configuration file (%s): starting empty; add models and kitties from the web page\n", path)
+		}
 	}
 	if err == nil {
 		err = cfg.ApplyEnv(os.Getenv)
@@ -285,7 +301,8 @@ func (a *app) open(cmd string) error {
 		return err
 	}
 	for _, p := range fleet.Settings().Providers {
-		if p.Error != "" {
+		// Only where a brain is used: ls, stop or rm need no key, and say nothing about one.
+		if p.Error != "" && brainCommands[cmd] {
 			fmt.Fprintf(a.err, "kitties: provider %q is not available: %s\n", p.Name, p.Error)
 		}
 	}
@@ -371,6 +388,14 @@ func (a *app) open(cmd string) error {
 	return nil
 }
 
+// fleetCommands are the commands that open the fleet; brainCommands the ones of them that talk to
+// the AI profiles, where a profile that cannot work is said.
+var (
+	fleetCommands = map[string]bool{"gateway": true, "token": true, "mcp": true, "ls": true, "providers": true, "create": true,
+		"start": true, "stop": true, "rm": true, "scale": true, "chat": true, "exec": true, "shot": true}
+	brainCommands = map[string]bool{"gateway": true, "providers": true, "create": true, "start": true, "scale": true, "chat": true}
+)
+
 func (a *app) dispatch(cmd string, args []string) error {
 	ctx, cancel := notifyContext()
 	defer cancel()
@@ -411,13 +436,31 @@ func demoConfig() (config.Config, error) {
 	return cfg, cfg.Validate()
 }
 
-func cmdInit(path string, out, errOut io.Writer) int {
+func cmdInit(path string, args []string, out, errOut io.Writer) int {
+	fs := flag.NewFlagSet("init", flag.ContinueOnError)
+	fs.SetOutput(errOut)
+	force := fs.Bool("force", false, "write the example over the configuration there, keeping a copy in <file>.bak")
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
 	if path == "" {
 		path = "kitties.yaml"
 	}
-	if _, err := os.Stat(path); err == nil {
-		fmt.Fprintf(errOut, "kitties: %s already exists, not touching it\n", path)
-		return 1
+	abs, _ := filepath.Abs(path)
+	service := serviceExists()
+	if _, err := os.Stat(path); err == nil && !*force {
+		fmt.Fprintf(out, "kitties: %s already exists, not touching it.\n", abs)
+		fmt.Fprintln(out, "  See or change the gateway: kitties config, kitties expose local|lan|wan, kitties token")
+		fmt.Fprintf(out, "  Start again from the example: kitties init -force (keeps a copy in %s.bak)\n", path)
+		fmt.Fprintln(out, "  Write another file: kitties -config other.yaml init")
+		initServiceNote(out, service)
+		return 0
+	} else if err == nil {
+		if err := os.Rename(path, path+".bak"); err != nil {
+			fmt.Fprintf(errOut, "kitties: %v\n", err)
+			return 1
+		}
+		fmt.Fprintf(out, "Kept the old configuration in %s.bak.\n", path)
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		fmt.Fprintf(errOut, "kitties: %v\n", err)
@@ -433,7 +476,15 @@ func cmdInit(path string, out, errOut io.Writer) int {
 		_ = os.WriteFile(soulPath, []byte(exampleSoul), 0o600)
 	}
 	fmt.Fprintf(out, "Wrote %s and %s.\nEdit the providers (keys come from OPENAI_API_KEY, ANTHROPIC_API_KEY...), then run: kitties gateway\n", path, soulPath)
+	initServiceNote(out, service)
 	return 0
+}
+
+// initServiceNote says that the installed service does not read the file init writes.
+func initServiceNote(out io.Writer, service bool) {
+	if service {
+		fmt.Fprintf(out, "The service of scripts/install.sh does not read this file: it is set up with kitties config and kitties expose (settings in %s).\n", serviceEnvFile)
+	}
 }
 
 // gatewayToken is the token the gateway uses: the configured one, else the one a previous run
