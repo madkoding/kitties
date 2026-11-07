@@ -2164,6 +2164,8 @@ test("Settings: the gateway is exposed local, LAN or WAN, WAN after accepting th
   await expect(box).toContainText("127.0.0.1:7488");
   await expect(box.getByTestId("exposure-lan")).toContainText("192.168.1.20:7488");
   await expect(box.getByTestId("exposure-apply")).toBeDisabled();
+  // The token is shown only by the desktop app, never by a page a browser opened.
+  await expect(box.getByTestId("in-browser")).toHaveCount(0);
   // WAN warns and cannot be applied until the risk is accepted.
   await box.getByTestId("exposure-wan").click();
   await expect(box.getByTestId("exposure-warning")).toContainText("every interface");

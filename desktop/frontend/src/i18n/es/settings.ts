@@ -408,6 +408,14 @@ const dict: Dictionary = {
   "{kitty} answers on WhatsApp; each number has its own chat here.":
     "{kitty} responde en WhatsApp; cada número tiene su propio chat aquí.",
   "{n} messages from other numbers were ignored.": "Se ignoraron {n} mensajes de otros números.",
+  "Use it from a browser": "Úsalo desde un navegador",
+  "The same page as this app. Open it and sign in with the token.":
+    "La misma página que esta app. Ábrela e inicia sesión con el token.",
+  "Open in the browser": "Abrir en el navegador",
+  Show: "Mostrar",
+  Hide: "Ocultar",
+  "Keep the token to yourself: it is the only password of the page.":
+    "Guarda el token para ti: es la única contraseña de la página.",
 };
 
 export default dict;

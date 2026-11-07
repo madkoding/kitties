@@ -188,6 +188,10 @@ const dict: Dictionary = {
   "found on this machine when empty": "si lo dejas vacío, se busca en esta máquina",
   Connect: "Conectar",
   Gateway: "Gateway",
+  "Where is it? In the console where the gateway started, or run":
+    "¿Dónde está? En la consola donde arrancó el gateway, o ejecuta",
+  "on that machine. In the desktop app: Settings, Preferences, Network access.":
+    "en esa máquina. En la app de escritorio: Ajustes, Preferencias, Acceso de red.",
 };
 
 export default dict;

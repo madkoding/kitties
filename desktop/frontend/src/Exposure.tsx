@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
 import type { Exposure as ExposureInfo, ExposureMode } from "./api";
-import { api, errText } from "./api";
+import { api, errText, inWails, openExternal } from "./api";
 import { ask } from "./Confirm";
 import { t } from "./i18n";
 
@@ -185,6 +185,70 @@ export default function Exposure() {
           {err}
         </p>
       )}
+      {inWails() && (
+        <InBrowser
+          addr={cur.mode === "lan" && cur.lan_ip ? `${cur.lan_ip}:${port}` : `127.0.0.1:${port}`}
+        />
+      )}
+    </div>
+  );
+}
+
+// InBrowser is how the person who runs the app uses Kitties from a browser too: the same page,
+// at the gateway's address, signed in with its token. Only the app shows the token (it runs on
+// the machine the gateway runs on); a browser never gets it from the gateway.
+function InBrowser({ addr }: { addr: string }) {
+  const [token, setToken] = useState("");
+  const [shown, setShown] = useState(false);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    window.go?.main?.App?.Gateway()
+      .then((c) => setToken(c.token))
+      .catch(() => setToken(""));
+  }, []);
+  const url = `http://${addr}`;
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setShown(true);
+    }
+  };
+  return (
+    <div class="callout mt-4" data-testid="in-browser">
+      <div class="font-semibold text-sm">{t("Use it from a browser")}</div>
+      <p class="text-xs text-[var(--t3)] mt-1">
+        {t("The same page as this app. Open it and sign in with the token.")}
+      </p>
+      <div class="flex flex-wrap items-center gap-2 mt-2">
+        <code class="font-mono text-xs">{url}</code>
+        <button
+          class="btn-ghost px-2 py-1 text-xs"
+          onClick={() => openExternal(url)}
+          data-testid="in-browser-open"
+        >
+          {t("Open in the browser")}
+        </button>
+      </div>
+      {token && (
+        <div class="flex flex-wrap items-center gap-2 mt-2">
+          <span class="text-xs text-[var(--t3)]">{t("Token")}:</span>
+          <code class="font-mono text-xs" data-testid="in-browser-token">
+            {shown ? token : "••••••••••••••••"}
+          </code>
+          <button class="btn-ghost px-2 py-1 text-xs" onClick={() => setShown(!shown)}>
+            {shown ? t("Hide") : t("Show")}
+          </button>
+          <button class="btn-ghost px-2 py-1 text-xs" onClick={copy} data-testid="in-browser-copy">
+            {copied ? t("Copied") : t("Copy")}
+          </button>
+        </div>
+      )}
+      <p class="text-xs text-[var(--t4)] mt-2">
+        {t("Keep the token to yourself: it is the only password of the page.")}
+      </p>
     </div>
   );
 }

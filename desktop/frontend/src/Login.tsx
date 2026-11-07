@@ -65,6 +65,11 @@ export default function Login({ onDone }: { onDone: () => void }) {
           {busy ? t("Checking…") : t("Sign in")}
         </button>
         <Missing items={[!token.trim() && t("the token")]} />
+        <p class="text-xs text-[var(--t3)] mt-3" data-testid="login-where">
+          {t("Where is it? In the console where the gateway started, or run")}{" "}
+          <code class="font-mono">kitties token</code>{" "}
+          {t("on that machine. In the desktop app: Settings, Preferences, Network access.")}
+        </p>
         <p class="text-xs text-[var(--t4)] mt-3">
           {t(
             "The token stays on the server: this browser keeps only a session that you can end with Sign out.",
