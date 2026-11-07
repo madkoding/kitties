@@ -21,7 +21,7 @@ button.ghost{background:transparent;color:var(--accent);border:1px solid var(--l
 .msg{max-width:720px;padding:10px 14px;border-radius:12px;background:var(--card);white-space:pre-wrap}.msg.user{align-self:flex-end;background:var(--accent);color:#fff}
 .msg b{display:block;font-size:12px;color:var(--muted);margin-bottom:2px}.msg.user b{color:#ffe0ea}
 form{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--line)}input,textarea{flex:1;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:10px;font:inherit}
-label{display:block;font-size:13px;margin:6px 0}.empty{color:var(--muted);padding:16px}
+.lite{padding:8px 16px;font-size:13px;color:var(--muted);border-bottom:1px solid var(--line)}label{display:block;font-size:13px;margin:6px 0}.empty{color:var(--muted);padding:16px}
 @media(max-width:720px){body{grid-template-columns:1fr}aside{display:none}}
 </style>
 </head>
@@ -34,6 +34,7 @@ label{display:block;font-size:13px;margin:6px 0}.empty{color:var(--muted);paddin
 <button class="ghost" id="newkitty">New kitty</button>
 </aside>
 <main>
+<div class="lite" role="note">This gateway was built without the Kitties interface, so this is its small spare page. For the same page as the desktop app, use a release download or build it with <code>make web</code>.</div>
 <div id="log"><div class="empty">Pick a chat, or start one with the kitties you want in it.</div></div>
 <form id="send"><input id="text" placeholder="Say something… (@name picks who answers in a group)" autocomplete="off"><button>Send</button></form>
 </main>

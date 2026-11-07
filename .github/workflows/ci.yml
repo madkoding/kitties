@@ -492,6 +492,16 @@ jobs:
           CGO_ENABLED=0 GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -trimpath -ldflags "-s -w -X main.version=${{ github.ref_name }} -X 'github.com/madkoding/kitties/internal/oauth.builtin=$OAUTH_APPS' -X 'github.com/madkoding/kitties/internal/selfupdate.builtinKey=$UPDATE_PUBKEY'" -o "desktop/build/bin/kitties-gateway$ext" ./cmd/kitties
           grep -q '<div id="root"' "desktop/build/bin/kitties-gateway$ext"
           ls -la desktop/build/bin
+      # The gateway the app starts serves the app's own page to a browser, not the spare one.
+      - name: the bundled gateway serves the app's page
+        if: runner.os == 'Linux'
+        run: |
+          data="$(mktemp -d)"
+          KITTIES_DATA_DIR="$data" KITTIES_LISTEN=127.0.0.1:7499 desktop/build/bin/kitties-gateway gateway > "$data/out.log" 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:7499/v1/health >/dev/null && break; sleep 1; done
+          curl -sf http://127.0.0.1:7499/ | grep -q '<div id="root"'
+          grep -q 'gateway token: ' "$data/out.log"
+          kill %1
       - name: pack
         shell: bash
         run: |
