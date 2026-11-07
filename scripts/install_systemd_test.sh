@@ -1,7 +1,7 @@
 #!/bin/sh
 # scripts/install.sh for real: a fake signed release is installed as a systemd service on this
 # machine (needs root and systemd, so it is for CI runners and throwaway VMs), the service answers,
-# `kitties gateway start|stop|restart|status` drive it, and running the installer again keeps the token.
+# `kitties gateway start|stop|restart|status` drive it, and running the installer again keeps the token (and moves an older install's out of kitties.env).
 # ufw and caddy are stubs: what the installer asks of them is checked, not their effect.
 #   sudo scripts/install_systemd_test.sh
 set -eu
@@ -46,8 +46,12 @@ grep -q "Kitties v9.9.9 is running" "$work/out" || fail "no summary"
 systemctl is-active --quiet kitties || fail "service not active"
 curl -fsS -o /dev/null http://127.0.0.1:7499/ || fail "the gateway does not answer"
 [ "$(stat -c %a /etc/kitties/kitties.env)" = 600 ] || fail "kitties.env is not 0600"
-token="$(sed -n 's/^KITTIES_TOKEN=//p' /etc/kitties/kitties.env)"
+# The token is the gateway's own file (Settings can replace it), shown at the end and by `kitties token`.
+grep -q '^KITTIES_TOKEN=' /etc/kitties/kitties.env && fail "kitties.env still holds the token"
+token="$(head -n 1 /var/lib/kitties/gateway.token)"
 [ -n "$token" ] && grep -q "$token" "$work/out" || fail "token not shown"
+[ "$(stat -c %a /var/lib/kitties/gateway.token)" = 600 ] || fail "gateway.token is not 0600"
+[ "$(/usr/local/bin/kitties token)" = "$token" ] || fail "kitties token does not print the service's token"
 grep -q "allow 7499/tcp" "$work/ufw.log" || fail "firewall not asked to open the port"
 grep -q "k.example.com" "$work/caddy/conf.d/kitties.caddy" && grep -q "127.0.0.1:7499" "$work/caddy/conf.d/kitties.caddy" || fail "caddy site"
 
@@ -61,6 +65,18 @@ sleep 1; /usr/local/bin/kitties gateway status >/dev/null || fail "status of a r
 
 run_install > "$work/out2" 2>&1 || { cat "$work/out2" >&2; fail "second run"; }
 grep -q "already installed" "$work/out2" || fail "second run is not a no-op"
-[ "$(sed -n 's/^KITTIES_TOKEN=//p' /etc/kitties/kitties.env)" = "$token" ] || fail "the token changed"
+[ "$(head -n 1 /var/lib/kitties/gateway.token)" = "$token" ] || fail "the token changed"
 systemctl is-active --quiet kitties || fail "not active after the second run"
+
+# An install from before kept the token in kitties.env: a run moves it, unchanged, to the gateway's file.
+legacy="legacy-token-0123456789abcdef0123456789"
+rm -f /var/lib/kitties/gateway.token
+echo "KITTIES_TOKEN=$legacy" >> /etc/kitties/kitties.env
+run_install > "$work/out3" 2>&1 || { cat "$work/out3" >&2; fail "third run"; }
+grep -q '^KITTIES_TOKEN=' /etc/kitties/kitties.env && fail "the old token stayed in kitties.env"
+[ "$(head -n 1 /var/lib/kitties/gateway.token)" = "$legacy" ] || fail "the old token was not kept"
+grep -q "$legacy" "$work/out3" || fail "the kept token is not shown"
+sleep 1; systemctl is-active --quiet kitties || fail "not active after moving the token"
+code="$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $legacy" http://127.0.0.1:7499/v1/kitties)"
+[ "$code" = 200 ] || fail "the gateway does not take the kept token ($code)"
 echo "ok"

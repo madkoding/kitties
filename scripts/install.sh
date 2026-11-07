@@ -408,19 +408,17 @@ fi
 
 install -d -m 0750 -o "$USER_NAME" -g "$USER_NAME" "$CONF_DIR"
 env_file="$CONF_DIR/kitties.env"
-token=
+# The token is the gateway's own: it makes one on its first start and keeps it in
+# $DATA_DIR/gateway.token, where `sudo kitties token` reads it and Settings can replace it.
+token_file="$DATA_DIR/gateway.token"
+install -d -m 0700 -o "$USER_NAME" -g "$USER_NAME" "$DATA_DIR"
 if [ ! -f "$env_file" ]; then
-    if command -v openssl >/dev/null 2>&1; then
-        token=$(openssl rand -hex 24)
-    else
-        token=$(head -c 24 /dev/urandom | od -An -tx1 | tr -d ' \n')
-    fi
     umask 077
     {
         echo "# Read by the systemd unit. Keep it mode 0600."
+        echo "# The token is in $token_file: see it with 'sudo kitties token', replace it from Settings."
         echo "KITTIES_LISTEN=$LISTEN"
         [ -z "$PUBLIC_URL" ] || echo "KITTIES_PUBLIC_URL=$PUBLIC_URL"
-        echo "KITTIES_TOKEN=$token"
         for v in OPENAI_API_KEY ANTHROPIC_API_KEY GEMINI_API_KEY; do
             if [ "$v" = "$KEY_VAR" ]; then echo "$v=$KEY_VAL"; else echo "$v="; fi
         done
@@ -429,6 +427,19 @@ if [ ! -f "$env_file" ]; then
     chmod 0600 "$env_file"
     say "$(L "wrote $env_file" "escribí $env_file")"
 else
+    # An older install kept the token in the env file, where Settings cannot replace it: it moves,
+    # unchanged, to the gateway's own file (nobody has to sign in again).
+    old_token=$(sed -n 's/^KITTIES_TOKEN=//p' "$env_file" | tail -n 1)
+    if [ -n "$old_token" ]; then
+        if [ ! -s "$token_file" ]; then
+            (umask 077; printf '%s\n' "$old_token" > "$token_file")
+            chown "$USER_NAME:$USER_NAME" "$token_file"
+            chmod 0600 "$token_file"
+        fi
+        sed -i "s|^KITTIES_TOKEN=.*|# The token is in $token_file: sudo kitties token|" "$env_file"
+        changed=1
+        say "$(L "moved the token to $token_file (unchanged; now Settings can replace it)" "moví el token a $token_file (el mismo; ahora Ajustes puede cambiarlo)")"
+    fi
     say "$(L "kept $env_file (settings and token unchanged)" "conservé $env_file (configuración y token sin cambios)")"
 fi
 
@@ -536,15 +547,20 @@ case "$host" in
 esac
 [ -z "$cur_public" ] || note "  $cur_public"
 echo
-# The token of a kept file is shown too: whoever runs this as root already has it, and it saves a
-# trip to the file.
+# The gateway writes its token as it starts; whoever runs this as root may see it.
+token=
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    token=$(head -n 1 "$token_file" 2>/dev/null | tr -d ' \r\n') || token=
+    [ -z "$token" ] || break
+    sleep 1
+done
 [ -n "$token" ] || token=$(sed -n 's/^KITTIES_TOKEN=//p' "$env_file" | tail -n 1)
 if [ -n "$token" ]; then
     note "$(L 'Token (the password of the page, paste it to sign in):' 'Token (la contraseña de la página, pégalo para entrar):')"
     note "  $token"
-    note "$(L "Saved in $env_file (mode 0600). Keep it secret. See it again: sudo grep TOKEN $env_file" "Guardado en $env_file (modo 0600). Mantenlo en secreto. Verlo otra vez: sudo grep TOKEN $env_file")"
+    note "$(L "Keep it secret. See it again: sudo kitties token. If it gets out: Settings, Preferences, Make a new token." "Mantenlo en secreto. Verlo otra vez: sudo kitties token. Si se filtra: Ajustes, Preferencias, Crear un token nuevo.")"
 else
-    note "$(L "Token: see KITTIES_TOKEN in $env_file" "Token: mira KITTIES_TOKEN en $env_file")"
+    note "$(L 'Token: sudo kitties token (the gateway writes it as it starts)' 'Token: sudo kitties token (el gateway lo escribe al arrancar)')"
 fi
 echo
 note "$(L 'Next steps:' 'Siguientes pasos:')"
