@@ -20,7 +20,7 @@ kitties:
     soul_file: souls/tom.yaml
     replicas: 3
 
-containers: { runtime: auto, image: ghcr.io/madkoding/kitty-desktop:latest, memory_mb: 2048, cpus: 2, auto_off_minutes: 15 }
+containers: { runtime: auto, image: ghcr.io/madkoding/kitty-desktop:latest, memory_mb: 2048, swap_mb: 1024, cpus: 2, auto_off_minutes: 15 }
 cloud:      { provider: "", max_running: 5, idle_minutes: 15, size: small, api_key_env: BOAT_API_KEY }
 gateway:    { listen: 127.0.0.1:7488, token: "" }
 motita:     { url: http://127.0.0.1:7477 }
@@ -34,6 +34,12 @@ connectors:
 turns itself off (15 by default, `0` never, at most a week). Each kitty can have a value of its own
 (its window, Desktop, "Turn off after", or `PATCH /v1/kitties/{ref}`). See
 [the machine's power](DESKTOP.md#turning-the-machine-on-and-off).
+
+`containers.memory_mb` and `containers.swap_mb` are the RAM and the swap of each kitty's machine
+(2048 and 1024 MB by default; `memory_mb: 0` leaves the engine's own, `swap_mb: 0` is no swap).
+**Settings › Machines** changes them for every kitty (kept in `settings.json`, over the file) and
+gives each kitty values of its own; so do `PUT /v1/settings/machines` and `PATCH /v1/kitties/{ref}`
+`{memory_mb, swap_mb}`. See [the machine's memory](DESKTOP.md#the-machines-memory).
 
 ### The connector catalogue
 

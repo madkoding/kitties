@@ -187,6 +187,33 @@ la enciende y espera a que esté lista, `off` la apaga cuando termina con la pan
 apagada **la enciende primero**, espera (hasta 3 minutos) y lo muestra como un paso del turno; si no
 puede, al kitty se le dice claramente que su máquina está apagada y por qué, y la herramienta no se ejecuta.
 
+## La memoria de la máquina
+
+Cada máquina tiene cierta **RAM y swap**: 2 GB y 1 GB por defecto (`containers.memory_mb` y
+`swap_mb`). **Ajustes › Máquinas** los cambia para todos los kitties y para cada uno (la ventana de un
+kitty, Escritorio, muestra los mismos selectores), con lo que cada máquina usa ahora y lo que tiene en
+total el motor de contenedores; las máquinas encendidas lo comparten, y un tamaño mayor que el del motor
+se rechaza.
+
+<img src="screenshots/73-settings-machines.png" alt="Ajustes, Máquinas: la RAM y el swap para todos los kitties, y la máquina de cada kitty con la memoria que usa" width="100%">
+
+**Dónde se aplica un cambio.** En un escritorio local (Docker o Podman) el nuevo tamaño llega a la
+máquina al instante (`docker update`), encendida o no. Cuando el motor no puede (un Podman antiguo, un
+cgroup sin contabilidad de swap) la ventana lo dice, y la máquina se rehace con el nuevo tamaño la
+próxima vez que se encienda: su home, su carpeta de trabajo y las sesiones del navegador se quedan. Una
+máquina en la nube tiene el tamaño de su proveedor (`cloud.size`), y los selectores lo dicen. Con
+Docker Desktop (Windows, macOS) la memoria del propio motor se fija en Docker Desktop › Settings ›
+Resources (en Windows con WSL 2, en `.wslconfig`).
+
+**El kitty conoce su memoria.** El mensaje sobre su máquina (arriba) dice además cuánta RAM y swap están
+usadas y libres, leídas dentro de la máquina (cgroup v2 o v1, si no `/proc/meminfo`) y guardadas 10
+segundos. `@tool machine {"action": "status"}` agrega lo que más ocupa (Chromium con sus procesos, la
+pantalla, los programas). Antes de **`open`** (una pestaña del navegador, unos 150 a 300 MB) y
+**`launch`** (un programa) el gateway mira: con menos de 250 MB libres para una pestaña, o 400 MB para un
+programa, la herramienta se rechaza y al kitty se le dice cuánto queda y que cierre pestañas (`ctrl+w`)
+o programas primero, o que te pida más RAM. El kitty líder y otros clientes MCP ven lo mismo en
+`kitty_compute`.
+
 ## Actualizar un escritorio sin perder lo que sabe
 
 Un escritorio se hace a partir de una imagen, y puede salir una más nueva. Un contenedor conserva la
@@ -263,7 +290,8 @@ actualización, ni una detención, ni eliminar al kitty.
 | El ciclo: captura, modelo, acciones, otra vez | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Contenedores: arrancar, `exec`, captura, stream en vivo | [`internal/container/`](../internal/container) |
 | La energía de la máquina: uso, apagado por inactividad, encender y apagar | [`internal/orchestrator/power.go`](../internal/orchestrator/power.go) |
-| Lo que el kitty sabe de su máquina, la herramienta `machine`, el encendido automático | [`internal/chat/machine.go`](../internal/chat/machine.go) |
+| Lo que el kitty sabe de su máquina, la herramienta `machine`, el encendido automático, el chequeo de memoria | [`internal/chat/machine.go`](../internal/chat/machine.go) |
+| La RAM y el swap de la máquina: límites, lectura, valores por defecto | [`internal/kitty/memory.go`](../internal/kitty/memory.go), [`internal/orchestrator/memory.go`](../internal/orchestrator/memory.go) |
 | Tomar el control: retenciones, entrada de la persona, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
 | Los respaldos cifrados de las sesiones de un kitty, y la actualización de un escritorio | [`internal/keep`](../internal/keep), [`internal/orchestrator/sessions.go`](../internal/orchestrator/sessions.go) |
 | Los secretos guardados que un kitty puede escribir, cifrados | [`internal/vault`](../internal/vault) |
