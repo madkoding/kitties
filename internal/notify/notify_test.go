@@ -212,3 +212,48 @@ func TestDigestSettingAndDelivery(t *testing.T) {
 		t.Error("no channel, no delivery")
 	}
 }
+
+func TestReplies(t *testing.T) {
+	reg := connector.NewRegistry()
+	reg.Add("push", &sink{kind: "ntfy"})
+	reg.Add("tg", &sink{kind: "telegram"})
+	if err := (Config{Connector: "push", Replies: true}).Validate(reg); err != nil {
+		t.Errorf("ntfy takes replies: %v", err)
+	}
+	for _, c := range []Config{{Replies: true}, {Connector: "tg", Replies: true}} {
+		if err := c.Validate(reg); err == nil || !strings.Contains(err.Error(), "notify.replies") {
+			t.Errorf("%+v: %v", c, err)
+		}
+	}
+	long := strings.Repeat("x", MinReplyTopic)
+	for _, tc := range []struct {
+		kind string
+		s    connector.Settings
+		ok   bool
+	}{
+		{"ntfy", connector.Settings{"topic": long}, true},
+		{"ntfy", connector.Settings{"topic": "short", "token": "tk"}, true},
+		{"ntfy", connector.Settings{"topic": "my-kitties"}, false},
+		{"telegram", connector.Settings{"topic": long}, false},
+	} {
+		if err := CheckReplies(tc.kind, tc.s); (err == nil) != tc.ok {
+			t.Errorf("%s %v: %v", tc.kind, tc.s, err)
+		}
+	}
+}
+
+func TestOnSentHearsWhatWentOut(t *testing.T) {
+	n, sk := setup(Config{Connector: "push"}, "ntfy")
+	var heard []Notification
+	var mu sync.Mutex
+	n.OnSent(func(x Notification) { mu.Lock(); heard = append(heard, x); mu.Unlock() })
+	n.Notify(Notification{Event: Help, Kitty: "luna", Title: "needs you", Chat: "c1"})
+	n.Wait()
+	sk.err = context.Canceled
+	_ = n.Deliver(context.Background(), Notification{Event: Reply, Kitty: "bo", Body: "x"})
+	mu.Lock()
+	defer mu.Unlock()
+	if len(heard) != 1 || heard[0].Kitty != "luna" || heard[0].Chat != "c1" {
+		t.Errorf("heard %+v (a failed send is not heard)", heard)
+	}
+}

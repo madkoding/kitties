@@ -38,6 +38,7 @@ import (
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/orchestrator"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/reply"
 	"github.com/madkoding/kitties/internal/selfupdate"
 	"github.com/madkoding/kitties/internal/shared"
 	"github.com/madkoding/kitties/internal/skills"
@@ -711,6 +712,13 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	go a.digest.Run(ctx, logf)
 	// A kitty that stopped on its day's tokens goes on by itself once they are back.
 	go a.chats.RunResumer(ctx, time.Minute)
+	// With notify.replies on, what the person writes to the ntfy topic reaches the kitties.
+	replies := reply.New(a.chats, a.fleet, a.notifier, logf)
+	if l, ok := any(a.chats).(interface{ Lead() *kitty.Kitty }); ok {
+		replies.Lead = l.Lead
+	}
+	a.notifier.OnSent(replies.Saw)
+	go replies.Listen(ctx, a.fleet.ReplyChannel, nil)
 	// What is in the middle of a task is neither updated nor turned off: set before the watchdog
 	// starts, which looks at it. A machine that turns itself off after a time without use is
 	// noted in the kitty's journal and told to the person.

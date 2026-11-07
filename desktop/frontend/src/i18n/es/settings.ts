@@ -208,6 +208,10 @@ const dict: Dictionary = {
     "Lo que hizo cada kitty, lo que gastó y lo que espera tu aprobación. Déjalo vacío para no recibir resumen.",
   "Start it with my day: what is on the calendar, the reminders still to do and the weather, from my connections (calendar, reminders, weather).":
     "Empezar con mi día: lo que hay en el calendario, los recordatorios pendientes y el clima, desde mis conexiones (calendario, recordatorios, clima).",
+  "Let me answer from ntfy: what I write to the topic goes to the kitty that notified me (or the one I name, like luna: …, or all: …), and its answer comes back here.":
+    "Responder desde ntfy: lo que escriba en el tema va al kitty que me avisó (o al que nombre, como luna: …, o todos: …), y su respuesta llega por el mismo lado.",
+  "The topic works as a password: give it 20 characters at least, hard to guess, or protect it with an access token.":
+    "El tema funciona como contraseña: dale al menos 20 caracteres difíciles de adivinar, o protégelo con un token de acceso.",
   "Send a test": "Enviar una prueba",
 
   // Preferences

@@ -26,6 +26,9 @@ const (
 	Recovered   Event = "recovered"    // a container was brought back
 	Budget      Event = "budget"       // a kitty is near or at its day's tokens
 	Updated     Event = "updated"      // a desktop or Kitties itself was updated, or a new version waits
+	// Reply is a kitty answering what the person wrote to the notification channel
+	// (internal/reply). It is not one of Events: it goes out because the person wrote.
+	Reply Event = "reply"
 	// Digest is the daily summary. It is not one of Events: the person turns it on by giving
 	// Config.Digest a time of day.
 	Digest Event = "digest"
@@ -65,6 +68,26 @@ type Config struct {
 	// Day starts the summary with the person's day: what is on the calendar, the reminders
 	// still to do and the weather, from the connections that have them.
 	Day bool `json:"day,omitempty" yaml:"day"`
+	// Replies lets the person answer the kitties by writing to the channel: what they write
+	// to the ntfy topic goes to the kitty that notified them (or the one they name), and its
+	// answer comes back the same way. Only an ntfy connector takes replies.
+	Replies bool `json:"replies,omitempty" yaml:"replies"`
+}
+
+// MinReplyTopic is the shortest topic that takes replies without an access token: on a public
+// server, whoever knows the topic can write to the kitties, so it must not be guessed.
+const MinReplyTopic = 20
+
+// CheckReplies checks a connector can take the person's replies: it is ntfy, and its topic is
+// protected with a token or long enough not to be guessed.
+func CheckReplies(kind string, s connector.Settings) error {
+	if kind != "ntfy" {
+		return fmt.Errorf("notify.replies: only an ntfy connector takes replies")
+	}
+	if strings.TrimSpace(s["token"]) == "" && len(strings.TrimSpace(s["topic"])) < MinReplyTopic {
+		return fmt.Errorf("notify.replies: whoever knows the topic could talk to your kitties: give it %d characters at least (hard to guess) or an access token", MinReplyTopic)
+	}
+	return nil
 }
 
 // DigestAt parses Digest into hour and minute; ok is false when none is set.
@@ -124,9 +147,16 @@ func (c Config) Validate(reg *connector.Registry) error {
 			return fmt.Errorf("notify.digest: choose a connector to send it through")
 		}
 	}
+	if c.Replies && c.Connector == "" {
+		return fmt.Errorf("notify.replies: choose an ntfy connector to answer through")
+	}
 	if c.Connector != "" && reg != nil {
-		if _, ok := reg.Get(c.Connector); !ok {
+		cn, ok := reg.Get(c.Connector)
+		if !ok {
 			return fmt.Errorf("notify.connector: no such connector %q", c.Connector)
+		}
+		if k, ok := cn.(connector.Kinder); c.Replies && ok && k.Kind() != "ntfy" {
+			return fmt.Errorf("notify.replies: only an ntfy connector takes replies")
 		}
 	}
 	return nil
@@ -152,6 +182,8 @@ type Notifier struct {
 
 	mu   sync.Mutex
 	last map[string]time.Time
+	// sent hears every notification that went out, so a reply can find who it answers.
+	sent func(Notification)
 	wg   sync.WaitGroup
 	// Quiet is how long the same notification is held back after it went out.
 	Quiet time.Duration
@@ -173,6 +205,13 @@ func (n *Notifier) SetLog(logf func(string, ...any)) {
 	if logf != nil {
 		n.logf = logf
 	}
+}
+
+// OnSent sets what hears every notification that went out.
+func (n *Notifier) OnSent(fn func(Notification)) {
+	n.mu.Lock()
+	n.sent = fn
+	n.mu.Unlock()
 }
 
 // Link is where a person opens a chat.
@@ -280,6 +319,12 @@ func (n *Notifier) call(ctx context.Context, name string, note Notification) err
 	res := n.reg.Call(ctx, connector.Call{Name: name, Args: args}, nil)
 	if res.Err != "" {
 		return fmt.Errorf("%s", res.Err)
+	}
+	n.mu.Lock()
+	sent := n.sent
+	n.mu.Unlock()
+	if sent != nil {
+		sent(note)
 	}
 	return nil
 }
