@@ -16,6 +16,10 @@ const dict: Dictionary = {
   "Open reports": "Abrir reportes",
   "Stop leading": "Dejar de ser principal",
   "Make {name} the lead": "Hacer principal a {name}",
+  "Ask me before the lead kitty changes another's limits":
+    "Pregúntame antes de que el kitty principal cambie los límites de otro",
+  "The lead may give a kitty more rounds, tokens or seconds per task (up to 500 rounds, 2M tokens, 2 hours). On: each lasting change waits in Approvals. What it gives for one task alone ends with the task.":
+    "El principal puede darle a un kitty más rondas, tokens o segundos por tarea (hasta 500 rondas, 2M de tokens, 2 horas). Activado: cada cambio permanente espera en Aprobaciones. Lo que da para una sola tarea termina con la tarea.",
   limit: "límite",
 };
 

@@ -189,6 +189,8 @@ export interface Delegation {
   task: string;
   result?: string;
   error?: string;
+  // limits says what the lead gave the kitty for this task alone, when it did.
+  limits?: string;
 }
 
 export interface Step {
@@ -400,7 +402,7 @@ export interface SettingsView {
   notify: { connector: string; on: string[]; digest?: string; day?: boolean };
   notify_events: string[];
   // autonomy is how long the kitties keep at a task on their own: empty takes the defaults.
-  autonomy?: { follow_ups: string; brain_wait: string; stand_ins?: string };
+  autonomy?: { follow_ups: string; brain_wait: string; stand_ins?: string; lead_limits?: string };
   accounts: Account[];
   // oauth_ready are the services a connection signs in to without an app of the person's own.
   oauth_ready?: string[];
@@ -1021,8 +1023,12 @@ export const api = {
     request("POST", `/v1/chats/${chat}/turns/${index}/feedback`, { rating, note }),
   setNotify: (c: { connector: string; on: string[]; digest?: string }) =>
     request<SettingsView>("PUT", "/v1/settings/notify", c),
-  setAutonomy: (a: { follow_ups: string; brain_wait: string; stand_ins: string }) =>
-    request<SettingsView>("PUT", "/v1/settings/autonomy", a),
+  setAutonomy: (a: {
+    follow_ups: string;
+    brain_wait: string;
+    stand_ins: string;
+    lead_limits?: string;
+  }) => request<SettingsView>("PUT", "/v1/settings/autonomy", a),
   testNotify: (connector = "") =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),
   // The browser session of a gateway served on a network: who is signed in, and the way in and out.

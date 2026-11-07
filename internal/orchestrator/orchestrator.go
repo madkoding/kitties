@@ -515,18 +515,17 @@ func (m *Manager) demoteLeadsLocked(keep string) []*kitty.Kitty {
 	return out
 }
 
-// SetRounds changes how many rounds of actions a kitty may take on one task (0 is the default):
-// what the lead kitty does for the others, within kitty.MaxRoundsCap.
-func (m *Manager) SetRounds(ref string, rounds int) (*kitty.Kitty, error) {
-	if rounds < 0 || rounds > kitty.MaxRoundsCap {
-		return nil, fmt.Errorf("rounds go from 1 to %d (0 for the default)", kitty.MaxRoundsCap)
+// SetTaskLimits changes what a kitty may spend on one task (rounds, tokens, seconds; 0 is the
+// default): what the lead kitty does for the others, within the caps of kitty.TaskLimits.
+func (m *Manager) SetTaskLimits(ref string, t kitty.TaskLimits) (*kitty.Kitty, error) {
+	if err := t.Validate(); err != nil {
+		return nil, err
 	}
 	k, err := m.Get(ref)
 	if err != nil {
 		return nil, err
 	}
-	limits := k.Limits
-	limits.MaxRounds = rounds
+	limits := t.Apply(k.Limits)
 	return m.Edit(k.ID, Update{Limits: &limits})
 }
 

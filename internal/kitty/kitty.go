@@ -3,6 +3,8 @@ package kitty
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/madkoding/kitties/internal/soul"
@@ -93,9 +95,75 @@ type Limits struct {
 	Attended bool `json:"attended,omitempty" yaml:"attended"`
 }
 
-// MaxRoundsCap is the most rounds per task a kitty may be given by another (the lead): enough
-// for a long task, not a runaway one. The person may still set more themselves.
-const MaxRoundsCap = 500
+// The most a kitty may be given per task by another (the lead): enough for a long task, not a
+// runaway one. The person may still set more themselves.
+const (
+	MaxRoundsCap  = 500
+	MaxTokensCap  = 2_000_000
+	MaxSecondsCap = 7200
+)
+
+// TaskLimits is a change to a kitty's limits per task, as the lead makes it: a nil field stays
+// as it was, zero goes back to the default.
+type TaskLimits struct {
+	MaxRounds  *int `json:"max_rounds,omitempty"`
+	MaxTokens  *int `json:"max_tokens,omitempty"`
+	MaxSeconds *int `json:"max_seconds,omitempty"`
+}
+
+// Empty reports whether the change changes nothing.
+func (t TaskLimits) Empty() bool {
+	return t.MaxRounds == nil && t.MaxTokens == nil && t.MaxSeconds == nil
+}
+
+// Validate keeps each field between 0 and its cap.
+func (t TaskLimits) Validate() error {
+	for _, f := range []struct {
+		name string
+		v    *int
+		cap  int
+	}{{"max_rounds", t.MaxRounds, MaxRoundsCap}, {"max_tokens", t.MaxTokens, MaxTokensCap}, {"max_seconds", t.MaxSeconds, MaxSecondsCap}} {
+		if f.v != nil && (*f.v < 0 || *f.v > f.cap) {
+			return fmt.Errorf("%s goes from 1 to %d (0 for the default)", f.name, f.cap)
+		}
+	}
+	return nil
+}
+
+// Apply is l with the change made.
+func (t TaskLimits) Apply(l Limits) Limits {
+	if t.MaxRounds != nil {
+		l.MaxRounds = *t.MaxRounds
+	}
+	if t.MaxTokens != nil {
+		l.MaxTokens = *t.MaxTokens
+	}
+	if t.MaxSeconds != nil {
+		l.MaxSeconds = *t.MaxSeconds
+	}
+	return l
+}
+
+// Describe says the change in words, against the limits before it ("rounds 40 → 120").
+func (t TaskLimits) Describe(before Limits) string {
+	say := func(v int) string {
+		if v == 0 {
+			return "default"
+		}
+		return fmt.Sprint(v)
+	}
+	var parts []string
+	if t.MaxRounds != nil {
+		parts = append(parts, fmt.Sprintf("rounds %s → %s", say(before.MaxRounds), say(*t.MaxRounds)))
+	}
+	if t.MaxTokens != nil {
+		parts = append(parts, fmt.Sprintf("tokens %s → %s", say(before.MaxTokens), say(*t.MaxTokens)))
+	}
+	if t.MaxSeconds != nil {
+		parts = append(parts, fmt.Sprintf("seconds %s → %s", say(before.MaxSeconds), say(*t.MaxSeconds)))
+	}
+	return strings.Join(parts, ", ")
+}
 
 // Validate refuses a negative limit.
 func (l Limits) Validate() error {

@@ -80,20 +80,22 @@ func TestLeadFromConfig(t *testing.T) {
 	}
 }
 
-func TestSetRounds(t *testing.T) {
+func TestSetTaskLimits(t *testing.T) {
 	m, err := New(testConfig(t), WithContainers(newFake(), nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	k, _ := m.Create(context.Background(), Spec{Name: "ana", Limits: kitty.Limits{MaxTokens: 100}})
-	got, err := m.SetRounds("ana", 80)
-	if err != nil || got.Limits.MaxRounds != 80 || got.Limits.MaxTokens != 100 {
+	k, _ := m.Create(context.Background(), Spec{Name: "ana", Limits: kitty.Limits{MaxTokens: 100, Retries: 2}})
+	r, sec := 80, 600
+	got, err := m.SetTaskLimits("ana", kitty.TaskLimits{MaxRounds: &r, MaxSeconds: &sec})
+	if err != nil || got.Limits.MaxRounds != 80 || got.Limits.MaxSeconds != 600 || got.Limits.MaxTokens != 100 || got.Limits.Retries != 2 {
 		t.Fatalf("set = %+v %v", got, err)
 	}
-	if _, err := m.SetRounds("ana", kitty.MaxRoundsCap+1); err == nil {
+	over := kitty.MaxRoundsCap + 1
+	if _, err := m.SetTaskLimits("ana", kitty.TaskLimits{MaxRounds: &over}); err == nil {
 		t.Error("past the cap")
 	}
-	if _, err := m.SetRounds("nobody", 5); err == nil {
+	if _, err := m.SetTaskLimits("nobody", kitty.TaskLimits{MaxRounds: &r}); err == nil {
 		t.Error("unknown kitty")
 	}
 	if k, _ = m.Get(k.ID); k.Limits.MaxRounds != 80 {

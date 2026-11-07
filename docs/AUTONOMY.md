@@ -60,6 +60,7 @@ autonomy:                        # Settings → Preferences → Working on their
   follow_ups: 10m 30m 2h         # waits before an unfinished goal runs again; off: never
   brain_wait: 30m                # how long a task waits for a model that is down; off: not at all
   stand_ins: 3                   # tasks a day a kitty without a backup hands to a free one; off: none
+  lead_limits: ask               # the lead's lasting changes of the others' limits wait for a yes; auto (default)
 kitties:
   - name: mimi
     backup: luna                 # takes over what mimi gives up on
@@ -89,11 +90,19 @@ one before.
   **Reports** thread, from the kitty that sent it, and the notification goes out in the lead's
   name (*luna: mimi finished a goal*). The daily summary is the lead's too, and stays in that
   thread. Nothing is lost: the original thread is linked, and the notification still arrives.
-- **It sets the others' rounds.** For a long task it hands out, the lead can give a kitty more
-  rounds of actions per task (or fewer, to keep one short): `@rounds tom {"max_rounds": 120}`, or
-  its native `rounds` tool. Only the lead may, never for itself, from 1 to 500 (0 goes back to the
-  default). The change is kept in the kitty's limits (Settings → Limits shows it), lands in both
-  journals and in the Reports thread, and the lead says so in its report.
+- **It gives the others more room.** For a long task it hands out, the lead can give a kitty more
+  rounds of actions, tokens or seconds per task (or fewer, to keep one short), within caps: 500
+  rounds, 2,000,000 tokens, 7,200 seconds (0 goes back to the default). Only the lead may, never
+  for itself.
+  - *For one task alone*: it passes `max_rounds`, `max_tokens` or `max_seconds` to `delegate`
+    (`@delegate tom {"task": "...", "max_rounds": 200}`). They hold while that task runs and end
+    with it; the delegation and the kitty's journal say so.
+  - *For good*: `@task_limits tom {"max_rounds": 120, "max_seconds": 1800}` (or its native
+    `task_limits` tool) changes the kitty's limits (Settings → Limits shows them), lands in both
+    journals and in the Reports thread, and the lead says so in its report.
+  - *With your yes*: *Settings → Preferences → Working on their own → Ask me before the lead
+    kitty changes another's limits* (`autonomy.lead_limits: ask`) holds each lasting change in
+    Approvals until you approve it.
 - **Ask it how things are going.** Write in the Reports thread: the lead reads the reports
   there and answers from them, or hands out the next round of work.
 

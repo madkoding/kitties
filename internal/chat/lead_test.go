@@ -2,10 +2,12 @@ package chat
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/madkoding/kitties/internal/agenda"
+	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
@@ -108,30 +110,30 @@ func TestLeadReportsForTheOthers(t *testing.T) {
 	}
 }
 
-// roundsFleet is the fake fleet that can change a kitty's rounds, as the orchestrator does.
-type roundsFleet struct{ *fakeFleet }
+// limitsFleet is the fake fleet that can change a kitty's limits, as the orchestrator does.
+type limitsFleet struct{ *fakeFleet }
 
-func (f roundsFleet) SetRounds(ref string, n int) (*kitty.Kitty, error) {
+func (f limitsFleet) SetTaskLimits(ref string, t kitty.TaskLimits) (*kitty.Kitty, error) {
 	k, err := f.Get(ref)
 	if err != nil {
 		return nil, err
 	}
-	k.Limits.MaxRounds = n
+	k.Limits = t.Apply(k.Limits)
 	return k, nil
 }
 
-func TestLeadSetsRounds(t *testing.T) {
-	ff, sa, sb, _ := fleet(t)
-	f := roundsFleet{ff}
+func TestLeadSetsLimits(t *testing.T) {
+	ff, _, sb, _ := fleet(t)
+	f := limitsFleet{ff}
 	s := service(t, f)
 	j, _ := withAgenda(t, s)
 	ana, _ := f.Get("ana")
 	bo, _ := f.Get("bo")
 	// Nobody leads: nobody gets the tool, and the line is refused.
-	if s.canSetRounds(bo) {
+	if s.canSetLimits(bo) {
 		t.Fatal("only the lead")
 	}
-	sb.replies = []string{"@rounds ana {\"max_rounds\": 60}", "ok"}
+	sb.replies = []string{"@task_limits ana {\"max_rounds\": 60}", "ok"}
 	c, _ := s.Create("", []string{"bo"})
 	if _, err := s.Send(context.Background(), c.ID, "go"); err != nil {
 		t.Fatal(err)
@@ -141,42 +143,48 @@ func TestLeadSetsRounds(t *testing.T) {
 	}
 
 	bo.Lead = true
-	if !s.canSetRounds(bo) || s.canSetRounds(ana) {
+	if !s.canSetLimits(bo) || s.canSetLimits(ana) {
 		t.Fatal("the lead, and only it, may")
 	}
 	found := false
 	for _, tool := range s.toolSet(bo, nil) {
-		found = found || tool.Name == "rounds"
+		found = found || tool.Name == "task_limits"
+		if tool.Name == "delegate" {
+			if _, ok := tool.Parameters["properties"].(map[string]any)["max_rounds"]; !ok {
+				t.Error("the lead's delegate takes limits for one task")
+			}
+		}
 	}
 	if !found {
-		t.Error("the lead is offered the rounds tool")
+		t.Error("the lead is offered the task_limits tool")
 	}
-	sb.replies = []string{"@rounds ana {\"max_rounds\": 60}", "Gave ana 60 rounds."}
-	if _, err := s.Send(context.Background(), c.ID, "ana needs more rounds"); err != nil {
+	sb.replies = []string{"@task_limits ana {\"max_rounds\": 60, \"max_tokens\": 500000, \"max_seconds\": 1800}", "Gave ana more."}
+	if _, err := s.Send(context.Background(), c.ID, "ana needs more"); err != nil {
 		t.Fatal(err)
 	}
-	if ana.Limits.MaxRounds != 60 {
-		t.Fatalf("rounds = %d", ana.Limits.MaxRounds)
+	if l := ana.Limits; l.MaxRounds != 60 || l.MaxTokens != 500000 || l.MaxSeconds != 1800 {
+		t.Fatalf("limits = %+v", l)
 	}
 	if kinds(j, "a1") != "limit" || !strings.Contains(kinds(j, "b1"), "limit") {
 		t.Errorf("journals: ana %s, bo %s", kinds(j, "a1"), kinds(j, "b1"))
 	}
 	reports, _ := s.ReportsChat(bo)
 	rep, _ := s.Get(reports)
-	if last := rep.Turns[len(rep.Turns)-1]; last.Report == nil || last.Report.Event != "rounds" || !strings.Contains(last.Text, "from the default to 60") {
+	if last := rep.Turns[len(rep.Turns)-1]; last.Report == nil || last.Report.Event != "limits" || !strings.Contains(last.Text, "rounds default → 60, tokens default → 500000, seconds default → 1800") {
 		t.Errorf("reported = %+v", last)
 	}
-	// The lead's prompt shows the team's rounds.
-	if p := sb.seen[len(sb.seen)-1][0].Content; !strings.Contains(p, "@rounds") {
-		t.Errorf("lead prompt names the tool: %s", p)
+	if p := sb.seen[len(sb.seen)-1][0].Content; !strings.Contains(p, "@task_limits") || !strings.Contains(p, "for that task alone with delegate") {
+		t.Errorf("lead prompt names the tools: %s", p)
 	}
 
-	// Refused: past the cap, itself, nobody, no number.
+	// Refused: past a cap, itself, nobody, nothing to change.
 	for line, want := range map[string]string{
-		"@rounds ana {\"max_rounds\": 9999}": "1 to 500",
-		"@rounds bo {\"max_rounds\": 10}":    "not its own",
-		"@rounds zed {\"max_rounds\": 10}":   "no such kitty",
-		"@rounds ana {}":                     "say how many",
+		"@task_limits ana {\"max_rounds\": 9999}":    "1 to 500",
+		"@task_limits ana {\"max_tokens\": 9999999}": "1 to 2000000",
+		"@task_limits ana {\"max_seconds\": 99999}":  "1 to 7200",
+		"@task_limits bo {\"max_rounds\": 10}":       "not its own",
+		"@task_limits zed {\"max_rounds\": 10}":      "no such kitty",
+		"@task_limits ana {}":                        "say what to change",
 	} {
 		sb.replies = []string{line, "ok"}
 		if _, err := s.Send(context.Background(), c.ID, "x"); err != nil {
@@ -191,11 +199,122 @@ func TestLeadSetsRounds(t *testing.T) {
 		t.Errorf("a refused change changed nothing: %d", ana.Limits.MaxRounds)
 	}
 	// Plain words work too, and 0 goes back to the default.
-	if o := s.runRounds(c.ID, action{kind: "rounds", name: "ana", args: map[string]any{"max_rounds": "0"}}, bo); o.err != "" || ana.Limits.MaxRounds != 0 {
-		t.Errorf("back to the default: %+v %d", o, ana.Limits.MaxRounds)
+	if o := s.runTaskLimits(c.ID, action{kind: "task_limits", name: "ana", args: map[string]any{"max_rounds": "0"}}, bo, &Turn{}); o.err != "" || ana.Limits.MaxRounds != 0 || ana.Limits.MaxTokens != 500000 {
+		t.Errorf("back to the default: %+v %+v", o, ana.Limits)
 	}
-	if a := fromCalls([]provider.ToolCall{{ID: "1", Name: "rounds", Args: map[string]any{"kitty": "ana", "max_rounds": 30.0}}}); a[0].kind != "rounds" || a[0].name != "ana" {
+	if a := fromCalls([]provider.ToolCall{{ID: "1", Name: "task_limits", Args: map[string]any{"kitty": "ana", "max_rounds": 30.0}}}); a[0].kind != "task_limits" || a[0].name != "ana" {
 		t.Errorf("native call = %+v", a[0])
 	}
-	_ = sa
 }
+
+func TestLeadLimitsForOneTask(t *testing.T) {
+	ff, _, sb, _ := fleet(t)
+	f := limitsFleet{ff}
+	s := service(t, f)
+	j, _ := withAgenda(t, s)
+	ana, _ := f.Get("ana")
+	bo, _ := f.Get("bo")
+	bo.Lead = true
+	ana.Limits.MaxRounds = 5
+	c, _ := s.Create("", []string{"bo"})
+	// While ana works on the task, it has the rounds the lead gave it; then its own again.
+	var during kitty.Limits
+	ff.brains["a1"] = probe(func() {
+		s.mu.RLock()
+		var ids []string
+		for id := range s.overrides {
+			ids = append(ids, id)
+		}
+		s.mu.RUnlock()
+		for _, id := range ids {
+			during = s.limitsFor(ana, id)
+		}
+	})
+	sb.replies = []string{"@delegate ana {\"task\": \"a long one\", \"max_rounds\": 200}", "ana did it."}
+	if _, err := s.Send(context.Background(), c.ID, "do the long one"); err != nil {
+		t.Fatal(err)
+	}
+	if during.MaxRounds != 200 {
+		t.Errorf("during the task = %+v", during)
+	}
+	if ana.Limits.MaxRounds != 5 || len(s.overrides) != 0 {
+		t.Errorf("after the task: %+v, %d overrides", ana.Limits, len(s.overrides))
+	}
+	got, _ := s.Get(c.ID)
+	if d := got.Turns[1].Delegations; len(d) != 1 || !strings.Contains(d[0].Limits, "for this task only, ana's rounds 5 → 200") {
+		t.Errorf("delegation = %+v", got.Turns[1].Delegations)
+	}
+	if kinds(j, "a1") != "limit" {
+		t.Errorf("ana's journal = %s", kinds(j, "a1"))
+	}
+	// Past the cap, refused; and a kitty that does not lead cannot give more.
+	sb.replies = []string{"@delegate ana {\"task\": \"x\", \"max_rounds\": 9999}", "ok"}
+	_, _ = s.Send(context.Background(), c.ID, "again")
+	if msgs := sb.seen[len(sb.seen)-1]; !strings.Contains(msgs[len(msgs)-1].Content, "1 to 500") {
+		t.Errorf("past the cap: %s", msgs[len(msgs)-1].Content)
+	}
+	bo.Lead = false
+	sb.replies = []string{"@delegate ana {\"task\": \"x\", \"max_rounds\": 300}", "ok"}
+	_, _ = s.Send(context.Background(), c.ID, "once more")
+	got, _ = s.Get(c.ID)
+	if d := got.Turns[len(got.Turns)-1].Delegations; len(d) == 1 && d[0].Limits != "" {
+		t.Errorf("only the lead gives more: %+v", d)
+	}
+}
+
+func TestLeadLimitsWaitForAYes(t *testing.T) {
+	ff, _, _, _ := fleet(t)
+	f := limitsFleet{ff}
+	s := service(t, f)
+	b := &bell{}
+	s.SetNotifier(b)
+	withAgenda(t, s)
+	store, err := approvals.Open(filepath.Join(t.TempDir(), "approvals.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SetApprovals(store)
+	ask := true
+	s.SetLeadLimitsAsk(func() bool { return ask })
+	ana, _ := f.Get("ana")
+	bo, _ := f.Get("bo")
+	bo.Lead = true
+	c, _ := s.Create("", []string{"bo"})
+	var turn Turn
+	o := s.runTaskLimits(c.ID, action{kind: "task_limits", name: "ana", args: map[string]any{"max_rounds": 120.0}}, bo, &turn)
+	if !strings.Contains(o.text, "held") || ana.Limits.MaxRounds != 0 || len(turn.Approvals) != 1 {
+		t.Fatalf("held = %+v, limits %+v", o, ana.Limits)
+	}
+	if b.events() != "approval" {
+		t.Errorf("the person is told: %s", b.events())
+	}
+	if _, err := s.DecideApproval(context.Background(), turn.Approvals[0].ID, true, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if ana.Limits.MaxRounds != 120 {
+		t.Errorf("approved = %+v", ana.Limits)
+	}
+	got, _ := s.Get(c.ID)
+	if last := got.Turns[len(got.Turns)-1]; !strings.Contains(last.Text, "Approved and done: bo changed ana's limits per task: rounds default → 120") {
+		t.Errorf("the thread hears it: %q", last.Text)
+	}
+	// A no changes nothing; with ask off, the change is made at once.
+	turn = Turn{}
+	s.runTaskLimits(c.ID, action{kind: "task_limits", name: "ana", args: map[string]any{"max_rounds": 7.0}}, bo, &turn)
+	if _, err := s.DecideApproval(context.Background(), turn.Approvals[0].ID, false, "too few", false); err != nil || ana.Limits.MaxRounds != 120 {
+		t.Errorf("rejected: %v %+v", err, ana.Limits)
+	}
+	ask = false
+	if o := s.runTaskLimits(c.ID, action{kind: "task_limits", name: "ana", args: map[string]any{"max_rounds": 7.0}}, bo, &Turn{}); o.err != "" || ana.Limits.MaxRounds != 7 {
+		t.Errorf("auto: %+v %+v", o, ana.Limits)
+	}
+}
+
+// probe is a brain that calls fn each time it is asked, and answers "done".
+type probe func()
+
+func (p probe) Complete(context.Context, []provider.Message) (provider.Reply, error) {
+	p()
+	return provider.Reply{Content: "done"}, nil
+}
+func (p probe) Describe() string { return "probe" }

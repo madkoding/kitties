@@ -780,7 +780,7 @@ function TurnCard({
               key={"d" + i}
               class={`tag ${d.error ? "tag-red" : "tag-magenta"}`}
               href={`#chat/${d.chat}`}
-              title={d.error || d.result || d.task}
+              title={[d.error || d.result || d.task, d.limits].filter(Boolean).join("\n")}
             >
               → {d.kitty}
             </a>
