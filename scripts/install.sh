@@ -549,7 +549,7 @@ esac
 echo
 # The gateway writes its token as it starts; whoever runs this as root may see it.
 token=
-for i in 1 2 3 4 5 6 7 8 9 10; do
+for _ in 1 2 3 4 5 6 7 8 9 10; do
     token=$(head -n 1 "$token_file" 2>/dev/null | tr -d ' \r\n') || token=
     [ -z "$token" ] || break
     sleep 1
