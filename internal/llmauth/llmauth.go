@@ -344,9 +344,9 @@ type Flow struct {
 	Paste  bool   `json:"paste,omitempty"`
 	Status string `json:"status"` // pending | connected | failed
 	// Log is the last lines a program the flow runs printed (the Claude Code installer).
-	Log    string `json:"log,omitempty"`
-	Error  string `json:"error,omitempty"`
-	Who    string `json:"who,omitempty"`
+	Log   string `json:"log,omitempty"`
+	Error string `json:"error,omitempty"`
+	Who   string `json:"who,omitempty"`
 }
 
 // Flow statuses.
