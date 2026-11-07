@@ -108,6 +108,8 @@ notify:
   connector: phone
   on: [help, approval]           # help | approval | goal_done | goal_blocked | recovered | budget
   digest: "08:30"                # a summary of the last day, every day at this time (empty: none)
+  replies: false                 # true: what you write to the ntfy topic reaches the kitties
+                                 # (needs a topic of 20+ characters or an access token)
 
 # A WhatsApp number of the kitties' own, linked as a device from Settings (docs/WHATSAPP.md).
 # Not an official API: WhatsApp may ban the number, so use a spare one. Used while nothing was

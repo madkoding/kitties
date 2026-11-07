@@ -399,7 +399,7 @@ export interface SettingsView {
   connector_categories: string[];
   motita_url?: string;
   // day starts the summary with the person's day: calendar, reminders and weather.
-  notify: { connector: string; on: string[]; digest?: string; day?: boolean };
+  notify: { connector: string; on: string[]; digest?: string; day?: boolean; replies?: boolean };
   notify_events: string[];
   // autonomy is how long the kitties keep at a task on their own: empty takes the defaults.
   autonomy?: { follow_ups: string; brain_wait: string; stand_ins?: string; lead_limits?: string };
@@ -1021,8 +1021,13 @@ export const api = {
     ),
   feedback: (chat: string, index: number, rating: "up" | "down" | "", note = "") =>
     request("POST", `/v1/chats/${chat}/turns/${index}/feedback`, { rating, note }),
-  setNotify: (c: { connector: string; on: string[]; digest?: string }) =>
-    request<SettingsView>("PUT", "/v1/settings/notify", c),
+  setNotify: (c: {
+    connector: string;
+    on: string[];
+    digest?: string;
+    day?: boolean;
+    replies?: boolean;
+  }) => request<SettingsView>("PUT", "/v1/settings/notify", c),
   setAutonomy: (a: {
     follow_ups: string;
     brain_wait: string;

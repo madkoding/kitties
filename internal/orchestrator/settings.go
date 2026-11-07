@@ -122,9 +122,31 @@ func (m *Manager) SetNotify(c notify.Config) error {
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if c.Replies {
+		cn := m.cfg.Connectors[c.Connector]
+		if err := notify.CheckReplies(cn.Kind, cn.ConnectorSettings()); err != nil {
+			return err
+		}
+	}
 	m.cfg.Notify = c
 	m.overlay.Notify = &c
 	return m.saveSettings()
+}
+
+// ReplyChannel is the ntfy connector the person answers the kitties through: its settings, and
+// ok when replies are on and the connector can take them.
+func (m *Manager) ReplyChannel() (connector.Settings, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	n := m.cfg.Notify
+	if !n.Replies || n.Connector == "" {
+		return nil, false
+	}
+	cn, ok := m.cfg.Connectors[n.Connector]
+	if !ok || notify.CheckReplies(cn.Kind, cn.ConnectorSettings()) != nil {
+		return nil, false
+	}
+	return cn.ConnectorSettings(), true
 }
 
 func (m *Manager) saveSettings() error {

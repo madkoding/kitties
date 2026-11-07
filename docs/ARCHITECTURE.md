@@ -251,6 +251,17 @@ message (ntfy preferred, with a click link to the page), for the events `help`, 
 one message. The choice is kept in `settings.json` over the YAML's `notify`; deleting the
 connector clears it.
 
+**Replies** (`internal/reply`). With `notify.replies` on an ntfy connector, `reply.Service.Listen`
+follows the topic's JSON stream (`GET <server>/<topic>/json`, going on `since` the last id after a
+break, reopened when the settings change). Messages tagged `cat` (`connector.NtfyMark`, put on
+everything the ntfy connector sends) are the gateway's own and skipped. `Handle` picks the kitties
+(the title, a `name:` or `@name` start, `all:`; else the lead, else the kitty of the last
+notification in the last day, else the only kitty), sends the text to that kitty's chat (the one
+it notified about, else its latest chat with the person, else a new one; a kitty waiting in
+`ask_help` gets it as its answer), and returns the answer through `Notifier.Deliver` with the
+event `reply`, following a desktop task until it ends. `Notifier.OnSent` tells it who notified
+last. `notify.CheckReplies` asks for a topic of 20 characters or a token; 30 messages an hour.
+
 **Daily summary** (`internal/digest`). `Reporter` builds one message from the journal (what each
 kitty finished, blocked, handed over, learned in the last 24 hours), today's spending and the
 actions waiting for a yes, and sends it through `Notifier.Deliver` when the clock passes

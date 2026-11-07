@@ -216,3 +216,47 @@ func TestNotifySettings(t *testing.T) {
 		}
 	}
 }
+
+func TestReplyChannel(t *testing.T) {
+	m, err := New(testConfig(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.ReplyChannel(); ok {
+		t.Error("replies are off by default")
+	}
+	if err := m.SetConnector("phone", config.Connector{Kind: "ntfy", Settings: map[string]string{"topic": "my-kitties"}}, ConnectorChange{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetNotify(notify.Config{Connector: "phone", Replies: true}); err == nil || !strings.Contains(err.Error(), "20 characters") {
+		t.Errorf("a short public topic must not take replies: %v", err)
+	}
+	if err := m.SetNotify(notify.Config{Connector: "sl", Replies: true}); err == nil {
+		t.Error("only ntfy takes replies")
+	}
+	long := "my-kitties-k7f9q2xw81m"
+	if err := m.SetConnector("phone", config.Connector{Kind: "ntfy", Settings: map[string]string{"topic": long}}, ConnectorChange{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetNotify(notify.Config{Connector: "phone", Replies: true}); err != nil {
+		t.Fatal(err)
+	}
+	if s, ok := m.ReplyChannel(); !ok || s["topic"] != long {
+		t.Errorf("channel %v %v", s, ok)
+	}
+	// A topic made short afterwards stops taking replies.
+	if err := m.SetConnector("phone", config.Connector{Kind: "ntfy", Settings: map[string]string{"topic": "short"}}, ConnectorChange{}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := m.ReplyChannel(); ok {
+		t.Error("a short topic still takes replies")
+	}
+	// From the file too.
+	base := "providers:\n  p:\n    kind: ollama\nconnectors:\n  phone:\n    kind: ntfy\n    settings: { topic: %s }\nnotify:\n  connector: phone\n  replies: true\n"
+	if _, err := config.Parse([]byte(fmt.Sprintf(base, "short"))); err == nil {
+		t.Error("the file: a short topic must not take replies")
+	}
+	if c, err := config.Parse([]byte(fmt.Sprintf(base, long))); err != nil || !c.Notify.Replies {
+		t.Errorf("the file: %+v %v", c.Notify, err)
+	}
+}

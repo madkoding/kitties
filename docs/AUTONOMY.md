@@ -168,6 +168,19 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   ten minutes. Optionally a **daily summary** arrives at the hour you choose: what each kitty did
   in the last day, what it spent, which goals ran again on their own and how they ended, and
   what waits for your yes.
+- **Answer from the notification.** With an ntfy channel and *Let me answer from ntfy* ticked
+  (`notify.replies: true`), the gateway listens to the same topic: what you write there goes to
+  the kitty that notified you last (in the last day), or to the one you name (`luna: …`,
+  `@luna …`, `luna y bo: …`, or the ntfy message's title), or to every kitty (`all: …`,
+  `todos: …`). With nothing named, the lead kitty answers when there is one; a request the
+  lead signed for another kitty is answered by naming that kitty (`bo: …`). A kitty waiting for
+  your help takes the message as its answer; one that starts a task on its desktop says so and
+  sends the result when it is done. Answers come back to the topic, marked with a 🐱 so the
+  gateway never reads its own. Write from the ntfy web app (it installs on the phone and has a
+  message box), from any ntfy client that publishes, or with
+  `curl -d "luna: are you done?" ntfy.sh/<topic>`. The topic is the password: replies need 20
+  characters at least or an access token, and 30 messages an hour of 2000 characters at most are
+  taken. Messages written while the gateway was off are not read.
 - **Community manager, support, finance.** Besides writing, connectors read and answer: Mastodon
   and Bluesky timelines, mentions, replies and likes; Gmail and Outlook inboxes; Slack and
   Telegram messages; Stripe balance, invoices and payments; Zendesk tickets. Results come back as
@@ -195,6 +208,7 @@ notify:
   connector: phone               # any messaging connector; ntfy pushes to your phone
   on: [help, approval, goal_done, goal_blocked, recovered, budget]   # default: help, approval
   digest: "08:30"                # a summary of the last day, every day (gateway's clock); empty: none
+  replies: true                  # answer the kitties by writing to the ntfy topic
 connectors:
-  phone: { kind: ntfy, settings: { topic: my-kitties } }
+  phone: { kind: ntfy, settings: { topic: my-kitties-k7f9q2xw81 } }   # 20+ characters, or a token
 ```
