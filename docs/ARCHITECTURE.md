@@ -101,6 +101,14 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
   the `whatsapp-web` connector. The session is kept in memory and sealed with the vault's key. It is
   the one part with third-party modules ([whatsmeow](https://github.com/tulir/whatsmeow) and what it
   needs); an unofficial API, off by default: [WHATSAPP.md](WHATSAPP.md).
+- **Guardrails** (`internal/guard`, `internal/chat/guard.go`): a chat whose writers are not the person
+  (a WhatsApp contact or group, a chat marked public) is exposed. There the kitty sees its soul, the
+  guard's rules and the thread with the third parties' words marked as data, and may only call the
+  connections picked for exposed kitties: no desktop, vault, library, memory or delegation. Its answer
+  is scrubbed (known secrets by value, credential shapes, internal paths and addresses, personal data
+  the other side did not give) before it is kept; attempts and floods are refused before anything is
+  stored; every event is recorded without the secret. What a kitty sends to other people through a
+  connection is scrubbed of secrets in any chat: [GUARDRAILS.md](GUARDRAILS.md).
 - **Skills and artifacts** (`internal/skills`, `internal/artifacts`): a library like motita's.
   Skills are markdown procedures the kitties read with `@skill read <name>` and propose with
   `@skill save` (a person accepts them in the Library); three ship built in. Artifacts are the

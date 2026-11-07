@@ -259,6 +259,10 @@ export interface Session {
   // a kitty's name).
   gist?: string;
   gist_by?: string;
+  // exposed marks a chat where whoever writes is not the person (a WhatsApp contact, a group, a
+  // public chat): the guardrails apply; audience says who writes there.
+  exposed?: boolean;
+  audience?: string;
 }
 
 export interface ProviderKind {
@@ -831,6 +835,12 @@ export const api = {
   testWhatsApp: (to: string) =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/whatsapp/test", { to }),
   clearWhatsAppHeld: () => request<WhatsAppStatus>("DELETE", "/v1/whatsapp/held"),
+  // guard is the guardrails of the kitties that answer other people (docs/GUARDRAILS.md).
+  guard: () => request<GuardStatus>("GET", "/v1/guard"),
+  setGuard: (s: GuardSettings) => request<GuardStatus>("PUT", "/v1/guard", s),
+  clearGuardLog: () => request<GuardStatus>("DELETE", "/v1/guard/log"),
+  exposeChat: (id: string, exposed: boolean, audience = "") =>
+    request<Session>("PUT", `/v1/chats/${encodeURIComponent(id)}/exposed`, { exposed, audience }),
   resendWhatsAppHeld: (id: string) =>
     request<WhatsAppStatus>("POST", `/v1/whatsapp/held/${encodeURIComponent(id)}/resend`),
   revokeMcpClient: (id: string) =>
@@ -1678,3 +1688,33 @@ export async function voxlSource(ref: string): Promise<string | null> {
     return null;
   }
 }
+
+// GuardSettings are the guardrails of the chats with people who are not the person: on by default,
+// no connection allowed, no number trusted.
+export type GuardSettings = {
+  enabled: boolean;
+  // connectors an exposed kitty may still use.
+  connectors: string[];
+  // trusted are the person's own WhatsApp numbers (digits): their chats are not exposed.
+  trusted: string[];
+  max_per_hour: number;
+  block_injection: boolean;
+  redact_personal: boolean;
+};
+
+// GuardEvent is one thing the guardrails did: kind is redacted, blocked_tool, rate_limited or
+// injection; it never holds a secret.
+export type GuardEvent = {
+  id: string;
+  at: string;
+  kind: "redacted" | "blocked_tool" | "rate_limited" | "injection";
+  chat?: string;
+  who?: string;
+  detail: string;
+  text?: string;
+};
+
+export type GuardStatus = GuardSettings & {
+  log: GuardEvent[];
+  counts: Record<string, number>;
+};
