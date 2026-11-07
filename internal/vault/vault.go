@@ -295,3 +295,17 @@ func contains(list []string, s string) bool {
 	}
 	return false
 }
+
+// Values are the values of every secret, opened: for the guardrails to take them out of what
+// reaches other people. They never leave the gateway.
+func (s *Store) Values() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := make([]string, 0, len(s.list))
+	for _, e := range s.list {
+		if plain, err := s.aead.Open(nil, e.Nonce, e.Sealed, []byte(strings.ToLower(e.Name))); err == nil {
+			out = append(out, string(plain))
+		}
+	}
+	return out
+}

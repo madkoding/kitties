@@ -31,6 +31,7 @@ import (
 	"github.com/madkoding/kitties/internal/attach"
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/connector"
+	"github.com/madkoding/kitties/internal/guard"
 	"github.com/madkoding/kitties/internal/kitty"
 )
 
@@ -292,6 +293,22 @@ type Options struct {
 	Defaults *Settings
 	// Log reports what happens (optional).
 	Log func(format string, args ...any)
+	// Guard keeps the chats of the people who write from giving the person away (optional:
+	// without it they are not guarded).
+	Guard Guard
+}
+
+// Guard is what the bridge needs of the guardrails (internal/guard).
+type Guard interface {
+	// Trusted reports whether a number is one of the person's own: its chat is not exposed.
+	Trusted(number string) bool
+	// Outbound takes the known secrets and the credentials out of a text that leaves.
+	Outbound(where, text string) string
+}
+
+// exposer is the part of the chats that marks a chat as exposed (chat.Service.Expose).
+type exposer interface {
+	Expose(id, who string, on bool) error
 }
 
 // sessionAAD binds the sealed session to its use.
@@ -1476,6 +1493,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 		b.opt.Log("whatsapp: no chat for +%s: %v", in.from, err)
 		return
 	}
+	b.expose(id, in)
 	if in.ref.ID != "" {
 		if err := c.MarkRead(ctx, in.ref); err != nil {
 			b.opt.Log("whatsapp: mark read: %v", err)
@@ -1496,6 +1514,15 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 	stopTyping()
 	if errors.Is(err, chat.ErrBusy) {
 		b.reply(ctx, c, in.to, b.busyText(in.who, in.text))
+		return
+	}
+	if errors.Is(err, guard.ErrInjection) {
+		// The guardrails did not let it reach the kitty: a short no, with nothing of why.
+		b.reply(ctx, c, in.to, b.refusalText(in.who, in.text))
+		return
+	}
+	if errors.Is(err, guard.ErrRate) {
+		b.opt.Log("whatsapp: +%s is over the guardrails' messages per hour: not answered", in.from)
 		return
 	}
 	if err != nil {
@@ -1542,6 +1569,52 @@ var busy = map[string]string{
 	"en": "⏳ I am still on your last message; I will write when it is done.",
 	"es": "⏳ Sigo con tu mensaje anterior; te escribo apenas termine.",
 	"pt": "⏳ Ainda estou na sua mensagem anterior; escrevo assim que terminar.",
+}
+
+// refusal is what a message the guardrails stopped gets, in the kitty's language.
+var refusal = map[string]string{
+	"en": "Sorry, I can't help with that. Is there anything else I can do for you?",
+	"es": "Lo siento, con eso no puedo ayudarte. ¿Hay algo más en que pueda ayudarte?",
+	"pt": "Desculpe, não posso ajudar com isso. Posso ajudar em mais alguma coisa?",
+}
+
+func (b *Bridge) refusalText(who, text string) string {
+	b.mu.Lock()
+	k := b.kittyLocked(who)
+	b.mu.Unlock()
+	lang := ""
+	if k != nil {
+		lang = k.Soul.Language
+	}
+	return refusal[LanguageOf(lang, text)]
+}
+
+// expose marks the chat of a message as exposed, unless it is a number of the person's own (a
+// group is always exposed: anyone in it may write).
+func (b *Bridge) expose(id string, in inbound) {
+	e, ok := b.opt.Chats.(exposer)
+	if !ok || b.opt.Guard == nil {
+		return
+	}
+	who := "WhatsApp +" + in.from
+	if in.group {
+		who = "WhatsApp group " + in.groupName
+		if in.groupName == "" {
+			who = "WhatsApp group " + strings.TrimSuffix(in.to, "@g.us")
+		}
+	}
+	on := in.group || !b.opt.Guard.Trusted(in.from)
+	if err := e.Expose(id, who, on); err != nil {
+		b.opt.Log("whatsapp: mark the chat of +%s: %v", in.from, err)
+	}
+}
+
+// outbound is text without the secrets the gateway knows, for to.
+func (b *Bridge) outbound(to, text string) string {
+	if b.opt.Guard == nil {
+		return text
+	}
+	return b.opt.Guard.Outbound("whatsapp "+to, text)
 }
 
 func (b *Bridge) busyText(who, text string) string {
@@ -1768,7 +1841,7 @@ func (b *Bridge) sendWith(ctx context.Context, to, text, file string) error {
 	if err != nil {
 		return err
 	}
-	text = strings.TrimSpace(text)
+	text = strings.TrimSpace(b.outbound(n, text))
 	if text == "" && file == "" {
 		return errors.New("the message is empty")
 	}
@@ -1886,6 +1959,7 @@ func (b *Bridge) voiceOf(who string) string {
 // say answers in: as a voice note when voice is on and the answer reads well aloud, else as
 // text (also when the speech service fails). who is the number or group whose kitty answers.
 func (b *Bridge) say(ctx context.Context, c Client, to, who string, in *inbound, text string, voice bool) {
+	text = b.outbound(to, text)
 	if voice {
 		err := b.voiceNote(ctx, c, to, text, b.voiceOf(who))
 		if err == nil || errors.Is(err, ErrLimit) {

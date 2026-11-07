@@ -28,6 +28,7 @@ import (
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/container"
 	"github.com/madkoding/kitties/internal/desktop"
+	"github.com/madkoding/kitties/internal/guard"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/llmauth"
 	"github.com/madkoding/kitties/internal/notify"
@@ -158,6 +159,8 @@ type Server struct {
 	mcpControl MCPControl
 	// whatsapp links a WhatsApp number, nil when the gateway has none.
 	whatsapp WhatsApp
+	// guard keeps the exposed kitties from giving the person away, nil when there is none.
+	guard Guard
 }
 
 // WithLibrary serves the skills and the artifacts.
@@ -275,6 +278,7 @@ func (s *Server) routes() {
 	s.exposureRoutes()
 	s.mcpControlRoutes()
 	s.whatsappRoutes()
+	s.guardRoutes()
 	s.mux.Handle("GET /v1/chats/{id}/events", api(s.handleEvents))
 	s.mux.Handle("POST /v1/oauth/{name}/start", api(s.handleOAuthStart))
 	s.mux.Handle("GET /v1/oauth/{name}/redirect", api(s.handleOAuthRedirect))
@@ -591,6 +595,10 @@ func codeFor(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
+	case errors.Is(err, guard.ErrRate):
+		return http.StatusTooManyRequests
+	case errors.Is(err, guard.ErrInjection):
+		return http.StatusUnprocessableEntity
 	case errors.Is(err, chat.ErrBusy), strings.Contains(msg, "already running"), strings.Contains(msg, "already has an answer"), strings.Contains(msg, "has the desktop"), strings.Contains(msg, "is already approved"), strings.Contains(msg, "is already rejected"):
 		return http.StatusConflict
 	case errors.Is(err, chat.ErrNoApprovals), errors.Is(err, chat.ErrNoMemory):

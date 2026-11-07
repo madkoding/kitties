@@ -52,6 +52,7 @@ import { ask } from "./Confirm";
 import Secrets from "./Secrets";
 import MachinesSettings from "./MachinesSettings";
 import Exposure from "./Exposure";
+import Guardrails from "./Guardrails";
 import McpConnector from "./McpConnector";
 import { SharedMemory } from "./Notes";
 import WhatsAppLink from "./WhatsApp";
@@ -69,6 +70,7 @@ export type Tab =
   | "models"
   | "connectors"
   | "secrets"
+  | "guardrails"
   | "memory"
   | "machines"
   | "notifications"
@@ -2150,6 +2152,7 @@ export default function SettingsModal({
     { id: "models", label: t("Models") },
     { id: "connectors", label: t("Connections") },
     { id: "secrets", label: t("Secrets") },
+    { id: "guardrails", label: t("Guardrails") },
     { id: "memory", label: t("Shared memory") },
     { id: "machines", label: t("Machines") },
     { id: "notifications", label: t("Notifications") },
@@ -2340,6 +2343,9 @@ export default function SettingsModal({
         )}
 
         {tab === "secrets" && <Secrets kitties={kitties} />}
+        {tab === "guardrails" && (
+          <Guardrails connections={(view?.connectors || []).map((c) => c.name)} />
+        )}
         {tab === "machines" && <MachinesSettings kitties={kitties} />}
         {tab === "memory" && <SharedMemory />}
         {tab === "notifications" && view && (

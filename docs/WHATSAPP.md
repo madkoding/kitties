@@ -101,6 +101,11 @@ session, without a new code. **Unlink** removes the device from the phone and fo
   group) by itself, a picture as a picture and anything else as a document (up to 16 MB).
 - **The allow list works both ways.** A message from a number that is not on it is ignored (and
   counted in Settings), without an answer; the kitties can only write to numbers on it.
+- **Guarded chats.** The chats with contacts and groups are guarded: the kitty has no desktop,
+  files, vault or notes about you there, and secrets and personal data are taken out of what it says.
+  Your own number keeps the whole kitty once you add it to Settings › Guardrails › *Your own WhatsApp
+  numbers*. Everything the bridge sends leaves without the known secrets. See
+  [GUARDRAILS.md](GUARDRAILS.md).
 - **The kitties write with the connector.** While the link is connected, `whatsapp-web` is offered
   to the kitties (those whose connections list is empty or names it):
 

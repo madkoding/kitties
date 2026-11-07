@@ -16,6 +16,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -31,6 +32,7 @@ import (
 	"github.com/madkoding/kitties/internal/demo"
 	"github.com/madkoding/kitties/internal/digest"
 	"github.com/madkoding/kitties/internal/gateway"
+	"github.com/madkoding/kitties/internal/guard"
 	"github.com/madkoding/kitties/internal/keep"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/mcp"
@@ -115,6 +117,11 @@ type app struct {
 	notifier *notify.Notifier
 	skills   *skills.Library
 	arts     *artifacts.Store
+	// guard keeps the exposed kitties from giving the person away; tokens are the gateway's own
+	// secrets it takes out too.
+	guard    *guard.Guard
+	tokensMu sync.Mutex
+	tokens   []string
 	in       io.Reader
 	out      io.Writer
 	err      io.Writer
@@ -346,6 +353,10 @@ func (a *app) open(cmd string) error {
 	chats.SetBudget(a.budget)
 	chats.SetApprovals(a.approvals)
 	chats.SetMemory(a.memory)
+	if a.guard, err = guard.Open(filepath.Join(dataDir, "guard"), a.secretValues); err != nil {
+		return err
+	}
+	chats.SetGuard(a.guard)
 	g := a.cfg.Gateway
 	a.notifier = notify.New(fleet.Connectors(), fleet.Notify, func() string {
 		if g.PublicURL != "" {
@@ -391,6 +402,32 @@ func (a *app) open(cmd string) error {
 	a.updater = selfupdate.New(a.cfg.Updates, version)
 	a.updater.Idle = func() bool { return !a.chats.AnyBusy() && !a.fleet.AnyHeld() }
 	return nil
+}
+
+// secretValues are the secrets the gateway knows now, for the guardrails to take out of what
+// reaches other people.
+func (a *app) secretValues() []string {
+	var out []string
+	if a.fleet != nil {
+		out = append(out, a.fleet.SecretValues()...)
+	}
+	if a.vault != nil {
+		out = append(out, a.vault.Values()...)
+	}
+	a.tokensMu.Lock()
+	out = append(out, a.tokens...)
+	a.tokensMu.Unlock()
+	return out
+}
+
+// keepSecret adds one of the gateway's own secrets (its token) to what the guardrails take out.
+func (a *app) keepSecret(v string) {
+	if v == "" {
+		return
+	}
+	a.tokensMu.Lock()
+	a.tokens = append(a.tokens, v)
+	a.tokensMu.Unlock()
 }
 
 // fleetCommands are the commands that open the fleet; brainCommands the ones of them that talk to
@@ -655,6 +692,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 		fmt.Fprintf(a.err, "kitties: goals from the configuration: %v\n", err)
 	}
 	token, tokenPath, _ := gatewayToken(a.cfg)
+	a.keepSecret(token)
 	// The token is left where a local program finds it (the desktop app, a script of the
 	// same user), so a local executable never asks for it.
 	if err := os.MkdirAll(filepath.Dir(tokenPath), 0o700); err == nil {
@@ -683,6 +721,9 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	if a.vault != nil {
 		srv.WithVault(a.vault)
 	}
+	if a.guard != nil {
+		srv.WithGuard(a.guard)
+	}
 	srv.WithShared(shared.New(a.fleet.SharedRoot()), a.fleet.SharedQuotaMB())
 	if wa := a.whatsappBridge(a.err, func(format string, args ...any) { fmt.Fprintf(a.out, format+"\n", args...) }); wa != nil {
 		wa.Start(ctx)
@@ -692,6 +733,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	if mt, mpath, err := mcpToken(a.cfg); err != nil {
 		fmt.Fprintf(a.err, "kitties: the MCP connector stays off, its token cannot be kept: %v\n", err)
 	} else if mt != "" {
+		a.keepSecret(mt)
 		srv.WithMCPOptions(mt, gateway.MCPOptions{Exec: g.MCP.AllowExec, OAuth: g.MCP.OAuth, Approve: g.MCP.AllowApprove,
 			ClientsFile: filepath.Join(a.cfg.DataDirOr(), "mcp-clients.json")})
 		// Every address it answers at (they follow the exposure), and the line for Claude Code.

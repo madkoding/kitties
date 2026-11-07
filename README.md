@@ -44,8 +44,15 @@ a desktop app and an Android app.
 - **A lead kitty.** Make one kitty the lead and it orchestrates the rest: it splits what you ask among
   them, gathers their answers into one report, and the others' news reach you through it
   ([details](docs/AUTONOMY.md#the-lead-kitty)).
+- **A sidebar that tells you what is going on.** Your kitties come first, then the chats; each chat
+  shows up to two lines of its last words (who said it, in a group), made on the gateway without asking
+  any model, with keys, passwords, addresses and long numbers masked.
 - **Trust and memory.** Notes that persist, thumbs that teach it your standards, action limits and
   approvals that loosen as it earns trust, and notifications to your phone when it needs you.
+- **Guardrails for kitties that answer other people.** In WhatsApp chats and chats you mark public, a
+  kitty has no desktop, files, vault, notes about you or other kitties; secrets, credentials, internal
+  paths and personal data are taken out of what it says, attempts to turn it are not answered, and
+  everything is recorded in Settings ([details](docs/GUARDRAILS.md), [español](docs/GUARDRAILS.es.md)).
 - **Connectors.** Slack, GitHub, Gmail, Google Workspace, Microsoft 365, Spotify, Stripe, Home
   Assistant and many more, with sign-in instead of pasted keys where the service allows it.
 - **Everywhere.** CLI for Linux, macOS, Windows and Android (Termux); a desktop app; an Android app;
@@ -115,7 +122,7 @@ Or download the app (it carries its own gateway), from the
 Everything is in [docs/](docs/README.md):
 
 - [Install and first steps](docs/INSTALL.md) · [Desktop and Android apps](docs/APPS.md) · [Run it on a server](docs/DEPLOY.md)
-- [Claude as the orchestrator (MCP)](docs/MCP.md) · [WhatsApp with a number of their own](docs/WHATSAPP.md) ([español](docs/WHATSAPP.es.md)) · [Configuration and connectors](docs/CONFIGURATION.md) · [Autonomy, trust and notifications](docs/AUTONOMY.md)
+- [Claude as the orchestrator (MCP)](docs/MCP.md) · [WhatsApp with a number of their own](docs/WHATSAPP.md) ([español](docs/WHATSAPP.es.md)) · [Guardrails](docs/GUARDRAILS.md) ([español](docs/GUARDRAILS.es.md)) · [Configuration and connectors](docs/CONFIGURATION.md) · [Autonomy, trust and notifications](docs/AUTONOMY.md)
 - [How a kitty uses its desktop](docs/DESKTOP.md) ([español](docs/DESKTOP.es.md)) · [The desktop's look and contents](docs/KITTY-DESKTOP.md)
 - [The API](docs/API.md) · [Architecture](docs/ARCHITECTURE.md) · [Development](docs/DEVELOPMENT.md) · [Releases and signing](docs/RELEASING.md)
 

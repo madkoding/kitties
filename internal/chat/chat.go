@@ -29,6 +29,7 @@ import (
 	"github.com/madkoding/kitties/internal/budget"
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/desktop"
+	"github.com/madkoding/kitties/internal/guard"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/memory"
 	"github.com/madkoding/kitties/internal/notify"
@@ -146,6 +147,14 @@ type Session struct {
 	SummaryUpTo int    `json:"summary_up_to,omitempty"`
 	// Reports marks the lead kitty's Reports thread, where the other kitties' news land.
 	Reports bool `json:"reports,omitempty"`
+	// Gist is the chat's last words, up to two lines in the sidebar, with secrets and personal details masked, and
+	// GistBy who said them ("user" or a kitty's name): what the sidebar shows under the title.
+	Gist   string `json:"gist,omitempty"`
+	GistBy string `json:"gist_by,omitempty"`
+	// Exposed marks a chat where whoever writes is not the person (a WhatsApp contact, a group, a
+	// public chat): the guardrails apply (guard.go). Audience says who writes there.
+	Exposed  bool   `json:"exposed,omitempty"`
+	Audience string `json:"audience,omitempty"`
 }
 
 // NeedsHelp reports whether the last turn is a kitty asking the person for help.
@@ -263,6 +272,8 @@ type Service struct {
 	// leadLimitsAsk says whether the lead's changes of limits wait for the person (lead.go).
 	overrides     map[string]kitty.TaskLimits
 	leadLimitsAsk func() bool
+	// guard keeps the exposed chats from giving the person away, nil when there is none.
+	guard Guard
 }
 
 // Reporter hears how a goal's run ended.
@@ -537,12 +548,15 @@ func (s *Service) load() error {
 		if err := json.Unmarshal(data, &sess); err != nil {
 			return fmt.Errorf("the chat %s is damaged: %w", e.Name(), err)
 		}
+		// Recomputed rather than trusted: a chat saved before gists, or under older masking rules.
+		refreshGist(&sess)
 		s.sessions[sess.ID] = &sess
 	}
 	return nil
 }
 
 func (s *Service) save(sess *Session) error {
+	refreshGist(sess)
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return fmt.Errorf("create the chats folder: %w", err)
 	}
@@ -781,6 +795,14 @@ func (s *Service) sendWith(ctx context.Context, id, from, fromID, text string, f
 		s.mu.Unlock()
 		return nil, ErrBusy
 	}
+	if from == "user" && s.guarded(sess) {
+		// A third party's message is weighed before anything of it is kept: one past the hour's
+		// limit, or that tries to turn the kitty, is not answered.
+		if err := s.guard.Admit(id, sess.Audience, text); err != nil {
+			s.mu.Unlock()
+			return nil, err
+		}
+	}
 	if err := s.storeFiles(id, metas, files); err != nil {
 		s.mu.Unlock()
 		return nil, err
@@ -813,6 +835,11 @@ func (s *Service) sendWith(ctx context.Context, id, from, fromID, text string, f
 		turn, pending, err := s.answer(ctx, id, k, kitties)
 		if err != nil {
 			turn = Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: "(" + k.Name + " could not answer: " + Plain(err.Error()) + ")", Detail: err.Error(), Parked: errors.Is(err, ErrDayTokens)}
+			if s.guardedID(id) {
+				// An error says how things are set up inside: the other side reads only that there
+				// is no answer now; the person finds why in Detail.
+				turn.Text = "(" + k.Name + " cannot answer right now)"
+			}
 		}
 		s.mu.Lock()
 		sess.Turns = append(sess.Turns, turn)
@@ -995,6 +1022,9 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	brain, err := s.fleet.Brain(k)
 	if err != nil {
 		return Turn{}, nil, err
+	}
+	if s.guardedID(id) {
+		return s.answerExposed(ctx, id, k, members, brain)
 	}
 	allowed := s.fleet.Connectors().Descriptions(k.Connectors)
 	var group []string
@@ -1690,6 +1720,7 @@ func (s *Service) transcriptFor(id string, brain provider.Client, paths map[stri
 		}
 	}
 	messages := []provider.Message{{Role: "system", Content: system}}
+	exposed := s.guardedID(id)
 	var pending []string
 	var images []provider.Image
 	var docs []provider.File
@@ -1717,6 +1748,9 @@ func (s *Service) transcriptFor(id string, brain provider.Client, paths map[stri
 			}
 		}
 		entry := "[" + label + "]: " + t.Text
+		if exposed && t.Kitty == "" {
+			entry = guard.Wrap(label, t.Text)
+		}
 		if len(t.Attachments) > 0 {
 			block, imgs, fs := s.describeFiles(id, brain, paths, k, t.Attachments, i >= fresh)
 			entry += block

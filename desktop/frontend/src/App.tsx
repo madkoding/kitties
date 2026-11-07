@@ -7,7 +7,7 @@ import Login from "./Login";
 import Welcome from "./Welcome";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
-import { IconMenu, IconMonitor, IconTrash, IconUsers } from "./icons";
+import { IconMenu, IconMonitor, IconShield, IconTrash, IconUsers } from "./icons";
 import LiveDesktop from "./LiveDesktop";
 import { ConnectModal, KittyDrawer, NewChatModal, NewKittyModal } from "./Modals";
 import SettingsModal from "./Settings";
@@ -413,6 +413,30 @@ export default function App() {
     }
   };
 
+  // toggleExposed marks the chat as one with people who are not the person (the guardrails apply)
+  // or takes the mark off, after a yes.
+  const toggleExposed = async () => {
+    if (!session) {
+      return;
+    }
+    const on = !session.exposed;
+    const question = on
+      ? t(
+          "Mark this chat as one with other people? The kitty gets no desktop, files, secrets or notes about you here, and what it says is filtered.",
+        )
+      : t(
+          "Take the guardrails off this chat? Do it only if everyone who writes here is you: the kitty gets everything back.",
+        );
+    if (!(await ask(question, on ? t("Mark it") : t("Take them off")))) {
+      return;
+    }
+    try {
+      setSession(await api.exposeChat(session.id, on, session.audience || ""));
+    } catch (e) {
+      setError(errText(e));
+    }
+  };
+
   const members = session
     ? session.members.map((id) => kitties.find((k) => k.id === id)).filter(Boolean)
     : [];
@@ -461,6 +485,28 @@ export default function App() {
             <span class="tag tag-accent">
               <IconUsers size={10} /> {t("group")}
             </span>
+          )}
+          {session && (
+            <button
+              class={
+                session.exposed
+                  ? "tag tag-accent flex items-center gap-1"
+                  : "btn-ghost p-2 text-[var(--t4)]"
+              }
+              onClick={toggleExposed}
+              title={
+                session.exposed
+                  ? t("Guarded: whoever writes here is not you ({who})", {
+                      who: session.audience || t("other people"),
+                    })
+                  : t("Mark as a chat with other people")
+              }
+              aria-pressed={!!session.exposed}
+              data-testid="chat-exposed"
+            >
+              <IconShield size={session.exposed ? 10 : 14} />
+              {session.exposed && <span>{t("guarded")}</span>}
+            </button>
           )}
           {members.map((k) => (
             <span key={k!.id} class="hidden sm:inline-flex tag items-center">
