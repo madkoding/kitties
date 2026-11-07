@@ -35,6 +35,7 @@ type ModalKind =
   | "artifact"
   | "approvals"
   | "notifications"
+  | "machines"
   | "preferences";
 
 // The route is the hash: #chat/<id> or #kitty/<id>, so a view can be linked and reloaded.
@@ -46,10 +47,10 @@ function routeFromHash(): {
   artifact: string;
 } {
   const m = location.hash.match(
-    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|preferences))?/,
+    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|machines|preferences))?/,
   );
   const n = location.hash.match(
-    /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|preferences)/,
+    /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|machines|preferences)/,
   );
   const c = location.hash.match(/^#connector\/([a-z0-9-]+)/);
   // #artifact/<name> opens a file of the library in the reader: a link that can be shared.
@@ -633,12 +634,13 @@ export default function App() {
         modal === "connectors-add" ||
         modal === "connector" ||
         modal === "notifications" ||
+        modal === "machines" ||
         modal === "preferences") && (
         <SettingsModal
           initial={
             modal === "settings" || modal === "models-add"
               ? "models"
-              : modal === "notifications" || modal === "preferences"
+              : modal === "notifications" || modal === "machines" || modal === "preferences"
                 ? modal
                 : "connectors"
           }

@@ -1,5 +1,12 @@
 import type { ComponentChildren } from "preact";
-import { useEffect, useErrorBoundary, useLayoutEffect, useMemo, useState } from "preact/hooks";
+import {
+  useEffect,
+  useErrorBoundary,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "preact/hooks";
 import type {
   Account,
   ConnectorKind,
@@ -43,6 +50,7 @@ import { Missing, Required, RequiredLegend } from "./Required";
 import { AccountSignIn } from "./SignIn";
 import { ask } from "./Confirm";
 import Secrets from "./Secrets";
+import MachinesSettings from "./MachinesSettings";
 import Exposure from "./Exposure";
 import McpConnector from "./McpConnector";
 import { SharedMemory } from "./Notes";
@@ -58,7 +66,14 @@ import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 // names, addresses and limits wait under "More options".
 
 export type Tab =
-  "models" | "connectors" | "secrets" | "memory" | "notifications" | "gateway" | "preferences";
+  | "models"
+  | "connectors"
+  | "secrets"
+  | "memory"
+  | "machines"
+  | "notifications"
+  | "gateway"
+  | "preferences";
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";
 const INPUT = "w-full px-3 py-2 text-sm";
@@ -1989,6 +2004,61 @@ function Preferences() {
 
 type ConnectionEdit = { view: ConnectorView | null; kind: ConnectorKind };
 
+// SettingsTabs are the sections of the dialog: pills that stay at the top while the page scrolls,
+// wrap on a wide screen and slide sideways on a phone, the chosen one kept in view. The arrow
+// keys, Home and End move between them, as in any tab list.
+function SettingsTabs({
+  tabs,
+  tab,
+  onPick,
+}: {
+  tabs: { id: Tab; label: string }[];
+  tab: Tab;
+  onPick: (t: Tab) => void;
+}) {
+  const bar = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const on = bar.current?.querySelector<HTMLElement>('[aria-selected="true"]');
+    on?.scrollIntoView?.({ block: "nearest", inline: "center" });
+  }, [tab]);
+  const onKey = (e: KeyboardEvent) => {
+    const i = tabs.findIndex((x) => x.id === tab);
+    const to =
+      e.key === "ArrowRight"
+        ? (i + 1) % tabs.length
+        : e.key === "ArrowLeft"
+          ? (i - 1 + tabs.length) % tabs.length
+          : e.key === "Home"
+            ? 0
+            : e.key === "End"
+              ? tabs.length - 1
+              : -1;
+    if (to < 0) {
+      return;
+    }
+    e.preventDefault();
+    onPick(tabs[to].id);
+    bar.current?.querySelectorAll<HTMLElement>('[role="tab"]')[to]?.focus();
+  };
+  return (
+    <div class="settings-tabs" role="tablist" ref={bar} onKeyDown={onKey}>
+      {tabs.map((x) => (
+        <button
+          key={x.id}
+          role="tab"
+          id={`settings-tab-${x.id}`}
+          aria-selected={tab === x.id}
+          tabIndex={tab === x.id ? 0 : -1}
+          class={`plain settings-tab ${tab === x.id ? "on" : ""}`}
+          onClick={() => onPick(x.id)}
+        >
+          {x.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function SettingsModal({
   onClose,
   initial,
@@ -2058,6 +2128,7 @@ export default function SettingsModal({
     { id: "connectors", label: t("Connections") },
     { id: "secrets", label: t("Secrets") },
     { id: "memory", label: t("Shared memory") },
+    { id: "machines", label: t("Machines") },
     { id: "notifications", label: t("Notifications") },
     { id: "gateway", label: inWails() ? t("Gateway") : t("Connection") },
     { id: "preferences", label: t("Preferences") },
@@ -2092,19 +2163,7 @@ export default function SettingsModal({
             <IconX />
           </button>
         </div>
-        <div class="flex gap-1 border-b border-white/5 mb-3 overflow-x-auto" role="tablist">
-          {tabs.map((x) => (
-            <button
-              key={x.id}
-              role="tab"
-              aria-selected={tab === x.id}
-              class={`plain px-4 py-2 text-sm border-b-2 whitespace-nowrap ${tab === x.id ? "border-[var(--color-accent)] text-[var(--t1)]" : "border-transparent text-[var(--t3)]"}`}
-              onClick={() => setTab(x.id)}
-            >
-              {x.label}
-            </button>
-          ))}
-        </div>
+        <SettingsTabs tabs={tabs} tab={tab} onPick={setTab} />
         <Err text={err} />
         {crash && (
           <p class="text-sm text-[var(--c-red)] mb-2" role="alert">
@@ -2258,6 +2317,7 @@ export default function SettingsModal({
         )}
 
         {tab === "secrets" && <Secrets kitties={kitties} />}
+        {tab === "machines" && <MachinesSettings kitties={kitties} />}
         {tab === "memory" && <SharedMemory />}
         {tab === "notifications" && view && (
           <NotifyForm view={view} onSaved={setView} onSetUp={setUpNtfy} />

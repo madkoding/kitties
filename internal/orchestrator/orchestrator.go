@@ -77,6 +77,7 @@ type Manager struct {
 	// use is when each machine was last used and what is using it (power.go); onPowerOff hears
 	// about a machine that turned itself off.
 	use        useTracker
+	mem        memoryCache
 	onPowerOff func(k *kitty.Kitty, idle time.Duration)
 
 	mu      sync.RWMutex
@@ -684,7 +685,8 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	// A desktop in another time zone than the host's (the host moved, or the gateway could not
 	// tell its zone when it made it) is made anew, so its clock shows the host's hour; a running
 	// one only while no one uses it (a gateway that starts finds them all idle).
-	moved := exists && m.zoneMoved(ctx, k)
+	// So is one whose RAM or swap changed while the engine could not change them in place.
+	moved := exists && (m.zoneMoved(ctx, k) || (!running && m.limitsMoved(ctx, k)))
 	switch {
 	case running && (!moved || m.Held(k.ID) || m.busy(k.ID)):
 	case exists && !running && !moved && !m.staleForAutoUpdate(ctx, k):
@@ -709,6 +711,8 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	// An older desktop's home, copied out when it was removed, goes into the new one.
 	m.finishMove(ctx, k, spec)
 	m.applyTheme(ctx, k, false)
+	// A running desktop kept as it was may still wait for its new limits.
+	_ = m.setMemoryPending(k.ID, running && m.limitsMoved(ctx, k))
 	// A machine just turned on has not been idle yet, and its desktop is still coming up.
 	m.use.touch(k.ID, m.now())
 	m.use.boot(k.ID, m.now())
@@ -995,17 +999,35 @@ type Update struct {
 	// true, goes back to the gateway's default instead.
 	AutoOff        *int  `json:"auto_off_minutes,omitempty"`
 	AutoOffDefault *bool `json:"auto_off_default,omitempty"`
+	// MemoryMB and SwapMB are the RAM and swap of its machine, in MB (both are needed together).
+	// MemoryDefault, when true, goes back to the defaults for every kitty.
+	MemoryMB      *int  `json:"memory_mb,omitempty"`
+	SwapMB        *int  `json:"swap_mb,omitempty"`
+	MemoryDefault *bool `json:"memory_default,omitempty"`
 }
 
-// Edit applies an update to a kitty and saves it. A new theme reaches a running desktop at once.
+// memoryChange reports whether the update touches the machine's RAM or swap.
+func (u Update) memoryChange() bool {
+	return u.MemoryMB != nil || u.SwapMB != nil || (u.MemoryDefault != nil && *u.MemoryDefault)
+}
+
+// Edit applies an update to a kitty and saves it. A new theme reaches a running desktop at once,
+// and new limits of memory too when the engine can (otherwise they wait for the next start).
 func (m *Manager) Edit(ref string, u Update) (*kitty.Kitty, error) {
 	k, err := m.edit(ref, u)
-	if err == nil && u.Theme != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
+	if err != nil {
+		return k, err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if u.Theme != nil {
 		m.applyTheme(ctx, k, true)
 	}
-	return k, err
+	if u.memoryChange() {
+		m.applyLimits(ctx, k)
+		return m.Get(k.ID)
+	}
+	return k, nil
 }
 
 func (m *Manager) edit(ref string, u Update) (*kitty.Kitty, error) {
@@ -1020,6 +1042,17 @@ func (m *Manager) edit(ref string, u Update) (*kitty.Kitty, error) {
 	}
 	if u.Connectors != nil {
 		if err := m.knownConnections(*u.Connectors); err != nil {
+			return nil, err
+		}
+	}
+	if u.MemoryMB != nil || u.SwapMB != nil {
+		if u.MemoryMB == nil || u.SwapMB == nil {
+			return nil, errors.New("memory_mb and swap_mb go together")
+		}
+		if err := kitty.ValidMemory(*u.MemoryMB, *u.SwapMB); err != nil {
+			return nil, err
+		}
+		if err := m.fitsEngine(*u.MemoryMB); err != nil {
 			return nil, err
 		}
 	}
@@ -1074,6 +1107,13 @@ func (m *Manager) edit(ref string, u Update) (*kitty.Kitty, error) {
 	}
 	if u.AutoOffDefault != nil && *u.AutoOffDefault {
 		k.AutoOff = nil
+	}
+	if u.MemoryMB != nil {
+		memoryMB, swapMB := *u.MemoryMB, *u.SwapMB
+		k.MemoryMB, k.SwapMB = &memoryMB, &swapMB
+	}
+	if u.MemoryDefault != nil && *u.MemoryDefault {
+		k.MemoryMB, k.SwapMB = nil, nil
 	}
 	if u.Backup != nil {
 		backup := strings.TrimSpace(*u.Backup)

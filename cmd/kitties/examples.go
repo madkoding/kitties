@@ -33,6 +33,7 @@ containers:
   runtime: auto                  # auto | docker | podman
   image: ghcr.io/madkoding/kitty-desktop:latest
   memory_mb: 2048
+  swap_mb: 1024
   cpus: 2
 
 gateway:

@@ -1417,6 +1417,11 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 				continue
 			}
 			s.waitWhileHeld(ctx, id, index, k.ID)
+			if err := s.memoryGate(ctx, k, da.Name); err != nil {
+				s.appendStep(id, index, Step{At: s.now(), Action: a.name, Args: a.args, Error: err.Error()})
+				outs = append(outs, outcome{action: a, err: err.Error()})
+				continue
+			}
 			looked = looked || da.Visual()
 			out, err := desktop.Run(ctx, runner, k.ID, da)
 			step := Step{At: s.now(), Action: a.name, Args: a.args, Result: out}

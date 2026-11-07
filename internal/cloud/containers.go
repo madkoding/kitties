@@ -358,6 +358,54 @@ func (r *Router) ZoneStale(ctx context.Context, name, zone string) (bool, error)
 	return z.ZoneStale(ctx, name, zone)
 }
 
+// limiter is a local engine that can change a container's RAM and swap, and tell its own total.
+type limiter interface {
+	SetLimits(ctx context.Context, name string, memoryMB, swapMB int) error
+	LimitsStale(ctx context.Context, name string, memoryMB, swapMB int) (bool, error)
+	EngineMemoryMB(ctx context.Context) (int, error)
+}
+
+var errNoLimits = errors.New("the RAM and swap of a machine in the cloud are its provider's size")
+
+// localLimiter is the local engine, for a desktop that is not in the cloud.
+func (r *Router) localLimiter(name string) (limiter, error) {
+	if name != "" && r.IsCloud != nil && r.IsCloud(name) {
+		return nil, errNoLimits
+	}
+	l, ok := r.Local.(limiter)
+	if !ok {
+		return nil, errors.New("this engine cannot change a machine's memory")
+	}
+	return l, nil
+}
+
+// SetLimits changes the RAM and swap of a local desktop; a machine in the cloud has its size.
+func (r *Router) SetLimits(ctx context.Context, name string, memoryMB, swapMB int) error {
+	l, err := r.localLimiter(name)
+	if err != nil {
+		return err
+	}
+	return l.SetLimits(ctx, name, memoryMB, swapMB)
+}
+
+// LimitsStale concerns the local desktops only.
+func (r *Router) LimitsStale(ctx context.Context, name string, memoryMB, swapMB int) (bool, error) {
+	l, err := r.localLimiter(name)
+	if err != nil {
+		return false, nil
+	}
+	return l.LimitsStale(ctx, name, memoryMB, swapMB)
+}
+
+// EngineMemoryMB is the local engine's.
+func (r *Router) EngineMemoryMB(ctx context.Context) (int, error) {
+	l, err := r.localLimiter("")
+	if err != nil {
+		return 0, err
+	}
+	return l.EngineMemoryMB(ctx)
+}
+
 // List joins both backends. A backend that cannot answer is left out as long as the other can;
 // when none can, the first error is returned.
 func (r *Router) List(ctx context.Context) ([]container.Info, error) {

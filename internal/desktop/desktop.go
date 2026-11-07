@@ -54,14 +54,14 @@ var Tools = []struct{ Name, Args, Help string }{
 	{"page_type", `{"ref": 3, "text": "...", "enter": false}`, "fill in a field of the last page_read by its number, or choose an option of a list; \"enter\": true presses Enter after"},
 	{"windows", `{}`, "list the open windows (id, workspace, title)"},
 	{"focus", `{"title": "..."}`, "bring to the front the window whose title has this text"},
-	{"open", `{"url": "https://..."}`, "open a URL in the browser on the display"},
-	{"launch", `{"argv": ["xterm"]}`, "start a program with windows and leave it open (run waits for a program to end)"},
+	{"open", `{"url": "https://..."}`, "open a URL in the browser on the display (a new tab takes some 150 to 300 MB: it is refused when the machine's memory is nearly full, so close tabs you no longer need with ctrl+w)"},
+	{"launch", `{"argv": ["xterm"]}`, "start a program with windows and leave it open (run waits for a program to end); refused when the machine's memory is nearly full"},
 	{"install", `{"packages": ["gimp"]}`, "install applications from Debian's repository; they are installed again when the desktop restarts"},
 	{"run", `{"argv": ["ls", "-la"]}`, "run a program in your working folder (an argument list, no shell)"},
 	{"wait", `{"seconds": 2}`, "wait for something to load (at most 10 seconds)"},
 	{"type_secret", `{"name": "shop password", "enter": false}`, "type a secret the person saved for you (a password, a code) where the focus is, by its name; it goes from the vault to the keyboard and you never read it; \"enter\": true presses Enter after"},
 	{"ask_help", `{"reason": "..."}`, "ask the person to take control of your desktop for what you cannot do alone (a password, a captcha, a code they receive); you wait until they give it back, then continue"},
-	{"machine", `{"action": "status|on|off"}`, "your machine is the computer your desktop runs on and can be off (the person turned it off, you did, or it turned itself off after a time without use): status tells its state, on turns it on and waits, off turns it off when you are done with the display for a good while; a desktop tool used while it is off turns it on by itself"},
+	{"machine", `{"action": "status|on|off"}`, "your machine is the computer your desktop runs on and can be off (the person turned it off, you did, or it turned itself off after a time without use): status tells its state, on turns it on and waits, off turns it off when you are done with the display for a good while; a desktop tool used while it is off turns it on by itself; status also tells its memory (RAM and swap used and free) and what holds the most"},
 	{"done", `{"summary": "..."}`, "finish the task and report what you achieved"},
 }
 

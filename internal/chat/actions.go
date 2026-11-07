@@ -35,7 +35,7 @@ const (
 )
 
 // machineHelp is what the machine tool says about itself.
-const machineHelp = "Your machine is the computer your desktop runs on. It can be off: the person turned it off, you did, or it turned itself off after a time without use. status tells whether it is on; on turns it on and waits until it is up; off turns it off when you are done with the display for a good while (it is refused while the person is watching or controlling it). A desktop tool used while it is off turns it on by itself."
+const machineHelp = "Your machine is the computer your desktop runs on. It can be off: the person turned it off, you did, or it turned itself off after a time without use. status tells whether it is on; on turns it on and waits until it is up; off turns it off when you are done with the display for a good while (it is refused while the person is watching or controlling it). A desktop tool used while it is off turns it on by itself. status also tells its memory (RAM and swap, used and free) and what holds the most: look before you open many tabs or a heavy program, and close what you no longer need."
 
 // toolSet is the tools a kitty is offered natively.
 func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.Tool {

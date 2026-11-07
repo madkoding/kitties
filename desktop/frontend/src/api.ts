@@ -51,10 +51,36 @@ export interface Power {
   off_reason?: "idle" | "manual" | "kitty" | "";
   auto_off_minutes: number;
   auto_off_custom: boolean;
+  // memory_mb and swap_mb are the RAM and swap the machine is given (0 RAM: the engine's own);
+  // memory_custom is whether they are the kitty's own, memory_pending whether they wait for the
+  // next start; memory_local is false in the cloud, where the machine's size is the provider's.
+  memory_mb?: number;
+  swap_mb?: number;
+  memory_custom?: boolean;
+  memory_pending?: boolean;
+  memory_local?: boolean;
   in_use: boolean;
   in_use_by?: "task" | "control" | "watch" | "command";
   idle_seconds: number;
   off_in_seconds?: number;
+}
+
+// Memory is what a kitty's machine has and uses now, in MB, and the programs that hold the most.
+export interface Memory {
+  total_mb: number;
+  used_mb: number;
+  available_mb: number;
+  swap_total_mb: number;
+  swap_used_mb: number;
+  top?: { name: string; mb: number; count: number }[];
+}
+
+// Machines are the RAM and swap of every machine without values of its own, and what the
+// container engine has (engine_mb, absent when it cannot tell).
+export interface Machines {
+  memory_mb: number;
+  swap_mb: number;
+  engine_mb?: number;
 }
 
 // THEMES are the looks a kitty's desktop can wear, as the gateway knows them.
@@ -763,6 +789,9 @@ export const api = {
       theme?: string;
       auto_off_minutes?: number;
       auto_off_default?: boolean;
+      memory_mb?: number;
+      swap_mb?: number;
+      memory_default?: boolean;
     },
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
   // lead is the fleet's lead kitty and its Reports thread; setLead makes another the lead
@@ -774,6 +803,13 @@ export const api = {
   // or off (a 409 says what is using it; force turns it off anyway).
   power: (ref: string) =>
     request<{ power: Power }>("GET", `/v1/kitties/${ref}/power`).then((r) => r.power),
+  // machine is the power and, when it is on, the memory of a kitty's machine.
+  machine: (ref: string) =>
+    request<{ power: Power; memory?: Memory }>("GET", `/v1/kitties/${ref}/power`),
+  // machines are the RAM and swap of the machines without values of their own.
+  machines: () => request<Machines>("GET", "/v1/settings/machines"),
+  setMachines: (m: { memory_mb: number; swap_mb: number }) =>
+    request<Machines>("PUT", "/v1/settings/machines", m),
   setPower: (ref: string, on: boolean, force = false) =>
     request<{ power: Power }>("POST", `/v1/kitties/${ref}/power`, { on, force }).then(
       (r) => r.power,

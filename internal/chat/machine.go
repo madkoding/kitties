@@ -26,6 +26,65 @@ type Machine interface {
 	PowerOff(ctx context.Context, ref string, o kitty.OffOptions) error
 }
 
+// MemoryReader is the fleet as what a kitty's machine has and uses (the orchestrator is one): the
+// kitty is told, so it does not open what does not fit.
+type MemoryReader interface {
+	Memory(ctx context.Context, ref string) (kitty.Memory, error)
+}
+
+func (s *Service) ram(ctx context.Context, k *kitty.Kitty) (kitty.Memory, bool) {
+	r, ok := s.fleet.(MemoryReader)
+	if !ok || !k.Desktop {
+		return kitty.Memory{}, false
+	}
+	m, err := r.Memory(ctx, k.ID)
+	return m, err == nil && m.TotalMB > 0
+}
+
+// memoryNeeds is the free memory, in MB, a desktop tool needs to start, and what it does (0 for
+// the tools that start nothing).
+func memoryNeeds(name string) (int, string) {
+	switch name {
+	case "open":
+		return kitty.OpenNeedsMB, "open another page in the browser"
+	case "launch":
+		return kitty.LaunchNeedsMB, "start another program"
+	}
+	return 0, ""
+}
+
+// memoryGate refuses a tool that starts something when the machine has too little memory left
+// for it: the kitty is told what is free and what to close first.
+func (s *Service) memoryGate(ctx context.Context, k *kitty.Kitty, name string) error {
+	need, what := memoryNeeds(name)
+	if need == 0 {
+		return nil
+	}
+	m, ok := s.ram(ctx, k)
+	if !ok || !m.Low(need) {
+		return nil
+	}
+	return m.NotEnough(what, need)
+}
+
+// memoryText is the sentence about the memory for the kitty, empty when it cannot be told.
+func (s *Service) memoryText(ctx context.Context, k *kitty.Kitty, top bool) string {
+	m, ok := s.ram(ctx, k)
+	if !ok {
+		return ""
+	}
+	out := " Memory: " + m.Describe() + "."
+	if top && len(m.Top) > 0 {
+		out += " What holds the most: " + m.TopText() + "."
+	}
+	if m.Low(kitty.LaunchNeedsMB) {
+		out += " It is nearly full: close tabs or programs you no longer need before you open more."
+	} else {
+		out += " A browser tab takes some 150 to 300 MB: open only what fits, and close what you no longer need."
+	}
+	return out
+}
+
 func (s *Service) machine() Machine {
 	m, _ := s.fleet.(Machine)
 	return m
@@ -78,6 +137,11 @@ func (s *Service) machineNote(k *kitty.Kitty) string {
 		return ""
 	}
 	note := "[Your machine, now: " + describePower(p) + "."
+	if p.State == kitty.PowerOn {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		note += s.memoryText(ctx, k, false)
+	}
 	if p.State != kitty.PowerOn {
 		note += " A desktop tool turns it on by itself and waits for it; the machine tool turns it on or off, or tells you its state."
 	}
@@ -123,7 +187,11 @@ func (s *Service) runMachine(ctx context.Context, a action, k *kitty.Kitty) outc
 	if err != nil {
 		return outcome{action: a, err: err.Error()}
 	}
-	return outcome{action: a, text: "your machine is " + describePower(p)}
+	text := "your machine is " + describePower(p)
+	if p.State == kitty.PowerOn {
+		text += "." + s.memoryText(ctx, k, true)
+	}
+	return outcome{action: a, text: text}
 }
 
 // ensureMachine turns the kitty's machine on, and waits for it, before a desktop tool runs. The

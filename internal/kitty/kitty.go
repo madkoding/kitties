@@ -45,6 +45,13 @@ type Kitty struct {
 	// AutoOff is the minutes its machine may stay on without use before it turns itself off: nil
 	// takes the gateway's default (containers.auto_off_minutes, 15), 0 is never.
 	AutoOff *int `json:"auto_off_minutes,omitempty"`
+	// MemoryMB and SwapMB are the RAM and swap of its machine, in MB: nil takes the gateway's
+	// defaults (containers.memory_mb and swap_mb, or what the settings chose for every kitty).
+	MemoryMB *int `json:"memory_mb,omitempty"`
+	SwapMB   *int `json:"swap_mb,omitempty"`
+	// MemoryPending is true when new limits could not reach the running machine: they apply the
+	// next time it is turned on.
+	MemoryPending bool `json:"memory_pending,omitempty"`
 	// OffReason is why the machine is off (OffIdle, OffManual, OffKitty), empty when it is on or
 	// the reason is not known.
 	OffReason string    `json:"off_reason,omitempty"`

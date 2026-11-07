@@ -3070,6 +3070,9 @@ test("a kitty's machine is turned on and off and has its own idle time", async (
   const power = page.getByTestId("machine-power");
   await expect(power).toBeVisible();
   await expect(power.getByTestId("machine-state")).toContainText("On");
+  // What its machine uses now: the kitty sees the same numbers.
+  await expect(power.getByTestId("ram-meter")).toContainText("of 2 GB");
+  await expect(power.getByTestId("memory-top")).toContainText("chromium");
   await shot(page, "56-machine-power");
   // The gateway's default is 15 minutes; this kitty can have a time of its own, or never.
   const headers = { Authorization: "Bearer e2e-token" };
@@ -3102,6 +3105,55 @@ test("a kitty's machine is turned on and off and has its own idle time", async (
   await expect(page.getByTestId("machine-power").getByTestId("machine-state")).toContainText("On", {
     timeout: 30_000,
   });
+});
+
+// Settings › Machines: the RAM and swap of every kitty, and of each one; the tabs stay at hand.
+test("Settings: machines have RAM and swap for every kitty and for each one", async ({ page }) => {
+  await open(page, "#new-machines");
+  const tabs = page.getByRole("tablist");
+  await expect(tabs.getByRole("tab", { name: "Machines" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  const box = page.getByTestId("machines");
+  await expect(box.getByTestId("engine-memory")).toContainText("16 GB in all");
+  const tom = box.getByTestId("machine-tom");
+  await expect(tom.getByTestId("ram-meter")).toContainText("of 2 GB");
+  await shot(page, "73-settings-machines");
+  const headers = { Authorization: "Bearer e2e-token" };
+  const power = async () =>
+    (await (await page.request.get(`${GATEWAY}/v1/kitties/tom/power`, { headers })).json()).power;
+  // tom gets 4 GB of its own and no swap; then back to the defaults.
+  await tom.getByTestId("ram").selectOption("4096");
+  await expect.poll(async () => (await power()).memory_mb).toBe(4096);
+  await tom.getByTestId("swap").selectOption("0");
+  await expect.poll(async () => (await power()).swap_mb).toBe(0);
+  expect(await power()).toMatchObject({ memory_custom: true });
+  await tom.getByTestId("ram").selectOption("default");
+  await expect.poll(async () => (await power()).memory_custom).toBe(false);
+  // The defaults for every kitty: 3 GB reaches tom, who has none of its own.
+  const defaults = box.locator(".form-card");
+  await defaults.getByTestId("ram").selectOption("3072");
+  await expect.poll(async () => (await power()).memory_mb).toBe(3072);
+  await defaults.getByTestId("ram").selectOption("2048");
+  await expect.poll(async () => (await power()).memory_mb).toBe(2048);
+  // The arrow keys move between the tabs.
+  await tabs.getByRole("tab", { name: "Machines" }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(tabs.getByRole("tab", { name: "Notifications" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  // On a phone the tabs slide sideways, the chosen one in view.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(`/${Q}`);
+  await page.goto(`/${Q}#new-machines`);
+  await page.reload();
+  await expect(page.getByTestId("machine-tom")).toBeVisible();
+  const chosen = page.getByRole("tab", { name: "Machines" });
+  await expect(chosen).toBeInViewport();
+  expect(await tabs.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  await shot(page, "73-settings-machines-phone");
 });
 
 test("many desktop tasks fold into one bar: the latest shows, the rest open on demand", async ({
