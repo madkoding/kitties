@@ -522,11 +522,44 @@ func cmdMCP(args []string, cfg config.Config, in io.Reader, out, errOut io.Write
 func cmdToken(cfg config.Config, out, errOut io.Writer) int {
 	token, path, fresh := gatewayToken(cfg)
 	if fresh {
-		fmt.Fprintf(errOut, "kitties: no token yet (%s); start the gateway once and it makes one\n", path)
+		// The service scripts/install.sh sets up keeps its own: `sudo kitties token` reads it.
+		if t := serviceToken(); t != "" {
+			fmt.Fprintln(out, t)
+			return 0
+		}
+		fmt.Fprintf(errOut, "kitties: no token yet (%s); start the gateway once and it makes one (for the service: sudo kitties token)\n", path)
 		return 1
 	}
 	fmt.Fprintln(out, token)
 	return 0
+}
+
+// serviceTokenFiles are where the service of scripts/install.sh keeps its token: the gateway's
+// file, then the env file of an older install. A variable for the tests.
+var serviceTokenFiles = []string{"/var/lib/kitties/gateway.token", "/etc/kitties/kitties.env"}
+
+// serviceToken is the token of the installed service, "" when there is none or it cannot be read
+// (it can only by root or the kitties user).
+func serviceToken() string {
+	for _, f := range serviceTokenFiles {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		for _, line := range strings.Split(string(data), "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasSuffix(f, ".env") {
+				if !strings.HasPrefix(line, "KITTIES_TOKEN=") {
+					continue
+				}
+				line = strings.TrimPrefix(line, "KITTIES_TOKEN=")
+			}
+			if len(line) >= 16 {
+				return line
+			}
+		}
+	}
+	return ""
 }
 
 func (a *app) cmdGateway(ctx context.Context, args []string) error {

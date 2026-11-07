@@ -48,8 +48,22 @@ func TestTokenCommand(t *testing.T) {
 	dir := t.TempDir()
 	cfg := filepath.Join(dir, "kitties.yaml")
 	_ = os.WriteFile(cfg, []byte("data_dir: "+dir+"\n"), 0o600)
+	old := serviceTokenFiles
+	t.Cleanup(func() { serviceTokenFiles = old })
+	svc := t.TempDir()
+	serviceTokenFiles = []string{filepath.Join(svc, "gateway.token"), filepath.Join(svc, "kitties.env")}
 	if code, _, errOut := exec(t, "", "-config", cfg, "token"); code != 1 || !strings.Contains(errOut, "no token yet") {
 		t.Errorf("before the gateway ran: %d %s", code, errOut)
+	}
+	// With none of its own, it gives the installed service's: an older env file's, then the
+	// gateway's file.
+	_ = os.WriteFile(serviceTokenFiles[1], []byte("# a comment\nKITTIES_LISTEN=127.0.0.1:7488\nKITTIES_TOKEN=legacy-env-token-0123456789\n"), 0o600)
+	if code, out, _ := exec(t, "", "-config", cfg, "token"); code != 0 || strings.TrimSpace(out) != "legacy-env-token-0123456789" {
+		t.Errorf("the service's env token = %d %q", code, out)
+	}
+	_ = os.WriteFile(serviceTokenFiles[0], []byte("service-file-token-0123456789\n"), 0o600)
+	if code, out, _ := exec(t, "", "-config", cfg, "token"); code != 0 || strings.TrimSpace(out) != "service-file-token-0123456789" {
+		t.Errorf("the service's token = %d %q", code, out)
 	}
 	_ = os.WriteFile(filepath.Join(dir, "gateway.token"), []byte("0123456789abcdef0123456789abcdef\n"), 0o600)
 	if code, out, _ := exec(t, "", "-config", cfg, "token"); code != 0 || strings.TrimSpace(out) != "0123456789abcdef0123456789abcdef" {
