@@ -21,9 +21,14 @@ curl -fsSL https://raw.githubusercontent.com/madkoding/kitties/main/scripts/inst
 
 It picks the release for the machine (amd64, arm64 or arm), checks it against the release's
 `SHA256SUMS`, installs `/usr/local/bin/kitties`, creates the `kitties` user (in the `docker` group
-when there is one), writes `/etc/kitties/kitties.env` with a generated token and installs and
-starts the `kitties` systemd service ([DEPLOY.md](DEPLOY.md) is the same by hand). At the end it
-prints the URL, the token and the next steps.
+when there is one), writes `/etc/kitties/kitties.env` and installs and starts the `kitties` systemd
+service ([DEPLOY.md](DEPLOY.md) is the same by hand). At the end it prints where to open the page,
+the token and the next steps.
+
+The token is the gateway's own: it makes one on its first start and keeps it in
+`/var/lib/kitties/gateway.token`. `sudo kitties token` prints it again, and Settings, Preferences,
+*Make a new token* replaces it when it gets out. An install from before this kept it in
+`kitties.env`; running the line again moves it there unchanged, so nobody has to sign in again.
 
 From a terminal (also with `curl | sudo sh`) it explains each step and asks, on a first install:
 
