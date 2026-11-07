@@ -93,3 +93,66 @@ func TestStreamGoesOnFromTheLastMessage(t *testing.T) {
 		t.Errorf("a refused topic: %v", err)
 	}
 }
+
+func TestListenReopensAndBacksOff(t *testing.T) {
+	defer func(d time.Duration, b []time.Duration) { recheck, backoff = d, b }(recheck, backoff)
+	recheck, backoff = 20*time.Millisecond, []time.Duration{5 * time.Millisecond}
+	var mu sync.Mutex
+	paths := map[string]int{}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		paths[r.URL.Path]++
+		mu.Unlock()
+		if r.URL.Path == "/broken/json" {
+			http.Error(w, "no", http.StatusUnauthorized)
+			return
+		}
+		fmt.Fprintln(w, `{"id":"o","event":"open"}`)
+		w.(http.Flusher).Flush()
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	var logged []string
+	s := New(newChats(fleet{luna}), fleet{luna}, &outbox{}, func(f string, a ...any) {
+		mu.Lock()
+		logged = append(logged, fmt.Sprintf(f, a...))
+		mu.Unlock()
+	})
+	topic := "first"
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		s.Listen(ctx, func() (connector.Settings, bool) {
+			mu.Lock()
+			defer mu.Unlock()
+			return connector.Settings{"url": srv.URL, "topic": topic}, true
+		}, nil)
+		close(done)
+	}()
+	wait := func(path string) {
+		deadline := time.Now().Add(3 * time.Second)
+		for time.Now().Before(deadline) {
+			mu.Lock()
+			n := paths[path]
+			mu.Unlock()
+			if n > 0 {
+				return
+			}
+			time.Sleep(5 * time.Millisecond)
+		}
+		t.Fatalf("%s was never asked", path)
+	}
+	wait("/first/json")
+	mu.Lock()
+	topic = "broken"
+	mu.Unlock()
+	wait("/broken/json")
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	<-done
+	mu.Lock()
+	defer mu.Unlock()
+	if paths["/broken/json"] < 2 || len(logged) == 0 || !strings.Contains(logged[0], "401") {
+		t.Errorf("retries %d, logged %v", paths["/broken/json"], logged)
+	}
+}

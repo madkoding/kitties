@@ -38,12 +38,13 @@ func (s *Service) Listen(ctx context.Context, ch Channel, client *http.Client) {
 	if client == nil {
 		client = &http.Client{}
 	}
+	every := recheck
 	last := "" // the id of the last message read, to go on from it after a break
 	fails := 0
 	for ctx.Err() == nil {
 		set, ok := ch()
 		if !ok {
-			if !sleep(ctx, recheck) {
+			if !sleep(ctx, every) {
 				return
 			}
 			continue
@@ -51,7 +52,7 @@ func (s *Service) Listen(ctx context.Context, ch Channel, client *http.Client) {
 		key := settingsKey(set)
 		sctx, cancel := context.WithCancel(ctx)
 		go func() {
-			t := time.NewTicker(recheck)
+			t := time.NewTicker(every)
 			defer t.Stop()
 			for {
 				select {

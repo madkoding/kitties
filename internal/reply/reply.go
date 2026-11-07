@@ -52,11 +52,12 @@ const (
 	recent = 24 * time.Hour
 	// perHour is how many messages an hour are taken; the rest are dropped.
 	perHour = 30
-	// follow is how long a kitty's desktop task is followed to send its result.
-	follow = 6 * time.Hour
 	// answerFor is how long a kitty may take to answer a message.
 	answerFor = 10 * time.Minute
 )
+
+// follow is how long a kitty's desktop task is followed to send its result.
+var follow = 6 * time.Hour
 
 // allWords name every kitty at once.
 var allWords = map[string]bool{"all": true, "everyone": true, "todos": true, "todas": true, "everybody": true, "kitties": true, "todos los kitties": true}

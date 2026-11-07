@@ -2,6 +2,7 @@ package reply
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -25,6 +26,7 @@ type chats struct {
 	order    []string
 	helped   []string
 	work     bool // the next answer starts a desktop task
+	sendErr  error
 	watchers []chan chat.Event
 }
 
@@ -74,6 +76,9 @@ func (c *chats) kitty(id string) *kitty.Kitty {
 func (c *chats) Send(_ context.Context, id, text string) ([]chat.Turn, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.sendErr != nil {
+		return nil, c.sendErr
+	}
 	s := c.sessions[id]
 	s.Turns = append(s.Turns, chat.Turn{From: "user", Text: text})
 	var out []chat.Turn
@@ -125,13 +130,14 @@ func (c *chats) finish(id, more string) {
 type outbox struct {
 	mu   sync.Mutex
 	sent []notify.Notification
+	err  error
 }
 
 func (o *outbox) Deliver(_ context.Context, n notify.Notification) error {
 	o.mu.Lock()
 	o.sent = append(o.sent, n)
 	o.mu.Unlock()
-	return nil
+	return o.err
 }
 
 func (o *outbox) all() []notify.Notification {
@@ -323,4 +329,59 @@ func TestLeadSignedNotificationReachesTheKittyByName(t *testing.T) {
 	if len(c.helped) != 1 || c.helped[0] != "1234" {
 		t.Errorf("help answers %v, sent %q", c.helped, o.bodies())
 	}
+}
+
+func TestSendFailures(t *testing.T) {
+	s, c, o := setup(luna)
+	c.sendErr = chat.ErrBusy
+	_ = s.Handle(context.Background(), "", "hola")
+	if got := o.bodies(); !strings.Contains(got, "is busy with a task") {
+		t.Errorf("busy: sent %q", got)
+	}
+	s, c, o = setup(luna)
+	c.sendErr = errors.New("boom")
+	_ = s.Handle(context.Background(), "", "hola")
+	if got := o.bodies(); !strings.Contains(got, "did not get your message") {
+		t.Errorf("error: sent %q", got)
+	}
+}
+
+func TestSayEdges(t *testing.T) {
+	var logged []string
+	c := newChats(fleet{luna})
+	o := &outbox{err: errors.New("down")}
+	s := New(c, fleet{luna}, o, func(f string, a ...any) { logged = append(logged, fmt.Sprintf(f, a...)) })
+	s.say(context.Background(), "luna", strings.Repeat("x", 4000), "")
+	if n := o.all()[0]; len(n.Body) > 3600 || !strings.HasSuffix(n.Body, "…") {
+		t.Errorf("long body %d", len(n.Body))
+	}
+	if len(logged) != 1 || !strings.Contains(logged[0], "down") {
+		t.Errorf("logged %v", logged)
+	}
+	New(c, fleet{luna}, nil, nil).say(context.Background(), "luna", "x", "")
+	// The digest names nobody to answer, and an empty fleet is shown an example name.
+	s.Saw(notify.Notification{Event: notify.Digest, Kitty: "luna"})
+	if s.whom != "" {
+		t.Errorf("the digest set who to answer: %q", s.whom)
+	}
+	if e := New(c, fleet{}, nil, nil).example(); e != "luna: …" {
+		t.Errorf("example %q", e)
+	}
+	if sessLen(c, "nope") != 0 {
+		t.Error("an unknown chat has turns")
+	}
+}
+
+func TestFollowGivesUp(t *testing.T) {
+	defer func(d time.Duration) { follow = d }(follow)
+	follow = 30 * time.Millisecond
+	s, c, o := setup(luna)
+	c.work = true
+	_ = s.Handle(context.Background(), "", "hola")
+	s.Wait()
+	if n := len(o.all()); n != 1 {
+		t.Errorf("sent %d after the task was given up on", n)
+	}
+	// A chat that went away ends the following at once.
+	s.followTask(luna, "gone", 0, "")
 }
