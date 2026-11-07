@@ -3196,3 +3196,48 @@ test("files attach by button, paste and drop, and the kitty reads them", async (
   });
   await shot(page, "57-attachments");
 });
+
+test("the lead kitty orchestrates the others and their news reach it", async ({ page }) => {
+  const H = { Authorization: "Bearer e2e-token" };
+  const lead = await page.request.put(`${GATEWAY}/v1/lead`, {
+    headers: H,
+    data: { kitty: "luna" },
+  });
+  expect(lead.ok()).toBeTruthy();
+  const { lead: luna, reports } = (await lead.json()) as { lead: { id: string }; reports: string };
+  try {
+    // A goal of mimi's runs: its result lands in luna's Reports thread.
+    const goals = (
+      await (await page.request.get(`${GATEWAY}/v1/goals?kitty=mimi`, { headers: H })).json()
+    ).goals as { id: string; title: string }[];
+    const inbox = goals.find((g) => g.title === "Inbox check")!;
+    await page.request.post(`${GATEWAY}/v1/goals/${inbox.id}/run`, { headers: H });
+    await expect
+      .poll(async () => {
+        const c = await (
+          await page.request.get(`${GATEWAY}/v1/chats/${reports}`, { headers: H })
+        ).json();
+        return (c.chat?.turns || c.turns || []).length;
+      })
+      .toBeGreaterThan(0);
+
+    await open(page, `#kitty/${luna.id}`);
+    const panel = page.getByTestId("lead-panel");
+    await expect(panel).toContainText("luna is the lead kitty");
+    await expect(page.getByTestId("lead-tag")).toBeVisible();
+    await expect(page.locator("aside").getByTestId("lead-badge")).toHaveCount(1);
+    await shot(page, "71-lead-kitty");
+
+    // Another kitty's drawer offers to take the lead.
+    await open(page, `#kitty/${ids.mimi}`);
+    await expect(page.getByTestId("lead-panel")).toContainText("luna leads the fleet now");
+
+    // The Reports thread: the others' news, from the kitty that sent each.
+    await open(page, `#kitty/${luna.id}`);
+    await page.getByRole("button", { name: "Open reports" }).click();
+    await expect(page.getByText("finished a goal", { exact: false }).first()).toBeVisible();
+    await shot(page, "72-lead-reports");
+  } finally {
+    await page.request.put(`${GATEWAY}/v1/lead`, { headers: H, data: { kitty: "" } });
+  }
+});

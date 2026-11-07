@@ -46,14 +46,17 @@ func (s *Service) demandOf(k *kitty.Kitty) int {
 }
 
 // tell sends a notification when there is a notifier.
+// With a lead kitty, the news of the others also lands in its Reports thread and the
+// notification goes out in its name (lead.go).
 func (s *Service) tell(e notify.Event, k *kitty.Kitty, title, body, chatID string) {
+	lead := s.leadFor(k)
+	if lead != nil {
+		s.report(lead, k, e, title, body, chatID)
+	}
 	if s.notifier == nil {
 		return
 	}
-	name := ""
-	if k != nil {
-		name = k.Name
-	}
+	name, title := signed(lead, k, title)
 	s.notifier.Notify(notify.Notification{Event: e, Kitty: name, Title: title, Body: body, Chat: chatID})
 }
 

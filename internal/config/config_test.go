@@ -486,3 +486,16 @@ func TestWhatsAppSection(t *testing.T) {
 		t.Fatal("only the transcriber says the file sets WhatsApp")
 	}
 }
+
+func TestOneLeadInTheFile(t *testing.T) {
+	base := "providers:\n  p:\n    kind: ollama\n    model: m\nkitties:\n"
+	if _, err := Parse([]byte(base + "  - name: ana\n    lead: true\n  - name: bo\n")); err != nil {
+		t.Errorf("one lead: %v", err)
+	}
+	if _, err := Parse([]byte(base + "  - name: ana\n    lead: true\n  - name: bo\n    lead: true\n")); err == nil || !strings.Contains(err.Error(), "only one kitty leads") {
+		t.Errorf("two leads = %v", err)
+	}
+	if _, err := Parse([]byte(base + "  - name: team\n    lead: true\n    replicas: 2\n")); err == nil || !strings.Contains(err.Error(), "replicas") {
+		t.Errorf("a lead with replicas = %v", err)
+	}
+}

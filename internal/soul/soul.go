@@ -115,7 +115,25 @@ type Context struct {
 	Peers []string
 	// Unattended is true when the kitty works on its own: it is told to see a task through.
 	Unattended bool
+	// Lead is true for the principal kitty, the one that orchestrates the fleet: it is told to
+	// split the person's requests among the others and report back for all of them.
+	Lead bool
+	// Team describes the other kitties for the lead, one line each (name, what it is good at,
+	// whether it has a computer, how it is).
+	Team []string
+	// LeadName names the fleet's lead for the other kitties, empty when there is none or this
+	// kitty is it.
+	LeadName string
 }
+
+// leadWords is what the principal kitty is told about its role.
+const leadWords = "You are the lead kitty: the person's main contact and the orchestrator of the whole fleet. " +
+	"When they ask for something, decide who does what: do yourself what is quick or yours, and hand each piece " +
+	"another kitty is better placed for to it (@delegate <name> {\"task\": \"...\"}, with everything it needs to know). " +
+	"Several pieces may go to several kitties. Gather their answers, check them, and give the person one clear report " +
+	"of the whole: what was done, by whom, what failed and what is left. The other kitties' reports (goals they " +
+	"finished or could not, help they need) reach you in your Reports thread; when the person asks how things are " +
+	"going, answer from them.\n"
 
 // persistWords is what an unattended kitty is told about finishing what it was asked. It is
 // static text, so it sits in the cacheable start of the prompt.
@@ -203,7 +221,19 @@ func (s Soul) SystemPrompt(c Context) string {
 			fmt.Fprintf(&b, "- %s: %s\n", n, c.Connectors[n])
 		}
 	}
-	if len(c.Peers) > 0 {
+	if c.Lead {
+		b.WriteString(leadWords)
+		if len(c.Team) > 0 {
+			b.WriteString("Your team:\n")
+			for _, line := range c.Team {
+				fmt.Fprintf(&b, "- %s\n", line)
+			}
+		}
+	} else if c.LeadName != "" {
+		fmt.Fprintf(&b, "%s is the lead kitty: it coordinates the fleet and reports to %s for everyone, so a task it "+
+			"hands you comes from the person; answer it fully, as you would answer them.\n", c.LeadName, user)
+	}
+	if len(c.Peers) > 0 && !c.Lead {
 		fmt.Fprintf(&b, "Other kitties you can hand a subtask to: %s. Write @delegate <name> {\"task\": \"...\"} on its own line "+
 			"with everything they need to know; their answer comes back to you and you go on. Use it for work another "+
 			"kitty is better placed for, never for the whole task.\n", strings.Join(c.Peers, ", "))

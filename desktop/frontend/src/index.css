@@ -2139,3 +2139,10 @@ html.mac-inset .live-head {
 .md h4 {
   scroll-margin-top: 0.5rem;
 }
+
+/* The lead kitty's card in its drawer: who orchestrates the fleet. */
+.lead-panel {
+  border: 1px solid rgb(var(--neon-rgb) / 0.3);
+  border-radius: 0.75rem;
+  padding: 0.625rem 0.75rem;
+}

@@ -27,6 +27,7 @@
 | `GET /v1/chats/{id}/events`               | server-sent events: `turn`, `update`, `done`, `deleted` |
 | `POST /v1/oauth/{connector}/start` · `GET /v1/oauth/callback` · `POST /v1/oauth/fragment` | the OAuth sign-in of a connector (`fragment`: the token of a flow that returns it in the address, Trello; open, tied to the flow by its `state`) |
 | `PATCH /v1/kitties/{ref}` `{avatar, soul}` · `GET /v1/avatars` | change a kitty's looks; the breeds and coats |
+| `GET /v1/lead` · `PUT /v1/lead` `{kitty}` · `PATCH /v1/kitties/{ref}` `{lead}` | the lead kitty (`null` when none) and the id of its Reports thread (`reports`); make another the lead (the one before stops being it), or `""` for none ([the lead kitty](AUTONOMY.md#the-lead-kitty)) |
 | `GET/PUT/DELETE /v1/skills/{name}` · `POST …/accept` | the skills library and its proposals |
 | `GET/PUT/DELETE /v1/artifacts/{name}`     | the artifacts library (raw file bodies) |
 | `GET /v1/approvals?status=pending` · `POST /v1/approvals/{id}/approve` `{always}` · `…/reject` `{reason}` | the actions held for a yes, and the answer |

@@ -49,6 +49,7 @@ kitties:
       color: orange              # orange | gray | black | white | cream | brown | blue | pink | mint | lilac
     connectors: [team-slack]
     backup: tom                  # takes over a task mimi gives up on (empty: mimi asks you)
+    # lead: true                 # the principal kitty: hands the work to the others, reports for all (one at most)
     approvals: ask               # ask: posting, replying, sending, refunding... wait for a yes | auto: never ask
     limits:                      # what one task may spend; 0 takes the default
       max_tokens: 0              # 0 (default): no limit per task (set one only to cap a task)

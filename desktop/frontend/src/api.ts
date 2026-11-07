@@ -27,6 +27,9 @@ export interface Kitty {
   // Limits bound one task; zero fields take the defaults. Backup takes over a task this kitty gives up on.
   limits?: Limits;
   backup?: string;
+  // lead marks the principal kitty, the orchestrator of the fleet (one at most): it hands the
+  // work to the others and their reports reach the person through it.
+  lead?: boolean;
   // approvals is "ask" (the default: an action that reaches other people waits for a yes until
   // the kitty is trusted with it) or "auto".
   approvals?: "ask" | "auto" | "";
@@ -247,6 +250,8 @@ export interface Session {
   owner?: string;
   depth?: number;
   needs_help?: boolean;
+  // reports marks the lead kitty's Reports thread, where the other kitties' news land.
+  reports?: boolean;
 }
 
 export interface ProviderKind {
@@ -750,12 +755,18 @@ export const api = {
       soul?: Kitty["soul"];
       limits?: Limits;
       backup?: string;
+      lead?: boolean;
       approvals?: string;
       theme?: string;
       auto_off_minutes?: number;
       auto_off_default?: boolean;
     },
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
+  // lead is the fleet's lead kitty and its Reports thread; setLead makes another the lead
+  // (an empty kitty leaves the fleet without one).
+  lead: () => request<{ lead: Kitty | null; reports?: string }>("GET", "/v1/lead"),
+  setLead: (kitty: string) =>
+    request<{ lead: Kitty | null; reports?: string }>("PUT", "/v1/lead", { kitty }),
   // power is the state of a kitty's machine; setPower turns it on (it comes up in the background)
   // or off (a 409 says what is using it; force turns it off anyway).
   power: (ref: string) =>

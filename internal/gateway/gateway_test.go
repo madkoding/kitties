@@ -86,6 +86,14 @@ func (f *fakeFleet) Edit(ref string, u orchestrator.Update) (*kitty.Kitty, error
 		}
 		k.Avatar = a
 	}
+	if u.Lead != nil {
+		for _, other := range f.kitties {
+			if *u.Lead && other.ID != k.ID {
+				other.Lead = false
+			}
+		}
+		k.Lead = *u.Lead
+	}
 	return k, nil
 }
 func (f *fakeFleet) op(name, ref string, status string) error {

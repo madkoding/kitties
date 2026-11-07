@@ -79,7 +79,7 @@ func (s *Server) WithMCPOptions(token string, opt MCPOptions) *Server {
 		}))
 	}
 	srv := mcp.New("kitties", s.version)
-	tools := append(append(s.mcpTools(opt.Exec), s.mcpMoreTools()...), s.mcpMemoryTools()...)
+	tools := append(append(append(s.mcpTools(opt.Exec), s.mcpMoreTools()...), s.mcpMemoryTools()...), s.mcpLeadTools()...)
 	if opt.Approve {
 		tools = append(tools, s.mcpApproveTool())
 	}
@@ -305,9 +305,9 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 				}
 				return jsonResult(map[string]any{"chats": rows})
 			}},
-		{Name: "chat_create", Description: "Open a thread with some kitties (by name or id).",
-			InputSchema: obj([]string{"members"}, map[string]any{"title": str("optional title"),
-				"members": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "kitty names or ids"}}),
+		{Name: "chat_create", Description: "Open a thread with some kitties (by name or id); with no members, with the lead kitty.",
+			InputSchema: obj(nil, map[string]any{"title": str("optional title"),
+				"members": map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "kitty names or ids; empty for the lead kitty"}}),
 			Annotations: write,
 			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
 				var a struct {
@@ -318,7 +318,11 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 					return mcp.Result{}, err
 				}
 				if len(a.Members) == 0 {
-					return mcp.Result{}, &mcp.ArgError{Msg: "members is required"}
+					lead := s.lead()
+					if lead == nil {
+						return mcp.Result{}, &mcp.ArgError{Msg: "members is required (or make a kitty the lead)"}
+					}
+					a.Members = []string{lead.ID}
 				}
 				c, err := s.chats.Create(a.Title, a.Members)
 				if err != nil {

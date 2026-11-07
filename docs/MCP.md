@@ -88,11 +88,12 @@ signs in again.
 | `kitty_remove` | delete a kitty; needs `confirm: true` |
 | `kitty_screenshot` | its desktop as a picture |
 | `kitty_exec` | a command in its container (only with `allow_exec`) |
-| `chat_create`, `chat_list`, `chat_get` | threads; `chat_get` returns the last turns |
+| `chat_create`, `chat_list`, `chat_get` | threads (`chat_create` with no members opens one with the lead kitty); `chat_get` returns the last turns |
 | `chat_send`, `chat_cancel` | give a task and read the answer; stop it |
 | `kitty_power`, `kitty_compute` | turn a machine on or off; where it runs (local or cloud) and its state |
 | `goal_list`, `goal_add`, `goal_run`, `goal_remove`, `kitty_journal` | goals on a schedule or event, run one now, read the journal |
 | `memory_list`, `memory_remember`, `memory_edit`, `memory_forget` | what a kitty knows about you and the work (the Memory panel), including the `shared` notes every kitty sees; a note written here is pinned |
+| `fleet_lead`, `fleet_lead_set`, `lead_ask` | the lead kitty and its Reports thread; make another the lead (or none); give the lead a task for the whole fleet and read its report ([the lead kitty](AUTONOMY.md#the-lead-kitty)) |
 | `approval_list`, `approval_reject` | see and reject actions held for a yes |
 | `approval_approve` | say yes, this once, to a held action; **only with `allow_approve`** (by default approving stays with you) |
 
