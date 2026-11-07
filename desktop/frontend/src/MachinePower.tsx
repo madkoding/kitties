@@ -1,7 +1,8 @@
 import { useEffect, useState } from "preact/hooks";
-import type { Kitty, Power } from "./api";
+import type { Kitty, Memory, Power } from "./api";
 import { api, errText } from "./api";
 import { t } from "./i18n";
+import MachineMemory from "./MachineMemory";
 
 // THE KITTY'S MACHINE.
 //
@@ -74,11 +75,15 @@ export default function MachinePower({
   onChanged: () => void;
 }) {
   const [power, setPower] = useState<Power | null>(null);
+  const [memory, setMemory] = useState<Memory | undefined>(undefined);
   const [err, setErr] = useState("");
   const load = () =>
     api
-      .power(kitty.id)
-      .then(setPower)
+      .machine(kitty.id)
+      .then((r) => {
+        setPower(r.power);
+        setMemory(r.memory);
+      })
       // A gateway without power control (an older one) shows nothing.
       .catch(() => setPower(null));
   useEffect(() => {
@@ -134,6 +139,15 @@ export default function MachinePower({
           </select>
         </label>
       </div>
+      <MachineMemory
+        kitty={kitty}
+        power={power}
+        memory={memory}
+        onChanged={() => {
+          void load();
+          onChanged();
+        }}
+      />
       <p class="text-xs text-[var(--t4)]">
         {t(
           "{name}'s machine turns itself off after this time without use, never in the middle of a task or while you watch its desktop. {name} knows whether it is on, and turns it on by itself when it needs it.",

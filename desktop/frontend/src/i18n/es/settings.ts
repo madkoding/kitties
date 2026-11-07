@@ -445,6 +445,36 @@ const dict: Dictionary = {
     "En un teléfono de la misma red, apunta la cámara aquí: Kitties se abre con la sesión iniciada. Quien vea este código puede entrar.",
   "To open it from a phone with a QR code, choose LAN above.":
     "Para abrirlo desde un teléfono con un código QR, elige LAN arriba.",
+
+  // Machines: RAM and swap
+  Machines: "Máquinas",
+  "{n} MB": "{n} MB",
+  "{n} GB": "{n} GB",
+  "{used} of {total}": "{used} de {total}",
+  None: "Ninguna",
+  RAM: "RAM",
+  "Default ({size})": "Predeterminado ({size})",
+  Swap: "Swap",
+  "No swap": "Sin swap",
+  "{name}'s machine runs in the cloud: its memory is the size of the machine there.":
+    "La máquina de {name} corre en la nube: su memoria es la del tamaño de la máquina allí.",
+  "Memory in use": "Memoria en uso",
+  "Swap in use": "Swap en uso",
+  "Turn the machine on to see the memory it uses.":
+    "Enciende la máquina para ver la memoria que usa.",
+  "Holding the most: {list}": "Lo que más ocupa: {list}",
+  "The new memory applies the next time the machine is turned on.":
+    "La nueva memoria se aplica la próxima vez que se encienda la máquina.",
+  "{name} sees how much memory is free and does not open tabs or programs that do not fit; it closes what it no longer needs.":
+    "{name} ve cuánta memoria queda libre y no abre pestañas ni programas que no quepan; cierra lo que ya no necesita.",
+  "Each kitty's desktop runs on a machine of its own with so much RAM and swap. Kitties see how much is free and do not open browser tabs or programs that do not fit.":
+    "El escritorio de cada kitty corre en una máquina propia con cierta RAM y swap. Los kitties ven cuánta queda libre y no abren pestañas del navegador ni programas que no quepan.",
+  "For every kitty": "Para todos los kitties",
+  "The container engine has {engine} in all; the machines that are on share it. {n} machines of {size} add up to {sum}.":
+    "El motor de contenedores tiene {engine} en total; las máquinas encendidas lo comparten. {n} máquinas de {size} suman {sum}.",
+  "A change reaches a machine at once when the engine can; otherwise the next time it is turned on. A machine in the cloud has the size of its provider.":
+    "Un cambio llega a la máquina al instante cuando el motor puede; si no, la próxima vez que se encienda. Una máquina en la nube tiene el tamaño de su proveedor.",
+  "Each kitty": "Cada kitty",
 };
 
 export default dict;

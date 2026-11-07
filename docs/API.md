@@ -6,8 +6,10 @@
 | `GET /v1/providers` · `GET /v1/connectors`| what the kitties can think with and reach      |
 | `GET /v1/kitties` · `POST /v1/kitties`    | the fleet; create `{name, provider, soul, connectors, desktop, start}` |
 | `POST /v1/kitties/{ref}/start` · `/stop` · `DELETE /v1/kitties/{ref}` | lifecycle, by id or name |
-| `GET /v1/kitties/{ref}/power` · `POST /v1/kitties/{ref}/power` `{on, force}` | its machine: `{state: on\|starting\|off\|error, step, off_reason, auto_off_minutes, in_use, in_use_by, off_in_seconds…}`; `step: desktop` while its container is up and its desktop still coming up; turn it on (202, it comes up in the background) or off (409 when something uses it, unless `force`) |
+| `GET /v1/kitties/{ref}/power` · `POST /v1/kitties/{ref}/power` `{on, force}` | its machine: `{state: on\|starting\|off\|error, step, off_reason, auto_off_minutes, in_use, in_use_by, off_in_seconds…}`; `memory_mb, swap_mb, memory_custom, memory_pending, memory_local` (its limits); `memory: {total_mb, used_mb, available_mb, swap_total_mb, swap_used_mb, top}` when it is on; `step: desktop` while its container is up and its desktop still coming up; turn it on (202, it comes up in the background) or off (409 when something uses it, unless `force`) |
 | `PATCH /v1/kitties/{ref}` `{auto_off_minutes}` | minutes without use before its machine turns itself off (`0` never; `auto_off_default: true` goes back to the gateway's default) |
+| `PATCH /v1/kitties/{ref}` `{memory_mb, swap_mb}` | the RAM and swap of its machine, in MB (together; `memory_default: true` goes back to the defaults); applied at once when the engine can, else `memory_pending` until it is turned on again |
+| `GET /v1/settings/machines` · `PUT /v1/settings/machines` `{memory_mb, swap_mb}` | the RAM and swap of every machine without its own, and `engine_mb`, what the container engine has |
 | `POST /v1/kitties/{ref}/exec` `{argv}`    | run a command in its container                 |
 | `GET /v1/kitties/{ref}/screenshot`        | a PNG of its display                           |
 | `POST /v1/kitties/{ref}/control` `{hold}` | take its display over, or give it back         |

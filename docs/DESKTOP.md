@@ -178,6 +178,30 @@ watch or control it). And a desktop tool used while the machine is off **turns i
 for it (up to 3 minutes) and shows that as a step of the turn; if it cannot, the kitty is told
 plainly that its machine is off and why, and the tool does not run.
 
+## The machine's memory
+
+Each machine has so much **RAM and swap**: 2 GB and 1 GB by default (`containers.memory_mb` and
+`swap_mb`). **Settings › Machines** changes them for every kitty and for each one (a kitty's window,
+Desktop, shows the same pickers), with what each machine uses now and what the container engine has
+in all; the machines that are on share it, and a size bigger than the engine is refused.
+
+<img src="screenshots/73-settings-machines.png" alt="Settings, Machines: the RAM and swap for every kitty, and each kitty's machine with the memory it uses" width="100%">
+
+**Where a change applies.** On a local desktop (Docker or Podman) a new size reaches the machine at
+once (`docker update`), running or not. When the engine cannot (an older Podman, a cgroup without swap
+accounting) the window says so, and the machine is made anew with the new size the next time it is
+turned on: its home, workspace and browser sessions stay. A machine in the cloud has its provider's
+size (`cloud.size`), and the pickers say so. With Docker Desktop (Windows, macOS) the engine's own memory
+is set in Docker Desktop › Settings › Resources (on Windows with WSL 2, in `.wslconfig`).
+
+**The kitty knows its memory.** The message about its machine (above) also says how much RAM and swap
+are used and free, read inside the machine (cgroup v2 or v1, else `/proc/meminfo`) and kept 10 seconds.
+`@tool machine {"action": "status"}` adds what holds the most (Chromium with its processes, the
+display, the programs). Before **`open`** (a browser tab, some 150 to 300 MB) and **`launch`** (a
+program) the gateway looks: with less than 250 MB free for a tab, or 400 MB for a program, the tool is
+refused and the kitty is told what is free and to close tabs (`ctrl+w`) or programs first, or to ask
+you for more RAM. The lead and other MCP clients see the same in `kitty_compute`.
+
 ## Updating a desktop without losing what it knows
 
 A desktop is made from an image, and a newer one can come. A container keeps the image it was made
@@ -252,7 +276,8 @@ an update, not a stop, not removing the kitty.
 | The loop: screenshot, model, actions, again | [`internal/chat/chat.go`](../internal/chat/chat.go) |
 | Containers: start, `exec`, screenshot, live stream | [`internal/container/`](../internal/container) |
 | The machine's power: use, idle shut-off, on and off | [`internal/orchestrator/power.go`](../internal/orchestrator/power.go) |
-| What the kitty knows of its machine, the `machine` tool, the auto turn-on | [`internal/chat/machine.go`](../internal/chat/machine.go) |
+| What the kitty knows of its machine, the `machine` tool, the auto turn-on, the memory check | [`internal/chat/machine.go`](../internal/chat/machine.go) |
+| The machine's RAM and swap: limits, reading, defaults | [`internal/kitty/memory.go`](../internal/kitty/memory.go), [`internal/orchestrator/memory.go`](../internal/orchestrator/memory.go) |
 | Taking over: holds, the person's input, `ask_help` | [`internal/orchestrator/control.go`](../internal/orchestrator/control.go) |
 | The sealed backups of a kitty's sessions, and the update of a desktop | [`internal/keep`](../internal/keep), [`internal/orchestrator/sessions.go`](../internal/orchestrator/sessions.go) |
 | Home, Shared, the move of an older home, export and restore | [`internal/orchestrator/home.go`](../internal/orchestrator/home.go), [`internal/shared`](../internal/shared), [`internal/gateway/shared.go`](../internal/gateway/shared.go) |

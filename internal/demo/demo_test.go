@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/madkoding/kitties/internal/container"
+	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/provider"
 )
 
@@ -223,5 +224,26 @@ func TestDemoBrainNamesTheAttachedFiles(t *testing.T) {
 	r, _ = NewBrain().Complete(context.Background(), []provider.Message{{Role: "user", Content: "[Attached file: a.md (text, 1 KB)]"}})
 	if !strings.Contains(r.Content, "**a.md**") || !strings.Contains(r.Content, "read through it") {
 		t.Fatalf("%q", r.Content)
+	}
+}
+
+func TestDemoMachineMemory(t *testing.T) {
+	d := NewDesktop()
+	ctx := context.Background()
+	out, _ := d.Exec(ctx, "kitty-a", kitty.MemoryArgv...)
+	if m, ok := kitty.ParseMemory(out); !ok || m.TotalMB != 2048 || len(m.Top) == 0 {
+		t.Errorf("memory = %+v %v", m, ok)
+	}
+	if out, _ := d.Exec(ctx, "kitty-a", "sh", "-c", "true"); !strings.HasPrefix(out, "(demo)") {
+		t.Errorf("other sh = %q", out)
+	}
+	if d.SetLimits(ctx, "kitty-a", 1, 1) != nil {
+		t.Error("set limits")
+	}
+	if s, _ := d.LimitsStale(ctx, "kitty-a", 1, 1); s {
+		t.Error("stale")
+	}
+	if n, _ := d.EngineMemoryMB(ctx); n != 16384 {
+		t.Error("engine")
 	}
 }

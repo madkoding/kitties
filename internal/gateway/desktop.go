@@ -33,6 +33,68 @@ func (s *Server) desktopRoutes() {
 	s.mux.Handle("POST /v1/kitties/{ref}/update", api(s.handleUpdate))
 	s.mux.Handle("GET /v1/kitties/{ref}/power", api(s.handlePower))
 	s.mux.Handle("POST /v1/kitties/{ref}/power", api(s.handleSetPower))
+	s.mux.Handle("GET /v1/settings/machines", api(s.handleMachines))
+	s.mux.Handle("PUT /v1/settings/machines", api(s.handleSetMachines))
+}
+
+// MemoryReader is what a kitty's machine has and uses now: RAM and swap, and what holds the most.
+type MemoryReader interface {
+	Memory(ctx context.Context, ref string) (kitty.Memory, error)
+}
+
+// Machiner is the RAM and swap every kitty's machine gets unless it has its own.
+type Machiner interface {
+	Machines() orchestrator.MachinesView
+	SetMachineDefaults(ctx context.Context, d orchestrator.MachineDefaults) error
+}
+
+// memoryOf is the memory of a machine that is on, nil when it cannot be told.
+func (s *Server) memoryOf(ctx context.Context, ref string, p kitty.Power) *kitty.Memory {
+	r, ok := s.fleet.(MemoryReader)
+	if !ok || p.State != kitty.PowerOn {
+		return nil
+	}
+	m, err := r.Memory(ctx, ref)
+	if err != nil {
+		return nil
+	}
+	return &m
+}
+
+func (s *Server) machiner(w http.ResponseWriter) Machiner {
+	m, ok := s.fleet.(Machiner)
+	if !ok {
+		fail(w, http.StatusNotFound, errors.New("this gateway cannot size machines"))
+	}
+	return m
+}
+
+// handleMachines is the RAM and swap of the machines without values of their own, and what the
+// engine has.
+func (s *Server) handleMachines(w http.ResponseWriter, _ *http.Request) {
+	m := s.machiner(w)
+	if m == nil {
+		return
+	}
+	reply(w, http.StatusOK, m.Machines())
+}
+
+// handleSetMachines changes them ({"memory_mb": 2048, "swap_mb": 1024}).
+func (s *Server) handleSetMachines(w http.ResponseWriter, r *http.Request) {
+	m := s.machiner(w)
+	if m == nil {
+		return
+	}
+	var d orchestrator.MachineDefaults
+	if err := decode(r, &d); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := m.SetMachineDefaults(r.Context(), d); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	reply(w, http.StatusOK, m.Machines())
 }
 
 // Powerer is the machine of a kitty: whether it is on, and turning it on and off.
@@ -74,7 +136,11 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 		fail(w, powerCode(err), err)
 		return
 	}
-	reply(w, http.StatusOK, map[string]any{"power": power})
+	out := map[string]any{"power": power}
+	if m := s.memoryOf(r.Context(), r.PathValue("ref"), power); m != nil {
+		out["memory"] = m
+	}
+	reply(w, http.StatusOK, out)
 }
 
 // handleSetPower turns a kitty's machine on ({"on": true}, 202: it comes up in the background) or

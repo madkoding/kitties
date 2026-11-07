@@ -183,8 +183,10 @@ type Spec struct {
 	KittyName string
 	Image     string
 	MemoryMB  int
-	CPUs      float64
-	Network   string
+	// SwapMB is the swap besides MemoryMB (0 is none); it counts only with a MemoryMB.
+	SwapMB  int
+	CPUs    float64
+	Network string
 	// Workspace is the host folder mounted at Workdir.
 	Workspace string
 	// Home is the host folder mounted at HomeDir; empty keeps the image's own home.
@@ -204,8 +206,8 @@ func (s Spec) Validate() error {
 	if !imageRef.MatchString(s.Image) {
 		return fmt.Errorf("image %q is not a valid reference", s.Image)
 	}
-	if s.MemoryMB < 0 || s.CPUs < 0 {
-		return errors.New("memory and cpus cannot be negative")
+	if s.MemoryMB < 0 || s.SwapMB < 0 || s.CPUs < 0 {
+		return errors.New("memory, swap and cpus cannot be negative")
 	}
 	if s.Network != "" && !nameRe.MatchString(s.Network) {
 		return fmt.Errorf("network %q is not a valid name", s.Network)
@@ -225,9 +227,7 @@ func (s Spec) Args() []string {
 		// The live view (voxl) on a random port of the host's loopback only: the gateway reaches it
 		// there, with no `docker exec` in the way (see Manager.Tunnel).
 		"-p", "127.0.0.1::" + strconv.Itoa(VoxlPort)}
-	if s.MemoryMB > 0 {
-		args = append(args, "--memory", strconv.Itoa(s.MemoryMB)+"m")
-	}
+	args = append(args, limitArgs(s.MemoryMB, s.SwapMB)...)
 	if s.CPUs > 0 {
 		args = append(args, "--cpus", strconv.FormatFloat(s.CPUs, 'f', -1, 64))
 	}
@@ -442,6 +442,71 @@ func (m *Manager) ZoneStale(ctx context.Context, name, zone string) (bool, error
 		}
 	}
 	return have != zone, nil
+}
+
+// limitArgs are the flags of a container's RAM and swap: --memory-swap is both together. No RAM
+// limit leaves both to the engine.
+func limitArgs(memoryMB, swapMB int) []string {
+	if memoryMB <= 0 {
+		return nil
+	}
+	return []string{"--memory", strconv.Itoa(memoryMB) + "m", "--memory-swap", strconv.Itoa(memoryMB+max(swapMB, 0)) + "m"}
+}
+
+// SetLimits changes the RAM and swap of a container, running or not, without making it anew.
+// An engine that cannot (an older Podman, a cgroup without swap accounting) says so: the
+// limits then reach the container when it is made anew (see LimitsStale).
+func (m *Manager) SetLimits(ctx context.Context, name string, memoryMB, swapMB int) error {
+	if !nameRe.MatchString(name) {
+		return fmt.Errorf("container name %q is not valid", name)
+	}
+	if memoryMB <= 0 {
+		return errors.New("a limit cannot be taken off a container that exists")
+	}
+	return m.simple(ctx, append(append([]string{"update"}, limitArgs(memoryMB, swapMB)...), name)...)
+}
+
+// LimitsStale tells whether a container has other RAM or swap limits than these.
+func (m *Manager) LimitsStale(ctx context.Context, name string, memoryMB, swapMB int) (bool, error) {
+	if !nameRe.MatchString(name) {
+		return false, fmt.Errorf("container name %q is not valid", name)
+	}
+	out, err := runCmd(ctx, m.rt.Bin, "inspect", "-f", "{{.HostConfig.Memory}} {{.HostConfig.MemorySwap}}", name)
+	if err != nil {
+		return false, fmt.Errorf("inspect %s: %s", name, tail(string(out), 4))
+	}
+	fields := strings.Fields(string(out))
+	if len(fields) != 2 {
+		return false, fmt.Errorf("inspect %s: unexpected answer %q", name, strings.TrimSpace(string(out)))
+	}
+	mem, err1 := strconv.ParseInt(fields[0], 10, 64)
+	both, err2 := strconv.ParseInt(fields[1], 10, 64)
+	if err1 != nil || err2 != nil {
+		return false, fmt.Errorf("inspect %s: unexpected answer %q", name, strings.TrimSpace(string(out)))
+	}
+	const mb = 1024 * 1024
+	if memoryMB <= 0 {
+		return mem != 0, nil
+	}
+	return mem != int64(memoryMB)*mb || both != int64(memoryMB+max(swapMB, 0))*mb, nil
+}
+
+// EngineMemoryMB is the memory the engine can give its containers all together, in MB: the
+// host's, or the virtual machine's of Docker Desktop and Podman machine.
+func (m *Manager) EngineMemoryMB(ctx context.Context) (int, error) {
+	format := "{{.MemTotal}}"
+	if strings.Contains(filepath.Base(m.rt.Bin), "podman") {
+		format = "{{.Host.MemTotal}}"
+	}
+	out, err := runCmd(ctx, m.rt.Bin, "info", "--format", format)
+	if err != nil {
+		return 0, fmt.Errorf("info: %s", tail(string(out), 4))
+	}
+	n, err := strconv.ParseInt(strings.TrimSpace(string(out)), 10, 64)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("info: unexpected answer %q", strings.TrimSpace(string(out)))
+	}
+	return int(n / (1024 * 1024)), nil
 }
 
 // Manager starts and stops containers with one runtime.

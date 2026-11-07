@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/madkoding/kitties/internal/container"
+	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/provider"
 )
 
@@ -343,6 +344,14 @@ func (d *Desktop) Exec(_ context.Context, name string, argv ...string) (string, 
 		return d.clip[name], nil
 	case "kitty-theme":
 		return "theme " + strings.Join(argv[1:], " "), nil
+	case "sh":
+		if len(argv) == 3 && argv[2] == kitty.MemoryScript {
+			// A drawn machine of 2 GB with the browser open and a little swap in use.
+			return "memory.max=2147483648\nmemory.current=1288490188\nmemory.swap.max=1073741824\nmemory.swap.current=52428800\n" +
+				"inactive_file 134217728\nMemTotal: 16384000 kB\nMemAvailable: 9000000 kB\nSwapTotal: 4096000 kB\nSwapFree: 4000000 kB\n" +
+				"--- ps\n 307200 chromium\n 204800 chromium\n 153600 chromium\n 102400 Xvfb\n 61440 lumen-wm\n 40960 pcmanfm\n", nil
+		}
+		return "(demo) " + strings.Join(argv, " ") + "\n", nil
 	case "kitty-backup":
 		// What a backup of a drawn desktop holds: nothing real, but sealed and kept like the real one.
 		return base64.StdEncoding.EncodeToString([]byte("demo sessions of "+name)) + "\n", nil
@@ -350,6 +359,15 @@ func (d *Desktop) Exec(_ context.Context, name string, argv ...string) (string, 
 		return "(demo) " + strings.Join(argv, " ") + "\n", nil
 	}
 }
+
+// SetLimits takes any RAM and swap: a drawn desktop holds nothing.
+func (d *Desktop) SetLimits(context.Context, string, int, int) error { return nil }
+
+// LimitsStale says a drawn desktop always has its limits.
+func (d *Desktop) LimitsStale(context.Context, string, int, int) (bool, error) { return false, nil }
+
+// EngineMemoryMB is the memory of a drawn engine.
+func (d *Desktop) EngineMemoryMB(context.Context) (int, error) { return 16384, nil }
 
 // Pull implements orchestrator.Containers: a drawn desktop has no image to download.
 func (d *Desktop) Pull(context.Context, string) error { return nil }

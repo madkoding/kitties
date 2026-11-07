@@ -103,8 +103,9 @@ func (m *Manager) desktopSpec(ctx context.Context, k *kitty.Kitty) (container.Sp
 		env[key] = v
 	}
 	env["KITTY_SHARED_QUOTA_MB"] = strconv.Itoa(m.SharedQuotaMB())
+	memoryMB, swapMB, _ := m.MemoryLimits(k)
 	spec := container.Spec{
-		Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: c.MemoryMB, CPUs: c.CPUs,
+		Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: memoryMB, SwapMB: swapMB, CPUs: c.CPUs,
 		Network: c.Network, Workspace: k.Workspace, Shared: m.sharedDir(k), Env: env,
 	}
 	if err := makeOpenDir(spec.Shared); err != nil {

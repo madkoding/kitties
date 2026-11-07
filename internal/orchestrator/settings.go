@@ -32,6 +32,8 @@ type Settings struct {
 	Notify *notify.Config `json:"notify,omitempty"`
 	// Autonomy is how long the kitties keep at a task on their own; nil keeps the file's.
 	Autonomy *config.Autonomy `json:"autonomy,omitempty"`
+	// Machines are the RAM and swap of every kitty's machine; nil keeps the file's.
+	Machines *MachineDefaults `json:"machines,omitempty"`
 	// Removed names entries of the file the person deleted from the page.
 	Removed struct {
 		Providers  []string `json:"providers,omitempty"`
@@ -83,6 +85,9 @@ func (m *Manager) loadSettings() error {
 	}
 	if s.Autonomy != nil {
 		m.cfg.Autonomy = *s.Autonomy
+	}
+	if s.Machines != nil {
+		m.cfg.Containers.MemoryMB, m.cfg.Containers.SwapMB = s.Machines.MemoryMB, s.Machines.SwapMB
 	}
 	return nil
 }

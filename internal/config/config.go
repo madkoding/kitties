@@ -218,8 +218,11 @@ type Containers struct {
 	// usual desktop tools; see docker/kitty-desktop.
 	Image string `yaml:"image"`
 	// Network is the network the containers join. Empty is the runtime's default bridge.
-	Network  string  `yaml:"network"`
+	Network string `yaml:"network"`
+	// MemoryMB is the RAM of each kitty's machine (2048 by default; 0 is no limit) and SwapMB the
+	// swap it has besides (1024 by default; 0 is none). Each kitty can have values of its own.
 	MemoryMB int     `yaml:"memory_mb"`
+	SwapMB   int     `yaml:"swap_mb"`
 	CPUs     float64 `yaml:"cpus"`
 	// Workspace is the host folder that holds one subfolder per kitty, mounted at /home/kitty/work.
 	Workspace string `yaml:"workspace"`
@@ -459,7 +462,7 @@ func Defaults() Config {
 		Providers: map[string]Provider{},
 		Containers: Containers{
 			Runtime: "auto", Image: "ghcr.io/madkoding/kitty-desktop:latest",
-			MemoryMB: 2048, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6, AutoOffMinutes: kitty.DefaultAutoOffMinutes,
+			MemoryMB: 2048, SwapMB: kitty.DefaultSwapMB, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6, AutoOffMinutes: kitty.DefaultAutoOffMinutes,
 		},
 		Cloud:      Cloud{MaxRunning: 5, IdleMinutes: 15, Size: "small", APIKeyEnv: "BOAT_API_KEY"},
 		Gateway:    Gateway{Listen: DefaultListen, MCP: MCP{Enabled: true}},
@@ -603,8 +606,8 @@ func (c *Config) Validate() error {
 	if err := kitty.ValidAutoOff(c.Containers.AutoOffMinutes); err != nil {
 		return fmt.Errorf("containers.%w", err)
 	}
-	if c.Containers.MemoryMB < 0 || c.Containers.CPUs < 0 {
-		return errors.New("containers: memory_mb and cpus cannot be negative")
+	if c.Containers.MemoryMB < 0 || c.Containers.SwapMB < 0 || c.Containers.CPUs < 0 {
+		return errors.New("containers: memory_mb, swap_mb and cpus cannot be negative")
 	}
 	if c.Gateway.Listen == "" {
 		return errors.New("gateway.listen cannot be empty")

@@ -35,6 +35,10 @@ a desktop app and an Android app.
   your computer, so a new desktop image changes nothing it built. What it makes for you lands in its
   `~/Shared` folder (`kitty-share`), which the app shows in **Library > Shared** to preview, download or
   keep; a kitty's files export to one `.tar.gz` without its secrets ([details](docs/DESKTOP.md#what-outlives-the-desktop-home-programs-and-shared)).
+- **Machines that know their memory.** Each desktop has its own RAM and swap, set in **Settings >
+  Machines** for every kitty or for each one. The kitty sees what is used and free, opens only the tabs
+  and programs that fit, and a new tab is refused when the memory is nearly full
+  ([details](docs/DESKTOP.md#the-machines-memory)).
 - **Autonomy.** Goals on a schedule or triggered by events, limits and a daily budget, retries, a
   backup kitty, delegation between kitties and a journal of everything.
 - **A lead kitty.** Make one kitty the lead and it orchestrates the rest: it splits what you ask among

@@ -23,9 +23,9 @@ func (s *Server) mcpMoreTools() []mcp.Tool {
 	write := mcp.Annotations{}
 	danger := mcp.Annotations{Destructive: true}
 	return []mcp.Tool{
-		{Name: "kitty_compute", Description: "Where a kitty's desktop runs, local (a container on the gateway's machine) or cloud, and its power state. Compute follows the configuration; it is not switched from here.",
+		{Name: "kitty_compute", Description: "Where a kitty's desktop runs, local (a container on the gateway's machine) or cloud, its power state, its RAM and swap limits and, when on, the memory it uses and has free. Compute follows the configuration; it is not switched from here.",
 			InputSchema: refSchema, Annotations: read,
-			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+			Call: func(ctx context.Context, raw json.RawMessage) (mcp.Result, error) {
 				var a refArgs
 				if err := args(raw, &a); err != nil {
 					return mcp.Result{}, err
@@ -42,6 +42,9 @@ func (s *Server) mcpMoreTools() []mcp.Tool {
 				if p, ok := s.fleet.(Powerer); ok {
 					if power, err := p.Power(a.Ref); err == nil {
 						out["power"] = power
+						if m := s.memoryOf(ctx, a.Ref, power); m != nil {
+							out["memory"] = m
+						}
 					}
 				}
 				return jsonResult(out)

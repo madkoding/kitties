@@ -65,6 +65,15 @@ type Power struct {
 	// whether the kitty has a value of its own (otherwise it is the gateway's default).
 	AutoOffMinutes int  `json:"auto_off_minutes"`
 	AutoOffCustom  bool `json:"auto_off_custom"`
+	// MemoryMB and SwapMB are the RAM and swap the machine is given (0 RAM is no limit: the
+	// engine's own); MemoryCustom is whether the kitty has values of its own, MemoryPending
+	// whether they wait for the machine to be turned on again. MemoryLocal is false for a
+	// machine in the cloud, whose size is the provider's.
+	MemoryMB      int  `json:"memory_mb"`
+	SwapMB        int  `json:"swap_mb"`
+	MemoryCustom  bool `json:"memory_custom"`
+	MemoryPending bool `json:"memory_pending,omitempty"`
+	MemoryLocal   bool `json:"memory_local"`
 	// InUse is whether something keeps it on right now, and InUseBy what (the Use constants).
 	InUse   bool   `json:"in_use"`
 	InUseBy string `json:"in_use_by,omitempty"`
