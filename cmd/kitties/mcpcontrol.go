@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -18,32 +19,64 @@ func mcpControlOf(cfg config.Config) *mcpControl { return &mcpControl{cfg: cfg} 
 
 func (m *mcpControl) tokenFile() string { return filepath.Join(m.cfg.DataDirOr(), "mcp.token") }
 
-// url is where /mcp answers: the public address, else the one the gateway listens on (a wildcard
-// listen address is reached through loopback).
-func (m *mcpControl) url() string {
-	g := m.cfg.Gateway
-	if g.PublicURL != "" {
-		return strings.TrimRight(g.PublicURL, "/") + gateway.MCPPath
+// mcpURLs are the addresses /mcp answers at, best first for a client on another computer: the
+// public address, then the local network one (when the gateway listens there), then this machine.
+// They follow the gateway's exposure, like the addresses its welcome block prints.
+func mcpURLs(listen, publicURL string, https bool, lanIP string) []gateway.MCPConnect {
+	var out []gateway.MCPConnect
+	if publicURL != "" {
+		out = append(out, gateway.MCPConnect{Where: "public", URL: strings.TrimRight(publicURL, "/") + gateway.MCPPath})
 	}
-	listen := g.Listen
-	for _, wild := range []string{"0.0.0.0:", "[::]:", ":"} {
-		if strings.HasPrefix(listen, wild) {
-			listen = "127.0.0.1:" + strings.TrimPrefix(listen, wild)
-			break
+	var local []gateway.MCPConnect
+	for _, a := range pageAddresses(listen, "", https, lanIP) {
+		c := gateway.MCPConnect{Where: "lan", URL: strings.TrimRight(a, "/") + gateway.MCPPath}
+		if u, err := url.Parse(a); err == nil && config.IsLoopbackAddr(u.Host) {
+			c.Where = "local"
+			local = append(local, c)
+			continue
 		}
+		out = append(out, c)
 	}
-	return "http://" + listen + gateway.MCPPath
+	return append(out, local...)
+}
+
+// claudeCommand is the `claude mcp add` line for a URL, user-wide so every project of that person
+// gets the fleet. token is how the header gets the token: the file read in place, or a placeholder
+// the page fills in when it copies the command.
+func claudeCommand(u, token string) string {
+	return `claude mcp add --transport http --scope user kitties ` + u + ` --header "Authorization: Bearer ` + token + `"`
 }
 
 func (m *mcpControl) MCP() gateway.MCPInfo {
+	g := m.cfg.Gateway
+	lan := ""
+	if config.ExposureOf(g.Listen) == config.ExposureWAN {
+		lan = lanIP()
+	}
 	info := gateway.MCPInfo{
 		MCPSettings:  m.cfg.MCPSettingsOf(),
-		URL:          m.url(),
 		TokenFile:    m.tokenFile(),
-		TokenManaged: m.cfg.Gateway.MCP.Token != "",
+		TokenManaged: g.MCP.Token != "",
 		CanChange:    true,
+		InContainer:  inContainer(),
+		Connect:      mcpURLs(g.Listen, g.PublicURL, g.TLSCert != "", lan),
 	}
-	info.Command = `claude mcp add --transport http kitties ` + info.URL + ` --header "Authorization: Bearer $(cat ` + info.TokenFile + `)"`
+	// The token file is where Claude Code runs only on this machine, outside a container: there
+	// the command reads it; anywhere else the page puts the token in when it copies the command.
+	readFile := `$(cat ` + info.TokenFile + `)`
+	for i := range info.Connect {
+		c := &info.Connect[i]
+		if c.Where == "local" && !info.InContainer {
+			c.Command = claudeCommand(c.URL, readFile)
+		} else {
+			c.Command = claudeCommand(c.URL, gateway.MCPTokenPlaceholder)
+			c.WithToken = true
+		}
+	}
+	if len(info.Connect) > 0 {
+		info.URL = info.Connect[0].URL
+		info.Command = info.Connect[0].Command
+	}
 	return info
 }
 

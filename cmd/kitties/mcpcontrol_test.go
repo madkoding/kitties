@@ -11,6 +11,9 @@ import (
 
 func newMCPControl(t *testing.T, mutate func(*config.Config)) (*mcpControl, string) {
 	t.Helper()
+	old := lanIP
+	t.Cleanup(func() { lanIP = old })
+	lanIP = func() string { return "192.168.1.9" }
 	cfg := config.Defaults()
 	cfg.DataDir = t.TempDir()
 	if mutate != nil {
@@ -25,12 +28,24 @@ func TestMCPControlShowsTheCommandWithoutTheToken(t *testing.T) {
 		t.Fatal(err)
 	}
 	info := m.MCP()
-	if info.URL != "http://127.0.0.1:7488/mcp" || !info.CanChange || info.TokenManaged {
+	if !info.Enabled || !info.CanChange || info.TokenManaged || len(info.Connect) != 2 {
 		t.Fatalf("info = %+v", info)
 	}
-	if !strings.Contains(info.Command, "claude mcp add --transport http kitties http://127.0.0.1:7488/mcp") ||
-		!strings.Contains(info.Command, "$(cat "+filepath.Join(dir, "mcp.token")+")") || strings.Contains(info.Command, "secret") {
-		t.Errorf("command = %q", info.Command)
+	// Exposed to the network: the network address first, for Claude Code on another computer, with
+	// a placeholder the page fills in; this machine's address reads the token file in place.
+	lan, local := info.Connect[0], info.Connect[1]
+	if lan.Where != "lan" || lan.URL != "http://"+lanIP()+":7488/mcp" || !lan.WithToken || info.URL != lan.URL || info.Command != lan.Command ||
+		lan.Command != `claude mcp add --transport http --scope user kitties `+lan.URL+` --header "Authorization: Bearer <MCP_TOKEN>"` {
+		t.Errorf("lan = %+v", lan)
+	}
+	if local.Where != "local" || local.URL != "http://127.0.0.1:7488/mcp" || local.WithToken ||
+		!strings.Contains(local.Command, "$(cat "+filepath.Join(dir, "mcp.token")+")") {
+		t.Errorf("local = %+v", local)
+	}
+	for _, c := range info.Connect {
+		if strings.Contains(c.Command, "secret") {
+			t.Errorf("the token is in %q", c.Command)
+		}
 	}
 	if tok, err := m.Token(); err != nil || tok != "abcdefghijklmnop-secret" {
 		t.Errorf("token = %q %v", tok, err)
@@ -38,20 +53,36 @@ func TestMCPControlShowsTheCommandWithoutTheToken(t *testing.T) {
 }
 
 func TestMCPControlURLs(t *testing.T) {
-	for listen, want := range map[string]string{
-		"127.0.0.1:9100": "http://127.0.0.1:9100/mcp",
-		"[::]:9100":      "http://127.0.0.1:9100/mcp",
-		":9100":          "http://127.0.0.1:9100/mcp",
-		"192.168.1.5:80": "http://192.168.1.5:80/mcp",
+	lan := "192.168.1.9"
+	for listen, want := range map[string][]string{
+		"127.0.0.1:9100": {"http://127.0.0.1:9100/mcp"},
+		"[::]:9100":      {"http://" + lan + ":9100/mcp", "http://127.0.0.1:9100/mcp"},
+		":9100":          {"http://" + lan + ":9100/mcp", "http://127.0.0.1:9100/mcp"},
+		"192.168.1.5:80": {"http://192.168.1.5:80/mcp", "http://127.0.0.1:80/mcp"},
 	} {
 		m, _ := newMCPControl(t, func(c *config.Config) { c.Gateway.Listen = listen })
-		if got := m.MCP().URL; got != want {
-			t.Errorf("listen %s: url %s, want %s", listen, got, want)
+		var got []string
+		for _, c := range m.MCP().Connect {
+			got = append(got, c.URL)
+		}
+		if strings.Join(got, " ") != strings.Join(want, " ") || m.MCP().URL != want[0] {
+			t.Errorf("listen %s: urls %v, want %v", listen, got, want)
 		}
 	}
 	m, _ := newMCPControl(t, func(c *config.Config) { c.Gateway.PublicURL = "https://k.example/" })
-	if got := m.MCP().URL; got != "https://k.example/mcp" {
-		t.Errorf("public url = %s", got)
+	if i := m.MCP(); i.URL != "https://k.example/mcp" || i.Connect[0].Where != "public" || !i.Connect[0].WithToken {
+		t.Errorf("public url = %+v", i)
+	}
+	// TLS on the gateway itself: https everywhere.
+	m, _ = newMCPControl(t, func(c *config.Config) { c.Gateway.TLSCert = "c.pem" })
+	if got := m.MCP().URL; got != "https://127.0.0.1:7488/mcp" {
+		t.Errorf("tls url = %s", got)
+	}
+	// In a container the token file is not where Claude Code runs: every command takes the token.
+	t.Setenv("KITTIES_IN_DOCKER", "1")
+	m, _ = newMCPControl(t, nil)
+	if i := m.MCP(); !i.InContainer || !i.Connect[0].WithToken || strings.Contains(i.Command, "$(cat") {
+		t.Errorf("container = %+v", i)
 	}
 }
 
@@ -70,7 +101,7 @@ func TestMCPControlSavesTheSwitches(t *testing.T) {
 }
 
 func TestMCPControlTokens(t *testing.T) {
-	m, dir := newMCPControl(t, nil)
+	m, dir := newMCPControl(t, func(c *config.Config) { c.Gateway.MCP.Enabled = false })
 	if _, err := m.Token(); err == nil {
 		t.Error("a token without a file")
 	}

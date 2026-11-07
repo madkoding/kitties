@@ -2638,7 +2638,30 @@ test("Settings: the Claude connector shows its switches, the command and the sig
     url: "https://kitties.example.com/mcp",
     token_file: "/home/me/.kitties/mcp.token",
     command:
-      'claude mcp add --transport http kitties https://kitties.example.com/mcp --header "Authorization: Bearer $(cat /home/me/.kitties/mcp.token)"',
+      'claude mcp add --transport http --scope user kitties https://kitties.example.com/mcp --header "Authorization: Bearer <MCP_TOKEN>"',
+    // It answers wherever the gateway does: the public address, the network and this machine.
+    connect: [
+      {
+        where: "public",
+        url: "https://kitties.example.com/mcp",
+        command:
+          'claude mcp add --transport http --scope user kitties https://kitties.example.com/mcp --header "Authorization: Bearer <MCP_TOKEN>"',
+        with_token: true,
+      },
+      {
+        where: "lan",
+        url: "http://192.168.1.20:7488/mcp",
+        command:
+          'claude mcp add --transport http --scope user kitties http://192.168.1.20:7488/mcp --header "Authorization: Bearer <MCP_TOKEN>"',
+        with_token: true,
+      },
+      {
+        where: "local",
+        url: "http://127.0.0.1:7488/mcp",
+        command:
+          'claude mcp add --transport http --scope user kitties http://127.0.0.1:7488/mcp --header "Authorization: Bearer $(cat /home/me/.kitties/mcp.token)"',
+      },
+    ],
     token_managed: false,
     can_change: true,
   };
@@ -2673,7 +2696,21 @@ test("Settings: the Claude connector shows its switches, the command and the sig
   await page.locator("aside").getByRole("button", { name: "Settings" }).click();
   await page.getByRole("tab", { name: "Preferences" }).click();
   const box = page.getByTestId("mcp");
-  await expect(box.getByTestId("mcp-command")).toContainText("claude mcp add --transport http");
+  // The page was opened at none of them: the best one (public) comes first, with a placeholder.
+  await expect(box.getByTestId("mcp-where-public")).toHaveAttribute("aria-checked", "true");
+  await expect(box.getByTestId("mcp-command")).toContainText(
+    "claude mcp add --transport http --scope user kitties https://kitties.example.com/mcp",
+  );
+  await expect(box.getByTestId("mcp-command")).toContainText("<MCP_TOKEN>");
+  await expect(box.getByTestId("mcp-plain-http")).toHaveCount(0);
+  // The local network goes over plain http: it says so.
+  await box.getByTestId("mcp-where-lan").click();
+  await expect(box.getByTestId("mcp-command")).toContainText("http://192.168.1.20:7488/mcp");
+  await expect(box.getByTestId("mcp-plain-http")).toBeVisible();
+  // This machine reads the token from its file.
+  await box.getByTestId("mcp-where-local").click();
+  await expect(box.getByTestId("mcp-command")).toContainText("$(cat /home/me/.kitties/mcp.token)");
+  await box.getByTestId("mcp-where-public").click();
   // The token is never drawn on the page.
   await expect(box).not.toContainText("the-secret-token-value");
   await expect(box.getByTestId("mcp-apply")).toBeDisabled();
@@ -2939,8 +2976,14 @@ test("Settings: the MCP clients can be revoked and the token is read only on req
   await page.locator("aside").getByRole("button", { name: "Settings" }).click();
   await page.getByRole("tab", { name: "Preferences" }).click();
   const box = page.getByTestId("mcp");
+  // An older gateway gives one address: no choice, its command as it is.
+  await expect(box.getByTestId("mcp-where")).toHaveCount(0);
+  await box.getByTestId("mcp-copy").click();
+  await expect(box.getByTestId("mcp-note")).toContainText("the command");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe("claude mcp add kitties");
+  expect(calls).toEqual([]);
   await box.getByTestId("mcp-copy-token").click();
-  await expect(box.getByTestId("mcp-note")).toBeVisible();
+  await expect(box.getByTestId("mcp-note")).toContainText("the token");
   expect(calls).toEqual(["GET"]);
   await box.getByTestId("mcp-test").click();
   await expect(box.getByTestId("mcp-note")).toContainText("23 tools");
@@ -2949,6 +2992,49 @@ test("Settings: the MCP clients can be revoked and the token is read only on req
   await page.getByTestId("confirm").getByRole("button", { name: "Revoke", exact: true }).click();
   await expect(box.getByTestId("mcp-client-c1")).toContainText("Revoked");
   expect(calls).toEqual(["GET", "DELETE client"]);
+});
+
+test("Settings: copying the command for another computer puts the token in, on request", async ({
+  page,
+  context,
+}) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"]);
+  const lan =
+    'claude mcp add --transport http --scope user kitties http://192.168.1.20:7488/mcp --header "Authorization: Bearer <MCP_TOKEN>"';
+  const mcp = {
+    enabled: true,
+    allow_exec: false,
+    allow_approve: false,
+    oauth: false,
+    url: "http://192.168.1.20:7488/mcp",
+    token_file: "/var/lib/kitties/mcp.token",
+    command: lan,
+    in_container: true,
+    connect: [
+      { where: "lan", url: "http://192.168.1.20:7488/mcp", command: lan, with_token: true },
+    ],
+    token_managed: false,
+    can_change: true,
+  };
+  let reads = 0;
+  await page.route("**/v1/mcp", (route) => route.fulfill({ json: mcp }));
+  await page.route("**/v1/mcp/token", (route) => {
+    reads++;
+    return route.fulfill({ json: { token: "the-secret-token-value" } });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("mcp");
+  await expect(box.getByTestId("mcp-command")).toContainText("<MCP_TOKEN>");
+  expect(reads).toBe(0);
+  await box.getByTestId("mcp-copy").click();
+  await expect(box.getByTestId("mcp-note")).toContainText("the command with the token");
+  expect(reads).toBe(1);
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    lan.replace("<MCP_TOKEN>", "the-secret-token-value"),
+  );
+  await expect(box).not.toContainText("the-secret-token-value");
 });
 
 // A kitty that starts working while the person types must not take the focus (or the text).

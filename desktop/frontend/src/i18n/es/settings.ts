@@ -295,14 +295,22 @@ const dict: Dictionary = {
   "Remote clients sign in with OAuth. It needs https in front (public address).":
     "Los clientes remotos entran con OAuth. Necesita https delante (dirección pública).",
   "Claude (MCP)": "Claude (MCP)",
-  "Let Claude run the fleet as an orchestrator. Off until you turn it on.":
-    "Deja que Claude maneje la flota como orquestador. Apagado hasta que lo actives.",
   "This gives Claude more power": "Esto le da más poder a Claude",
   "Commands run inside the kitty and an approval lets a held action go ahead without you. Turn it on only if you trust the client that holds the token.":
     "Los comandos corren dentro del kitty y una aprobación deja seguir una acción retenida sin ti. Actívalo solo si confías en el cliente que tiene el token.",
+  "Let Claude run the fleet as an orchestrator. It answers wherever Kitties does, behind a token of its own.":
+    "Deja que Claude maneje la flota como orquestador. Responde dondequiera que Kitties responda, con un token propio.",
+  "This computer": "Este computador",
+  "Local network": "Red local",
+  "Public address": "Dirección pública",
+  "the command with the token": "el comando con el token",
+  "Run this on the computer where Claude Code is. Copy command puts the token in; it is not shown here.":
+    "Ejecútalo en el computador donde está Claude Code. Copiar comando le pone el token; aquí no se muestra.",
+  "Run this on this computer, where Claude Code is. It reads the token from its file; the token is not shown here.":
+    "Ejecútalo en este computador, donde está Claude Code. Lee el token de su archivo; aquí no se muestra.",
+  "Plain http: the token crosses the network unencrypted. Use it on a network you trust, or put https in front (public address).":
+    "http sin cifrar: el token cruza la red en claro. Úsalo en una red de confianza o pon https delante (dirección pública).",
   "Connect Claude Code": "Conectar Claude Code",
-  "Run this where Claude Code is. It reads the token from its file; the token is not shown here.":
-    "Ejecútalo donde está Claude Code. Lee el token de su archivo; aquí no se muestra.",
   "Copy command": "Copiar comando",
   "Copy token": "Copiar token",
   "Signed-in clients": "Clientes con sesión",

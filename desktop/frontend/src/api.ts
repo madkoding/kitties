@@ -1311,10 +1311,24 @@ export type McpInfo = {
   url: string;
   token_file: string;
   command: string;
+  // connect are the addresses /mcp answers at (they follow the gateway's exposure), best first.
+  connect?: McpConnect[];
+  in_container?: boolean;
   token_managed: boolean;
   can_change: boolean;
   why?: string;
 };
+
+// McpConnect is one address Claude Code reaches the connector at. With with_token the command
+// carries MCP_TOKEN_PLACEHOLDER, replaced with the token only when the person copies it.
+export type McpConnect = {
+  where: "public" | "lan" | "local";
+  url: string;
+  command: string;
+  with_token?: boolean;
+};
+
+export const MCP_TOKEN_PLACEHOLDER = "<MCP_TOKEN>";
 
 export type McpSettings = Pick<McpInfo, "enabled" | "allow_exec" | "allow_approve" | "oauth">;
 

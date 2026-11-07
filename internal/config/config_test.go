@@ -452,8 +452,17 @@ func TestCloudNeededAndIsCloudContainer(t *testing.T) {
 
 func TestApplyEnvMCP(t *testing.T) {
 	cfg := Defaults()
-	if cfg.Gateway.MCP.Enabled || cfg.Gateway.MCP.AllowExec {
-		t.Fatal("the MCP connector is off by default")
+	if !cfg.Gateway.MCP.Enabled || cfg.Gateway.MCP.AllowExec || cfg.Gateway.MCP.AllowApprove || cfg.Gateway.MCP.OAuth {
+		t.Fatal("the MCP connector is on by default, its extras off")
+	}
+	for _, v := range []string{"false", "0", "no", "off"} {
+		off := Defaults()
+		if err := off.ApplyEnv(func(k string) string { return map[string]string{"KITTIES_MCP": v}[k] }); err != nil || off.Gateway.MCP.Enabled {
+			t.Errorf("KITTIES_MCP=%s leaves it on (%v)", v, err)
+		}
+	}
+	if off, err := Parse([]byte("gateway: { mcp: { enabled: false } }\n")); err != nil || off.Gateway.MCP.Enabled {
+		t.Errorf("enabled: false in the file leaves it on (%v)", err)
 	}
 	env := map[string]string{"KITTIES_MCP": "true", "KITTIES_MCP_TOKEN": "t0ken", "KITTIES_MCP_EXEC": "1", "KITTIES_MCP_OAUTH": "yes", "KITTIES_MCP_APPROVE": "true"}
 	if err := cfg.ApplyEnv(func(k string) string { return env[k] }); err != nil {

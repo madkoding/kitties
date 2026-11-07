@@ -11,7 +11,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -544,13 +543,15 @@ func cmdMCP(args []string, cfg config.Config, in io.Reader, out, errOut io.Write
 		return 2
 	}
 	if *url == "" {
-		host := cfg.Gateway.Listen
-		if h, port, err := net.SplitHostPort(host); err == nil && (h == "" || h == "0.0.0.0" || h == "::") {
-			host = net.JoinHostPort("127.0.0.1", port)
+		// This machine's own address: the bridge runs where the gateway does, unless -url says.
+		g := cfg.Gateway
+		for _, c := range mcpURLs(g.Listen, "", g.TLSCert != "", "") {
+			if *url == "" || c.Where == "local" {
+				*url = c.URL
+			}
 		}
-		*url = "http://" + host + gateway.MCPPath
-		if cfg.Gateway.PublicURL != "" {
-			*url = cfg.Gateway.PublicURL + gateway.MCPPath
+		if g.PublicURL != "" {
+			*url = strings.TrimRight(g.PublicURL, "/") + gateway.MCPPath
 		}
 	}
 	tok := *token
@@ -691,11 +692,13 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	} else if mt != "" {
 		srv.WithMCPOptions(mt, gateway.MCPOptions{Exec: g.MCP.AllowExec, OAuth: g.MCP.OAuth, Approve: g.MCP.AllowApprove,
 			ClientsFile: filepath.Join(a.cfg.DataDirOr(), "mcp-clients.json")})
-		base := "http://" + g.Listen
-		if g.PublicURL != "" {
-			base = g.PublicURL
+		// Every address it answers at (they follow the exposure), and the line for Claude Code.
+		info := mcpControlOf(a.cfg).MCP()
+		fmt.Fprintf(a.out, "MCP connector: %s (token in %s)\n", info.URL, mpath)
+		for _, c := range info.Connect[1:] {
+			fmt.Fprintf(a.out, "               %s\n", c.URL)
 		}
-		fmt.Fprintf(a.out, "MCP connector: %s%s (token in %s)\n", base, gateway.MCPPath, mpath)
+		fmt.Fprintf(a.out, "  Claude Code: %s\n", claudeCommand(info.URL, "<token in "+mpath+">"))
 	}
 	if site, ok := webFS(); ok {
 		srv.WithWeb(site)
