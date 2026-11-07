@@ -75,6 +75,12 @@ Open `https://<your domain>` and sign in with the token. The image is
 The data folder is mounted at the same path inside and outside the container on purpose: the
 kitties' containers mount their workspaces by host path.
 
+A Claude plan (Pro, Max) works in the container too: *Install Claude Code there* (Quick start, or
+Settings → Models → Anthropic → Claude subscription) runs Anthropic's installer inside it, and the
+image carries what Claude Code needs on Alpine. `HOME` is `<data>/home`, so `claude` and its
+login stay in the data folder and survive an image update. The image does not ship `claude`
+itself (about 300 MB).
+
 The desktops show the host's hour: the gateway passes the host's time zone to each desktop
 (`TZ`), read from `TZ` in `deploy/.env` or, when empty, from the host's `/etc/localtime` and zone
 files, mounted read-only. A desktop made in another zone (the host moved) is made anew, its

@@ -12,6 +12,7 @@ import (
 func (s *Server) accountRoutes() {
 	api := s.auth
 	s.mux.Handle("POST /v1/settings/accounts/{kind}/login", api(s.handleAccountLogin))
+	s.mux.Handle("POST /v1/settings/accounts/{kind}/install", api(s.handleAccountInstall))
 	s.mux.Handle("DELETE /v1/settings/accounts/{kind}", api(s.handleAccountSignOut))
 	s.mux.Handle("GET /v1/settings/logins/{id}", api(s.handleLoginFlow))
 	s.mux.Handle("POST /v1/settings/logins/{id}/paste", api(s.handleLoginPaste))
@@ -27,6 +28,17 @@ func (s *Server) handleAccountLogin(w http.ResponseWriter, r *http.Request) {
 	f, err := s.fleet.Accounts().Start(r.PathValue("kind"), opts)
 	if err != nil {
 		// A sign-in that cannot start is the person's to fix (install a program, pick a key).
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	reply(w, http.StatusOK, f)
+}
+
+// handleAccountInstall installs the program an account signs in with (Claude Code), for a person
+// with no terminal on the gateway's machine.
+func (s *Server) handleAccountInstall(w http.ResponseWriter, r *http.Request) {
+	f, err := s.fleet.Accounts().Install(r.PathValue("kind"))
+	if err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}

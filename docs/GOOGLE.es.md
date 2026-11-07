@@ -49,6 +49,17 @@ En vez de pegar el cliente en cada conexión, ponlo una vez en el gateway:
 `make OAUTH_APPS="google=<client id>:<client secret>" dist` (la release lee el secreto
 `KITTIES_OAUTH_APPS` del repositorio).
 
+### Gemini con la misma app
+
+Con esa app en el gateway, un modelo Gemini también inicia sesión con tu cuenta de Google (Inicio
+rápido o **Ajustes → Modelos → Google Gemini → Cuenta de Google → Iniciar sesión con Google**), sin
+gcloud: escribe el proyecto de Cloud al que se cobra Gemini e inicia sesión. Activa la **Generative
+Language API** en ese proyecto. Pide los mismos permisos que gcloud (`cloud-platform`,
+`generative-language.retriever`), que Google considera sensibles: deja la app en Prueba con tus
+cuentas como usuarios de prueba, o verifícala. Un navegador en otra máquina termina en una página de
+`127.0.0.1` que no carga: copia su dirección de vuelta en Kitties, como en las conexiones. Sin la
+app, *Usar mi sesión de gcloud* sigue usando `gcloud auth application-default login`.
+
 ## Permisos (scopes)
 
 Siempre `openid email` (para mostrar qué cuenta entró) y, por cada servicio marcado, el permiso

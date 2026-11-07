@@ -974,6 +974,107 @@ test("a first run can sign in with GitHub Copilot or a ChatGPT plan", async ({ p
   await expect(quick.getByTestId("quick-start-key")).toHaveAttribute("aria-checked", "true");
 });
 
+test("a first run installs Claude Code where Kitties runs, then signs in", async ({ page }) => {
+  let installed = false;
+  let polls = 0;
+  await withAccounts(page, () => [
+    { kind: "claude-code", signed_in: false, available: true, missing: !installed },
+  ]);
+  await page.route("**/v1/kitties", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ json: { kitties: [] } })
+      : route.continue(),
+  );
+  await page.route("**/v1/providers", (route) =>
+    route.fulfill({ json: { providers: [], kinds: [] } }),
+  );
+  await page.route("**/v1/chats", (route) =>
+    route.request().method() === "GET" ? route.fulfill({ json: { chats: [] } }) : route.continue(),
+  );
+  await page.route("**/v1/settings/accounts/claude-code/install", (route) =>
+    route.fulfill({
+      json: { id: "i1", kind: "claude-code", method: "install", status: "pending" },
+    }),
+  );
+  await page.route("**/v1/settings/logins/i1", (route) => {
+    polls++;
+    installed = polls > 2;
+    return route.fulfill({
+      json: {
+        id: "i1",
+        kind: "claude-code",
+        method: "install",
+        status: installed ? "connected" : "pending",
+        who: "/home/kitties/.local/bin/claude",
+        log: "Setting up Claude Code...\nDownloading 64%",
+      },
+    });
+  });
+  await page.goto(`/${Q}`);
+  const quick = page.getByTestId("quick-start");
+  await expect(quick).toContainText("Claude Code is not on the computer that runs Kitties yet.");
+  await quick.getByTestId("sign-in-install").click();
+  await expect(quick.getByTestId("sign-in-installing")).toBeVisible();
+  // What the installer prints shows as it goes.
+  await expect(quick.getByTestId("sign-in-install-log")).toContainText("Downloading 64%");
+  await shot(page, "70-quick-start-install");
+  // Once it is there, its own sign-in is offered.
+  await expect(quick.getByTestId("sign-in-start")).toHaveText("Sign in with Claude", {
+    timeout: 10_000,
+  });
+});
+
+test("a first run signs in to Gemini with Google when Kitties has a Google app", async ({
+  page,
+}) => {
+  let body = "";
+  await withAccounts(page, () => [
+    { kind: "gemini", signed_in: false, available: true, browser: true },
+  ]);
+  await page.route("**/v1/kitties", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ json: { kitties: [] } })
+      : route.continue(),
+  );
+  await page.route("**/v1/providers", (route) =>
+    route.fulfill({ json: { providers: [], kinds: [] } }),
+  );
+  await page.route("**/v1/chats", (route) =>
+    route.request().method() === "GET" ? route.fulfill({ json: { chats: [] } }) : route.continue(),
+  );
+  await page.route("https://accounts.google.com/**", (route) => route.fulfill({ body: "google" }));
+  await page.route("**/v1/settings/accounts/gemini/login", (route) => {
+    body = route.request().postData() || "";
+    return route.fulfill({
+      json: {
+        id: "g1",
+        kind: "gemini",
+        method: "browser",
+        url: "https://accounts.google.com/o/oauth2/v2/auth?client_id=x",
+        paste: true,
+        status: "pending",
+      },
+    });
+  });
+  await page.route("**/v1/settings/logins/g1", (route) =>
+    route.fulfill({ json: { id: "g1", kind: "gemini", method: "browser", status: "pending" } }),
+  );
+  await page.goto(`/${Q}`);
+  const quick = page.getByTestId("quick-start");
+  await quick.getByLabel("Its brain").selectOption("gemini");
+  await expect(quick.getByTestId("quick-start-login")).toHaveAttribute("aria-checked", "true");
+  // The project it is billed to comes first; gcloud's login stays as another way.
+  await expect(quick.getByTestId("sign-in-start")).toBeDisabled();
+  await expect(quick.getByRole("button", { name: "Use my gcloud login" })).toBeVisible();
+  await quick.getByLabel("Google Cloud project ID").fill("my-proj");
+  await shot(page, "69-quick-start-google");
+  const popup = page.waitForEvent("popup");
+  await quick.getByTestId("sign-in-start").click();
+  await (await popup).close();
+  expect(JSON.parse(body)).toEqual({ project: "my-proj" });
+  await expect(quick.getByTestId("sign-in-waiting")).toContainText("127.0.0.1");
+});
+
 test("a first run is a checklist, and nothing can be made out of order", async ({ page }) => {
   // A gateway with no model and no kitty yet.
   await page.route("**/v1/kitties", (route) =>

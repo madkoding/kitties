@@ -64,6 +64,8 @@ export function AccountSignIn({
   const [project, setProject] = useState("");
   const pending = flow?.status === "pending";
   const claude = signIn.how === "cli";
+  // google is a Google sign-in in the browser (Kitties has a Google app), not only gcloud's.
+  const google = signIn.how === "gcloud" && Boolean(account?.browser);
 
   // Follow a sign-in that waits for the browser; a panel that closes cancels it.
   useEffect(() => {
@@ -98,16 +100,30 @@ export function AccountSignIn({
     [flow?.id, flow?.status],
   );
 
-  const start = async () => {
+  const start = async (via?: "gcloud") => {
     setErr("");
     setBusy(true);
     try {
-      const f = await api.startLogin(signIn.kind, project.trim() || undefined);
+      const f = await api.startLogin(signIn.kind, project.trim() || undefined, via);
       setFlow(f);
       if (f.status === "connected") {
         onAccounts();
       } else if (f.url) {
         openExternal(f.url);
+      }
+    } catch (e) {
+      setErr(errText(e));
+    }
+    setBusy(false);
+  };
+  const install = async () => {
+    setErr("");
+    setBusy(true);
+    try {
+      const f = await api.installAccount(signIn.kind);
+      setFlow(f);
+      if (f.status === "connected") {
+        onAccounts();
       }
     } catch (e) {
       setErr(errText(e));
@@ -179,31 +195,59 @@ export function AccountSignIn({
   return (
     <div class="callout mt-3" data-testid="sign-in">
       <p class="text-xs text-[var(--t2)]">
-        {signIn.help}
+        {google
+          ? t("Sign in with your Google account; Gemini is billed to your Cloud project.")
+          : signIn.help}
         {signIn.plans && (
           <span class="text-[var(--t4)]"> {t("Works with {plans}.", { plans: signIn.plans })}</span>
         )}
       </p>
 
-      {signIn.how === "cli" && account?.missing && (
-        <ol class="steps text-xs mt-2">
-          <li>
-            {t("Install Claude Code on the computer that runs Kitties:")}{" "}
-            <Link href={signIn.setupURL || "https://claude.com/product/claude-code"}>
-              {t("how to install ↗")}
-            </Link>
-          </li>
-          <li>
+      {signIn.how === "cli" && account?.missing && !pending && (
+        <div class="mt-2">
+          <p class="text-xs">{t("Claude Code is not on the computer that runs Kitties yet.")}</p>
+          <div class="flex gap-2 flex-wrap items-center mt-2">
             <button
               type="button"
-              class="btn-accent px-3 py-1.5 text-xs mt-1"
+              class="btn-accent px-3 py-1.5 text-xs"
               disabled={busy}
-              onClick={start}
+              onClick={install}
+              data-testid="sign-in-install"
+            >
+              {t("Install Claude Code there")}
+            </button>
+            <button
+              type="button"
+              class="btn-ghost px-3 py-1.5 text-xs"
+              disabled={busy}
+              onClick={() => start()}
             >
               {busy ? t("Looking…") : t("Done: find Claude Code")}
             </button>
-          </li>
-        </ol>
+          </div>
+          <p class="text-xs text-[var(--t4)] mt-1">
+            {t("It runs Anthropic's installer.")}{" "}
+            <Link href={signIn.setupURL || "https://claude.com/product/claude-code"}>
+              {t("how to install ↗")}
+            </Link>
+          </p>
+        </div>
+      )}
+
+      {pending && flow?.method === "install" && (
+        <div class="mt-2" data-testid="sign-in-installing">
+          <p class="text-xs">{t("Installing Claude Code… it takes a minute or two.")}</p>
+          {flow.log && (
+            <pre
+              class="command mt-1 max-h-32 overflow-auto"
+              style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+              aria-live="polite"
+              data-testid="sign-in-install-log"
+            >
+              {flow.log}
+            </pre>
+          )}
+        </div>
       )}
 
       {((signIn.how === "cli" && !account?.missing) ||
@@ -214,7 +258,7 @@ export function AccountSignIn({
             type="button"
             class="btn-accent px-3 py-1.5 text-xs mt-2"
             disabled={busy}
-            onClick={start}
+            onClick={() => start()}
             data-testid="sign-in-start"
           >
             {busy
@@ -230,17 +274,19 @@ export function AccountSignIn({
           </button>
         )}
 
-      {signIn.how === "gcloud" && (
+      {signIn.how === "gcloud" && !pending && (
         <>
-          <ol class="steps text-xs mt-2">
-            <li>
-              {t("Install gcloud:")} <Link href={signIn.setupURL!}>Google Cloud CLI ↗</Link>
-            </li>
-            <li>
-              {t("Sign it in once, in a terminal:")}
-              <Command text={GCLOUD} />
-            </li>
-          </ol>
+          {!google && (
+            <ol class="steps text-xs mt-2">
+              <li>
+                {t("Install gcloud:")} <Link href={signIn.setupURL!}>Google Cloud CLI ↗</Link>
+              </li>
+              <li>
+                {t("Sign it in once, in a terminal:")}
+                <Command text={GCLOUD} />
+              </li>
+            </ol>
+          )}
           <label class="block text-xs text-[var(--t3)] mb-1 mt-3" for="sign-in-project">
             {t("Google Cloud project ID")}
           </label>
@@ -249,16 +295,33 @@ export function AccountSignIn({
             class="w-full px-3 py-2 text-sm font-mono"
             value={project}
             onInput={(e) => setProject((e.target as HTMLInputElement).value)}
-            placeholder={t("leave empty to use gcloud's quota project")}
+            placeholder={
+              google
+                ? t("the project Gemini is billed to")
+                : t("leave empty to use gcloud's quota project")
+            }
           />
-          <button
-            type="button"
-            class="btn-accent px-3 py-1.5 text-xs mt-2"
-            disabled={busy}
-            onClick={start}
-          >
-            {busy ? t("Checking…") : t("Use my Google login")}
-          </button>
+          <div class="flex gap-2 flex-wrap mt-2">
+            {google && (
+              <button
+                type="button"
+                class="btn-accent px-3 py-1.5 text-xs"
+                disabled={busy || !project.trim()}
+                onClick={() => start()}
+                data-testid="sign-in-start"
+              >
+                {busy ? t("Opening…") : t("Sign in with {service}", { service: "Google" })}
+              </button>
+            )}
+            <button
+              type="button"
+              class={`${google ? "btn-ghost" : "btn-accent"} px-3 py-1.5 text-xs`}
+              disabled={busy}
+              onClick={() => start("gcloud")}
+            >
+              {busy && !google ? t("Checking…") : t("Use my gcloud login")}
+            </button>
+          </div>
         </>
       )}
 
@@ -300,7 +363,8 @@ export function AccountSignIn({
                 {claude
                   ? t("Once you sign in, claude.com shows a code: copy it and paste it here.")
                   : t(
-                      "Did the browser end on a page that does not load (localhost:1455)? Copy its whole address and paste it here:",
+                      "Did the browser end on a page that does not load ({host})? Copy its whole address and paste it here:",
+                      { host: google ? "127.0.0.1" : "localhost:1455" },
                     )}
               </p>
               <div class="flex gap-2 mt-1">
@@ -308,7 +372,13 @@ export function AccountSignIn({
                   class="flex-1 min-w-0 px-3 py-2 text-xs font-mono"
                   value={pasted}
                   onInput={(e) => setPasted((e.target as HTMLInputElement).value)}
-                  placeholder={claude ? "code#state" : "http://localhost:1455/auth/callback?code=…"}
+                  placeholder={
+                    claude
+                      ? "code#state"
+                      : google
+                        ? "http://127.0.0.1:…/auth/callback?code=…"
+                        : "http://localhost:1455/auth/callback?code=…"
+                  }
                   aria-label={
                     claude ? t("Code from claude.com") : t("Address the browser landed on")
                   }

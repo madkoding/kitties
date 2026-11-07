@@ -5,7 +5,8 @@
 //   - codex:       "Sign in with ChatGPT", PKCE with a callback on localhost:1455 (or the address
 //     pasted back); the plan pays, through the ChatGPT backend.
 //   - copilot:     GitHub's device flow, then Copilot's session token.
-//   - gemini:      the Google login of gcloud (application default credentials).
+//   - gemini:      Google in the browser (PKCE back to 127.0.0.1, or the address pasted back) when
+//     Kitties has a Google app, else the Google login of gcloud (application default credentials).
 //   - claude-code: the claude program's own `claude auth login`, run by kitties: the person opens
 //     its link and pastes back the code claude.com shows. Nothing is kept here: the program holds
 //     its own login, the only way Anthropic allows a Claude subscription.
@@ -28,6 +29,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/madkoding/kitties/internal/oauth"
 	"github.com/madkoding/kitties/internal/provider"
 )
 
@@ -38,6 +40,7 @@ type Endpoints struct {
 	GitHub       string
 	GitHubAPI    string
 	GoogleToken  string
+	GoogleAuth   string
 }
 
 // Production are the real addresses.
@@ -47,6 +50,7 @@ var Production = Endpoints{
 	GitHub:       "https://github.com",
 	GitHubAPI:    "https://api.github.com",
 	GoogleToken:  "https://oauth2.googleapis.com/token",
+	GoogleAuth:   "https://accounts.google.com/o/oauth2/v2/auth",
 }
 
 // Credential is one signed-in account, kept in its own file.
@@ -167,6 +171,10 @@ type Manager struct {
 	// claudeLogin starts the claude program's sign-in (tests answer without it).
 	claudeLogin func(ctx context.Context, bin string) (claudeLogin, error)
 	claude      claudeCache
+	// installClaude runs Anthropic's installer (tests answer without it).
+	installClaude func(ctx context.Context, out *logTail) error
+	// googleApp is the Google app Gemini signs in with in the browser ("" when there is none).
+	googleApp func() (id, secret string)
 	// pollEvery overrides a device flow's interval (tests).
 	pollEvery time.Duration
 
@@ -181,7 +189,8 @@ func New(dir string) *Manager {
 	return &Manager{
 		store: NewStore(dir), ep: Production, httpDo: (&http.Client{Timeout: 30 * time.Second}).Do,
 		now: time.Now, listen: func(addr string) (net.Listener, error) { return net.Listen("tcp", addr) },
-		adcPath: adcPath, findClaude: provider.FindClaude, claudeLogin: startClaudeLogin, flows: map[string]*flow{},
+		adcPath: adcPath, findClaude: provider.FindClaude, claudeLogin: startClaudeLogin, installClaude: runClaudeInstaller,
+		googleApp: func() (string, string) { return oauth.Builtin("google") }, flows: map[string]*flow{},
 	}
 }
 
@@ -195,6 +204,9 @@ type Account struct {
 	Note      string `json:"note,omitempty"`
 	// Missing is true when the program the sign-in runs is not installed (claude).
 	Missing bool `json:"missing,omitempty"`
+	// Browser is true when it signs in in the browser instead of with a program (Google, when
+	// Kitties has a Google app).
+	Browser bool `json:"browser,omitempty"`
 }
 
 // Accounts lists every kind that signs in with an account.
@@ -213,6 +225,11 @@ func (m *Manager) Accounts() []Account {
 			}
 		case "qwen":
 			a.Available, a.Note = false, ErrQwenUnavailable.Error()
+		case "gemini":
+			a.Browser = m.googleBrowser()
+			if c, ok, _ := m.store.Load(k); ok {
+				a.SignedIn, a.Who = true, c.Who
+			}
 		default:
 			if c, ok, _ := m.store.Load(k); ok {
 				a.SignedIn, a.Who = true, c.Who
@@ -326,8 +343,10 @@ type Flow struct {
 	// another machine never sees the localhost callback).
 	Paste  bool   `json:"paste,omitempty"`
 	Status string `json:"status"` // pending | connected | failed
-	Error  string `json:"error,omitempty"`
-	Who    string `json:"who,omitempty"`
+	// Log is the last lines a program the flow runs printed (the Claude Code installer).
+	Log   string `json:"log,omitempty"`
+	Error string `json:"error,omitempty"`
+	Who   string `json:"who,omitempty"`
 }
 
 // Flow statuses.
@@ -342,6 +361,8 @@ type flow struct {
 	started time.Time
 	cancel  context.CancelFunc
 	paste   chan string
+	// log is what a program the flow runs printed last (an installer), shown as it goes.
+	log *logTail
 }
 
 // flowTTL is how long a sign-in may wait for the person.
@@ -351,6 +372,9 @@ const flowTTL = 15 * time.Minute
 type StartOptions struct {
 	// Project is the Google Cloud project the Gemini requests are billed to.
 	Project string `json:"project,omitempty"`
+	// Via picks the Google sign-in: "gcloud" takes gcloud's login; otherwise the browser, when
+	// Kitties has a Google app (KITTIES_GOOGLE_CLIENT_ID or the build's own).
+	Via string `json:"via,omitempty"`
 }
 
 // Start begins kind's sign-in. An instant one (Google, Claude) is done or failed on return.
@@ -359,7 +383,8 @@ func (m *Manager) Start(kind string, opts StartOptions) (Flow, error) {
 	// A new sign-in replaces the one of the same kind still waiting.
 	m.mu.Lock()
 	for id, f := range m.flows {
-		if f.Kind == kind && f.Status == Pending {
+		// An install running for the same program goes on.
+		if f.Kind == kind && f.Status == Pending && f.Method != "install" {
 			f.cancel()
 			delete(m.flows, id)
 		}
@@ -371,6 +396,9 @@ func (m *Manager) Start(kind string, opts StartOptions) (Flow, error) {
 	case "copilot":
 		return m.startCopilot()
 	case "gemini":
+		if opts.Via != "gcloud" && m.googleBrowser() {
+			return m.startGoogleBrowser(opts)
+		}
 		return m.startGoogle(opts)
 	case "claude-code":
 		return m.startClaude()
@@ -389,7 +417,11 @@ func (m *Manager) Get(id string) (Flow, bool) {
 	if !ok {
 		return Flow{}, false
 	}
-	return f.Flow, true
+	out := f.Flow
+	if f.log != nil {
+		out.Log = f.log.String()
+	}
+	return out, true
 }
 
 // Paste hands a flow the address (or code) the browser landed on.
@@ -440,8 +472,13 @@ func (m *Manager) track(f Flow, paste chan string, run func(ctx context.Context)
 
 // trackWith is track over a context the flow already started with (a program it runs).
 func (m *Manager) trackWith(ctx context.Context, cancel context.CancelFunc, f Flow, paste chan string, run func(ctx context.Context) (Credential, error)) Flow {
+	return m.trackLog(ctx, cancel, f, paste, nil, run)
+}
+
+// trackLog is trackWith for a flow whose program's output the page follows in log.
+func (m *Manager) trackLog(ctx context.Context, cancel context.CancelFunc, f Flow, paste chan string, log *logTail, run func(ctx context.Context) (Credential, error)) Flow {
 	f.ID, f.Status = randomText(12), Pending
-	fl := &flow{Flow: f, started: m.now(), cancel: cancel, paste: paste}
+	fl := &flow{Flow: f, started: m.now(), cancel: cancel, paste: paste, log: log}
 	m.mu.Lock()
 	m.flows[f.ID] = fl
 	// The answer is a copy taken before the goroutine below may change the flow.

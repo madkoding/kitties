@@ -307,8 +307,6 @@ const dict: Dictionary = {
   "how to install ↗": "cómo instalarlo ↗",
   "Sign it in once, in a terminal:": "Inicia sesión una vez, en una terminal:",
   "Looking…": "Buscando…",
-  "Install Claude Code on the computer that runs Kitties:":
-    "Instala Claude Code en la computadora donde corre Kitties:",
   "Once you sign in, claude.com shows a code: copy it and paste it here.":
     "Cuando inicies sesión, claude.com muestra un código: cópialo y pégalo aquí.",
   "Code from claude.com": "Código de claude.com",
@@ -317,13 +315,22 @@ const dict: Dictionary = {
   "It is signed in to your Claude account.": "Tiene la sesión iniciada con tu cuenta de Claude.",
   "Or sign it in yourself, in a terminal where Kitties runs:":
     "O inicia sesión tú, en una terminal donde corre Kitties:",
+  "Claude Code is not on the computer that runs Kitties yet.":
+    "Claude Code todavía no está en la computadora donde corre Kitties.",
+  "Install Claude Code there": "Instalar Claude Code ahí",
+  "It runs Anthropic's installer.": "Usa el instalador de Anthropic.",
+  "Installing Claude Code… it takes a minute or two.":
+    "Instalando Claude Code… tarda uno o dos minutos.",
+  "the project Gemini is billed to": "el proyecto al que se cobra Gemini",
+  "Use my gcloud login": "Usar mi sesión de gcloud",
+  "Sign in with your Google account; Gemini is billed to your Cloud project.":
+    "Inicia sesión con tu cuenta de Google; Gemini se cobra a tu proyecto de Cloud.",
   "Done: find Claude Code": "Listo: buscar Claude Code",
   "Install gcloud:": "Instala gcloud:",
   "Google Cloud project ID": "ID del proyecto de Google Cloud",
   "leave empty to use gcloud's quota project":
     "déjalo vacío para usar el proyecto de cuota de gcloud",
   "Checking…": "Comprobando…",
-  "Use my Google login": "Usar mi cuenta de Google",
   "Opening…": "Abriendo…",
   "Sign in with {service}": "Iniciar sesión con {service}",
   "Type this code on GitHub:": "Escribe este código en GitHub:",
@@ -332,8 +339,8 @@ const dict: Dictionary = {
   "Finish signing in in your browser, then come back: this changes by itself.":
     "Termina de iniciar sesión en tu navegador y vuelve: esto cambia solo.",
   "Open the page again ↗": "Abrir la página otra vez ↗",
-  "Did the browser end on a page that does not load (localhost:1455)? Copy its whole address and paste it here:":
-    "¿El navegador terminó en una página que no carga (localhost:1455)? Copia su dirección completa y pégala aquí:",
+  "Did the browser end on a page that does not load ({host})? Copy its whole address and paste it here:":
+    "¿El navegador terminó en una página que no carga ({host})? Copia su dirección completa y pégala aquí:",
   "Address the browser landed on": "Dirección a la que llegó el navegador",
   "Use it": "Usarla",
 

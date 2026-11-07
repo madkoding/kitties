@@ -304,8 +304,6 @@ const dict: Dictionary = {
   "how to install ↗": "como instalar ↗",
   "Sign it in once, in a terminal:": "Entre uma vez, em um terminal:",
   "Looking…": "Procurando…",
-  "Install Claude Code on the computer that runs Kitties:":
-    "Instale o Claude Code no computador onde o Kitties roda:",
   "Once you sign in, claude.com shows a code: copy it and paste it here.":
     "Quando você entrar, o claude.com mostra um código: copie e cole aqui.",
   "Code from claude.com": "Código do claude.com",
@@ -313,12 +311,21 @@ const dict: Dictionary = {
   "It is signed in to your Claude account.": "Está conectado à sua conta do Claude.",
   "Or sign it in yourself, in a terminal where Kitties runs:":
     "Ou entre você mesmo, num terminal onde o Kitties roda:",
+  "Claude Code is not on the computer that runs Kitties yet.":
+    "O Claude Code ainda não está no computador onde o Kitties roda.",
+  "Install Claude Code there": "Instalar o Claude Code lá",
+  "It runs Anthropic's installer.": "Usa o instalador da Anthropic.",
+  "Installing Claude Code… it takes a minute or two.":
+    "Instalando o Claude Code… leva um ou dois minutos.",
+  "the project Gemini is billed to": "o projeto em que o Gemini é cobrado",
+  "Use my gcloud login": "Usar meu login do gcloud",
+  "Sign in with your Google account; Gemini is billed to your Cloud project.":
+    "Entre com sua conta do Google; o Gemini é cobrado no seu projeto do Cloud.",
   "Done: find Claude Code": "Pronto: procurar o Claude Code",
   "Install gcloud:": "Instale o gcloud:",
   "Google Cloud project ID": "ID do projeto do Google Cloud",
   "leave empty to use gcloud's quota project": "deixe vazio para usar o projeto de cota do gcloud",
   "Checking…": "Verificando…",
-  "Use my Google login": "Usar minha conta do Google",
   "Opening…": "Abrindo…",
   "Sign in with {service}": "Entrar com {service}",
   "Type this code on GitHub:": "Digite este código no GitHub:",
@@ -327,8 +334,8 @@ const dict: Dictionary = {
   "Finish signing in in your browser, then come back: this changes by itself.":
     "Termine de entrar no seu navegador e volte: isto muda sozinho.",
   "Open the page again ↗": "Abrir a página de novo ↗",
-  "Did the browser end on a page that does not load (localhost:1455)? Copy its whole address and paste it here:":
-    "O navegador parou em uma página que não carrega (localhost:1455)? Copie o endereço inteiro dela e cole aqui:",
+  "Did the browser end on a page that does not load ({host})? Copy its whole address and paste it here:":
+    "O navegador parou em uma página que não carrega ({host})? Copie o endereço inteiro dela e cole aqui:",
   "Address the browser landed on": "Endereço onde o navegador parou",
   "Use it": "Usar",
 

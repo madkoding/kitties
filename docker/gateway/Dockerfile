@@ -29,11 +29,17 @@ RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH:-amd64} go build -
 
 FROM alpine:3.24
 # docker-cli: the gateway starts a container per kitty through the host's docker socket.
-RUN apk add --no-cache docker-cli ca-certificates tzdata \
+# bash, curl, libgcc, libstdc++ and ripgrep: what Claude Code needs on Alpine, so a Claude plan
+# works here too. The page installs it with Anthropic's installer ("Install Claude Code there"),
+# into HOME, which lives in the data volume: claude and its login outlive an image update, and
+# the image stays small (claude itself is a ~300 MB program).
+RUN apk add --no-cache docker-cli ca-certificates tzdata bash curl libgcc libstdc++ ripgrep \
  && adduser -D -u 10001 kitties
 COPY --from=binary /out/kitties /usr/local/bin/kitties
 ENV KITTIES_DATA_DIR=/var/lib/kitties \
-    KITTIES_LISTEN=0.0.0.0:7488
+    KITTIES_LISTEN=0.0.0.0:7488 \
+    HOME=/var/lib/kitties/home \
+    USE_BUILTIN_RIPGREP=0
 VOLUME /var/lib/kitties
 EXPOSE 7488
 # Not root, except to reach the docker socket: compose adds the socket's group (see deploy/).

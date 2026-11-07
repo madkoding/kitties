@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import type { Account, ProviderKind } from "./api";
 import { api, errText, openExternal } from "./api";
 import { friendlyError, PROVIDERS, SIGN_IN } from "./friendly";
@@ -28,10 +28,9 @@ const OLLAMA = "http://127.0.0.1:11434";
 export default function QuickStart({ onDone }: { onDone: (chat: string) => void }) {
   const [choice, setChoice] = useState<Choice>("anthropic");
   // way is how the brain is paid: the person's own plan, signed in to, or a key. A plan comes
-  // first: it is what most people already have. With no claude program where the gateway runs,
-  // the key is offered first instead (until the person picks).
+  // first: it is what most people already have (with no claude program where the gateway runs,
+  // the page installs it).
   const [way, setWay] = useState<Way>("login");
-  const touched = useRef(false);
   const [key, setKey] = useState("");
   const [name, setName] = useState("Mimi");
   const [kinds, setKinds] = useState<ProviderKind[]>([]);
@@ -44,9 +43,6 @@ export default function QuickStart({ onDone }: { onDone: (chat: string) => void 
       .then((s) => {
         setKinds(s.kinds || []);
         setAccounts(s.accounts || []);
-        if (!touched.current && s.accounts?.find((a) => a.kind === "claude-code")?.missing) {
-          setWay("key");
-        }
       })
       .catch(() => setKinds([]));
   useEffect(() => {
@@ -118,10 +114,11 @@ export default function QuickStart({ onDone }: { onDone: (chat: string) => void 
         disabled={busy}
         onChange={(e) => {
           const c = (e.target as HTMLSelectElement).value as Choice;
-          touched.current = true;
           setChoice(c);
-          // A plan where one signs in from the page; Google's needs gcloud, so its key first.
-          setWay(SIGN_IN[c] && c !== "gemini" ? "login" : "key");
+          // A plan where one signs in from the page; Google's only with Kitties' own Google app
+          // (else it is gcloud's, in a terminal), so then its key comes first.
+          const google = accounts.find((a) => a.kind === "gemini")?.browser;
+          setWay(SIGN_IN[c] && (c !== "gemini" || google) ? "login" : "key");
           setErr("");
         }}
       >
@@ -143,7 +140,6 @@ export default function QuickStart({ onDone }: { onDone: (chat: string) => void 
               class={`plain way ${way === w ? "on" : ""}`}
               disabled={busy}
               onClick={() => {
-                touched.current = true;
                 setWay(w);
                 setErr("");
               }}

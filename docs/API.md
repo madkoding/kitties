@@ -42,7 +42,7 @@
 | `GET /v1/shared` · `GET`/`DELETE /v1/kitties/{ref}/shared/{path}` (`?download=1`) · `POST /v1/kitties/{ref}/keep/{path}` | what every kitty left in its Shared folder (and the quota), one file (sandboxed), delete it, copy it into the library |
 | `GET /v1/kitties/{ref}/export` · `POST /v1/kitties/{ref}/import` | a `.tar.gz` of its home, work and Shared folders without keys, passwords or browser sessions; put one back into its running desktop |
 | `GET /v1/update` (`?refresh=1`) · `POST /v1/update/apply` | the version of Kitties and whether a newer one is out; install it and restart |
-| `POST /v1/settings/accounts/{kind}/login` · `GET/DELETE /v1/settings/logins/{id}` · `POST …/paste` · `DELETE /v1/settings/accounts/{kind}` | sign a model in with a subscription, follow it, paste the browser's address (or the code claude.com shows, for Claude), sign out |
+| `POST /v1/settings/accounts/{kind}/login` (`project`, `via: gcloud`) · `POST /v1/settings/accounts/claude-code/install` · `GET/DELETE /v1/settings/logins/{id}` · `POST …/paste` · `DELETE /v1/settings/accounts/{kind}` | sign a model in with a subscription, follow it, paste the browser's address (or the code claude.com shows, for Claude), install Claude Code (a flow to follow), sign out |
 
 `POST /mcp` is the [MCP connector](MCP.md) (off by default, its own bearer token). `GET /v1/mcp/clients` · `DELETE /v1/mcp/clients/{id}` list and revoke the OAuth clients that signed in. `GET`/`PUT /v1/mcp` read and change the connector's switches (`accept_risk` to turn on exec or approve; the gateway restarts); `GET /v1/mcp/token` returns its token (explicit, never cached) and `POST /v1/mcp/token` rotates it; `POST /v1/mcp/test` asks the connector for its tools and says whether it answers.
 

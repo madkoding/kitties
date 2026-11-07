@@ -51,6 +51,26 @@ func TestAccountClaude(t *testing.T) {
 	}
 }
 
+func TestAccountInstall(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell scripts")
+	}
+	bin := filepath.Join(t.TempDir(), "claude")
+	_ = os.WriteFile(bin, []byte("#!/bin/sh\n"), 0o755)
+	t.Setenv("KITTIES_CLAUDE_BIN", bin)
+	srv, _, _ := setup(t)
+	// Installed already: done at once; only claude has a program to install.
+	if code, body, _ := call(t, srv, "POST", "/v1/settings/accounts/claude-code/install", "tok", nil); code != 200 || body["status"] != "connected" || body["method"] != "install" {
+		t.Errorf("install = %d %v", code, body)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/settings/accounts/codex/install", "tok", nil); code != 400 {
+		t.Errorf("codex install = %d", code)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/settings/accounts/claude-code/install", "", nil); code != 401 {
+		t.Errorf("no token = %d", code)
+	}
+}
+
 func TestAccountCodexFlow(t *testing.T) {
 	srv, _, _ := setup(t)
 	code, body, _ := call(t, srv, "POST", "/v1/settings/accounts/codex/login", "tok", nil)
