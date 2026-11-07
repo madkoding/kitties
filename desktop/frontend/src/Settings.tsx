@@ -1715,10 +1715,12 @@ function NotifyForm({
   );
   const [digest, setDigest] = useState(view.notify?.digest || "");
   const [day, setDay] = useState(Boolean(view.notify?.day));
+  const [replies, setReplies] = useState(Boolean(view.notify?.replies));
+  const ntfy = channels.find((c) => c.name === connector)?.kind === "ntfy";
   const [msg, flash] = useFlash();
   const [err, setErr] = useState("");
   const toggle = (e: string) => setOn(on.includes(e) ? on.filter((x) => x !== e) : [...on, e]);
-  const body = { connector, on, digest, day };
+  const body = { connector, on, digest, day, replies: ntfy && replies };
   const save = async () => {
     setErr("");
     try {
@@ -1840,6 +1842,27 @@ function NotifyForm({
           )}
         </span>
       </label>
+      {ntfy && (
+        <label class="flex items-start gap-2 mt-3 text-sm cursor-pointer">
+          <input
+            type="checkbox"
+            class="mt-1"
+            checked={replies}
+            onChange={() => setReplies(!replies)}
+            data-testid="notify-replies"
+          />
+          <span>
+            {t(
+              "Let me answer from ntfy: what I write to the topic goes to the kitty that notified me (or the one I name, like luna: …, or all: …), and its answer comes back here.",
+            )}
+            <span class="block text-xs text-[var(--t3)] mt-1">
+              {t(
+                "The topic works as a password: give it 20 characters at least, hard to guess, or protect it with an access token.",
+              )}
+            </span>
+          </span>
+        </label>
+      )}
       <div class="flex items-center gap-2 mt-4 flex-wrap">
         <button class="btn-accent px-4 py-2 text-sm" onClick={save}>
           {t("Save")}

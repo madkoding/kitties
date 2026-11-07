@@ -94,7 +94,7 @@ func TestReadingActions(t *testing.T) {
 		{"zendesk reply", "zendesk", Settings{"subdomain": "acme", "email": "a@x", "token": "t"}, map[string]any{"action": "reply", "id": 12.0, "text": "Fixed.", "public": "false"},
 			nil, "PUT", "/tickets/12.json", `"public":false`, nil},
 		{"ntfy", "ntfy", Settings{"topic": "kitties-abc", "token": "tk"}, map[string]any{"text": "need you", "title": "mimi", "priority": "4", "click": "https://k/#chat/1"},
-			nil, "POST", "ntfy.sh", `"topic":"kitties-abc"`, nil},
+			nil, "POST", "ntfy.sh", `"tags":["cat"]`, nil},
 	}
 	for _, c := range cases {
 		out, err, cap := run(t, c.kind, c.settings, c.args, c.answers...)

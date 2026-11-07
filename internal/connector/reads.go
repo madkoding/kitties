@@ -657,7 +657,9 @@ func makeNtfy(s Settings) Connector {
 		if err != nil {
 			return request{}, err
 		}
-		body := map[string]any{"topic": s["topic"], "message": text}
+		// The mark tells what the gateway sent from what the person writes to the topic, when
+		// it takes replies (internal/reply); the app shows it as a cat.
+		body := map[string]any{"topic": s["topic"], "message": text, "tags": []string{NtfyMark}}
 		if t := str(a, "title"); t != "" {
 			body["title"] = t
 		}
@@ -673,9 +675,15 @@ func makeNtfy(s Settings) Connector {
 		if s["token"] != "" {
 			headers = bearer(s["token"])
 		}
-		return request{method: "POST", url: base(s, "https://ntfy.sh"), headers: headers, body: body}, nil
+		return request{method: "POST", url: NtfyServer(s), headers: headers, body: body}, nil
 	}}, "send")
 }
+
+// NtfyMark is the tag on every message the ntfy connector sends.
+const NtfyMark = "cat"
+
+// NtfyServer is the ntfy server of the settings.
+func NtfyServer(s Settings) string { return base(s, "https://ntfy.sh") }
 
 // moreKinds are the kinds of the catalogue that came with reading and watching.
 func moreKinds() []Kind {

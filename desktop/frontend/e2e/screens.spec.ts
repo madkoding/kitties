@@ -697,6 +697,11 @@ test("notifications: pick a channel, send a test and be told when something wait
   await expect(form.getByText("Sent: look at your phone or channel.")).toBeVisible();
   await expect.poll(hooked).toContain('"topic":"kitties-e2e"');
   await expect.poll(hooked).toContain("Notifications work");
+  // Answering the kitties from ntfy needs a topic nobody can guess: this one is too short.
+  await form.getByTestId("notify-replies").check();
+  await form.getByRole("button", { name: "Save" }).click();
+  await expect(form.getByText(/20 characters at least/)).toBeVisible();
+  await form.getByTestId("notify-replies").uncheck();
   // A daily summary at a time of the person's choice, and one on demand.
   await form.getByLabel("A summary of the last day, every day at").fill("08:30");
   await form.getByRole("button", { name: "Save" }).click();

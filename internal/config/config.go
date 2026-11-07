@@ -619,8 +619,14 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if c.Notify.Connector != "" {
-		if _, ok := c.Connectors[c.Notify.Connector]; !ok {
+		cn, ok := c.Connectors[c.Notify.Connector]
+		if !ok {
 			return fmt.Errorf("notify.connector: %q is not a configured connector", c.Notify.Connector)
+		}
+		if c.Notify.Replies {
+			if err := notify.CheckReplies(cn.Kind, cn.ConnectorSettings()); err != nil {
+				return err
+			}
 		}
 	}
 	if (c.Gateway.TLSCert == "") != (c.Gateway.TLSKey == "") {
