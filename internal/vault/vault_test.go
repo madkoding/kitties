@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 )
@@ -156,5 +157,22 @@ func TestBoxSealsForOneUseOnly(t *testing.T) {
 	t.Setenv(KeyEnv, "nope")
 	if _, err := NewBox(t.TempDir()); err == nil {
 		t.Error("a bad key made a box")
+	}
+}
+
+func TestValuesAreEverySecret(t *testing.T) {
+	s, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v := s.Values(); len(v) != 0 {
+		t.Fatalf("empty vault gives %v", v)
+	}
+	_ = s.Put("wifi", "pato-azul-77", []string{"k1"})
+	_ = s.Put("bank", "4821", nil)
+	v := s.Values()
+	sort.Strings(v)
+	if len(v) != 2 || v[0] != "4821" || v[1] != "pato-azul-77" {
+		t.Fatalf("Values = %v", v)
 	}
 }

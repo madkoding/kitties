@@ -106,6 +106,11 @@ olvida la sesión.
   solo a la persona (o al grupo): una imagen como imagen y lo demás como documento (hasta 16 MB).
 - **La lista funciona en ambos sentidos.** Un mensaje de un número que no está se ignora (y se
   cuenta en Ajustes) sin respuesta; los kitties solo pueden escribir a números de la lista.
+- **Chats protegidos.** Los chats con contactos y grupos están protegidos: ahí el kitty no tiene
+  escritorio, archivos, bóveda ni notas sobre ti, y se quitan secretos y datos personales de lo que
+  dice. Tu propio número conserva el kitty completo cuando lo agregas en Ajustes › Protecciones ›
+  *Tus propios números de WhatsApp*. Todo lo que envía el puente sale sin los secretos conocidos.
+  Ver [GUARDRAILS.es.md](GUARDRAILS.es.md).
 - **Los kitties escriben con el conector.** Mientras el vínculo está conectado, `whatsapp-web` se
   ofrece a los kitties (los que tienen su lista de conexiones vacía o lo nombran):
 
