@@ -287,6 +287,8 @@ export interface LoginFlow {
   status: "pending" | "connected" | "failed";
   error?: string;
   who?: string;
+  // log is the last lines the Claude Code installer printed, while it runs.
+  log?: string;
 }
 
 export interface ProviderView {

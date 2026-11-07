@@ -235,9 +235,19 @@ export function AccountSignIn({
       )}
 
       {pending && flow?.method === "install" && (
-        <p class="text-xs mt-2" data-testid="sign-in-installing">
-          {t("Installing Claude Code… it takes a minute or two.")}
-        </p>
+        <div class="mt-2" data-testid="sign-in-installing">
+          <p class="text-xs">{t("Installing Claude Code… it takes a minute or two.")}</p>
+          {flow.log && (
+            <pre
+              class="command mt-1 max-h-32 overflow-auto"
+              style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}
+              aria-live="polite"
+              data-testid="sign-in-install-log"
+            >
+              {flow.log}
+            </pre>
+          )}
+        </div>
       )}
 
       {((signIn.how === "cli" && !account?.missing) ||

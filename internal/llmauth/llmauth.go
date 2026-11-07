@@ -172,7 +172,7 @@ type Manager struct {
 	claudeLogin func(ctx context.Context, bin string) (claudeLogin, error)
 	claude      claudeCache
 	// installClaude runs Anthropic's installer (tests answer without it).
-	installClaude func(ctx context.Context) error
+	installClaude func(ctx context.Context, out *logTail) error
 	// googleApp is the Google app Gemini signs in with in the browser ("" when there is none).
 	googleApp func() (id, secret string)
 	// pollEvery overrides a device flow's interval (tests).
@@ -343,6 +343,8 @@ type Flow struct {
 	// another machine never sees the localhost callback).
 	Paste  bool   `json:"paste,omitempty"`
 	Status string `json:"status"` // pending | connected | failed
+	// Log is the last lines a program the flow runs printed (the Claude Code installer).
+	Log    string `json:"log,omitempty"`
 	Error  string `json:"error,omitempty"`
 	Who    string `json:"who,omitempty"`
 }
@@ -359,6 +361,8 @@ type flow struct {
 	started time.Time
 	cancel  context.CancelFunc
 	paste   chan string
+	// log is what a program the flow runs printed last (an installer), shown as it goes.
+	log *logTail
 }
 
 // flowTTL is how long a sign-in may wait for the person.
@@ -413,7 +417,11 @@ func (m *Manager) Get(id string) (Flow, bool) {
 	if !ok {
 		return Flow{}, false
 	}
-	return f.Flow, true
+	out := f.Flow
+	if f.log != nil {
+		out.Log = f.log.String()
+	}
+	return out, true
 }
 
 // Paste hands a flow the address (or code) the browser landed on.
@@ -464,8 +472,13 @@ func (m *Manager) track(f Flow, paste chan string, run func(ctx context.Context)
 
 // trackWith is track over a context the flow already started with (a program it runs).
 func (m *Manager) trackWith(ctx context.Context, cancel context.CancelFunc, f Flow, paste chan string, run func(ctx context.Context) (Credential, error)) Flow {
+	return m.trackLog(ctx, cancel, f, paste, nil, run)
+}
+
+// trackLog is trackWith for a flow whose program's output the page follows in log.
+func (m *Manager) trackLog(ctx context.Context, cancel context.CancelFunc, f Flow, paste chan string, log *logTail, run func(ctx context.Context) (Credential, error)) Flow {
 	f.ID, f.Status = randomText(12), Pending
-	fl := &flow{Flow: f, started: m.now(), cancel: cancel, paste: paste}
+	fl := &flow{Flow: f, started: m.now(), cancel: cancel, paste: paste, log: log}
 	m.mu.Lock()
 	m.flows[f.ID] = fl
 	// The answer is a copy taken before the goroutine below may change the flow.

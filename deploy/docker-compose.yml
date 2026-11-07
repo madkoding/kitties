@@ -22,6 +22,8 @@ services:
       # The kitties' containers mount their workspaces by host path, so the data lives at the
       # same path inside and outside this container.
       KITTIES_DATA_DIR: ${KITTIES_DATA:-/var/lib/kitties}
+      # Claude Code, when installed from the page, and its login live here, in the data.
+      HOME: ${KITTIES_DATA:-/var/lib/kitties}/home
       # Provider keys the models of your configuration read; add the ones you use.
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}

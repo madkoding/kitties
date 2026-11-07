@@ -988,6 +988,9 @@ test("a first run installs Claude Code where Kitties runs, then signs in", async
   await page.route("**/v1/providers", (route) =>
     route.fulfill({ json: { providers: [], kinds: [] } }),
   );
+  await page.route("**/v1/chats", (route) =>
+    route.request().method() === "GET" ? route.fulfill({ json: { chats: [] } }) : route.continue(),
+  );
   await page.route("**/v1/settings/accounts/claude-code/install", (route) =>
     route.fulfill({
       json: { id: "i1", kind: "claude-code", method: "install", status: "pending" },
@@ -995,7 +998,7 @@ test("a first run installs Claude Code where Kitties runs, then signs in", async
   );
   await page.route("**/v1/settings/logins/i1", (route) => {
     polls++;
-    installed = polls > 1;
+    installed = polls > 2;
     return route.fulfill({
       json: {
         id: "i1",
@@ -1003,6 +1006,7 @@ test("a first run installs Claude Code where Kitties runs, then signs in", async
         method: "install",
         status: installed ? "connected" : "pending",
         who: "/home/kitties/.local/bin/claude",
+        log: "Setting up Claude Code...\nDownloading 64%",
       },
     });
   });
@@ -1011,6 +1015,9 @@ test("a first run installs Claude Code where Kitties runs, then signs in", async
   await expect(quick).toContainText("Claude Code is not on the computer that runs Kitties yet.");
   await quick.getByTestId("sign-in-install").click();
   await expect(quick.getByTestId("sign-in-installing")).toBeVisible();
+  // What the installer prints shows as it goes.
+  await expect(quick.getByTestId("sign-in-install-log")).toContainText("Downloading 64%");
+  await shot(page, "70-quick-start-install");
   // Once it is there, its own sign-in is offered.
   await expect(quick.getByTestId("sign-in-start")).toHaveText("Sign in with Claude", {
     timeout: 10_000,

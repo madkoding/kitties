@@ -33,6 +33,7 @@ cd desktop && wails dev   # live reload while working on it
 | ![Adding a model: the key and the suggested model](screenshots/34-add-model.png) | ![A connection and the kitties that may use it](screenshots/33-connection-form.png) |
 | ![A Claude subscription, through Claude Code](screenshots/35-claude-subscription.png) | ![GitHub Copilot: sign in with a code](screenshots/36-copilot-code.png) |
 | ![The quick start signs in with a Claude plan: the code from claude.com, pasted back](screenshots/68-quick-start-sign-in.png) | ![The quick start signs Gemini in with a Google account, billed to a Cloud project](screenshots/69-quick-start-google.png) |
+| ![Claude Code installed from the page, the installer's output as it goes](screenshots/70-quick-start-install.png) | ![Settings shows where Kitties is reached on its first start](screenshots/67-settings-exposure-first-start.png) |
 | ![The Android app asks for the gateway](screenshots/37-android-connect.png) | ![The Android app, connected](screenshots/38-android-app.png) |
 | ![A kitty posting through Slack: the chip carries the logo](screenshots/19-connector-call.png) | ![The phone layout](screenshots/12-phone.png) |
 
