@@ -63,6 +63,7 @@ export function AccountSignIn({
   const [pasted, setPasted] = useState("");
   const [project, setProject] = useState("");
   const pending = flow?.status === "pending";
+  const claude = signIn.how === "cli";
 
   // Follow a sign-in that waits for the browser; a panel that closes cancels it.
   useEffect(() => {
@@ -157,10 +158,7 @@ export function AccountSignIn({
               ✓ {t("Claude Code is on this computer")}
               {account.who && <span class="font-mono text-xs"> ({account.who})</span>}.
             </div>
-            <p class="text-xs mt-1">
-              {t("If it is not signed in yet, run this once in a terminal and follow the browser:")}
-            </p>
-            <Command text="claude auth login" />
+            <p class="text-xs mt-1">{t("It is signed in to your Claude account.")}</p>
           </>
         ) : (
           <div class="flex items-center gap-2 flex-wrap">
@@ -187,17 +185,13 @@ export function AccountSignIn({
         )}
       </p>
 
-      {signIn.how === "cli" && (
+      {signIn.how === "cli" && account?.missing && (
         <ol class="steps text-xs mt-2">
           <li>
-            {t("Install Claude Code on this computer:")}{" "}
+            {t("Install Claude Code on the computer that runs Kitties:")}{" "}
             <Link href={signIn.setupURL || "https://claude.com/product/claude-code"}>
               {t("how to install ↗")}
             </Link>
-          </li>
-          <li>
-            {t("Sign it in once, in a terminal:")}
-            <Command text="claude auth login" />
           </li>
           <li>
             <button
@@ -211,6 +205,30 @@ export function AccountSignIn({
           </li>
         </ol>
       )}
+
+      {((signIn.how === "cli" && !account?.missing) ||
+        signIn.how === "browser" ||
+        signIn.how === "device") &&
+        !pending && (
+          <button
+            type="button"
+            class="btn-accent px-3 py-1.5 text-xs mt-2"
+            disabled={busy}
+            onClick={start}
+            data-testid="sign-in-start"
+          >
+            {busy
+              ? t("Opening…")
+              : t("Sign in with {service}", {
+                  service:
+                    signIn.how === "device"
+                      ? "GitHub"
+                      : signIn.how === "cli"
+                        ? "Claude"
+                        : "ChatGPT",
+                })}
+          </button>
+        )}
 
       {signIn.how === "gcloud" && (
         <>
@@ -244,20 +262,13 @@ export function AccountSignIn({
         </>
       )}
 
-      {(signIn.how === "browser" || signIn.how === "device") && !pending && (
-        <button
-          type="button"
-          class="btn-accent px-3 py-1.5 text-xs mt-2"
-          disabled={busy}
-          onClick={start}
-          data-testid="sign-in-start"
-        >
-          {busy
-            ? t("Opening…")
-            : t("Sign in with {service}", {
-                service: signIn.how === "device" ? "GitHub" : "ChatGPT",
-              })}
-        </button>
+      {claude && !account?.missing && !pending && (
+        <>
+          <p class="text-xs text-[var(--t4)] mt-2">
+            {t("Or sign it in yourself, in a terminal where Kitties runs:")}
+          </p>
+          <Command text="claude auth login" />
+        </>
       )}
 
       {pending && flow?.method === "device" && (
@@ -276,29 +287,39 @@ export function AccountSignIn({
       {pending && flow?.method === "browser" && (
         <div class="mt-2" data-testid="sign-in-waiting">
           <p class="text-xs">
-            {t("Finish signing in in your browser, then come back: this changes by itself.")}{" "}
+            {claude
+              ? t("Sign in on claude.com in the tab that opened.")
+              : t(
+                  "Finish signing in in your browser, then come back: this changes by itself.",
+                )}{" "}
             {flow.url && <Link href={flow.url}>{t("Open the page again ↗")}</Link>}
           </p>
           {flow.paste && (
             <>
               <p class="text-xs text-[var(--t4)] mt-2">
-                {t(
-                  "Did the browser end on a page that does not load (localhost:1455)? Copy its whole address and paste it here:",
-                )}
+                {claude
+                  ? t("Once you sign in, claude.com shows a code: copy it and paste it here.")
+                  : t(
+                      "Did the browser end on a page that does not load (localhost:1455)? Copy its whole address and paste it here:",
+                    )}
               </p>
               <div class="flex gap-2 mt-1">
                 <input
                   class="flex-1 min-w-0 px-3 py-2 text-xs font-mono"
                   value={pasted}
                   onInput={(e) => setPasted((e.target as HTMLInputElement).value)}
-                  placeholder="http://localhost:1455/auth/callback?code=…"
-                  aria-label={t("Address the browser landed on")}
+                  placeholder={claude ? "code#state" : "http://localhost:1455/auth/callback?code=…"}
+                  aria-label={
+                    claude ? t("Code from claude.com") : t("Address the browser landed on")
+                  }
+                  data-testid="sign-in-paste"
                 />
                 <button
                   type="button"
                   class="btn-ghost px-3 py-1.5 text-xs"
                   disabled={!pasted.trim()}
                   onClick={paste}
+                  data-testid="sign-in-use"
                 >
                   {t("Use it")}
                 </button>

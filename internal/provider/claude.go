@@ -119,6 +119,10 @@ func claudeEnv(bin string, maxTokens int) []string {
 		fmt.Sprintf("CLAUDE_CODE_MAX_OUTPUT_TOKENS=%d", maxTokens))
 }
 
+// ClaudeEnv is the environment the claude program runs in for kitties, for its own commands too
+// (auth status, auth login): the same login the turns use.
+func ClaudeEnv(bin string) []string { return claudeEnv(bin, DefaultMaxTokens) }
+
 // claudeArgs are the flags of one turn: the model, the system prompt from a file, no tools, no
 // settings, no slash commands and nothing kept once it ends.
 func claudeArgs(model, systemFile string) []string {

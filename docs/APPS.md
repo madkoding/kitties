@@ -32,6 +32,7 @@ cd desktop && wails dev   # live reload while working on it
 | ![The desktop app opens Kitties in a browser, and on a phone with a QR code](screenshots/56-settings-in-browser.png) | ![A browser signs in with the token, and says where it is](screenshots/30-sign-in.png) |
 | ![Adding a model: the key and the suggested model](screenshots/34-add-model.png) | ![A connection and the kitties that may use it](screenshots/33-connection-form.png) |
 | ![A Claude subscription, through Claude Code](screenshots/35-claude-subscription.png) | ![GitHub Copilot: sign in with a code](screenshots/36-copilot-code.png) |
+| ![The quick start signs in with a Claude plan: the code from claude.com, pasted back](screenshots/68-quick-start-sign-in.png) | ![Settings shows where Kitties is reached on its first start](screenshots/67-settings-exposure-first-start.png) |
 | ![The Android app asks for the gateway](screenshots/37-android-connect.png) | ![The Android app, connected](screenshots/38-android-app.png) |
 | ![A kitty posting through Slack: the chip carries the logo](screenshots/19-connector-call.png) | ![The phone layout](screenshots/12-phone.png) |
 
