@@ -16,6 +16,15 @@ type ExposureInfo struct {
 	LANIP     string `json:"lan_ip,omitempty"`
 	CanChange bool   `json:"can_change"`
 	Why       string `json:"why,omitempty"`
+	// TokenRotate says Settings can replace the gateway's token; TokenWhy why not.
+	TokenRotate bool   `json:"token_rotate"`
+	TokenWhy    string `json:"token_why,omitempty"`
+}
+
+// TokenRotating is an Exposing that can also replace the gateway's token (the restart after it
+// makes the new one count).
+type TokenRotating interface {
+	RotateGatewayToken() error
 }
 
 // Exposing is what the gateway needs to show and change its exposure; Relaunch restarts it so the
@@ -35,6 +44,27 @@ func (s *Server) WithExposure(e Exposing) *Server {
 func (s *Server) exposureRoutes() {
 	s.mux.Handle("GET /v1/exposure", s.auth(s.handleExposure))
 	s.mux.Handle("PUT /v1/exposure", s.auth(s.handleSetExposure))
+	s.mux.Handle("POST /v1/token/rotate", s.auth(s.handleRotateToken))
+}
+
+// handleRotateToken replaces the gateway's token and restarts: every browser session and every
+// program that used the old token has to sign in again with the new one, which only the console
+// that started the gateway, its token file and the desktop app on that machine get.
+func (s *Server) handleRotateToken(w http.ResponseWriter, _ *http.Request) {
+	rot, ok := s.exposure.(TokenRotating)
+	if s.exposure == nil || !ok {
+		fail(w, http.StatusNotFound, errors.New("this gateway cannot replace its token"))
+		return
+	}
+	if err := rot.RotateGatewayToken(); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	reply(w, http.StatusAccepted, map[string]any{"restarting": true})
+	go func() {
+		time.Sleep(restartAfter)
+		_ = s.exposure.Relaunch()
+	}()
 }
 
 func (s *Server) handleExposure(w http.ResponseWriter, _ *http.Request) {

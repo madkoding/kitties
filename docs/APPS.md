@@ -28,7 +28,8 @@ cd desktop && wails dev   # live reload while working on it
 | ![A markdown artifact opened in the reader](screenshots/60-artifact-reader.png) | ![A code block in colour, opened from a #artifact/ link](screenshots/61-artifact-code.png) |
 | ![New kitty: pick its pixel cat](screenshots/07-new-kitty.png) | ![Light mode](screenshots/11-light.png) |
 | ![A real kitty's desktop, live: Chromium and a terminal on Lumen](screenshots/48-live-desktop.png) | ![Taking control: a command typed in the kitty's terminal](screenshots/49-live-desktop-control.png) |
-| ![A first run is a checklist](screenshots/31-welcome.png) | ![Adding a model: pick the provider](screenshots/32-pick-provider.png) |
+| ![A first run: the quick start, then the checklist](screenshots/31-welcome.png) | ![Adding a model: pick the provider](screenshots/32-pick-provider.png) |
+| ![The desktop app opens Kitties in a browser, and on a phone with a QR code](screenshots/56-settings-in-browser.png) | ![A browser signs in with the token, and says where it is](screenshots/30-sign-in.png) |
 | ![Adding a model: the key and the suggested model](screenshots/34-add-model.png) | ![A connection and the kitties that may use it](screenshots/33-connection-form.png) |
 | ![A Claude subscription, through Claude Code](screenshots/35-claude-subscription.png) | ![GitHub Copilot: sign in with a code](screenshots/36-copilot-code.png) |
 | ![The Android app asks for the gateway](screenshots/37-android-connect.png) | ![The Android app, connected](screenshots/38-android-app.png) |

@@ -560,7 +560,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 			fmt.Fprintf(a.err, "kitties: could not keep the token in %s: %v\n", tokenPath, err)
 		}
 	}
-	fmt.Fprintf(a.out, "gateway token: %s (also in %s)\n", token, tokenPath)
+	printWelcome(a.out, version, a.cfg.Gateway.Listen, a.cfg.Gateway.PublicURL, a.cfg.Gateway.TLSCert != "", token, tokenPath)
 	for _, k := range a.fleet.List() {
 		fmt.Fprintf(a.out, "  %-16s %-8s %s\n", k.Name, k.Status, k.Provider)
 	}

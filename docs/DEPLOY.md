@@ -9,7 +9,12 @@ https. Three ways to run it, from the quickest.
 - **The token is the password.** The gateway prints one when it starts (and keeps it in its
   data folder); set your own with `KITTIES_TOKEN`. On a network the page asks for it once and
   trades it for a session cookie (`HttpOnly`, `SameSite=Strict`, `Secure` on https): the browser
-  never keeps the token. *Sign out* in the sidebar ends the session.
+  never keeps the token. *Sign out* in the sidebar ends the session. `kitties token` prints it
+  again; the desktop app shows it (and a QR code that signs a phone in) in Settings, Preferences,
+  Network access.
+- **A token that got out is replaced from Settings, Preferences** (*Make a new token*): the
+  gateway restarts with a new one and every browser and program signs in again. A token set with
+  `KITTIES_TOKEN` or `gateway.token` is changed there instead.
 - **Ten wrong tokens from one address within a minute lock that address out** until the minute passes.
 - **The kitties' containers need Docker on the same machine.** Each kitty runs in a container
   the gateway starts through Docker. That access is root on the host: do not expose the gateway

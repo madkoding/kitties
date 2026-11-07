@@ -45,3 +45,29 @@ func TestExposureIsReadOnlyInAContainer(t *testing.T) {
 		t.Error("a container changed its exposure")
 	}
 }
+
+func TestRotateGatewayToken(t *testing.T) {
+	cfg := config.Defaults()
+	cfg.DataDir = t.TempDir()
+	e := exposureOf(cfg, "127.0.0.1:7488")
+	if info := e.Exposure(); !info.TokenRotate || info.TokenWhy != "" {
+		t.Fatalf("exposure = %+v", info)
+	}
+	before, _, _ := gatewayToken(cfg)
+	if err := e.RotateGatewayToken(); err != nil {
+		t.Fatal(err)
+	}
+	after, _, fresh := gatewayToken(cfg)
+	if fresh || after == before || len(after) < 16 {
+		t.Errorf("the new token: %q (fresh %v, before %q)", after, fresh, before)
+	}
+	// A token from the configuration is not replaced by a file.
+	cfg.Gateway.Token = "configured-token-0123456789"
+	fixed := exposureOf(cfg, "127.0.0.1:7488")
+	if info := fixed.Exposure(); info.TokenRotate || info.TokenWhy == "" {
+		t.Fatalf("fixed exposure = %+v", info)
+	}
+	if err := fixed.RotateGatewayToken(); err == nil {
+		t.Error("a configured token was rotated")
+	}
+}

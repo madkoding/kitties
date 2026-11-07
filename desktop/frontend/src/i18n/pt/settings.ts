@@ -408,6 +408,27 @@ const dict: Dictionary = {
     "{kitty} responde no WhatsApp; cada número tem seu próprio chat aqui.",
   "{n} messages from other numbers were ignored.":
     "{n} mensagens de outros números foram ignoradas.",
+  "Use it from a browser": "Use pelo navegador",
+  "The same page as this app. Open it and sign in with the token.":
+    "A mesma página deste app. Abra e entre com o token.",
+  "Open in the browser": "Abrir no navegador",
+  Show: "Mostrar",
+  Hide: "Ocultar",
+  "Keep the token to yourself: it is the only password of the page.":
+    "Guarde o token para você: é a única senha da página.",
+  "Make a new token? Every browser and program that uses the old one is signed out; this app takes the new one by itself.":
+    "Criar um token novo? Todo navegador e programa que usa o antigo fica de fora; este app pega o novo sozinho.",
+  "Make a new token? Every browser and program that uses the old one is signed out, this page too. The new one is shown in the console where Kitties runs (or with kitties token) and in the desktop app.":
+    "Criar um token novo? Todo navegador e programa que usa o antigo fica de fora, esta página também. O novo aparece no console onde o Kitties roda (ou com kitties token) e no app de desktop.",
+  "Make a new token": "Criar um token novo",
+  "Restarting Kitties…": "Reiniciando o Kitties…",
+  "If the token got out, a new one signs everybody out.":
+    "Se o token vazou, um novo deixa todos de fora.",
+  "QR code to open Kitties on a phone": "Código QR para abrir o Kitties num celular",
+  "On a phone in the same network, point the camera here: Kitties opens signed in. Anyone who sees this code can get in.":
+    "Num celular da mesma rede, aponte a câmera aqui: o Kitties abre já com a sessão iniciada. Quem vir este código pode entrar.",
+  "To open it from a phone with a QR code, choose LAN above.":
+    "Para abrir num celular com um código QR, escolha LAN acima.",
 };
 
 export default dict;
