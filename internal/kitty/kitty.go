@@ -53,6 +53,10 @@ type Kitty struct {
 	Limits Limits `json:"limits"`
 	// Backup names the kitty a task is handed to when this one gives up; empty asks the person.
 	Backup string `json:"backup,omitempty"`
+	// Lead marks the principal kitty, the fleet's orchestrator: the person talks to it, it hands
+	// the work to the others and the reports of every kitty come back to the person through it.
+	// At most one kitty of a fleet is the lead.
+	Lead bool `json:"lead,omitempty"`
 	// Approvals is empty (or "auto"): the kitty acts as far as its accounts allow, held back
 	// only by the limits the person set; "ask": an action that reaches other people waits for a
 	// yes until the kitty has earned the right to do it alone.
@@ -88,6 +92,10 @@ type Limits struct {
 	// windows) is reached, and only asks when something truly blocks it.
 	Attended bool `json:"attended,omitempty" yaml:"attended"`
 }
+
+// MaxRoundsCap is the most rounds per task a kitty may be given by another (the lead): enough
+// for a long task, not a runaway one. The person may still set more themselves.
+const MaxRoundsCap = 500
 
 // Validate refuses a negative limit.
 func (l Limits) Validate() error {

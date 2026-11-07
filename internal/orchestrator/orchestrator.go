@@ -424,6 +424,8 @@ type Spec struct {
 	Limits kitty.Limits `json:"limits"`
 	// Backup names the kitty that takes over a task this one gives up on.
 	Backup string `json:"backup"`
+	// Lead makes the new kitty the principal one; the lead it replaces stops being one.
+	Lead bool `json:"lead"`
 	// Approvals is ask (or empty) or auto.
 	Approvals string `json:"approvals"`
 }
@@ -479,18 +481,66 @@ func (m *Manager) Create(ctx context.Context, s Spec) (*kitty.Kitty, error) {
 	k := &kitty.Kitty{
 		ID: m.newID(), Name: s.Name, Provider: prov, Soul: personality, Connectors: s.Connectors,
 		Desktop: desktop, BodyLater: wants && !desktop, Status: kitty.StatusCreated, CreatedAt: m.now(), Avatar: avatar,
-		Limits: s.Limits, Backup: s.Backup, Approvals: s.Approvals,
+		Limits: s.Limits, Backup: s.Backup, Approvals: s.Approvals, Lead: s.Lead,
 	}
 	if desktop {
 		k.Container = kitty.ContainerName(s.Name)
 		k.Workspace = filepath.Join(m.workspaceRoot(), s.Name)
 	}
+	var demoted []*kitty.Kitty
+	if k.Lead {
+		demoted = m.demoteLeadsLocked(k.ID)
+	}
 	m.kitties[k.ID] = k
 	if err := m.saveLocked(); err != nil {
 		delete(m.kitties, k.ID)
+		for _, d := range demoted {
+			d.Lead = true
+		}
 		return nil, err
 	}
 	return k, nil
+}
+
+// demoteLeadsLocked takes the lead from every kitty but keep, so the fleet has one at most, and
+// returns the ones it took it from.
+func (m *Manager) demoteLeadsLocked(keep string) []*kitty.Kitty {
+	var out []*kitty.Kitty
+	for id, other := range m.kitties {
+		if id != keep && other.Lead {
+			other.Lead = false
+			out = append(out, other)
+		}
+	}
+	return out
+}
+
+// SetRounds changes how many rounds of actions a kitty may take on one task (0 is the default):
+// what the lead kitty does for the others, within kitty.MaxRoundsCap.
+func (m *Manager) SetRounds(ref string, rounds int) (*kitty.Kitty, error) {
+	if rounds < 0 || rounds > kitty.MaxRoundsCap {
+		return nil, fmt.Errorf("rounds go from 1 to %d (0 for the default)", kitty.MaxRoundsCap)
+	}
+	k, err := m.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	limits := k.Limits
+	limits.MaxRounds = rounds
+	return m.Edit(k.ID, Update{Limits: &limits})
+}
+
+// Lead is the principal kitty, the one that orchestrates the fleet, or nil when none is.
+func (m *Manager) Lead() *kitty.Kitty {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	for _, k := range m.kitties {
+		if k.Lead {
+			c := *k
+			return &c
+		}
+	}
+	return nil
 }
 
 // makeWorkspace creates a kitty's workspace so its container can write in it. The container's
@@ -575,7 +625,7 @@ func (m *Manager) Bootstrap(ctx context.Context) error {
 			if _, err := m.Get(name); err == nil {
 				continue
 			}
-			spec := Spec{Name: name, Provider: k.Provider, Soul: k.Soul, SoulFile: k.SoulFile, Connectors: k.Connectors, Desktop: k.Desktop, Avatar: k.Avatar, Limits: k.Limits, Backup: k.Backup, Approvals: k.Approvals}
+			spec := Spec{Name: name, Provider: k.Provider, Soul: k.Soul, SoulFile: k.SoulFile, Connectors: k.Connectors, Desktop: k.Desktop, Avatar: k.Avatar, Limits: k.Limits, Backup: k.Backup, Approvals: k.Approvals, Lead: k.Lead && len(names) == 1}
 			if spec.Soul.Name == "" {
 				spec.Soul.Name = k.Name
 			}
@@ -589,10 +639,26 @@ func (m *Manager) Bootstrap(ctx context.Context) error {
 			}
 		}
 	}
+	m.leadFromConfig()
 	if len(errs) > 0 {
 		return errors.New(strings.Join(errs, "; "))
 	}
 	return nil
+}
+
+// leadFromConfig makes the kitty the configuration marks lead: true the lead when the fleet has
+// none, so a file edited after the kitties exist still names it; one chosen in the interface wins.
+func (m *Manager) leadFromConfig() {
+	if m.Lead() != nil {
+		return
+	}
+	for _, k := range m.cfg.Kitties {
+		if k.Lead {
+			yes := true
+			_, _ = m.edit(k.Name, Update{Lead: &yes})
+			return
+		}
+	}
 }
 
 // Start brings the kitty up: its container when it has one.
@@ -921,6 +987,9 @@ type Update struct {
 	Backup *string `json:"backup,omitempty"`
 	// Approvals is ask or auto (empty is ask).
 	Approvals *string `json:"approvals,omitempty"`
+	// Lead, true, makes the kitty the principal one (the one before stops being it); false takes
+	// the lead from it and leaves the fleet without one.
+	Lead *bool `json:"lead,omitempty"`
 	// Theme is the look of its desktop (kitty.Themes; empty is the image's own).
 	Theme *string `json:"theme,omitempty"`
 	// AutoOff is the minutes its machine stays on without use: 0 is never. AutoOffDefault, when
@@ -1026,7 +1095,19 @@ func (m *Manager) edit(ref string, u Update) (*kitty.Kitty, error) {
 		}
 		k.Backup = backup
 	}
+	var demoted []*kitty.Kitty
+	was := k.Lead
+	if u.Lead != nil {
+		k.Lead = *u.Lead
+		if k.Lead {
+			demoted = m.demoteLeadsLocked(k.ID)
+		}
+	}
 	if err := m.saveLocked(); err != nil {
+		k.Lead = was
+		for _, d := range demoted {
+			d.Lead = true
+		}
 		return nil, err
 	}
 	c := *k

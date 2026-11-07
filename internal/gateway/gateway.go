@@ -231,6 +231,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /v1/kitties/{ref}", api(s.handleGetKitty))
 	s.mux.Handle("DELETE /v1/kitties/{ref}", api(s.handleRemoveKitty))
 	s.mux.Handle("PATCH /v1/kitties/{ref}", api(s.handleEditKitty))
+	s.routesLead(api)
 	s.mux.Handle("GET /v1/avatars", api(s.handleAvatars))
 	s.mux.Handle("POST /v1/kitties/{ref}/start", api(s.handleStartKitty))
 	s.mux.Handle("POST /v1/kitties/{ref}/stop", api(s.handleStopKitty))
@@ -681,6 +682,7 @@ func (s *Server) handleCreateKitty(w http.ResponseWriter, r *http.Request) {
 		Avatar     kitty.Avatar `json:"avatar"`
 		Limits     kitty.Limits `json:"limits"`
 		Backup     string       `json:"backup"`
+		Lead       bool         `json:"lead"`
 		Approvals  string       `json:"approvals"`
 		Start      *bool        `json:"start"`
 	}
@@ -699,7 +701,7 @@ func (s *Server) handleCreateKitty(w http.ResponseWriter, r *http.Request) {
 		Start *bool
 	}{orchestrator.Spec{
 		Name: body.Name, Provider: body.Provider, Soul: body.Soul, Connectors: body.Connectors, Desktop: body.Desktop,
-		Avatar: body.Avatar, Limits: body.Limits, Backup: body.Backup, Approvals: body.Approvals,
+		Avatar: body.Avatar, Limits: body.Limits, Backup: body.Backup, Approvals: body.Approvals, Lead: body.Lead,
 	}, body.Start}
 	k, err := s.fleet.Create(r.Context(), spec.Spec)
 	if err != nil {

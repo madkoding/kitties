@@ -16,7 +16,7 @@ import { ask } from "./Confirm";
 import { Modal } from "./Modal";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
 import { ProviderLogo } from "./ConnectorLogo";
-import { IconPlay, IconStop, IconTrash } from "./icons";
+import { IconCrown, IconPlay, IconStop, IconTrash } from "./icons";
 import DesktopCare from "./DesktopCare";
 import MachinePower from "./MachinePower";
 import LiveDesktop from "./LiveDesktop";
@@ -616,6 +616,91 @@ function KittyBasics({
   );
 }
 
+// LeadPanel makes a kitty the lead (the principal one, which orchestrates the others and
+// reports for all of them) or takes the lead from it, and opens its Reports thread.
+export function LeadPanel({
+  kitty,
+  kitties,
+  onChanged,
+  onOpenChat,
+}: {
+  kitty: Kitty;
+  kitties: Kitty[];
+  onChanged: () => void;
+  onOpenChat: (id: string) => void;
+}) {
+  const [err, setErr] = useState("");
+  const current = kitties.find((k) => k.lead && k.id !== kitty.id);
+  const set = async (on: boolean) => {
+    setErr("");
+    try {
+      await api.setLead(on ? kitty.id : "");
+      onChanged();
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+  const reports = async () => {
+    setErr("");
+    try {
+      const r = await api.lead();
+      if (r.reports) onOpenChat(r.reports);
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
+  return (
+    <div class="lead-panel mt-4" data-testid="lead-panel">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class={kitty.lead ? "text-accent" : "text-[var(--t4)]"}>
+          <IconCrown size={16} />
+        </span>
+        <div class="flex-1 min-w-0 basis-[14rem]">
+          <div class="text-sm font-medium">
+            {kitty.lead
+              ? t("{name} is the lead kitty", { name: kitty.name })
+              : t("Lead kitty (orchestrator)")}
+          </div>
+          <p class="text-xs text-[var(--t4)]">
+            {kitty.lead
+              ? t(
+                  "It splits what you ask among the other kitties, gathers their answers and gives you one report. Their news (goals done or stuck, help, approvals) reach you through it, in its Reports thread.",
+                )
+              : current
+                ? t("{lead} leads the fleet now; making {name} the lead takes it from {lead}.", {
+                    lead: current.name,
+                    name: kitty.name,
+                  })
+                : t(
+                    "One kitty can lead the others: you talk to it, it hands the work out and reports for all of them.",
+                  )}
+          </p>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          {kitty.lead ? (
+            <>
+              <button class="btn-outline px-3 py-1.5 text-xs" onClick={reports}>
+                {t("Open reports")}
+              </button>
+              <button class="btn-ghost px-3 py-1.5 text-xs" onClick={() => set(false)}>
+                {t("Stop leading")}
+              </button>
+            </>
+          ) : (
+            <button
+              class="btn-outline px-3 py-1.5 text-xs flex items-center gap-1"
+              onClick={() => set(true)}
+            >
+              <IconCrown size={12} /> {t("Make {name} the lead", { name: kitty.name })}
+            </button>
+          )}
+        </div>
+      </div>
+      {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
+    </div>
+  );
+}
+
 export function KittyDrawer({
   kitty,
   kitties,
@@ -692,6 +777,11 @@ export function KittyDrawer({
             >
               {kitty.status}
             </span>
+            {kitty.lead && (
+              <span class="tag tag-accent flex items-center gap-1" data-testid="lead-tag">
+                <IconCrown size={11} /> {t("Lead")}
+              </span>
+            )}
             <span class="tag tag-accent max-w-full min-w-0">
               <span class="truncate">
                 {model ? modelLabel(model) : kitty.provider || t("no model")}
@@ -736,6 +826,7 @@ export function KittyDrawer({
         </div>
       </div>
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
+      <LeadPanel kitty={kitty} kitties={kitties} onChanged={onChanged} onOpenChat={onOpenChat} />
       {/* The desktop comes first: the goals and the journal grow, and must not push it down. */}
       {kitty.desktop && (
         <div class="min-w-0">

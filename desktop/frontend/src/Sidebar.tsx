@@ -10,6 +10,7 @@ import {
   IconX,
   IconShield,
   IconLogOut,
+  IconCrown,
 } from "./icons";
 import PixelCat, { type Mood } from "./PixelCat";
 import { t } from "./i18n";
@@ -100,6 +101,7 @@ export default function Sidebar(p: Props) {
               <span class="flex-1 min-w-0 truncate text-sm">{c.title}</span>
               {c.needs_help && <span class="tag tag-amber">{t("help")}</span>}
               {c.goal && !c.needs_help && <span class="tag tag-magenta">{t("goal")}</span>}
+              {c.reports && !c.needs_help && <span class="tag tag-accent">{t("reports")}</span>}
               <span class="tag">
                 {c.members.length > 1 ? <IconUsers size={10} /> : null}
                 {c.members.length > 1 ? c.members.length : (byId.get(c.members[0])?.name ?? "1")}
@@ -128,6 +130,11 @@ export default function Sidebar(p: Props) {
               />
               <span class={`dot ${k.status}`} />
               <span class="flex-1 min-w-0 truncate text-sm">{k.name}</span>
+              {k.lead && (
+                <span class="text-accent" title={t("Lead kitty")} data-testid="lead-badge">
+                  <IconCrown size={12} />
+                </span>
+              )}
               <span class="text-[0.625rem] font-mono text-[var(--t4)] truncate max-w-[4.375rem]">
                 {k.provider}
               </span>

@@ -163,6 +163,8 @@ type Kitty struct {
 	Limits kitty.Limits `yaml:"limits"`
 	// Backup names the kitty that takes over a task this one could not finish.
 	Backup string `yaml:"backup"`
+	// Lead makes this kitty the principal one, the orchestrator of the fleet (at most one).
+	Lead bool `yaml:"lead"`
 	// Approvals is ask (the default) or auto: see kitty.Kitty.
 	Approvals string `yaml:"approvals"`
 	// Goals are what the kitty pursues on its own: on a schedule, on events, or both.
@@ -512,6 +514,7 @@ func (c *Config) Validate() error {
 		}
 	}
 	seen := map[string]bool{}
+	lead := ""
 	for i, k := range c.Kitties {
 		if !ValidName(k.Name) {
 			return fmt.Errorf("kitties[%d].name: %q is not a valid name (lowercase letters, digits and dashes)", i, k.Name)
@@ -543,6 +546,15 @@ func (c *Config) Validate() error {
 		}
 		if !kitty.ValidApprovals(k.Approvals) {
 			return fmt.Errorf("kitties[%d].approvals: %q is not ask or auto", i, k.Approvals)
+		}
+		if k.Lead {
+			if lead != "" {
+				return fmt.Errorf("kitties[%d].lead: %s is the lead already; only one kitty leads the fleet", i, lead)
+			}
+			if k.Replicas > 1 {
+				return fmt.Errorf("kitties[%d].lead: a kitty with replicas cannot be the lead", i)
+			}
+			lead = k.Name
 		}
 		if k.Backup != "" {
 			if k.Backup == k.Name {

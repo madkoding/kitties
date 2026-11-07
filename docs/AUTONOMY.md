@@ -72,6 +72,53 @@ kitties:
         on: [github]             # the github connector's inbound_secret signs the hook
 ```
 
+## The lead kitty
+
+One kitty of the fleet can be the **lead**: the principal one, your main contact and the
+orchestrator of the others. There is one at most; making another kitty the lead takes it from the
+one before.
+
+- **It hands the work out.** Its prompt names the team (what each kitty is good at, whether it has
+  a computer, the services it may use, whether it is busy) and tells it to split what you ask:
+  it does what is quick or its own, delegates each piece to the kitty best placed for it (several
+  pieces to several kitties if need be), checks their answers and gives you **one report** of the
+  whole: what was done, by whom, what failed and what is left. The other kitties know who leads,
+  and treat a task it hands them as coming from you.
+- **The reports come back through it.** What another kitty has to tell you (a goal done or
+  stuck, help it needs, an action waiting for a yes, its day's tokens) lands in the lead's
+  **Reports** thread, from the kitty that sent it, and the notification goes out in the lead's
+  name (*luna: mimi finished a goal*). The daily summary is the lead's too, and stays in that
+  thread. Nothing is lost: the original thread is linked, and the notification still arrives.
+- **It sets the others' rounds.** For a long task it hands out, the lead can give a kitty more
+  rounds of actions per task (or fewer, to keep one short): `@rounds tom {"max_rounds": 120}`, or
+  its native `rounds` tool. Only the lead may, never for itself, from 1 to 500 (0 goes back to the
+  default). The change is kept in the kitty's limits (Settings → Limits shows it), lands in both
+  journals and in the Reports thread, and the lead says so in its report.
+- **Ask it how things are going.** Write in the Reports thread: the lead reads the reports
+  there and answers from them, or hands out the next round of work.
+
+| | |
+| --- | --- |
+| ![The lead kitty's drawer](screenshots/71-lead-kitty.png) | ![The lead's Reports thread](screenshots/72-lead-reports.png) |
+
+Choose it in the kitty's drawer (*Make luna the lead*, *Open reports*, *Stop leading*), in the YAML,
+from the terminal or through the API and MCP:
+
+```yaml
+kitties:
+  - name: luna
+    lead: true          # at most one; a kitty with replicas cannot lead
+```
+
+```sh
+kitties lead luna      # or: kitties lead (who leads), kitties lead none
+curl -X PUT -H "Authorization: Bearer $(kitties token)" -d '{"kitty":"luna"}' http://127.0.0.1:7488/v1/lead
+```
+
+A lead set in the YAML applies when the fleet has none; one chosen in the interface wins. With
+Claude, `fleet_lead`, `fleet_lead_set` and `lead_ask` (a task for the whole fleet, answered with one
+report) do the same ([MCP](MCP.md)).
+
 ## Learning, trust and being told
 
 Autonomy needs a memory, a leash that loosens with trust, and a way to reach you.

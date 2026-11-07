@@ -67,6 +67,8 @@ Commands:
   ls                        list the kitties and their state
   create <name> [flags]     create a kitty (-provider, -persona, -soul file, -avatar breed/color, -no-desktop)
   start|stop|rm <name>      manage one kitty
+  lead [<name> | none]      show the lead kitty (the one that orchestrates the others and reports for
+                            all of them), make another the lead, or leave the fleet without one
   scale <name> <n>          run n replicas of a configured kitty (name-1 ... name-n)
   chat <name>[,<name>...]   talk to one kitty, or to a group of them, from the terminal
   exec <name> <cmd...>      run a command inside the kitty's container
@@ -366,10 +368,12 @@ func (a *app) open(cmd string) error {
 			}
 			return out
 		},
-		Today:   a.budget.Today,
-		Config:  fleet.Notify,
-		Deliver: a.notifier.Deliver,
-		Day:     digest.MyDay(fleet.Connectors()),
+		Today:  a.budget.Today,
+		Config: fleet.Notify,
+		Deliver: func(ctx context.Context, n notify.Notification) error {
+			return a.notifier.Deliver(ctx, chats.LeadDigest(n))
+		},
+		Day: digest.MyDay(fleet.Connectors()),
 	}, filepath.Join(dataDir, "digest.json"))
 	// A removed kitty takes its held actions and its memory along.
 	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget, chats.LeaveChats)
@@ -391,7 +395,7 @@ func (a *app) open(cmd string) error {
 // the AI profiles, where a profile that cannot work is said.
 var (
 	fleetCommands = map[string]bool{"gateway": true, "token": true, "mcp": true, "ls": true, "providers": true, "create": true,
-		"start": true, "stop": true, "rm": true, "scale": true, "chat": true, "exec": true, "shot": true}
+		"start": true, "stop": true, "rm": true, "scale": true, "lead": true, "chat": true, "exec": true, "shot": true}
 	brainCommands = map[string]bool{"gateway": true, "providers": true, "create": true, "start": true, "scale": true, "chat": true}
 )
 
@@ -411,6 +415,8 @@ func (a *app) dispatch(cmd string, args []string) error {
 		return a.cmdLifecycle(ctx, cmd, args)
 	case "scale":
 		return a.cmdScale(ctx, args)
+	case "lead":
+		return a.cmdLead(args)
 	case "chat":
 		return a.cmdChat(ctx, args)
 	case "exec":
@@ -430,7 +436,7 @@ func demoConfig() (config.Config, error) {
 	cfg.Kitties = []config.Kitty{
 		{Name: "mimi", Soul: soul.Soul{Persona: "a patient researcher who loves to explain", Tone: "warm and precise", Traits: []string{"curious", "thorough"}, Skills: []string{"research", "summaries"}}},
 		{Name: "tom", Soul: soul.Soul{Persona: "a hands-on engineer who tries things on the desktop before answering", Tone: "friendly and direct", Skills: []string{"browsing", "testing web apps"}}},
-		{Name: "luna", Soul: soul.Soul{Persona: "a planner who keeps the team on track", Tone: "calm and structured", Skills: []string{"planning", "reviews"}}},
+		{Name: "luna", Lead: true, Soul: soul.Soul{Persona: "a planner who keeps the team on track", Tone: "calm and structured", Skills: []string{"planning", "reviews"}}},
 	}
 	return cfg, cfg.Validate()
 }
@@ -833,6 +839,37 @@ func (a *app) cmdList() error {
 			fmt.Fprintf(a.out, "  error: %s\n", k.Error)
 		}
 	}
+	if lead := a.fleet.Lead(); lead != nil {
+		fmt.Fprintf(a.out, "lead: %s\n", lead.Name)
+	}
+	return nil
+}
+
+// cmdLead shows the lead kitty, makes another one the lead, or ("none") leaves the fleet without one.
+func (a *app) cmdLead(args []string) error {
+	if len(args) > 1 {
+		return errors.New("usage: kitties lead [<name> | none]")
+	}
+	if len(args) == 1 {
+		on, ref := true, args[0]
+		if ref == "none" || ref == "-" {
+			lead := a.fleet.Lead()
+			if lead == nil {
+				fmt.Fprintln(a.out, "the fleet has no lead")
+				return nil
+			}
+			on, ref = false, lead.ID
+		}
+		if _, err := a.fleet.Edit(ref, orchestrator.Update{Lead: &on}); err != nil {
+			return err
+		}
+	}
+	lead := a.fleet.Lead()
+	if lead == nil {
+		fmt.Fprintln(a.out, "the fleet has no lead: `kitties lead <name>` makes one the orchestrator of the others")
+		return nil
+	}
+	fmt.Fprintf(a.out, "%s leads the fleet: it hands the work to the others and reports for all of them\n", lead.Name)
 	return nil
 }
 
