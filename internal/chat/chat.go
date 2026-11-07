@@ -146,6 +146,10 @@ type Session struct {
 	SummaryUpTo int    `json:"summary_up_to,omitempty"`
 	// Reports marks the lead kitty's Reports thread, where the other kitties' news land.
 	Reports bool `json:"reports,omitempty"`
+	// Gist is the chat's last words in one line, with secrets and personal details masked, and
+	// GistBy who said them ("user" or a kitty's name): what the sidebar shows under the title.
+	Gist   string `json:"gist,omitempty"`
+	GistBy string `json:"gist_by,omitempty"`
 }
 
 // NeedsHelp reports whether the last turn is a kitty asking the person for help.
@@ -537,12 +541,15 @@ func (s *Service) load() error {
 		if err := json.Unmarshal(data, &sess); err != nil {
 			return fmt.Errorf("the chat %s is damaged: %w", e.Name(), err)
 		}
+		// Recomputed rather than trusted: a chat saved before gists, or under older masking rules.
+		refreshGist(&sess)
 		s.sessions[sess.ID] = &sess
 	}
 	return nil
 }
 
 func (s *Service) save(sess *Session) error {
+	refreshGist(sess)
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return fmt.Errorf("create the chats folder: %w", err)
 	}
