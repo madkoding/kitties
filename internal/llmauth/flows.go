@@ -56,7 +56,7 @@ func (m *Manager) startCodex() (Flow, error) {
 	}
 	var srv *http.Server
 	if err == nil {
-		srv = serveCallback(ln, p.state, callbacks)
+		srv = serveCallback(ln, p.state, "ChatGPT plan", callbacks)
 	}
 	paste := make(chan string, 1)
 	return m.track(Flow{Kind: "codex", Method: "browser", URL: link, Paste: true}, paste, func(ctx context.Context) (Credential, error) {
@@ -144,14 +144,15 @@ func (m *Manager) codexToken(req *http.Request, old Credential) (Credential, err
 // callback is what the browser brought back to the callback address.
 type callback struct{ code, state, err string }
 
-// serveCallback answers the browser on ln and hands the code of the sign-in with state on.
-func serveCallback(ln net.Listener, state string, out chan<- callback) *http.Server {
+// serveCallback answers the browser on ln and hands the code of the sign-in with state on; plan
+// names what Kitties thinks with once it is done.
+func serveCallback(ln net.Listener, state, plan string, out chan<- callback) *http.Server {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/auth/callback", func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		cb := callback{code: q.Get("code"), state: q.Get("state"), err: strings.TrimSpace(q.Get("error") + " " + q.Get("error_description"))}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		title, msg := "Signed in", "Kitties can think with your ChatGPT plan now. You can close this window."
+		title, msg := "Signed in", "Kitties can think with your "+plan+" now. You can close this window."
 		switch {
 		case cb.state != state:
 			w.WriteHeader(http.StatusBadRequest)

@@ -50,6 +50,17 @@ Instead of pasting the client in each connection, set it once on the gateway:
 `make OAUTH_APPS="google=<client id>:<client secret>" dist` (the release reads the
 `KITTIES_OAUTH_APPS` repository secret).
 
+### Gemini with the same app
+
+With that gateway-wide app, a Gemini model signs in with your Google account too (Quick start or
+**Settings → Models → Google Gemini → Google account → Sign in with Google**), with no gcloud: type
+the Cloud project Gemini is billed to and sign in. Enable the **Generative Language API** in that
+project. It asks for the scopes gcloud asks for (`cloud-platform`, `generative-language.retriever`),
+which Google treats as sensitive: keep the app in Testing with your accounts as test users, or have
+it verified. A browser on another machine lands on a `127.0.0.1` page that does not load: copy its
+address back into Kitties, as for the connections. Without the app, *Use my gcloud login* still
+takes `gcloud auth application-default login`.
+
 ## Scopes
 
 Kitties always asks `openid email` (to show which account signed in) and, for each service ticked,

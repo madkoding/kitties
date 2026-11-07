@@ -140,6 +140,8 @@ func newRig(t *testing.T) *rig {
 	}
 	r.m.adcPath = func() string { return filepath.Join(r.dir, "adc.json") }
 	r.m.findClaude = func() (string, error) { return "", provider.ErrNoClaude }
+	r.m.googleApp = func() (string, string) { return "", "" }
+	r.m.installClaude = func(context.Context) error { return errors.New("no installs in tests") }
 	return r
 }
 

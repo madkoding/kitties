@@ -271,6 +271,8 @@ export interface Account {
   note?: string;
   // missing is true when the program the sign-in runs is not installed (claude).
   missing?: boolean;
+  // browser is true when it signs in in the browser instead of with a program (Google).
+  browser?: boolean;
 }
 
 // LoginFlow is a sign-in in progress: open url (and type code), or paste back where the browser
@@ -278,7 +280,7 @@ export interface Account {
 export interface LoginFlow {
   id: string;
   kind: string;
-  method: "device" | "browser" | "instant";
+  method: "device" | "browser" | "instant" | "install";
   url?: string;
   code?: string;
   paste?: boolean;
@@ -891,8 +893,14 @@ export const api = {
     ),
   testConnector: (name: string) =>
     request<ConnectorTest>("POST", `/v1/settings/connectors/${name}/test`),
-  startLogin: (kind: string, project?: string) =>
-    request<LoginFlow>("POST", `/v1/settings/accounts/${kind}/login`, project ? { project } : {}),
+  startLogin: (kind: string, project?: string, via?: "gcloud") =>
+    request<LoginFlow>("POST", `/v1/settings/accounts/${kind}/login`, {
+      ...(project ? { project } : {}),
+      ...(via ? { via } : {}),
+    }),
+  // installAccount installs the program an account signs in with (Claude Code) on the gateway.
+  installAccount: (kind: string) =>
+    request<LoginFlow>("POST", `/v1/settings/accounts/${kind}/install`),
   loginFlow: (id: string) => request<LoginFlow>("GET", `/v1/settings/logins/${id}`),
   pasteLogin: (id: string, code: string) =>
     request<LoginFlow>("POST", `/v1/settings/logins/${id}/paste`, { code }),
