@@ -499,20 +499,16 @@ select:focus {
 }
 
 .row.chat-row {
-  margin-top: 0.625rem;
   align-items: flex-start;
 }
-/* A chat's tags sit on the top edge of its box, so the title and the gist keep the width. */
-.row > .chat-badges {
-  position: absolute;
-  top: 0;
-  right: 0.5rem;
-  transform: translateY(-50%);
+/* A chat's tags lead its title; empty, they take no room. */
+.chat-badges {
   display: flex;
+  flex: none;
   gap: 0.25rem;
-  /* Solid behind the tags, so the edge of the box does not cross them. */
-  background: rgb(var(--bg-rgb));
-  border-radius: var(--radius-cut);
+}
+.chat-badges:empty {
+  display: none;
 }
 .chat-badges .tag {
   line-height: 1.3;

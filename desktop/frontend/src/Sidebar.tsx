@@ -164,7 +164,22 @@ export default function Sidebar(p: Props) {
                   })}
                 </span>
                 <span class="flex-1 min-w-0 flex flex-col">
-                  <span class="truncate text-sm">{c.title}</span>
+                  <span class="flex items-center gap-1.5 min-w-0">
+                    <span class="chat-badges" data-testid="chat-badges">
+                      {c.needs_help && <span class="tag tag-amber">{t("help")}</span>}
+                      {c.goal && !c.needs_help && <span class="tag tag-magenta">{t("goal")}</span>}
+                      {c.reports && !c.needs_help && (
+                        <span class="tag tag-accent">{t("reports")}</span>
+                      )}
+                      {c.members.length > 1 && (
+                        <span class="tag" title={t("{count} kitties", { count: c.members.length })}>
+                          <IconUsers size={10} />
+                          {c.members.length}
+                        </span>
+                      )}
+                    </span>
+                    <span class="truncate text-sm">{c.title}</span>
+                  </span>
                   {c.gist && (
                     <span
                       id={`gist-${c.id}`}
@@ -173,17 +188,6 @@ export default function Sidebar(p: Props) {
                       title={gistLine(c)}
                     >
                       {gistLine(c)}
-                    </span>
-                  )}
-                </span>
-                <span class="chat-badges" data-testid="chat-badges">
-                  {c.needs_help && <span class="tag tag-amber">{t("help")}</span>}
-                  {c.goal && !c.needs_help && <span class="tag tag-magenta">{t("goal")}</span>}
-                  {c.reports && !c.needs_help && <span class="tag tag-accent">{t("reports")}</span>}
-                  {c.members.length > 1 && (
-                    <span class="tag" title={t("{count} kitties", { count: c.members.length })}>
-                      <IconUsers size={10} />
-                      {c.members.length}
                     </span>
                   )}
                 </span>
