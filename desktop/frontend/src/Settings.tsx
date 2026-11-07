@@ -44,6 +44,7 @@ import { AccountSignIn } from "./SignIn";
 import { ask } from "./Confirm";
 import Secrets from "./Secrets";
 import Exposure from "./Exposure";
+import Guardrails from "./Guardrails";
 import McpConnector from "./McpConnector";
 import { SharedMemory } from "./Notes";
 import WhatsAppLink from "./WhatsApp";
@@ -58,7 +59,14 @@ import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 // names, addresses and limits wait under "More options".
 
 export type Tab =
-  "models" | "connectors" | "secrets" | "memory" | "notifications" | "gateway" | "preferences";
+  | "models"
+  | "connectors"
+  | "secrets"
+  | "guardrails"
+  | "memory"
+  | "notifications"
+  | "gateway"
+  | "preferences";
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";
 const INPUT = "w-full px-3 py-2 text-sm";
@@ -2080,6 +2088,7 @@ export default function SettingsModal({
     { id: "models", label: t("Models") },
     { id: "connectors", label: t("Connections") },
     { id: "secrets", label: t("Secrets") },
+    { id: "guardrails", label: t("Guardrails") },
     { id: "memory", label: t("Shared memory") },
     { id: "notifications", label: t("Notifications") },
     { id: "gateway", label: inWails() ? t("Gateway") : t("Connection") },
@@ -2281,6 +2290,9 @@ export default function SettingsModal({
         )}
 
         {tab === "secrets" && <Secrets kitties={kitties} />}
+        {tab === "guardrails" && (
+          <Guardrails connections={(view?.connectors || []).map((c) => c.name)} />
+        )}
         {tab === "memory" && <SharedMemory />}
         {tab === "notifications" && view && (
           <NotifyForm view={view} onSaved={setView} onSetUp={setUpNtfy} />

@@ -2433,6 +2433,43 @@ test("the secrets a kitty may type: saved with who may use them, changed and rem
   await expect(row).toHaveCount(0);
 });
 
+test("the guardrails of the kitties that answer other people: safe defaults, kept, and a chat marked guarded", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.single}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Guardrails" }).click();
+  const g = page.getByTestId("guardrails");
+  await expect(g).toBeVisible();
+  // On by default, with personal data taken out and attempts not answered.
+  await expect(g.getByTestId("guard-enabled").locator("input")).toBeChecked();
+  await expect(g.getByTestId("guard-redact_personal").locator("input")).toBeChecked();
+  await expect(g.getByTestId("guard-block_injection").locator("input")).toBeChecked();
+  await expect(g.getByTestId("guard-per-hour")).toHaveValue("20");
+  const save = g.getByTestId("guard-save");
+  await expect(save).toBeDisabled();
+  // A number of the person's own keeps the whole kitty.
+  await g.getByTestId("guard-number").fill("+56 9 1234 5678");
+  await g.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(g.getByTestId("guard-trusted")).toContainText("+56912345678");
+  await g.getByTestId("guard-per-hour").fill("30");
+  await save.click();
+  await expect(save).toBeDisabled();
+  await expect(g.getByTestId("guard-per-hour")).toHaveValue("30");
+  await shot(page, "73-guardrails");
+  await page.keyboard.press("Escape");
+  // A chat is marked as one with other people from its header, after a yes.
+  const mark = page.getByTestId("chat-exposed");
+  await expect(mark).toHaveAttribute("aria-pressed", "false");
+  await mark.click();
+  await page.getByRole("button", { name: "Mark it" }).click();
+  await expect(mark).toHaveAttribute("aria-pressed", "true");
+  await expect(mark).toContainText("guarded");
+  await mark.click();
+  await page.getByRole("button", { name: "Take them off" }).click();
+  await expect(mark).toHaveAttribute("aria-pressed", "false");
+});
+
 test("a kitty's desktop wears the theme picked in its drawer", async ({ page }) => {
   await open(page, `#chat/${ids.desktop}`);
   await kittyRow(page, "tom").click();
