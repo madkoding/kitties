@@ -187,6 +187,13 @@ test("the sidebar lists the kitties first, and each chat says what it is about",
   const box = (await gist.boundingBox())!;
   expect(box.height).toBeGreaterThan(lineHeight * 1.5);
   expect(box.height).toBeLessThanOrEqual(lineHeight * 2 + 1);
+  // A group's cats huddle in the square one cat takes, so the title keeps its place.
+  const groupRow = group.locator("xpath=..");
+  const cats = (await groupRow.getByTestId("chat-cats").boundingBox())!;
+  const single = (await desktop.locator("xpath=..").getByTestId("chat-cats").boundingBox())!;
+  expect(Math.abs(cats.width - single.width)).toBeLessThan(1);
+  await expect(groupRow.getByTestId("chat-cats").locator("> *")).toHaveCount(3);
+  await group.scrollIntoViewIfNeeded();
   await shot(page, "73-sidebar-gists");
 });
 

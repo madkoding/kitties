@@ -463,6 +463,41 @@ select:focus {
   color: var(--t2);
 }
 
+/* A chat's cats share one square: one cat fills it, two or three huddle together in it. */
+.chat-cats {
+  position: relative;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+}
+.row > .chat-cats > * {
+  position: absolute;
+}
+.chat-cats.n1 > * {
+  inset: 0;
+}
+.chat-cats.n2 > :nth-child(1) {
+  left: 0;
+  top: 0;
+}
+.chat-cats.n2 > :nth-child(2) {
+  right: 0;
+  bottom: 0;
+}
+.chat-cats.n3 > :nth-child(1) {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+.chat-cats.n3 > :nth-child(2) {
+  left: -0.125rem;
+  bottom: 0;
+}
+.chat-cats.n3 > :nth-child(3) {
+  right: -0.125rem;
+  bottom: 0;
+}
+
 .row.chat-row {
   margin-top: 0.625rem;
   align-items: flex-start;

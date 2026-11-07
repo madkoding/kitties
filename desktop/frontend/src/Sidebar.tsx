@@ -149,7 +149,7 @@ export default function Sidebar(p: Props) {
                   aria-current={p.current === c.id ? "page" : undefined}
                   aria-describedby={c.gist ? `gist-${c.id}` : undefined}
                 />
-                <span class="flex -space-x-2">
+                <span class={`chat-cats n${Math.min(c.members.length, 3)}`} data-testid="chat-cats">
                   {c.members.slice(0, 3).map((id) => {
                     const k = byId.get(id);
                     return k ? (
@@ -158,7 +158,7 @@ export default function Sidebar(p: Props) {
                         breed={k.avatar?.breed}
                         color={k.avatar?.color}
                         mood={p.workingChats.has(c.id) ? "working" : moodOf(k)}
-                        size={36}
+                        size={c.members.length > 1 ? 24 : 36}
                       />
                     ) : null;
                   })}
