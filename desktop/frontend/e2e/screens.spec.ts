@@ -811,15 +811,20 @@ test("a first run starts in one screen: model, kitty and chat", async ({ page })
     calls.push("test");
     return route.fulfill({ json: { ok: true, reply: "hi" } });
   });
+  await withAccounts(page, () => [{ kind: "claude-code", signed_in: false, available: true }]);
   await page.goto(`/${Q}`);
   const quick = page.getByTestId("quick-start");
   await expect(quick).toBeVisible();
-  // The key is needed for a provider that pays with one; Ollama needs none.
+  // A plan to sign in to comes first; a key works as well, for a provider that pays with one.
   await expect(quick.getByTestId("quick-start-go")).toBeDisabled();
+  await expect(quick.getByTestId("missing")).toHaveText("Still needed: sign in");
+  await quick.getByTestId("quick-start-key").click();
   await expect(quick.getByTestId("missing")).toHaveText("Still needed: the key");
+  // Ollama needs none.
   await quick.getByLabel("Its brain").selectOption("ollama");
   await expect(quick.getByTestId("quick-start-go")).toBeEnabled();
   await quick.getByLabel("Its brain").selectOption("anthropic");
+  await quick.getByTestId("quick-start-key").click();
   await quick.getByLabel("Its key").fill("sk-ant-demo");
   await quick.getByLabel("Your kitty's name").fill("Nala");
   await quick.getByTestId("quick-start-go").click();
@@ -829,6 +834,144 @@ test("a first run starts in one screen: model, kitty and chat", async ({ page })
   expect(calls[2]).toContain('"name":"Nala"');
   expect(calls[3]).toContain('"members":["nala"]');
   await expect(page).toHaveURL(/#chat\/c-first/);
+});
+
+// withAccounts answers the settings with these sign-ins instead of the gateway's own.
+async function withAccounts(page: Page, accounts: () => unknown[]): Promise<void> {
+  await page.route("**/v1/settings", async (route) => {
+    const res = await route.fetch();
+    const json = await res.json();
+    return route.fulfill({ response: res, json: { ...json, accounts: accounts() } });
+  });
+}
+
+test("a first run signs in with a Claude plan, from a browser on any machine", async ({ page }) => {
+  const calls: string[] = [];
+  let signedIn = false;
+  let pasted = "";
+  await page.route("**/v1/kitties", (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({ json: { kitties: [] } });
+    }
+    calls.push(`kitty ${route.request().postData()}`);
+    return route.fulfill({
+      json: { kitty: { id: "nala", name: "Nala", provider: "claude-code" } },
+    });
+  });
+  await page.route("**/v1/chats", (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({ json: { chats: [] } });
+    }
+    return route.fulfill({ json: { chat: { id: "c-plan", title: "", members: ["nala"] } } });
+  });
+  await page.route("**/v1/providers", (route) =>
+    route.fulfill({ json: { providers: [], kinds: [] } }),
+  );
+  await withAccounts(page, () => [
+    { kind: "claude-code", signed_in: signedIn, available: true, who: "/usr/bin/claude" },
+  ]);
+  // The claude program's own link: its page shows a code, pasted back here.
+  await page.route("https://claude.com/**", (route) => route.fulfill({ body: "claude.com" }));
+  await page.route("**/v1/settings/accounts/claude-code/login", (route) =>
+    route.fulfill({
+      json: {
+        id: "f1",
+        kind: "claude-code",
+        method: "browser",
+        url: "https://claude.com/cai/oauth/authorize?code=true",
+        paste: true,
+        status: "pending",
+      },
+    }),
+  );
+  await page.route("**/v1/settings/logins/f1/paste", (route) => {
+    pasted = JSON.parse(route.request().postData() || "{}").code;
+    signedIn = true;
+    return route.fulfill({
+      json: { id: "f1", kind: "claude-code", method: "browser", status: "pending" },
+    });
+  });
+  await page.route("**/v1/settings/logins/f1", (route) =>
+    route.fulfill({
+      json: {
+        id: "f1",
+        kind: "claude-code",
+        method: "browser",
+        status: signedIn ? "connected" : "pending",
+      },
+    }),
+  );
+  await page.route("**/v1/settings/providers/claude-code", (route) => {
+    calls.push(`model ${route.request().postData()}`);
+    return route.continue({
+      method: "GET",
+      url: route
+        .request()
+        .url()
+        .replace(/\/providers\/claude-code$/, ""),
+    });
+  });
+  await page.route("**/v1/settings/providers/claude-code/test", (route) =>
+    route.fulfill({ json: { ok: true, reply: "hi" } }),
+  );
+  await page.goto(`/${Q}`);
+  const quick = page.getByTestId("quick-start");
+  await expect(quick.getByTestId("quick-start-login")).toHaveAttribute("aria-checked", "true");
+  await expect(quick.getByTestId("missing")).toHaveText("Still needed: sign in");
+  const popup = page.waitForEvent("popup");
+  await quick.getByTestId("sign-in-start").click();
+  await (await popup).close();
+  await expect(quick.getByTestId("sign-in-waiting")).toContainText("claude.com");
+  await quick.getByLabel("Code from claude.com").fill("abc#state");
+  await shot(page, "68-quick-start-sign-in");
+  await quick.getByTestId("sign-in-use").click();
+  await expect(quick.getByTestId("sign-in")).toContainText("Claude Code is on this computer");
+  expect(pasted).toBe("abc#state");
+  await quick.getByLabel("Your kitty's name").fill("Nala");
+  await quick.getByTestId("quick-start-go").click();
+  await expect(page).toHaveURL(/#chat\/c-plan/);
+  // No key and no account mark: the claude program is its own login.
+  expect(calls[0]).toContain('"kind":"claude-code"');
+  expect(calls[0]).not.toContain("api_key");
+  expect(calls[0]).not.toContain('"auth"');
+  expect(calls[1]).toContain('"provider":"claude-code"');
+});
+
+test("a first run can sign in with GitHub Copilot or a ChatGPT plan", async ({ page }) => {
+  await withAccounts(page, () => [
+    { kind: "codex", signed_in: false, available: true },
+    { kind: "copilot", signed_in: false, available: true },
+  ]);
+  await page.route("**/v1/kitties", (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({ json: { kitties: [] } })
+      : route.continue(),
+  );
+  await page.route("**/v1/providers", (route) =>
+    route.fulfill({ json: { providers: [], kinds: [] } }),
+  );
+  await page.goto(`/${Q}`);
+  const quick = page.getByTestId("quick-start");
+  // Copilot has no key: it signs in with GitHub's code.
+  await quick.getByLabel("Its brain").selectOption("copilot");
+  await expect(quick.getByRole("radiogroup")).toHaveCount(0);
+  await expect(quick.getByTestId("sign-in-start")).toHaveText("Sign in with GitHub");
+  // A ChatGPT plan, or an OpenAI key.
+  await quick.getByLabel("Its brain").selectOption("openai");
+  await expect(quick.getByTestId("sign-in-start")).toHaveText("Sign in with ChatGPT");
+  await quick.getByTestId("quick-start-key").click();
+  await expect(quick.getByLabel("Its key")).toBeVisible();
+  // Ollama Cloud signs other apps in only with its keys.
+  await quick.getByLabel("Its brain").selectOption("ollama-cloud");
+  await expect(quick.getByRole("radiogroup")).toHaveCount(0);
+  await expect(quick.getByLabel("Its key")).toBeVisible();
+  await expect(quick.getByRole("link", { name: "Get a key" })).toHaveAttribute(
+    "href",
+    "https://ollama.com/settings/keys",
+  );
+  // Google's sign-in is gcloud's: its key comes first.
+  await quick.getByLabel("Its brain").selectOption("gemini");
+  await expect(quick.getByTestId("quick-start-key")).toHaveAttribute("aria-checked", "true");
 });
 
 test("a first run is a checklist, and nothing can be made out of order", async ({ page }) => {
@@ -844,6 +987,10 @@ test("a first run is a checklist, and nothing can be made out of order", async (
   await page.route("**/v1/providers", (route) =>
     route.fulfill({ json: { providers: [], kinds: [] } }),
   );
+  // claude is on the gateway's machine, not signed in yet: the plan is offered first.
+  await withAccounts(page, () => [
+    { kind: "claude-code", signed_in: false, available: true, who: "/usr/local/bin/claude" },
+  ]);
   await page.goto(`/${Q}`);
   const welcome = page.getByTestId("welcome");
   await expect(welcome).toContainText("Welcome to Kitties");
@@ -851,6 +998,8 @@ test("a first run is a checklist, and nothing can be made out of order", async (
   await expect(welcome.getByRole("button", { name: "Create a kitty" })).toBeDisabled();
   // The quick start asks for the three things a first kitty needs, all on this screen.
   await expect(welcome.getByTestId("quick-start")).toBeVisible();
+  await expect(welcome.getByLabel("Its brain")).toHaveValue("anthropic");
+  await expect(welcome.getByTestId("sign-in-start")).toHaveText("Sign in with Claude");
   await shot(page, "31-welcome");
   // A chat needs a kitty, and a kitty needs a model: each says so and leads to the next step.
   await page.locator("aside").getByRole("button", { name: "New chat" }).click();
@@ -1028,6 +1177,8 @@ test("a model can think on a subscription: Claude through Claude Code, Copilot w
   );
   await form.getByRole("radio", { name: /Claude subscription/ }).click();
   const signIn = form.getByTestId("sign-in");
+  // Its own sign-in from the page, or the same command in a terminal.
+  await expect(signIn.getByTestId("sign-in-start")).toHaveText("Sign in with Claude");
   await expect(signIn).toContainText("claude auth login");
   await expect(page.getByLabel("Model")).toHaveValue("sonnet");
   await expect(form.getByLabel("API key")).toHaveCount(0);

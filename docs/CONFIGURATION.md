@@ -207,16 +207,19 @@ Keys come from the provider's usual variable (`OPENAI_API_KEY`, `ANTHROPIC_API_K
 
 ### A subscription instead of a key
 
-Under **Settings → Models**, a provider that has one offers *API key* or the subscription you
-already pay for:
+Under **Settings → Models**, and in the *Quick start* of the first run, a provider that has one
+offers *API key* or the subscription you already pay for. Every sign-in below works from a browser
+on another machine too (the local network, a public address, a phone): none of them needs the
+browser to reach the gateway back.
 
 | Subscription | How it signs in | Saved as |
 | --- | --- | --- |
-| Claude (Pro, Max) | Anthropic only allows it through Claude Code: install it, run `claude auth login` once, and Kitties runs the `claude` program for each answer (tools as text, no API key passed to it) | `kind: claude-code` |
+| Claude (Pro, Max) | Anthropic only allows it through Claude Code, installed where the gateway runs. *Sign in with Claude* runs its own `claude auth login`: open the link, sign in on claude.com and paste back the code it shows (or run `claude auth login` in a terminal). Kitties runs the `claude` program for each answer (tools as text, no API key passed to it) and never sees nor keeps the login | `kind: claude-code` |
 | ChatGPT (Plus, Pro, Business) | *Sign in with ChatGPT* in the browser; the callback lands on `localhost:1455`, or paste its address back when the gateway runs elsewhere | `kind: codex, auth: login` |
 | GitHub Copilot | a code typed on github.com/login/device | `kind: copilot, auth: login` |
 | Google (Gemini) | the login of gcloud (`gcloud auth application-default login`) and a Cloud project | `kind: gemini, auth: login` |
 | Qwen | ended by Qwen on 2026-04-15: a DashScope key is the way in | — |
+| Ollama Cloud, Cursor | no sign-in for other apps: Ollama Cloud takes a key from ollama.com/settings/keys (`kind: ollama-cloud`); Cursor has no API to think with | — |
 
 The tokens are kept in `data_dir/accounts` (one file per account, readable by you only) and
 renewed before they expire.

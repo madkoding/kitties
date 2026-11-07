@@ -269,6 +269,8 @@ export interface Account {
   who?: string;
   available: boolean;
   note?: string;
+  // missing is true when the program the sign-in runs is not installed (claude).
+  missing?: boolean;
 }
 
 // LoginFlow is a sign-in in progress: open url (and type code), or paste back where the browser

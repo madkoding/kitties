@@ -14,8 +14,9 @@
 
 Kitties is a Go framework for running **NNN bots** at once. Every kitty has a **soul** (a
 personality, yours to shape), a **brain** (the AI provider you pick for it: OpenAI, Anthropic,
-Gemini, Ollama, Groq, OpenRouter, DeepSeek, Qwen, Mistral, Copilot or any OpenAI-compatible server,
-with an API key or a subscription) and a **body**: its own Docker container with a headless
+Gemini, Ollama, Ollama Cloud, Groq, OpenRouter, DeepSeek, Qwen, Mistral, Copilot or any
+OpenAI-compatible server, with an API key or a subscription you sign in to from the browser: Claude,
+ChatGPT, Copilot) and a **body**: its own Docker container with a headless
 desktop, a browser and the usual tools, so it can work on graphical applications without touching
 your machine. Talk to one kitty, or open a group chat and let several work on the same thread.
 Everything goes through one **gateway** (an HTTP API with a web page), driven by the `kitties` CLI,

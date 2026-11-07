@@ -304,6 +304,15 @@ const dict: Dictionary = {
   "how to install ↗": "como instalar ↗",
   "Sign it in once, in a terminal:": "Entre uma vez, em um terminal:",
   "Looking…": "Procurando…",
+  "Install Claude Code on the computer that runs Kitties:":
+    "Instale o Claude Code no computador onde o Kitties roda:",
+  "Once you sign in, claude.com shows a code: copy it and paste it here.":
+    "Quando você entrar, o claude.com mostra um código: copie e cole aqui.",
+  "Code from claude.com": "Código do claude.com",
+  "Sign in on claude.com in the tab that opened.": "Entre no claude.com na aba que se abriu.",
+  "It is signed in to your Claude account.": "Está conectado à sua conta do Claude.",
+  "Or sign it in yourself, in a terminal where Kitties runs:":
+    "Ou entre você mesmo, num terminal onde o Kitties roda:",
   "Done: find Claude Code": "Pronto: procurar o Claude Code",
   "Install gcloud:": "Instale o gcloud:",
   "Google Cloud project ID": "ID do projeto do Google Cloud",

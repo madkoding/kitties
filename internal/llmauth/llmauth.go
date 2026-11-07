@@ -6,8 +6,9 @@
 //     pasted back); the plan pays, through the ChatGPT backend.
 //   - copilot:     GitHub's device flow, then Copilot's session token.
 //   - gemini:      the Google login of gcloud (application default credentials).
-//   - claude-code: nothing is kept: the claude program holds its own login (`claude auth login`),
-//     the only way Anthropic allows a Claude subscription.
+//   - claude-code: the claude program's own `claude auth login`, run by kitties: the person opens
+//     its link and pastes back the code claude.com shows. Nothing is kept here: the program holds
+//     its own login, the only way Anthropic allows a Claude subscription.
 //   - qwen:        ended by Qwen on 2026-04-15; a DashScope key is the way in.
 package llmauth
 
@@ -163,6 +164,9 @@ type Manager struct {
 	listen     func(addr string) (net.Listener, error)
 	adcPath    func() string
 	findClaude func() (string, error)
+	// claudeLogin starts the claude program's sign-in (tests answer without it).
+	claudeLogin func(ctx context.Context, bin string) (claudeLogin, error)
+	claude      claudeCache
 	// pollEvery overrides a device flow's interval (tests).
 	pollEvery time.Duration
 
@@ -177,7 +181,7 @@ func New(dir string) *Manager {
 	return &Manager{
 		store: NewStore(dir), ep: Production, httpDo: (&http.Client{Timeout: 30 * time.Second}).Do,
 		now: time.Now, listen: func(addr string) (net.Listener, error) { return net.Listen("tcp", addr) },
-		adcPath: adcPath, findClaude: provider.FindClaude, flows: map[string]*flow{},
+		adcPath: adcPath, findClaude: provider.FindClaude, claudeLogin: startClaudeLogin, flows: map[string]*flow{},
 	}
 }
 
@@ -189,6 +193,8 @@ type Account struct {
 	// Available is false when the sign-in cannot be used (Qwen's ended).
 	Available bool   `json:"available"`
 	Note      string `json:"note,omitempty"`
+	// Missing is true when the program the sign-in runs is not installed (claude).
+	Missing bool `json:"missing,omitempty"`
 }
 
 // Accounts lists every kind that signs in with an account.
@@ -199,10 +205,11 @@ func (m *Manager) Accounts() []Account {
 		switch k {
 		case "claude-code":
 			if p, err := m.findClaude(); err == nil {
-				a.SignedIn, a.Who = true, p
+				a.Who = p
+				a.SignedIn, _ = m.claudeStatus(p)
 				a.Note = "uses the login of the claude program (claude auth login)"
 			} else {
-				a.Note = ErrNoClaudeText
+				a.Note, a.Missing = ErrNoClaudeText, true
 			}
 		case "qwen":
 			a.Available, a.Note = false, ErrQwenUnavailable.Error()
@@ -366,11 +373,7 @@ func (m *Manager) Start(kind string, opts StartOptions) (Flow, error) {
 	case "gemini":
 		return m.startGoogle(opts)
 	case "claude-code":
-		p, err := m.findClaude()
-		if err != nil {
-			return Flow{}, err
-		}
-		return Flow{ID: randomText(12), Kind: kind, Method: "instant", Status: Connected, Who: p}, nil
+		return m.startClaude()
 	case "qwen":
 		return Flow{}, ErrQwenUnavailable
 	}
@@ -432,6 +435,11 @@ func (m *Manager) prune() {
 // track registers a pending flow and runs it; run's credential is saved and the flow ends.
 func (m *Manager) track(f Flow, paste chan string, run func(ctx context.Context) (Credential, error)) Flow {
 	ctx, cancel := context.WithTimeout(context.Background(), flowTTL)
+	return m.trackWith(ctx, cancel, f, paste, run)
+}
+
+// trackWith is track over a context the flow already started with (a program it runs).
+func (m *Manager) trackWith(ctx context.Context, cancel context.CancelFunc, f Flow, paste chan string, run func(ctx context.Context) (Credential, error)) Flow {
 	f.ID, f.Status = randomText(12), Pending
 	fl := &flow{Flow: f, started: m.now(), cancel: cancel, paste: paste}
 	m.mu.Lock()
@@ -442,7 +450,8 @@ func (m *Manager) track(f Flow, paste chan string, run func(ctx context.Context)
 	go func() {
 		defer cancel()
 		c, err := run(ctx)
-		if err == nil {
+		// claude keeps its own login: there is nothing to save for it.
+		if err == nil && c.Kind != "claude-code" {
 			c.UpdatedAt = m.now()
 			err = m.store.Save(c)
 		}
