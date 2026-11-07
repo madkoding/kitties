@@ -422,6 +422,7 @@ export interface ProviderInfo {
 interface WailsApp {
   Request(method: string, path: string, body: string): Promise<string>;
   Gateway(): Promise<{ url: string; token: string }>;
+  SignInQR(base: string): Promise<string>;
   GatewayNote(): Promise<string>;
   Connect(url: string, token: string): Promise<string>;
 }
@@ -782,6 +783,9 @@ export const api = {
   exposure: () => request<Exposure>("GET", "/v1/exposure"),
   setExposure: (mode: ExposureMode, acceptRisk = false) =>
     request<{ restarting: boolean }>("PUT", "/v1/exposure", { mode, accept_risk: acceptRisk }),
+  // rotateToken replaces the gateway's token and restarts it: everyone signed in with the old
+  // one is signed out.
+  rotateToken: () => request<{ restarting: boolean }>("POST", "/v1/token/rotate"),
   // mcp is the MCP connector for Claude; setMcp keeps the switches and the gateway restarts
   // (exec and approve need acceptRisk); mcpToken is the explicit way to read its token;
   // rotateMcpToken replaces it (and restarts); the clients are the OAuth sign-ins, revocable.
@@ -1268,6 +1272,8 @@ export type Exposure = {
   lan_ip?: string;
   can_change: boolean;
   why?: string;
+  token_rotate?: boolean;
+  token_why?: string;
 };
 
 // McpInfo is the MCP connector (docs/MCP.md) as Settings shows it. It never carries the token:

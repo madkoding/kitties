@@ -188,7 +188,64 @@ export default function Exposure() {
       {inWails() && (
         <InBrowser
           addr={cur.mode === "lan" && cur.lan_ip ? `${cur.lan_ip}:${port}` : `127.0.0.1:${port}`}
+          phone={cur.mode !== "local" && cur.lan_ip ? `${cur.lan_ip}:${port}` : ""}
         />
+      )}
+      <RotateToken info={cur} />
+    </div>
+  );
+}
+
+// RotateToken replaces the gateway's token, for when it got out: every browser and program that
+// used the old one is signed out. The new one is shown only where the old one was: the console
+// that started the gateway, its token file and this app on that machine.
+function RotateToken({ info }: { info: ExposureInfo }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  if (!info.token_rotate) {
+    return info.token_why ? (
+      <p class="text-xs text-[var(--t4)] mt-3" data-testid="token-fixed">
+        {info.token_why}
+      </p>
+    ) : null;
+  }
+  const rotate = async () => {
+    const yes = await ask(
+      inWails()
+        ? t(
+            "Make a new token? Every browser and program that uses the old one is signed out; this app takes the new one by itself.",
+          )
+        : t(
+            "Make a new token? Every browser and program that uses the old one is signed out, this page too. The new one is shown in the console where Kitties runs (or with kitties token) and in the desktop app.",
+          ),
+      t("Make a new token"),
+    );
+    if (!yes) {
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      await api.rotateToken();
+      // The gateway restarts with it: load again, which signs this page in again or asks.
+      setTimeout(() => location.reload(), 2500);
+    } catch (e) {
+      setErr(errText(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <div class="mt-4" data-testid="rotate-token">
+      <button class="btn-ghost px-3 py-1.5 text-sm" disabled={busy} onClick={rotate}>
+        {busy ? t("Restarting Kitties…") : t("Make a new token")}
+      </button>
+      <p class="text-xs text-[var(--t4)] mt-1">
+        {t("If the token got out, a new one signs everybody out.")}
+      </p>
+      {err && (
+        <p class="text-sm text-[var(--c-red)] mt-2" role="alert">
+          {err}
+        </p>
       )}
     </div>
   );
@@ -197,16 +254,28 @@ export default function Exposure() {
 // InBrowser is how the person who runs the app uses Kitties from a browser too: the same page,
 // at the gateway's address, signed in with its token. Only the app shows the token (it runs on
 // the machine the gateway runs on); a browser never gets it from the gateway.
-function InBrowser({ addr }: { addr: string }) {
+function InBrowser({ addr, phone }: { addr: string; phone: string }) {
   const [token, setToken] = useState("");
   const [shown, setShown] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [qr, setQr] = useState("");
   useEffect(() => {
     window.go?.main?.App?.Gateway()
       .then((c) => setToken(c.token))
       .catch(() => setToken(""));
   }, []);
+  useEffect(() => {
+    if (!phone || !token) {
+      setQr("");
+      return;
+    }
+    window.go?.main?.App?.SignInQR(`http://${phone}`)
+      .then(setQr)
+      .catch(() => setQr(""));
+  }, [phone, token]);
   const url = `http://${addr}`;
+  // Opened from here it signs in by itself: the token rides after the #, which no server sees.
+  const signedIn = token ? `${url}/#signin=${encodeURIComponent(token)}` : url;
   const copy = async () => {
     try {
       await navigator.clipboard.writeText(token);
@@ -226,7 +295,7 @@ function InBrowser({ addr }: { addr: string }) {
         <code class="font-mono text-xs">{url}</code>
         <button
           class="btn-ghost px-2 py-1 text-xs"
-          onClick={() => openExternal(url)}
+          onClick={() => openExternal(signedIn)}
           data-testid="in-browser-open"
         >
           {t("Open in the browser")}
@@ -245,6 +314,24 @@ function InBrowser({ addr }: { addr: string }) {
             {copied ? t("Copied") : t("Copy")}
           </button>
         </div>
+      )}
+      {qr ? (
+        <div class="flex items-center gap-3 mt-3" data-testid="in-browser-qr">
+          <img
+            src={qr}
+            alt={t("QR code to open Kitties on a phone")}
+            class="w-32 h-32 rounded bg-white p-1"
+          />
+          <p class="text-xs text-[var(--t3)]">
+            {t(
+              "On a phone in the same network, point the camera here: Kitties opens signed in. Anyone who sees this code can get in.",
+            )}
+          </p>
+        </div>
+      ) : (
+        <p class="text-xs text-[var(--t4)] mt-2">
+          {t("To open it from a phone with a QR code, choose LAN above.")}
+        </p>
       )}
       <p class="text-xs text-[var(--t4)] mt-2">
         {t("Keep the token to yourself: it is the only password of the page.")}

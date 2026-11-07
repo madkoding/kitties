@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"os"
+	"path/filepath"
 
 	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/gateway"
@@ -14,10 +15,13 @@ import (
 type exposure struct {
 	dataDir string
 	listen  string
+	// tokenFixed: the token comes from the configuration or KITTIES_TOKEN, which a new file
+	// would not replace.
+	tokenFixed bool
 }
 
 func exposureOf(cfg config.Config, listen string) *exposure {
-	return &exposure{dataDir: cfg.DataDirOr(), listen: listen}
+	return &exposure{dataDir: cfg.DataDirOr(), listen: listen, tokenFixed: cfg.Gateway.Token != ""}
 }
 
 func (e *exposure) Exposure() gateway.ExposureInfo {
@@ -25,6 +29,10 @@ func (e *exposure) Exposure() gateway.ExposureInfo {
 	if _, err := os.Stat("/.dockerenv"); err == nil || os.Getenv("KITTIES_IN_DOCKER") != "" {
 		info.CanChange = false
 		info.Why = "this gateway runs in a container: set KITTIES_LISTEN and the published port in the compose file"
+	}
+	info.TokenRotate = !e.tokenFixed
+	if e.tokenFixed {
+		info.TokenWhy = "the token is set in the configuration (gateway.token or KITTIES_TOKEN): change it there and restart"
 	}
 	return info
 }
@@ -41,6 +49,18 @@ func (e *exposure) SetExposure(mode string) error {
 		return err
 	}
 	return config.SaveExposure(e.dataDir, mode)
+}
+
+// RotateGatewayToken writes a new token where the gateway reads it; the restart that follows
+// signs every browser and program that used the old one out.
+func (e *exposure) RotateGatewayToken() error {
+	if e.tokenFixed {
+		return errors.New(e.Exposure().TokenWhy)
+	}
+	if err := os.MkdirAll(e.dataDir, 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(e.dataDir, "gateway.token"), []byte(gateway.NewToken()+"\n"), 0o600)
 }
 
 func (e *exposure) Relaunch() error { return relaunch() }
