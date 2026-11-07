@@ -2,6 +2,8 @@ package main
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/madkoding/kitties/internal/config"
@@ -69,5 +71,41 @@ func TestRotateGatewayToken(t *testing.T) {
 	}
 	if err := fixed.RotateGatewayToken(); err == nil {
 		t.Error("a configured token was rotated")
+	}
+}
+
+func TestFirstStartListensOnTheLAN(t *testing.T) {
+	withRuntime(t, false)
+	t.Setenv("KITTIES_IN_DOCKER", "")
+	if inContainer() {
+		t.Skip("running in a container: the compose file decides where it listens")
+	}
+	old := lanIP
+	t.Cleanup(func() { lanIP = old })
+	// Another loopback address stands in for the network one: the test opens nothing.
+	lanIP = func() string { return "127.0.0.2" }
+	dir := t.TempDir()
+	t.Setenv("HOME", filepath.Join(dir, "home"))
+	t.Setenv("KITTIES_CONFIG", "")
+	t.Setenv("KITTIES_LISTEN", "")
+	t.Setenv("KITTIES_DATA_DIR", filepath.Join(dir, "data"))
+	wd, _ := os.Getwd()
+	_ = os.Chdir(dir)
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+	addr, out, _, stop := serve(t, "gateway")
+	stop()
+	if addr != "127.0.0.2:7488" || !strings.Contains(out.String(), "First start: Kitties listens on your local network (http://127.0.0.2:7488)") {
+		t.Errorf("first start on %s:\n%s", addr, out.String())
+	}
+	data := filepath.Join(dir, "data")
+	if config.SavedExposure(data) != config.ExposureLAN || !config.ExposureAuto(data) {
+		t.Error("the first start's exposure is not kept as automatic")
+	}
+	e := exposureOf(config.Config{DataDir: data}, "192.168.1.20:7488")
+	if info := e.Exposure(); info.Mode != config.ExposureLAN || !info.Auto {
+		t.Errorf("Settings sees %+v", info)
+	}
+	if err := e.SetExposure(config.ExposureLocal); err != nil || config.ExposureAuto(data) {
+		t.Errorf("going back to local: %v", err)
 	}
 }

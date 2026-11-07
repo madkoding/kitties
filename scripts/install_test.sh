@@ -38,9 +38,17 @@ run --pubkey "$pub" >/dev/null 2>&1 && fail "tampered binary accepted"
 mkdir -p "$work/stub" "$work/caddy"
 printf '#!/bin/sh\n[ "$1" = status ] && echo "Status: ${FAKE_UFW:-inactive}"\nexit 0\n' > "$work/stub/ufw"
 printf '#!/bin/sh\nexit 0\n' > "$work/stub/caddy"
-chmod +x "$work/stub/ufw" "$work/stub/caddy"
+# This machine's address in the local network (hostname -I), the same everywhere the test runs.
+printf '#!/bin/sh\n[ "$1" = -I ] && echo "${FAKE_IP-192.168.1.20} fe80::1"\nexit 0\n' > "$work/stub/hostname"
+printf '#!/bin/sh\nexit 0\n' > "$work/stub/ip"
+chmod +x "$work/stub/ufw" "$work/stub/caddy" "$work/stub/hostname" "$work/stub/ip"
 ask() { printf '%b' "$1" > "$work/answers"; PATH="$work/stub:$PATH" KITTIES_CADDY_DIR="$work/caddy" KITTIES_LANG=en KITTIES_CONF_DIR="$work/none" KITTIES_TTY="$work/answers" sh scripts/install.sh --dry-run --lang "${LANG_T:-en}" > "$work/ask.out" 2>&1 || true; }
-ask '\n\n\ny\n'; grep -q "LISTEN=127.0.0.1:7488 PUBLIC_URL= " "$work/ask.out" || fail "defaults are not local-only"
+# The local network is the default where there is one (to set it up from another computer).
+ask '\n\n\ny\n'; grep -q "LISTEN=192.168.1.20:7488 PUBLIC_URL= .*AUTO_LAN=1" "$work/ask.out" || fail "defaults are not the LAN"
+grep -q "Choose 1-3 \[2\]" "$work/ask.out" || fail "the LAN is not offered as the default"
+ask '\n1\n\n\ny\n'; grep -q "LISTEN=127.0.0.1:7488 .*AUTO_LAN=0" "$work/ask.out" || fail "choosing local"
+ask '\n2\n\n\ny\n'; grep -q "LISTEN=192.168.1.20:7488 .*AUTO_LAN=0" "$work/ask.out" || fail "choosing the LAN is the person's own"
+FAKE_IP='' ask '\n\n\n\ny\n'; grep -q "LISTEN=127.0.0.1:7488 .*AUTO_LAN=0" "$work/ask.out" && grep -q "Choose 1-3 \[1\]" "$work/ask.out" || fail "without a LAN, local is the default"
 ask '9000\n3\ny\nhttps://k.example.com\ny\n'; grep -q "LISTEN=0.0.0.0:9000 PUBLIC_URL=https://k.example.com" "$work/ask.out" || fail "0.0.0.0 answers"
 ask '\n3\nn\n1\n\ny\n'; grep -q "LISTEN=127.0.0.1:7488" "$work/ask.out" || fail "declining 0.0.0.0 must fall back"
 ask '\n3\n'; grep -q "EVERY network interface" "$work/ask.out" || fail "no 0.0.0.0 warning"
@@ -50,7 +58,8 @@ ask '\n\n\n\nn\n'; grep -q "cancelled" "$work/ask.out" || fail "no cancel on a r
 export FAKE_UFW=active
 ask '\n3\ny\n\ny\n4\ny\n'; grep -q "FIREWALL=1" "$work/ask.out" || fail "firewall answer"
 ask '\n3\ny\n\n\n4\ny\n'; grep -q "FIREWALL=0" "$work/ask.out" || fail "0.0.0.0 must default to not opening the firewall"
-ask '\n\n\n4\ny\n'; grep -q "FIREWALL=0" "$work/ask.out" && ! grep -q "ufw is active" "$work/ask.out" || fail "loopback must not ask about the firewall"
+ask '\n1\n\n4\ny\n'; grep -q "FIREWALL=0" "$work/ask.out" && ! grep -q "ufw is active" "$work/ask.out" || fail "loopback must not ask about the firewall"
+ask '\n\n\n\n4\ny\n'; grep -q "FIREWALL=1" "$work/ask.out" && grep -q "ufw is active" "$work/ask.out" || fail "the default LAN must offer to open the firewall"
 FAKE_UFW=inactive
 ask '\n3\ny\n\n4\ny\n'; ! grep -q "ufw is active" "$work/ask.out" || fail "asked about an inactive firewall"
 # https with Caddy: asked only when Caddy imports conf.d; the key is hidden and never printed
@@ -59,7 +68,7 @@ printf 'import conf.d/*\n' > "$work/caddy/Caddyfile"
 ask '\n\nhttps://k.example.com\ny\n1\nsk-secret123\ny\n'
 grep -q "CADDY=1 KEY=ANTHROPIC_API_KEY" "$work/ask.out" || fail "caddy and key answers"
 ! grep -q "sk-secret123" "$work/ask.out" || fail "the key was printed"
-ask '\n\n\n1\nbad key"\ny\n'; grep -q "KEY=$" "$work/ask.out" || fail "a key with spaces/quotes must be refused"
+ask '\n\n\n1\nbad key"\ny\n'; grep -q "KEY= AUTO_LAN" "$work/ask.out" || fail "a key with spaces/quotes must be refused"
 LANG_T=es ask '\n\n\n4\ny\n'; grep -q "Instalador de Kitties" "$work/ask.out" || fail "Spanish messages"
 KITTIES_LANG=en KITTIES_CONF_DIR="$work/none" sh scripts/install.sh --dry-run --yes --open-firewall --caddy --public-url https://k.example.com > "$work/ask.out" 2>&1; grep -q "FIREWALL=1 CADDY=1" "$work/ask.out" || fail "--open-firewall --caddy"
 # flags skip the question they answer, --yes asks nothing
@@ -70,6 +79,13 @@ done
 grep -q "EVERY network interface" "$work/ask.out" || fail "--expose wan must warn"
 KITTIES_LANG=en KITTIES_CONF_DIR="$work/none" KITTIES_TTY="$work/nonexistent" sh scripts/install.sh --dry-run --yes --expose moon > "$work/ask.out" 2>&1 && fail "--expose moon must fail"
 KITTIES_LANG=es KITTIES_CONF_DIR="$work/none" KITTIES_TTY="$work/nonexistent" sh scripts/install.sh --dry-run > "$work/ask.out" 2>&1; grep -q "dry run" "$work/ask.out" || fail "no terminal: must not ask"
+# asked nothing: the LAN where there is one (with the firewall warned about), never with a public URL
+yes_lan() { PATH="$work/stub:$PATH" KITTIES_LANG=en KITTIES_CONF_DIR="$work/none" KITTIES_TTY="$work/nonexistent" sh scripts/install.sh --dry-run --yes "$@" > "$work/ask.out" 2>&1; }
+FAKE_UFW=active yes_lan; grep -q "LISTEN=192.168.1.20:7488 .*AUTO_LAN=1" "$work/ask.out" && grep -q "set it up from another computer" "$work/ask.out" && grep -q "ufw is active: other computers" "$work/ask.out" || fail "--yes defaults to the LAN"
+FAKE_UFW=active yes_lan --open-firewall; ! grep -q "ufw is active: other computers" "$work/ask.out" || fail "--open-firewall still warned"
+FAKE_IP='' yes_lan; grep -q "LISTEN=127.0.0.1:7488 .*AUTO_LAN=0" "$work/ask.out" || fail "--yes without a LAN"
+yes_lan --public-url https://k.example.com; grep -q "LISTEN=127.0.0.1:7488 .*AUTO_LAN=0" "$work/ask.out" || fail "a public URL keeps it local"
+yes_lan --expose local; grep -q "LISTEN=127.0.0.1:7488 .*AUTO_LAN=0" "$work/ask.out" || fail "--expose local"
 
 # the unit written by the installer is the shipped one (path and user substituted)
 sed -n '/^cat > "\$UNIT.new" <<UNITEOF$/,/^UNITEOF$/p' scripts/install.sh | sed '1d;$d' \

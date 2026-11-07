@@ -579,6 +579,15 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 			return err
 		}
 	}
+	firstLAN := ""
+	if *listen == "" && !inContainer() {
+		// A gateway that never ran opens to the local network, behind its token, so it can be set
+		// up from another computer; Settings takes it back to this machine alone.
+		var err error
+		if firstLAN, err = a.cfg.FirstStartLAN(lanIP()); err != nil {
+			fmt.Fprintf(a.err, "kitties: could not open the first start to the local network: %v\n", err)
+		}
+	}
 	if err := a.fleet.Bootstrap(ctx); err != nil {
 		fmt.Fprintf(a.err, "kitties: some kitties did not start: %v\n", err)
 	}
@@ -594,6 +603,9 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 		}
 	}
 	printWelcome(a.out, version, a.cfg.Gateway.Listen, a.cfg.Gateway.PublicURL, a.cfg.Gateway.TLSCert != "", token, tokenPath)
+	if firstLAN != "" {
+		printFirstStartLAN(a.out, firstLAN)
+	}
 	for _, k := range a.fleet.List() {
 		fmt.Fprintf(a.out, "  %-16s %-8s %s\n", k.Name, k.Status, k.Provider)
 	}
