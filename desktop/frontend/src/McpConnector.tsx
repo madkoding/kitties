@@ -1,6 +1,6 @@
 import { useEffect, useState } from "preact/hooks";
-import type { McpClient, McpInfo, McpSettings } from "./api";
-import { api, errText } from "./api";
+import type { McpClient, McpConnect, McpInfo, McpSettings } from "./api";
+import { api, errText, MCP_TOKEN_PLACEHOLDER } from "./api";
 import { ask } from "./Confirm";
 import { t } from "./i18n";
 
@@ -8,12 +8,14 @@ import { t } from "./i18n";
 //
 // Shows whether Claude can run the fleet through /mcp, the three switches that widen what it may
 // do (exec, approve, OAuth), the `claude mcp add` line ready to copy and the remote clients that
-// signed in, each with a revoke button. The token is never drawn: the command reads it from its
-// file, and copying or rotating it are explicit buttons.
+// signed in, each with a revoke button. The connector answers wherever the gateway does (this
+// machine, the local network, the public address), and each address has its command. The token
+// is never drawn: on this machine the command reads it from its file; elsewhere it shows a
+// placeholder and *Copy command* puts the token in, like copying or rotating it, on request.
 
 const KEYS: (keyof McpSettings)[] = ["enabled", "allow_exec", "allow_approve", "oauth"];
 
-function pick(i: McpInfo): McpSettings {
+function settingsOf(i: McpInfo): McpSettings {
   return {
     enabled: i.enabled,
     allow_exec: i.allow_exec,
@@ -22,8 +24,30 @@ function pick(i: McpInfo): McpSettings {
   };
 }
 
+// connectOf is the connector's addresses; an older gateway gives only url and command.
+function connectOf(i: McpInfo): McpConnect[] {
+  if (i.connect && i.connect.length > 0) {
+    return i.connect;
+  }
+  return [{ where: "local", url: i.url, command: i.command }];
+}
+
+// firstChoice is the address this page was opened at, when it is one of them: the computer that
+// has the page open is the likeliest to have Claude Code too. Otherwise the first (best) one.
+function firstChoice(all: McpConnect[]): number {
+  const i = all.findIndex((c) => {
+    try {
+      return new URL(c.url).host === location.host;
+    } catch {
+      return false;
+    }
+  });
+  return i >= 0 ? i : 0;
+}
+
 export default function McpConnector() {
   const [cur, setCur] = useState<McpInfo | null>(null);
+  const [pick, setPick] = useState(0);
   const [want, setWant] = useState<McpSettings | null>(null);
   const [risk, setRisk] = useState(false);
   const [clients, setClients] = useState<McpClient[]>([]);
@@ -36,7 +60,8 @@ export default function McpConnector() {
       .mcp()
       .then((i) => {
         setCur(i);
-        setWant(pick(i));
+        setWant(settingsOf(i));
+        setPick(firstChoice(connectOf(i)));
         if (i.enabled && i.oauth) {
           api
             .mcpClients()
@@ -103,6 +128,30 @@ export default function McpConnector() {
       setNote(t("Copied: {what}.", { what }));
     } catch {
       setNote(t("This page cannot reach the clipboard: select the text and copy it by hand."));
+    }
+  };
+  const connect = connectOf(cur);
+  const chosen = connect[Math.min(pick, connect.length - 1)];
+  const where = {
+    local: t("This computer"),
+    lan: t("Local network"),
+    public: t("Public address"),
+  };
+  // copyCommand puts the token into a command that needs it: the person asked for it.
+  const copyCommand = async () => {
+    setErr("");
+    if (!chosen.with_token) {
+      await copy(chosen.command, t("the command"));
+      return;
+    }
+    try {
+      const { token } = await api.mcpToken();
+      await copy(
+        chosen.command.split(MCP_TOKEN_PLACEHOLDER).join(token),
+        t("the command with the token"),
+      );
+    } catch (e) {
+      setErr(errText(e));
     }
   };
   const copyToken = async () => {
@@ -188,7 +237,9 @@ export default function McpConnector() {
     <div class="mt-6 pt-4 border-t border-white/5" data-testid="mcp">
       <div class="section-title !mx-0">{t("Claude (MCP)")}</div>
       <p class="text-xs text-[var(--t3)] mb-2">
-        {t("Let Claude run the fleet as an orchestrator. Off until you turn it on.")}
+        {t(
+          "Let Claude run the fleet as an orchestrator. It answers wherever Kitties does, behind a token of its own.",
+        )}
       </p>
       <div class="flex flex-col gap-2">
         {switches.map((s) => (
@@ -260,21 +311,49 @@ export default function McpConnector() {
       {cur.enabled && (
         <div class="mt-4" data-testid="mcp-connect">
           <div class="text-sm font-semibold">{t("Connect Claude Code")}</div>
+          {connect.length > 1 && (
+            <div class="flex flex-wrap gap-2 mb-2" role="radiogroup" data-testid="mcp-where">
+              {connect.map((c, i) => (
+                <button
+                  key={c.url}
+                  role="radio"
+                  aria-checked={c === chosen}
+                  class={`${c === chosen ? "btn-accent" : "btn-outline"} px-3 py-1 text-xs`}
+                  onClick={() => setPick(i)}
+                  data-testid={`mcp-where-${c.where}`}
+                  title={c.url}
+                >
+                  {where[c.where] || c.where}
+                </button>
+              ))}
+            </div>
+          )}
           <p class="text-xs text-[var(--t3)] mb-1">
-            {t(
-              "Run this where Claude Code is. It reads the token from its file; the token is not shown here.",
-            )}
+            {chosen.with_token
+              ? t(
+                  "Run this on the computer where Claude Code is. Copy command puts the token in; it is not shown here.",
+                )
+              : t(
+                  "Run this on this computer, where Claude Code is. It reads the token from its file; the token is not shown here.",
+                )}
           </p>
           <pre
             class="callout text-xs overflow-x-auto whitespace-pre-wrap break-all"
             data-testid="mcp-command"
           >
-            {cur.command}
+            {chosen.command}
           </pre>
+          {chosen.url.startsWith("http://") && chosen.where !== "local" && (
+            <p class="text-xs text-[var(--c-amber)] mt-1" data-testid="mcp-plain-http">
+              {t(
+                "Plain http: the token crosses the network unencrypted. Use it on a network you trust, or put https in front (public address).",
+              )}
+            </p>
+          )}
           <div class="flex flex-wrap gap-2 mt-2">
             <button
               class="btn-outline px-3 py-1.5 text-sm"
-              onClick={() => copy(cur.command, t("the command"))}
+              onClick={copyCommand}
               data-testid="mcp-copy"
             >
               {t("Copy command")}

@@ -319,7 +319,8 @@ func TestMCPToken(t *testing.T) {
 	dir := t.TempDir()
 	cfg := config.Defaults()
 	cfg.DataDir = dir
-	// Off by default: no token, nothing written.
+	// Turned off: no token, nothing written.
+	cfg.Gateway.MCP.Enabled = false
 	if tok, _, err := mcpToken(cfg); tok != "" || err != nil {
 		t.Fatalf("off: %q %v", tok, err)
 	}
