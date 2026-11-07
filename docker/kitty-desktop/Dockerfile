@@ -113,7 +113,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GTK_THEME=Adwaita:dark \
     SAL_USE_VCLPLUGIN=gtk3
 
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# `upgrade` first: the base tag lags behind Debian's security updates and `install` leaves
+# packages already in it (zlib1g, ...) at the old version, which the image scan flags.
+# APT_REFRESH (the CI passes the ISO week) makes this layer miss the build cache once a week, so a
+# fix Debian publishes reaches the image even when nothing here changed.
+ARG APT_REFRESH=
+RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgrade -y \
+    && apt-get install -y --no-install-recommends \
         xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip picom \
         xterm sudo playerctl dbus-x11 pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
         libglib2.0-0 libxml2 libpango-1.0-0 libpangocairo-1.0-0 libpangoxft-1.0-0 libcairo2 libxft2 libxrandr2 libxinerama1 \

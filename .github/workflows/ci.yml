@@ -294,6 +294,8 @@ jobs:
           test -n "$sha"
           echo "lumen-wm main is $sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          # The ISO week: the image's apt layer is rebuilt once a week (see APT_REFRESH in the Dockerfile).
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       # The image is large (LibreOffice, Rust build of voxl): with BuildKit the layers live in the
       # builder as well as in the daemon, and the runner's disk ran out. Drop what the job does not use.
       - name: free disk space
@@ -310,7 +312,9 @@ jobs:
           context: docker/kitty-desktop
           load: true
           tags: kitty-desktop:ci
-          build-args: LUMEN_COMMIT=${{ steps.lumen.outputs.sha }}
+          build-args: |
+            LUMEN_COMMIT=${{ steps.lumen.outputs.sha }}
+            APT_REFRESH=${{ steps.lumen.outputs.week }}
           cache-from: type=gha,scope=kitty-desktop-amd64
           cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,mode=max,scope=kitty-desktop-amd64' || '' }}
       - name: the shelf's weather and player feeds, and its font
@@ -614,11 +618,15 @@ jobs:
           test -n "$sha"
           echo "lumen-wm main is $sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          # The ISO week: the image's apt layer is rebuilt once a week (see APT_REFRESH in the Dockerfile).
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: docker/kitty-desktop
           push: true
-          build-args: LUMEN_COMMIT=${{ steps.lumen.outputs.sha }}
+          build-args: |
+            LUMEN_COMMIT=${{ steps.lumen.outputs.sha }}
+            APT_REFRESH=${{ steps.lumen.outputs.week }}
           platforms: linux/${{ matrix.arch }}
           cache-from: type=gha,scope=kitty-desktop-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=kitty-desktop-${{ matrix.arch }}

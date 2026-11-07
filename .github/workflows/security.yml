@@ -121,6 +121,9 @@ jobs:
     name: ${{ matrix.image }} image · known vulnerabilities
     runs-on: ubuntu-24.04
     timeout-minutes: 30
+    permissions:
+      contents: read
+      security-events: write
     strategy:
       fail-fast: false
       matrix:
@@ -176,6 +179,7 @@ jobs:
           sha="$(git ls-remote https://github.com/madkoding/lumen-wm.git refs/heads/main | cut -f1)"
           test -n "$sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "week=$(date -u +%G-W%V)" >> "$GITHUB_OUTPUT"
       # The kitty-desktop image is large: BuildKit keeps its layers in the builder as well as in the
       # daemon, and trivy exports it once more, so the runner's disk ran out. Drop what the job does not use.
       - name: free disk space
@@ -195,12 +199,29 @@ jobs:
           load: true
           pull: true
           tags: scan:image
-          build-args: ${{ steps.lumen.outputs.sha != '' && format('LUMEN_COMMIT={0}', steps.lumen.outputs.sha) || '' }}
+          # Same arguments as the ci build, so the layers come from its cache (none for the gateway).
+          build-args: |
+            ${{ steps.lumen.outputs.sha != '' && format('LUMEN_COMMIT={0}', steps.lumen.outputs.sha) || '' }}
+            ${{ steps.lumen.outputs.week != '' && format('APT_REFRESH={0}', steps.lumen.outputs.week) || '' }}
           cache-from: type=gha,scope=${{ matrix.scope }}
       # The image is in the daemon now: the builder's copy of the layers and cache is not needed.
       - name: drop the builder's cache
         if: steps.scope.outputs.scan == 'true'
         run: docker buildx prune --all --force
+      # The same findings for the Security tab (code scanning), before the step that fails on them,
+      # so a red run's details are there without opening the log.
+      - name: report for code scanning
+        if: steps.scope.outputs.scan == 'true'
+        run: ./trivy image --skip-version-check --severity HIGH,CRITICAL --ignore-unfixed --exit-code 0 --format sarif --output trivy.sarif scan:image
+      # A fork's or Dependabot's pull request gets a read-only token: no upload there, the scan still runs.
+      - name: upload the report
+        if: >-
+          steps.scope.outputs.scan == 'true' && github.actor != 'dependabot[bot]' &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository)
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: trivy.sarif
+          category: image/${{ matrix.image }}
       - name: scan it
         if: steps.scope.outputs.scan == 'true'
         run: ./trivy image --skip-version-check --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 scan:image
