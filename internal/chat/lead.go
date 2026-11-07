@@ -1,10 +1,12 @@
 package chat
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/madkoding/kitties/internal/agenda"
+	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/notify"
 )
@@ -154,23 +156,31 @@ func (s *Service) LeadDigest(n notify.Notification) notify.Notification {
 	return n
 }
 
-// roundsHelp is what the lead's rounds tool says about itself.
-const roundsHelp = "Change how many rounds of actions another kitty may take on one task (its max_rounds): more for a long task " +
-	"you hand it, fewer to keep one short. 0 goes back to the default. The change lasts until it is changed again; " +
-	"say in your report that you made it."
+// taskLimitsHelp is what the lead's task_limits tool says about itself.
+var taskLimitsHelp = fmt.Sprintf("Change what another kitty may spend on one task: rounds of actions (max_rounds, up to %d), "+
+	"tokens (max_tokens, up to %d) and seconds (max_seconds, up to %d); 0 goes back to the default, a field left out stays. "+
+	"It lasts until changed again. To give a kitty more for one task only, pass the same fields to delegate instead. "+
+	"Say in your report that you changed it.", kitty.MaxRoundsCap, kitty.MaxTokensCap, kitty.MaxSecondsCap)
 
-// RoundsSetter changes a kitty's rounds per task; the orchestrator is one.
-type RoundsSetter interface {
-	SetRounds(ref string, rounds int) (*kitty.Kitty, error)
+// LimitsSetter changes a kitty's limits per task; the orchestrator is one.
+type LimitsSetter interface {
+	SetTaskLimits(ref string, t kitty.TaskLimits) (*kitty.Kitty, error)
 }
 
-// canSetRounds reports whether k may change the others' rounds: only the lead, on a fleet that
+// LeadLimitsConnector names, in the approvals, a change of limits the lead asked for.
+const LeadLimitsConnector = "kitties"
+
+// SetLeadLimitsAsk makes every change of limits the lead asks for wait for the person's yes
+// while fn says so (autonomy.lead_limits: ask).
+func (s *Service) SetLeadLimitsAsk(fn func() bool) { s.leadLimitsAsk = fn }
+
+// canSetLimits reports whether k may change the others' limits: only the lead, on a fleet that
 // can change them, with another kitty to change.
-func (s *Service) canSetRounds(k *kitty.Kitty) bool {
+func (s *Service) canSetLimits(k *kitty.Kitty) bool {
 	if k == nil || !k.Lead {
 		return false
 	}
-	if _, ok := s.fleet.(RoundsSetter); !ok {
+	if _, ok := s.fleet.(LimitsSetter); !ok {
 		return false
 	}
 	for _, other := range s.fleet.List() {
@@ -181,54 +191,140 @@ func (s *Service) canSetRounds(k *kitty.Kitty) bool {
 	return false
 }
 
-// runRounds is the lead changing another kitty's rounds per task. Only the lead may, within
-// kitty.MaxRoundsCap; the change goes to both journals and to the lead's Reports thread.
-func (s *Service) runRounds(id string, a action, k *kitty.Kitty) outcome {
-	if !k.Lead {
-		return outcome{action: a, err: "only the lead kitty changes the others' rounds"}
+// taskLimitsArg reads the change of limits from an action's arguments.
+func taskLimitsArg(args map[string]any) kitty.TaskLimits {
+	var t kitty.TaskLimits
+	if n, ok := intArg(args, "max_rounds", "rounds"); ok {
+		t.MaxRounds = &n
 	}
-	setter, ok := s.fleet.(RoundsSetter)
-	if !ok {
-		return outcome{action: a, err: "rounds cannot be changed here"}
+	if n, ok := intArg(args, "max_tokens", "tokens"); ok {
+		t.MaxTokens = &n
+	}
+	if n, ok := intArg(args, "max_seconds", "seconds"); ok {
+		t.MaxSeconds = &n
+	}
+	return t
+}
+
+// runTaskLimits is the lead changing another kitty's limits per task. Only the lead may, within
+// the caps; the change goes to both journals and to the lead's Reports thread, or waits for the
+// person's yes when they asked for that.
+func (s *Service) runTaskLimits(id string, a action, k *kitty.Kitty, turn *Turn) outcome {
+	if !k.Lead {
+		return outcome{action: a, err: "only the lead kitty changes the others' limits"}
+	}
+	if _, ok := s.fleet.(LimitsSetter); !ok {
+		return outcome{action: a, err: "limits cannot be changed here"}
 	}
 	name := strings.TrimSpace(a.name)
 	if name == "" {
 		name = argText(a.args, "kitty")
 	}
 	if name == "" {
-		return outcome{action: a, err: "say which kitty: @rounds <name> {\"max_rounds\": 40}"}
+		return outcome{action: a, err: "say which kitty: @task_limits <name> {\"max_rounds\": 120}"}
 	}
 	target, err := s.fleet.Get(name)
 	if err != nil {
 		return outcome{action: a, err: "no such kitty " + name}
 	}
 	if target.ID == k.ID {
-		return outcome{action: a, err: "the lead changes the others' rounds, not its own; the person sets yours"}
+		return outcome{action: a, err: "the lead changes the others' limits, not its own; the person sets yours"}
 	}
-	n, ok := intArg(a.args, "max_rounds", "rounds")
-	if !ok {
-		return outcome{action: a, err: fmt.Sprintf("say how many: {\"max_rounds\": 1 to %d, or 0 for the default}", kitty.MaxRoundsCap)}
+	t := taskLimitsArg(a.args)
+	if t.Empty() {
+		return outcome{action: a, err: "say what to change: max_rounds, max_tokens or max_seconds (0 for the default)"}
 	}
-	if n < 0 || n > kitty.MaxRoundsCap {
-		return outcome{action: a, err: fmt.Sprintf("rounds go from 1 to %d (0 for the default)", kitty.MaxRoundsCap)}
-	}
-	before := target.Limits.MaxRounds
-	if _, err := setter.SetRounds(target.ID, n); err != nil {
+	if err := t.Validate(); err != nil {
 		return outcome{action: a, err: err.Error()}
 	}
-	say := func(v int) string {
-		if v == 0 {
-			return "the default"
+	change := target.Name + "'s limits per task: " + t.Describe(target.Limits)
+	if s.approvals != nil && s.leadLimitsAsk != nil && s.leadLimitsAsk() {
+		args := map[string]any{"kitty": target.ID}
+		for key, v := range map[string]*int{"max_rounds": t.MaxRounds, "max_tokens": t.MaxTokens, "max_seconds": t.MaxSeconds} {
+			if v != nil {
+				args[key] = *v
+			}
 		}
-		return fmt.Sprint(v)
+		ap, err := s.approvals.Request(approvals.Approval{Kitty: k.ID, KittyName: k.Name, Connector: LeadLimitsConnector, Kind: "limits",
+			Action: "task_limits", Args: args, Summary: "change " + change, Risk: "always", Chat: id, Goal: s.goalOf(id)})
+		if err != nil {
+			return outcome{action: a, err: "could not hold the change for approval: " + err.Error()}
+		}
+		turn.Approvals = append(turn.Approvals, ApprovalRef{ID: ap.ID, Connector: LeadLimitsConnector, Action: "task_limits", Summary: "change " + change})
+		s.note(k, agenda.KindApproval, ap.Goal, id, "waiting for approval: change "+change)
+		s.tell(notify.Approval, k, "needs your approval", "change "+change, id)
+		return outcome{action: a, text: fmt.Sprintf("held: the person approves changes of limits first (request %s). Go on without it; the result appears in this thread once they decide.", ap.ID)}
 	}
-	line := fmt.Sprintf("%s set %s's rounds per task from %s to %s", k.Name, target.Name, say(before), say(n))
-	s.note(k, agenda.KindLimit, s.goalOf(id), id, line)
-	s.note(target, agenda.KindLimit, "", id, line)
-	if reports, err := s.ReportsChat(k); err == nil && reports != id {
-		s.appendTurn(reports, Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: line, Report: &Report{Event: "rounds", Chat: id}})
+	line, err := s.applyTaskLimits(k, target, t, id)
+	if err != nil {
+		return outcome{action: a, err: err.Error()}
 	}
 	return outcome{action: a, text: line + "."}
+}
+
+// applyTaskLimits makes a change of limits the lead asked for, and records it.
+func (s *Service) applyTaskLimits(lead, target *kitty.Kitty, t kitty.TaskLimits, chatID string) (string, error) {
+	setter, ok := s.fleet.(LimitsSetter)
+	if !ok {
+		return "", errors.New("limits cannot be changed here")
+	}
+	line := lead.Name + " changed " + target.Name + "'s limits per task: " + t.Describe(target.Limits)
+	if _, err := setter.SetTaskLimits(target.ID, t); err != nil {
+		return "", err
+	}
+	s.note(lead, agenda.KindLimit, s.goalOf(chatID), chatID, line)
+	s.note(target, agenda.KindLimit, "", chatID, line)
+	if reports, err := s.ReportsChat(lead); err == nil && reports != chatID {
+		s.appendTurn(reports, Turn{At: s.now(), From: lead.Name, Kitty: lead.ID, Text: line, Report: &Report{Event: "limits", Chat: chatID}})
+	}
+	return line, nil
+}
+
+// decideLeadLimits runs a change of limits the person approved.
+func (s *Service) decideLeadLimits(ap *approvals.Approval) (string, error) {
+	lead, err := s.fleet.Get(ap.Kitty)
+	if err != nil {
+		return "", err
+	}
+	ref, _ := ap.Args["kitty"].(string)
+	target, err := s.fleet.Get(ref)
+	if err != nil {
+		return "", err
+	}
+	t := taskLimitsArg(ap.Args)
+	if err := t.Validate(); err != nil {
+		return "", err
+	}
+	return s.applyTaskLimits(lead, target, t, ap.Chat)
+}
+
+// taskOverride is what one delegated task may spend beyond the kitty's own limits: the lead
+// passes it with delegate, and it lasts only while that task runs.
+func (s *Service) setTaskOverride(chatID string, t kitty.TaskLimits) func() {
+	s.mu.Lock()
+	if s.overrides == nil {
+		s.overrides = map[string]kitty.TaskLimits{}
+	}
+	s.overrides[chatID] = t
+	s.mu.Unlock()
+	return func() {
+		s.mu.Lock()
+		delete(s.overrides, chatID)
+		s.mu.Unlock()
+	}
+}
+
+// limitsFor are k's limits for a task in a thread: its own, with the one-task change the lead
+// made for that thread if any, over the defaults.
+func (s *Service) limitsFor(k *kitty.Kitty, chatID string) kitty.Limits {
+	s.mu.RLock()
+	t, ok := s.overrides[chatID]
+	s.mu.RUnlock()
+	l := k.Limits
+	if ok {
+		l = t.Apply(l)
+	}
+	return l.Or(s.DefaultLimits)
 }
 
 // intArg reads a whole number from the arguments, given as a number or as text.

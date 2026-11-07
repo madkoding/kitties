@@ -1851,6 +1851,7 @@ function AutonomyForm({
   const [followUps, setFollowUps] = useState(view.autonomy?.follow_ups || "");
   const [brainWait, setBrainWait] = useState(view.autonomy?.brain_wait || "");
   const [standIns, setStandIns] = useState(view.autonomy?.stand_ins || "");
+  const [leadAsk, setLeadAsk] = useState(view.autonomy?.lead_limits === "ask");
   const [msg, flash] = useFlash();
   const [err, setErr] = useState("");
   const save = async () => {
@@ -1861,6 +1862,7 @@ function AutonomyForm({
           follow_ups: followUps.trim(),
           brain_wait: brainWait.trim(),
           stand_ins: standIns.trim(),
+          lead_limits: leadAsk ? "ask" : "",
         }),
       );
       flash(t("Saved."));
@@ -1914,6 +1916,20 @@ function AutonomyForm({
       <p class={HELP}>
         {t(
           "When a kitty with no backup gives up, the free kitty most like it takes the task over, up to this many times a day. Write off to be asked instead.",
+        )}
+      </p>
+      <label class="flex items-center gap-2 mt-3 text-sm" for="auto-lead-limits">
+        <input
+          id="auto-lead-limits"
+          type="checkbox"
+          checked={leadAsk}
+          onChange={(e) => setLeadAsk((e.target as HTMLInputElement).checked)}
+        />
+        {t("Ask me before the lead kitty changes another's limits")}
+      </label>
+      <p class={HELP}>
+        {t(
+          "The lead may give a kitty more rounds, tokens or seconds per task (up to 500 rounds, 2M tokens, 2 hours). On: each lasting change waits in Approvals. What it gives for one task alone ends with the task.",
         )}
       </p>
       <div class="flex items-center gap-2 mt-4 flex-wrap">

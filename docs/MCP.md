@@ -126,7 +126,7 @@ signs in again.
 | `goal_list`, `goal_add`, `goal_run`, `goal_remove`, `kitty_journal` | goals on a schedule or event, run one now, read the journal |
 | `memory_list`, `memory_remember`, `memory_edit`, `memory_forget` | what a kitty knows about you and the work (the Memory panel), including the `shared` notes every kitty sees; a note written here is pinned |
 | `fleet_lead`, `fleet_lead_set`, `lead_ask` | the lead kitty and its Reports thread; make another the lead (or none); give the lead a task for the whole fleet and read its report ([the lead kitty](AUTONOMY.md#the-lead-kitty)) |
-| `kitty_set_rounds` | a kitty's rounds per task (1 to 500, 0 for the default), as its lead does |
+| `kitty_set_limits` | a kitty's rounds (1–500), tokens (1–2,000,000) and seconds (1–7,200) per task, 0 for the default, as its lead does |
 | `approval_list`, `approval_reject` | see and reject actions held for a yes |
 | `approval_approve` | say yes, this once, to a held action; **only with `allow_approve`** (by default approving stays with you) |
 

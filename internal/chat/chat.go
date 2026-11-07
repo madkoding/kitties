@@ -108,6 +108,8 @@ type Delegation struct {
 	Task    string `json:"task"`
 	Result  string `json:"result,omitempty"`
 	Error   string `json:"error,omitempty"`
+	// Limits says what the lead gave the kitty for this task alone, when it did.
+	Limits string `json:"limits,omitempty"`
 }
 
 // Step is one action on the desktop.
@@ -257,6 +259,10 @@ type Service struct {
 	CompactKeep  int
 	// pollEvery is how often a delegating kitty looks whether the other one finished.
 	pollEvery time.Duration
+	// overrides are the one-task changes of limits the lead passed with a delegation, by thread;
+	// leadLimitsAsk says whether the lead's changes of limits wait for the person (lead.go).
+	overrides     map[string]kitty.TaskLimits
+	leadLimitsAsk func() bool
 }
 
 // Reporter hears how a goal's run ended.
@@ -383,8 +389,8 @@ func parseDirectives(text string) ([]Directive, string) {
 			kind = "memory"
 		case strings.HasPrefix(trimmed, "@limit "):
 			kind = "limit"
-		case strings.HasPrefix(trimmed, "@rounds "):
-			kind = "rounds"
+		case strings.HasPrefix(trimmed, "@task_limits "):
+			kind = "task_limits"
 		default:
 			kept = append(kept, line)
 			continue
@@ -400,7 +406,7 @@ func parseDirectives(text string) ([]Directive, string) {
 					key = "task"
 				case "memory":
 					key = "text"
-				case "rounds":
+				case "task_limits":
 					key = "max_rounds"
 				}
 				d.Args[key] = strings.Trim(argsText, "\"' ")
@@ -1253,7 +1259,7 @@ type taskState struct {
 // many times as the limits allow, and a task given up on is handed to the backup kitty or
 // left with the person.
 func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Kitty, p *pendingTask) {
-	limits := k.Limits.Or(s.DefaultLimits)
+	limits := s.limitsFor(k, id)
 	if limits.MaxSeconds > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(limits.MaxSeconds)*time.Second)

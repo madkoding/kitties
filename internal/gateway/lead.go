@@ -113,30 +113,31 @@ func (s *Server) mcpLeadTools() []mcp.Tool {
 				}
 				return jsonResult(out)
 			}},
-		{Name: "kitty_set_rounds", Description: fmt.Sprintf("Change how many rounds of actions a kitty may take on one task (1 to %d; 0 goes back to the default), as its lead does.", kitty.MaxRoundsCap),
-			InputSchema: obj([]string{"ref", "max_rounds"}, map[string]any{"ref": str("the kitty's id or name"),
-				"max_rounds": map[string]any{"type": "integer", "description": "rounds per task; 0 for the default"}}),
+		{Name: "kitty_set_limits", Description: fmt.Sprintf("Change what a kitty may spend on one task, as its lead does: rounds (1 to %d), tokens (1 to %d), seconds (1 to %d); 0 goes back to the default, a field left out stays.", kitty.MaxRoundsCap, kitty.MaxTokensCap, kitty.MaxSecondsCap),
+			InputSchema: obj([]string{"ref"}, map[string]any{"ref": str("the kitty's id or name"),
+				"max_rounds":  map[string]any{"type": "integer", "description": "rounds per task; 0 for the default"},
+				"max_tokens":  map[string]any{"type": "integer", "description": "tokens per task; 0 for the default"},
+				"max_seconds": map[string]any{"type": "integer", "description": "seconds per task; 0 for the default"}}),
 			Annotations: mcp.Annotations{},
 			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
 				var a struct {
-					Ref       string `json:"ref"`
-					MaxRounds *int   `json:"max_rounds"`
+					Ref string `json:"ref"`
+					kitty.TaskLimits
 				}
 				if err := args(raw, &a); err != nil {
 					return mcp.Result{}, err
 				}
-				if a.MaxRounds == nil {
-					return mcp.Result{}, &mcp.ArgError{Msg: "max_rounds is required"}
+				if a.Empty() {
+					return mcp.Result{}, &mcp.ArgError{Msg: "say what to change: max_rounds, max_tokens or max_seconds"}
 				}
-				if *a.MaxRounds < 0 || *a.MaxRounds > kitty.MaxRoundsCap {
-					return mcp.Result{}, &mcp.ArgError{Msg: fmt.Sprintf("max_rounds goes from 1 to %d (0 for the default)", kitty.MaxRoundsCap)}
+				if err := a.Validate(); err != nil {
+					return mcp.Result{}, &mcp.ArgError{Msg: err.Error()}
 				}
 				k, err := s.fleet.Get(a.Ref)
 				if err != nil {
 					return mcp.Result{}, err
 				}
-				limits := k.Limits
-				limits.MaxRounds = *a.MaxRounds
+				limits := a.Apply(k.Limits)
 				k, err = s.fleet.Edit(k.ID, orchestrator.Update{Limits: &limits})
 				if err != nil {
 					return mcp.Result{}, err
