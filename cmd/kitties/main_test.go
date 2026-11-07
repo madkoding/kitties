@@ -120,8 +120,19 @@ func TestUsageVersionInit(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(filepath.Dir(path), "souls", "tom.yaml")); err != nil {
 		t.Error("init writes the sample soul")
 	}
-	if code, _, errOut := exec(t, "", "-config", path, "init"); code != 1 || !strings.Contains(errOut, "already exists") {
-		t.Error("init refuses to overwrite")
+	if code, out, _ := exec(t, "", "-config", path, "init"); code != 0 || !strings.Contains(out, "already exists") ||
+		!strings.Contains(out, "kitties config") || !strings.Contains(out, "init -force") {
+		t.Errorf("init does not overwrite, and says what to do: %d %s", code, out)
+	}
+	_ = os.WriteFile(path, []byte("# mine\n"), 0o600)
+	if code, out, _ := exec(t, "", "-config", path, "init", "-force"); code != 0 || !strings.Contains(out, ".bak") {
+		t.Errorf("init -force: %d %s", code, out)
+	}
+	if mustRead(t, path+".bak") != "# mine\n" || !strings.Contains(mustRead(t, path), "providers:") {
+		t.Error("init -force keeps the old file and writes the example")
+	}
+	if code, _, _ := exec(t, "", "-config", path, "init", "-bogus"); code != 2 {
+		t.Error("init with a bad flag")
 	}
 	bad := filepath.Join(path, "x.yaml")
 	if code, _, _ := exec(t, "", "-config", bad, "init"); code != 1 {
@@ -408,8 +419,11 @@ func TestOpenFailures(t *testing.T) {
 	cfg := filepath.Join(dir, "k.yaml")
 	_ = os.WriteFile(cfg, []byte("data_dir: "+filepath.Join(dir, "data")+"\nproviders:\n  p:\n    kind: openai\n"), 0o600)
 	t.Setenv("OPENAI_API_KEY", "")
-	if code, _, errOut := exec(t, "", "-config", cfg, "ls"); code != 0 || !strings.Contains(errOut, "API key") {
-		t.Errorf("a provider without a key is reported, the fleet still runs: %d %s", code, errOut)
+	if code, _, errOut := exec(t, "", "-config", cfg, "ls"); code != 0 || strings.Contains(errOut, "API key") {
+		t.Errorf("ls needs no brain and says nothing of the key: %d %s", code, errOut)
+	}
+	if code, _, errOut := exec(t, "", "-config", cfg, "providers"); code != 0 || !strings.Contains(errOut, "API key") {
+		t.Errorf("a provider without a key is reported where brains are used: %d %s", code, errOut)
 	}
 	if code, _, errOut := exec(t, "", "-config", cfg, "create", "x", "-no-desktop"); code != 1 || !strings.Contains(errOut, "cannot be used yet") {
 		t.Errorf("a kitty cannot use the keyless profile: %d %s", code, errOut)
