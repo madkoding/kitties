@@ -18,14 +18,34 @@ type MCPInfo struct {
 	// URL is where /mcp answers; TokenFile where its token is kept.
 	URL       string `json:"url"`
 	TokenFile string `json:"token_file"`
-	// Command is the `claude mcp add` line for it (it reads the token file, it does not contain it).
+	// Command is the `claude mcp add` line for URL (it reads the token file or carries
+	// MCPTokenPlaceholder, never the token).
 	Command string `json:"command"`
+	// Connect are the addresses /mcp answers at (they follow the gateway's exposure), best first,
+	// each with its command.
+	Connect []MCPConnect `json:"connect"`
+	// InContainer: the token file is inside the gateway's container, not where Claude Code runs.
+	InContainer bool `json:"in_container,omitempty"`
 	// TokenManaged is true when the token comes from the configuration or the environment, so it
 	// cannot be replaced from here.
 	TokenManaged bool   `json:"token_managed"`
 	CanChange    bool   `json:"can_change"`
 	Why          string `json:"why,omitempty"`
 }
+
+// MCPConnect is one address Claude Code can reach the connector at.
+type MCPConnect struct {
+	// Where is "public" (public_url), "lan" (the local network) or "local" (this machine).
+	Where string `json:"where"`
+	URL   string `json:"url"`
+	// Command is the `claude mcp add` line; with WithToken it carries MCPTokenPlaceholder, which
+	// the page replaces with the token only when the person copies it.
+	Command   string `json:"command"`
+	WithToken bool   `json:"with_token,omitempty"`
+}
+
+// MCPTokenPlaceholder stands for the connector's token in a command shown on the page.
+const MCPTokenPlaceholder = "<MCP_TOKEN>"
 
 // MCPControl is what the gateway needs to show and change the connector; Relaunch restarts it so
 // the change takes effect.

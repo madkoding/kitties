@@ -258,7 +258,8 @@ type Gateway struct {
 	// listens on this machine alone and no public_url or proxy is configured: a server never
 	// hands its token out.
 	LocalToken *bool `yaml:"local_token"`
-	// MCP is the connector that lets Claude run the fleet (docs/MCP.md). Off by default.
+	// MCP is the connector that lets Claude run the fleet (docs/MCP.md). On by default, behind a
+	// token of its own, wherever the gateway is exposed; `enabled: false` turns it off.
 	MCP MCP `yaml:"mcp"`
 }
 
@@ -320,11 +321,13 @@ func (c *Config) ApplyEnv(getenv func(string) string) error {
 	case "1", "true", "yes":
 		c.Gateway.TrustProxy = true
 	}
-	// The MCP connector: KITTIES_MCP (true) turns it on, KITTIES_MCP_TOKEN sets its token and
-	// KITTIES_MCP_EXEC (true) adds the exec tool.
+	// The MCP connector: KITTIES_MCP (true/false) turns it on or off, KITTIES_MCP_TOKEN sets its
+	// token and KITTIES_MCP_EXEC (true) adds the exec tool.
 	switch strings.ToLower(getenv("KITTIES_MCP")) {
-	case "1", "true", "yes":
+	case "1", "true", "yes", "on":
 		c.Gateway.MCP.Enabled = true
+	case "0", "false", "no", "off":
+		c.Gateway.MCP.Enabled = false
 	}
 	switch strings.ToLower(getenv("KITTIES_MCP_APPROVE")) {
 	case "1", "true", "yes":
@@ -457,7 +460,7 @@ func Defaults() Config {
 			MemoryMB: 2048, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6, AutoOffMinutes: kitty.DefaultAutoOffMinutes,
 		},
 		Cloud:      Cloud{MaxRunning: 5, IdleMinutes: 15, Size: "small", APIKeyEnv: "BOAT_API_KEY"},
-		Gateway:    Gateway{Listen: DefaultListen},
+		Gateway:    Gateway{Listen: DefaultListen, MCP: MCP{Enabled: true}},
 		Updates:    Updates{Gateway: UpdateNotify, CheckHours: 12, Repo: "madkoding/kitties", API: "https://api.github.com"},
 		Connectors: map[string]Connector{},
 	}
