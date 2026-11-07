@@ -20,10 +20,10 @@ const Q = "?theme=dark&motion=off";
 
 test.beforeAll(() => fs.mkdirSync(SHOTS, { recursive: true }));
 
-// kittyRow is a kitty's row in the sidebar (its hit button carries the name).
-// A chat with one kitty is titled after it, so the kitty row is the last button of that name.
+// kittyRow is a kitty's row in the sidebar (its hit button carries the name). A chat with one
+// kitty is titled after it, so the row is looked for in the kitties' section only.
 const kittyRow = (page: Page, name: string) =>
-  page.locator("aside").getByRole("button", { name, exact: true }).last();
+  page.getByTestId("sidebar-kitties").getByRole("button", { name, exact: true });
 
 async function open(page: Page, hash: string, query = Q): Promise<void> {
   await page.goto(`/${query}${hash}`);
@@ -47,7 +47,7 @@ test("the empty state lists the kitties", async ({ page }) => {
 
 test("a chat with one kitty: the answer, the skill and the saved artifact", async ({ page }) => {
   await open(page, `#chat/${ids.single}`);
-  await expect(page.getByText("Here is how I would split it")).toBeVisible();
+  await expect(page.getByText("Here is how I would split it:", { exact: true })).toBeVisible();
   await expect(page.getByText("skill · report-findings")).toBeVisible();
   await expect(page.getByText("launch-plan.md").first()).toBeVisible();
   await shot(page, "02-chat");
@@ -151,11 +151,54 @@ test("a desktop task: two columns, the latest screenshot in view and the earlier
     .toBeLessThan(6);
 });
 
+test("the sidebar lists the kitties first, and each chat says what it is about", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.group}`);
+  const kitties = page.getByTestId("sidebar-kitties");
+  const chats = page.getByTestId("sidebar-chats");
+  await expect(kitties.getByRole("heading", { name: "Kitties" })).toBeVisible();
+  // The kitties come first, the chats after them.
+  const k = (await kitties.boundingBox())!;
+  const c = (await chats.boundingBox())!;
+  expect(k.y + k.height).toBeLessThanOrEqual(c.y + 1);
+  await expect(kitties.getByRole("button", { name: "mimi", exact: true })).toBeVisible();
+
+  // Each chat row carries its gist: one line, read with the row by a screen reader, and
+  // nothing that looks like a link's path or an address.
+  const group = chats.getByRole("button", { name: "Launch team", exact: true });
+  await expect(group).toHaveAttribute("aria-current", "page");
+  const gistId = await group.getAttribute("aria-describedby");
+  expect(gistId).toBeTruthy();
+  const gist = page.locator(`[id="${gistId}"]`);
+  await expect(gist).toHaveText(/^(mimi|tom|luna): \S/);
+  const desktop = chats.getByRole("button", { name: "Tom on the desktop", exact: true });
+  await expect(
+    page.locator(`[id="${await desktop.getAttribute("aria-describedby")}"]`),
+  ).not.toContainText("https://");
+  const lines = await chats.getByTestId("chat-gist").allTextContents();
+  expect(lines.length).toBeGreaterThan(3);
+  for (const line of lines) {
+    expect(line.length).toBeLessThanOrEqual(100);
+    expect(line).not.toMatch(/https?:\/\/|@\w+\.\w/);
+  }
+  // A gist never wraps: its row keeps one line of it.
+  const box = (await gist.boundingBox())!;
+  expect(box.height).toBeLessThan(20);
+  await shot(page, "73-sidebar-gists");
+});
+
 test("on a phone the menu button opens the sidebar", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/${Q}#chat/${ids.desktop}`);
   await page.getByLabel("Menu").click();
   await expect(page.locator("aside.sidebar")).toBeVisible();
+  // The gists fit the narrow sidebar: cut with an ellipsis, never wider than their row.
+  const gist = page.getByTestId("sidebar-chats").getByTestId("chat-gist").first();
+  await expect(gist).toBeVisible();
+  const row = (await gist.locator("xpath=ancestor::div[contains(@class,'row')][1]").boundingBox())!;
+  const g = (await gist.boundingBox())!;
+  expect(g.x + g.width).toBeLessThanOrEqual(row.x + row.width);
   await shot(page, "12-phone-menu");
 });
 

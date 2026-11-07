@@ -255,6 +255,10 @@ export interface Session {
   needs_help?: boolean;
   // reports marks the lead kitty's Reports thread, where the other kitties' news land.
   reports?: boolean;
+  // gist is the chat's last words in one line, secrets masked; gist_by who said them ("user" or
+  // a kitty's name).
+  gist?: string;
+  gist_by?: string;
 }
 
 export interface ProviderKind {

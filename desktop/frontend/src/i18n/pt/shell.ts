@@ -61,6 +61,7 @@ const dict: Dictionary = {
 
   // Sidebar
   Chats: "Chats",
+  "You: {text}": "Você: {text}",
   "No chats yet.": "Ainda não há chats.",
   help: "ajuda",
   goal: "objetivo",

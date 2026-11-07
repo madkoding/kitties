@@ -447,6 +447,20 @@ select:focus {
 .row > .row-actions {
   pointer-events: auto;
 }
+/* A chat's gist: its last words under the title, one muted line that never wraps. */
+.chat-gist {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  color: var(--t3);
+}
+.row.on .chat-gist {
+  color: var(--t2);
+}
+
 .section-title {
   font-size: 0.7rem;
   letter-spacing: 0.08em;
