@@ -50,3 +50,15 @@ test("a gateway on a network asks for the token, keeps a session, and signs out"
   await page.reload();
   await expect(login).toBeVisible();
 });
+
+test("a link from the desktop app's QR code signs in by itself and leaves no token behind", async ({
+  page,
+}) => {
+  await page.goto(`${LOGIN_PAGE}/?theme=dark&motion=off#signin=${TOKEN}`);
+  await expect(
+    page.locator("aside").getByRole("button", { name: "mimi", exact: true }),
+  ).toBeAttached();
+  await expect(page.getByTestId("login")).toBeHidden();
+  expect(page.url()).not.toContain(TOKEN);
+  expect(await page.evaluate(() => history.length)).toBeLessThanOrEqual(2);
+});

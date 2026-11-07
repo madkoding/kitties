@@ -1,8 +1,24 @@
-import { useState } from "preact/hooks";
+import { useEffect, useState } from "preact/hooks";
 import { api } from "./api";
 import { t } from "./i18n";
 import PixelCat from "./PixelCat";
 import { Missing, Required } from "./Required";
+
+// A link from the desktop app's QR code carries the token after the #, which never reaches the
+// server: it is taken off the address at once (so it stays out of the history and the bar) and
+// used to sign in.
+let fromLink = "";
+{
+  const m = location.hash.match(/^#signin=(.+)$/);
+  if (m) {
+    try {
+      fromLink = decodeURIComponent(m[1]);
+    } catch {
+      fromLink = "";
+    }
+    history.replaceState(null, "", location.pathname + location.search);
+  }
+}
 
 // Login is what a gateway served on a network shows before anything else: the token it printed
 // when it started, traded for a session cookie so the page never keeps it.
@@ -10,16 +26,11 @@ export default function Login({ onDone }: { onDone: () => void }) {
   const [token, setToken] = useState("");
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const submit = async (e: Event) => {
-    e.preventDefault();
-    // Enter sends the form like the button does: only with a token, and once.
-    if (busy || !token.trim()) {
-      return;
-    }
+  const signIn = async (tok: string) => {
     setBusy(true);
     setErr("");
     try {
-      await api.login(token.trim());
+      await api.login(tok);
       setToken("");
       onDone();
     } catch (x) {
@@ -27,6 +38,21 @@ export default function Login({ onDone }: { onDone: () => void }) {
       setBusy(false);
     }
   };
+  const submit = async (e: Event) => {
+    e.preventDefault();
+    // Enter sends the form like the button does: only with a token, and once.
+    if (busy || !token.trim()) {
+      return;
+    }
+    await signIn(token.trim());
+  };
+  useEffect(() => {
+    if (fromLink) {
+      const tok = fromLink;
+      fromLink = "";
+      void signIn(tok);
+    }
+  }, []);
   return (
     <div class="app-bg fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="login">
       <form class="chat-modal w-full max-w-sm p-6" onSubmit={submit}>
