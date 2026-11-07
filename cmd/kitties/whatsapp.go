@@ -26,6 +26,9 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 		Dir: filepath.Join(dataDir, "whatsapp"), Chats: a.chats, Kitty: a.fleet.Get, Registry: a.fleet.Connectors(),
 		QRImage: wameow.QRImage, Log: logf,
 	}
+	if a.guard != nil {
+		opt.Guard = a.guard
+	}
 	if a.vault != nil {
 		if box, err := vault.NewBox(dataDir); err == nil {
 			opt.Box, opt.NewClient = box, wameow.New
