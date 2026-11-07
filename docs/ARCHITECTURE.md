@@ -160,6 +160,10 @@ commands that need a container say so.
 ## Conversations (`internal/chat`)
 
 A session is a list of turns and a list of member kitty ids, saved as `<data_dir>/chats/<id>.json`.
+Every save also refreshes the session's **gist** (`gist.go`): the last turn with words, as one
+line of at most 140 characters (the sidebar shows up to two lines), without markdown and with keys, tokens, passwords said with their
+name, e-mail addresses, long numbers and link paths masked. It needs no model, so listing chats
+stays free; the sidebar shows it under each chat's title and `chat_list` (MCP) returns it.
 
 `Send` appends the person's message and picks the responders: in a one-to-one chat the kitty;
 in a group, the kitties the message mentions with `@name`, or every member when it mentions none.

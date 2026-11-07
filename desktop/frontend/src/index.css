@@ -447,6 +447,73 @@ select:focus {
 .row > .row-actions {
   pointer-events: auto;
 }
+/* A chat's gist: its last words under the title, muted, two lines at most. */
+.chat-gist {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: 0.6875rem;
+  line-height: 1.3;
+  color: var(--t3);
+}
+.row.on .chat-gist {
+  color: var(--t2);
+}
+
+/* A chat's cats share one square: one cat fills it, two or three huddle together in it. */
+.chat-cats {
+  position: relative;
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+}
+.row > .chat-cats > * {
+  position: absolute;
+}
+.chat-cats.n1 > * {
+  inset: 0;
+}
+.chat-cats.n2 > :nth-child(1) {
+  left: 0;
+  top: 0;
+}
+.chat-cats.n2 > :nth-child(2) {
+  right: 0;
+  bottom: 0;
+}
+.chat-cats.n3 > :nth-child(1) {
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+.chat-cats.n3 > :nth-child(2) {
+  left: -0.125rem;
+  bottom: 0;
+}
+.chat-cats.n3 > :nth-child(3) {
+  right: -0.125rem;
+  bottom: 0;
+}
+
+.row.chat-row {
+  align-items: flex-start;
+}
+/* A chat's tags lead its title; empty, they take no room. */
+.chat-badges {
+  display: flex;
+  flex: none;
+  gap: 0.25rem;
+}
+.chat-badges:empty {
+  display: none;
+}
+.chat-badges .tag {
+  line-height: 1.3;
+}
+
 .section-title {
   font-size: 0.7rem;
   letter-spacing: 0.08em;

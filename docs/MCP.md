@@ -120,7 +120,7 @@ signs in again.
 | `kitty_remove` | delete a kitty; needs `confirm: true` |
 | `kitty_screenshot` | its desktop as a picture |
 | `kitty_exec` | a command in its container (only with `allow_exec`) |
-| `chat_create`, `chat_list`, `chat_get` | threads (`chat_create` with no members opens one with the lead kitty); `chat_get` returns the last turns |
+| `chat_create`, `chat_list`, `chat_get` | threads (`chat_create` with no members opens one with the lead kitty); `chat_get` returns the last turns; `chat_list` gives each thread's short `gist`, with secrets masked |
 | `chat_send`, `chat_cancel` | give a task and read the answer; stop it |
 | `kitty_power`, `kitty_compute` | turn a machine on or off; where it runs (local or cloud) and its state |
 | `goal_list`, `goal_add`, `goal_run`, `goal_remove`, `kitty_journal` | goals on a schedule or event, run one now, read the journal |

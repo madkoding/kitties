@@ -20,10 +20,10 @@ const Q = "?theme=dark&motion=off";
 
 test.beforeAll(() => fs.mkdirSync(SHOTS, { recursive: true }));
 
-// kittyRow is a kitty's row in the sidebar (its hit button carries the name).
-// A chat with one kitty is titled after it, so the kitty row is the last button of that name.
+// kittyRow is a kitty's row in the sidebar (its hit button carries the name). A chat with one
+// kitty is titled after it, so the row is looked for in the kitties' section only.
 const kittyRow = (page: Page, name: string) =>
-  page.locator("aside").getByRole("button", { name, exact: true }).last();
+  page.getByTestId("sidebar-kitties").getByRole("button", { name, exact: true });
 
 async function open(page: Page, hash: string, query = Q): Promise<void> {
   await page.goto(`/${query}${hash}`);
@@ -47,7 +47,7 @@ test("the empty state lists the kitties", async ({ page }) => {
 
 test("a chat with one kitty: the answer, the skill and the saved artifact", async ({ page }) => {
   await open(page, `#chat/${ids.single}`);
-  await expect(page.getByText("Here is how I would split it")).toBeVisible();
+  await expect(page.getByText("Here is how I would split it:", { exact: true })).toBeVisible();
   await expect(page.getByText("skill · report-findings")).toBeVisible();
   await expect(page.getByText("launch-plan.md").first()).toBeVisible();
   await shot(page, "02-chat");
@@ -151,11 +151,63 @@ test("a desktop task: two columns, the latest screenshot in view and the earlier
     .toBeLessThan(6);
 });
 
+test("the sidebar lists the kitties first, and each chat says what it is about", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.group}`);
+  const kitties = page.getByTestId("sidebar-kitties");
+  const chats = page.getByTestId("sidebar-chats");
+  await expect(kitties.getByRole("heading", { name: "Kitties" })).toBeVisible();
+  // The kitties come first, the chats after them.
+  const k = (await kitties.boundingBox())!;
+  const c = (await chats.boundingBox())!;
+  expect(k.y + k.height).toBeLessThanOrEqual(c.y + 1);
+  await expect(kitties.getByRole("button", { name: "mimi", exact: true })).toBeVisible();
+
+  // Each chat row carries its gist: up to two lines, read with the row by a screen reader, and
+  // nothing that looks like a link's path or an address.
+  const group = chats.getByRole("button", { name: "Launch team", exact: true });
+  await expect(group).toHaveAttribute("aria-current", "page");
+  const gistId = await group.getAttribute("aria-describedby");
+  expect(gistId).toBeTruthy();
+  const gist = page.locator(`[id="${gistId}"]`);
+  await expect(gist).toHaveText(/^(mimi|tom|luna): \S/);
+  const desktop = chats.getByRole("button", { name: "Tom on the desktop", exact: true });
+  await expect(
+    page.locator(`[id="${await desktop.getAttribute("aria-describedby")}"]`),
+  ).not.toContainText("https://");
+  const lines = await chats.getByTestId("chat-gist").allTextContents();
+  expect(lines.length).toBeGreaterThan(3);
+  for (const line of lines) {
+    expect(line.length).toBeLessThanOrEqual(160);
+    expect(line).not.toMatch(/https?:\/\/|@\w+\.\w/);
+  }
+  // A long gist wraps, and is cut at two lines.
+  const lineHeight = await gist.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
+  const box = (await gist.boundingBox())!;
+  expect(box.height).toBeGreaterThan(lineHeight * 1.5);
+  expect(box.height).toBeLessThanOrEqual(lineHeight * 2 + 1);
+  // A group's cats huddle in the square one cat takes, so the title keeps its place.
+  const groupRow = group.locator("xpath=..");
+  const cats = (await groupRow.getByTestId("chat-cats").boundingBox())!;
+  const single = (await desktop.locator("xpath=..").getByTestId("chat-cats").boundingBox())!;
+  expect(Math.abs(cats.width - single.width)).toBeLessThan(1);
+  await expect(groupRow.getByTestId("chat-cats").locator("> *")).toHaveCount(3);
+  await group.scrollIntoViewIfNeeded();
+  await shot(page, "73-sidebar-gists");
+});
+
 test("on a phone the menu button opens the sidebar", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`/${Q}#chat/${ids.desktop}`);
   await page.getByLabel("Menu").click();
   await expect(page.locator("aside.sidebar")).toBeVisible();
+  // The gists fit the narrow sidebar: cut with an ellipsis, never wider than their row.
+  const gist = page.getByTestId("sidebar-chats").getByTestId("chat-gist").first();
+  await expect(gist).toBeVisible();
+  const row = (await gist.locator("xpath=ancestor::div[contains(@class,'row')][1]").boundingBox())!;
+  const g = (await gist.boundingBox())!;
+  expect(g.x + g.width).toBeLessThanOrEqual(row.x + row.width);
   await shot(page, "12-phone-menu");
 });
 
@@ -700,7 +752,7 @@ test("notifications: pick a channel, send a test and be told when something wait
   // Answering the kitties from ntfy needs a topic nobody can guess: this one is too short.
   await form.getByTestId("notify-replies").check();
   await form.getByRole("button", { name: "Save" }).click();
-  await expect(form.getByText(/20 characters at least/)).toBeVisible();
+  await expect(form.getByRole("alert")).toContainText("20 characters at least");
   await form.getByTestId("notify-replies").uncheck();
   // A daily summary at a time of the person's choice, and one on demand.
   await form.getByLabel("A summary of the last day, every day at").fill("08:30");
@@ -2202,7 +2254,9 @@ test("a kitty that needs the person asks for help: a window shows what it sees, 
   await expect(live.getByTestId("live-state")).toContainText("You have the controls");
   await live.getByTestId("give-back").click();
   await live.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(page.getByText("Signed in to the shop: thank you for the password.")).toBeVisible({
+  await expect(
+    page.getByRole("log").getByText("Signed in to the shop: thank you for the password."),
+  ).toBeVisible({
     timeout: 15000,
   });
   await expect(callout).toHaveCount(0);

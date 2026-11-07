@@ -289,7 +289,7 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 				}
 				return mcp.Result{Content: []mcp.Content{mcp.Image("image/png", base64.StdEncoding.EncodeToString(png))}}, nil
 			}},
-		{Name: "chat_list", Description: "The threads (id, title, members, last update), without their turns.",
+		{Name: "chat_list", Description: "The threads (id, title, members, last update, and a one-line gist of their last words with secrets masked), without their turns.",
 			InputSchema: obj(nil, map[string]any{}), Annotations: read,
 			Call: func(context.Context, json.RawMessage) (mcp.Result, error) {
 				type row struct {
@@ -298,10 +298,11 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 					Members   []string  `json:"members"`
 					Turns     int       `json:"turns"`
 					UpdatedAt time.Time `json:"updated_at"`
+					Gist      string    `json:"gist,omitempty"`
 				}
 				rows := []row{}
 				for _, c := range s.chats.List() {
-					rows = append(rows, row{c.ID, c.Title, c.Members, len(c.Turns), c.UpdatedAt})
+					rows = append(rows, row{c.ID, c.Title, c.Members, len(c.Turns), c.UpdatedAt, c.Gist})
 				}
 				return jsonResult(map[string]any{"chats": rows})
 			}},

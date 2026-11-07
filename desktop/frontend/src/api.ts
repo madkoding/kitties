@@ -255,6 +255,10 @@ export interface Session {
   needs_help?: boolean;
   // reports marks the lead kitty's Reports thread, where the other kitties' news land.
   reports?: boolean;
+  // gist is the chat's last words (the row shows up to two lines), secrets masked; gist_by who said them ("user" or
+  // a kitty's name).
+  gist?: string;
+  gist_by?: string;
   // exposed marks a chat where whoever writes is not the person (a WhatsApp contact, a group, a
   // public chat): the guardrails apply; audience says who writes there.
   exposed?: boolean;
