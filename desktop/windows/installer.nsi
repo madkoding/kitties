@@ -42,6 +42,8 @@ BrandingText "${APP} ${VERSION}"
 !endif
 !define MUI_FINISHPAGE_RUN "$INSTDIR\kitties-desktop.exe"
 !define MUI_FINISHPAGE_RUN_TEXT "Open ${APP}"
+; What comes next, in plain words: the app needs nothing else, and the browser is one setting away.
+!define MUI_FINISHPAGE_TEXT "$(FinishText)"
 
 Var Expose
 Var RadioLocal
@@ -129,6 +131,8 @@ LangString ExposeLan ${LANG_ENGLISH} "2) LAN (this computer's address in your ne
 LangString ExposeLan ${LANG_SPANISH} "2) LAN (la dirección de este equipo en tu red): otros equipos de tu casa u oficina."
 LangString ExposeWan ${LANG_ENGLISH} "3) WAN (0.0.0.0): every network interface, the internet too if this computer is public."
 LangString ExposeWan ${LANG_SPANISH} "3) WAN (0.0.0.0): todas las interfaces de red, también internet si este equipo es público."
+LangString FinishText ${LANG_ENGLISH} "${APP} is installed.$\r$\n$\r$\nOpen it: it starts its gateway by itself, there is nothing else to set up. Its first screen walks you through the rest: a model, then your first kitty.$\r$\n$\r$\nTo use it from a browser too, open Settings, Preferences, Network access in the app: the address and the token are there."
+LangString FinishText ${LANG_SPANISH} "${APP} quedó instalado.$\r$\n$\r$\nÁbrelo: arranca su gateway solo, no hay nada más que configurar. Su primera pantalla te guía en lo demás: un modelo y luego tu primer kitty.$\r$\n$\r$\nPara usarlo también desde un navegador, abre Ajustes, Preferencias, Acceso de red en la app: ahí están la dirección y el token."
 LangString ExposeWarn ${LANG_ENGLISH} "WAN listens on EVERY network interface. The page and its token travel over plain http and the token is the only password.$\r$\nUse it only behind a firewall or a VPN.$\r$\n$\r$\nListen on every interface anyway?"
 LangString ExposeWarn ${LANG_SPANISH} "WAN escucha en TODAS las interfaces de red. La página y su token viajan por http sin cifrar y el token es la única contraseña.$\r$\nÚsalo solo tras un firewall o una VPN.$\r$\n$\r$\n¿Escuchar en todas las interfaces de todos modos?"
 

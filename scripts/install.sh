@@ -536,10 +536,13 @@ case "$host" in
 esac
 [ -z "$cur_public" ] || note "  $cur_public"
 echo
+# The token of a kept file is shown too: whoever runs this as root already has it, and it saves a
+# trip to the file.
+[ -n "$token" ] || token=$(sed -n 's/^KITTIES_TOKEN=//p' "$env_file" | tail -n 1)
 if [ -n "$token" ]; then
-    note "$(L 'Token (the password of the page):' 'Token (la contraseña de la página):')"
+    note "$(L 'Token (the password of the page, paste it to sign in):' 'Token (la contraseña de la página, pégalo para entrar):')"
     note "  $token"
-    note "$(L "Saved in $env_file (mode 0600). Keep it secret." "Guardado en $env_file (modo 0600). Mantenlo en secreto.")"
+    note "$(L "Saved in $env_file (mode 0600). Keep it secret. See it again: sudo grep TOKEN $env_file" "Guardado en $env_file (modo 0600). Mantenlo en secreto. Verlo otra vez: sudo grep TOKEN $env_file")"
 else
     note "$(L "Token: see KITTIES_TOKEN in $env_file" "Token: mira KITTIES_TOKEN en $env_file")"
 fi
