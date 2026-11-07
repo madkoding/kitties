@@ -311,3 +311,16 @@ func TestLimits(t *testing.T) {
 	}
 	_ = s.Handle(context.Background(), "", "   ")
 }
+
+func TestLeadSignedNotificationReachesTheKittyByName(t *testing.T) {
+	s, c, o := setup(luna, bo)
+	s.Lead = func() *kitty.Kitty { return luna }
+	help, _ := c.Create("", []string{bo.ID})
+	c.sessions[help.ID].Turns = []chat.Turn{{From: "user", Text: "go"}, {From: "bo", Kitty: bo.ID, Working: true, NeedsHelp: true}}
+	// The lead signs bo's request for help.
+	s.Saw(notify.Notification{Event: notify.Help, Kitty: "luna", Chat: help.ID})
+	_ = s.Handle(context.Background(), "", "bo: 1234")
+	if len(c.helped) != 1 || c.helped[0] != "1234" {
+		t.Errorf("help answers %v, sent %q", c.helped, o.bodies())
+	}
+}

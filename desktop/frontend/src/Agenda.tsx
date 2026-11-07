@@ -334,6 +334,7 @@ const KIND_TAG: Record<string, string> = {
   recovered: "tag-green",
   updated: "tag-green",
   off: "tag-amber",
+  limit: "tag-magenta",
 };
 
 export function JournalPanel({

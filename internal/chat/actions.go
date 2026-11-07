@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/madkoding/kitties/internal/connector"
@@ -19,7 +20,7 @@ import (
 
 // action is one thing the model asked for.
 type action struct {
-	kind   string // tool | connector | skill | artifact | delegate | memory | limit
+	kind   string // tool | connector | skill | artifact | delegate | memory | limit | task_limits
 	name   string // the tool, the connector, or the verb (skill/artifact)
 	args   map[string]any
 	raw    string
@@ -99,8 +100,22 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 				"mode": str("ask (wait for the person's yes), never, or none (lift the limit)")}, "connector", "mode")})
 	}
 	if s.canDelegate(k) {
+		props := map[string]any{"kitty": str("the other kitty's name"), "task": str("what to do, with everything it needs to know")}
+		if k.Lead {
+			// The lead may give the kitty more (or less) for this one task.
+			props["max_rounds"] = num(fmt.Sprintf("for this task only: rounds, 1 to %d", kitty.MaxRoundsCap))
+			props["max_tokens"] = num(fmt.Sprintf("for this task only: tokens, 1 to %d", kitty.MaxTokensCap))
+			props["max_seconds"] = num(fmt.Sprintf("for this task only: seconds, 1 to %d", kitty.MaxSecondsCap))
+		}
 		tools = append(tools, provider.Tool{Name: "delegate", Description: "Hand a subtask to another kitty and get its answer back. For work another kitty is better placed for, never the whole task.",
-			Parameters: obj(map[string]any{"kitty": str("the other kitty's name"), "task": str("what to do, with everything it needs to know")}, "kitty", "task")})
+			Parameters: obj(props, "kitty", "task")})
+	}
+	if s.canSetLimits(k) {
+		tools = append(tools, provider.Tool{Name: "task_limits", Description: taskLimitsHelp,
+			Parameters: obj(map[string]any{"kitty": str("the kitty's name"),
+				"max_rounds":  num(fmt.Sprintf("rounds per task, 1 to %d; 0 for the default", kitty.MaxRoundsCap)),
+				"max_tokens":  num(fmt.Sprintf("tokens per task, 1 to %d; 0 for the default", kitty.MaxTokensCap)),
+				"max_seconds": num(fmt.Sprintf("seconds per task, 1 to %d; 0 for the default", kitty.MaxSecondsCap))}, "kitty")})
 	}
 	if s.arts != nil {
 		tools = append(tools,
@@ -148,6 +163,9 @@ func fromCalls(calls []provider.ToolCall) []action {
 			a.kind, a.name = "machine", "machine"
 		case c.Name == "delegate":
 			a.kind = "delegate"
+			a.name, _ = a.args["kitty"].(string)
+		case c.Name == "task_limits":
+			a.kind = "task_limits"
 			a.name, _ = a.args["kitty"].(string)
 		default:
 			a.kind, a.name = "tool", c.Name
@@ -224,6 +242,8 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 			out = append(out, s.runMemory(id, a, k))
 		case "limit":
 			out = append(out, s.runLimit(id, a, k, allowed, turn))
+		case "task_limits":
+			out = append(out, s.runTaskLimits(id, a, k, turn))
 		case "machine":
 			out = append(out, s.runMachine(ctx, a, k))
 		case "connector":

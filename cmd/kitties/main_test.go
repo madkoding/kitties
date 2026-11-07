@@ -220,6 +220,28 @@ func TestFleetCommands(t *testing.T) {
 	if code, out, _ := exec(t, "", "-config", cfg, "ls"); code != 0 || !strings.Contains(out, "ana") || !strings.Contains(out, "brain") {
 		t.Errorf("ls: %s", out)
 	}
+	// The lead: none, then brain, then none again.
+	if code, out, _ := exec(t, "", "-config", cfg, "lead"); code != 0 || !strings.Contains(out, "has no lead") {
+		t.Errorf("lead: %d %s", code, out)
+	}
+	if code, out, _ := exec(t, "", "-config", cfg, "lead", "brain"); code != 0 || !strings.Contains(out, "brain leads the fleet") {
+		t.Errorf("lead brain: %d %s", code, out)
+	}
+	if code, out, _ := exec(t, "", "-config", cfg, "ls"); code != 0 || !strings.Contains(out, "lead: brain") {
+		t.Errorf("ls shows the lead: %s", out)
+	}
+	if code, _, _ := exec(t, "", "-config", cfg, "lead", "nobody"); code != 1 {
+		t.Error("an unknown kitty cannot lead")
+	}
+	if code, _, _ := exec(t, "", "-config", cfg, "lead", "a", "b"); code != 1 {
+		t.Error("lead usage")
+	}
+	if code, out, _ := exec(t, "", "-config", cfg, "lead", "none"); code != 0 || !strings.Contains(out, "has no lead") {
+		t.Errorf("lead none: %d %s", code, out)
+	}
+	if code, out, _ := exec(t, "", "-config", cfg, "lead", "none"); code != 0 || !strings.Contains(out, "has no lead") {
+		t.Errorf("lead none twice: %d %s", code, out)
+	}
 	for _, cmd := range []string{"stop", "start", "rm"} {
 		if code, out, _ := exec(t, "", "-config", cfg, cmd, "ana"); code != 0 || !strings.Contains(out, "ana: "+cmd) {
 			t.Errorf("%s: %d %s", cmd, code, out)

@@ -98,11 +98,26 @@ func (s *Service) Saw(n notify.Notification) {
 	if n.Kitty == "" || n.Event == notify.Digest {
 		return
 	}
+	// A notification the lead signs for another kitty is about that kitty's chat: its members
+	// are the ones a "name: …" reply goes on with there.
+	var members []string
+	if n.Chat != "" {
+		if sess, err := s.chats.Get(n.Chat); err == nil {
+			for _, k := range s.fleet.List() {
+				if member(sess, k.ID) {
+					members = append(members, strings.ToLower(k.Name))
+				}
+			}
+		}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	name := strings.ToLower(n.Kitty)
 	if n.Chat != "" {
 		s.last[name] = seen{chat: n.Chat, at: s.now()}
+		for _, m := range members {
+			s.last[m] = seen{chat: n.Chat, at: s.now()}
+		}
 	}
 	s.whom, s.whoAt = name, s.now()
 }

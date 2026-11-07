@@ -13,12 +13,21 @@ import (
 //	  follow_ups: 10m 30m 2h   # waits before a goal that did not finish runs again; "off": never
 //	  brain_wait: 30m          # how long a task waits for a model that is down; "off": not at all
 //	  stand_ins: 3             # tasks a day a kitty without a backup hands to a free one; "off": none
+//	  lead_limits: ask         # the lead's changes of the others' limits wait for a yes; auto (default): they don't
 //
 // Empty takes the defaults.
 type Autonomy struct {
 	FollowUps string `yaml:"follow_ups" json:"follow_ups"`
 	BrainWait string `yaml:"brain_wait" json:"brain_wait"`
 	StandIns  string `yaml:"stand_ins" json:"stand_ins"`
+	// LeadLimits is auto (the default: the lead kitty changes the others' limits per task by
+	// itself) or ask (each change waits for the person's yes).
+	LeadLimits string `yaml:"lead_limits" json:"lead_limits,omitempty"`
+}
+
+// LeadLimitsAsk reports whether the lead's changes of limits wait for the person.
+func (a Autonomy) LeadLimitsAsk() bool {
+	return strings.EqualFold(strings.TrimSpace(a.LeadLimits), "ask")
 }
 
 // maxWait is the longest single wait either setting takes.
@@ -38,8 +47,14 @@ func (a Autonomy) Validate() error {
 	if _, err := a.brainWait(0); err != nil {
 		return err
 	}
-	_, err := a.standIns(0)
-	return err
+	if _, err := a.standIns(0); err != nil {
+		return err
+	}
+	switch strings.ToLower(strings.TrimSpace(a.LeadLimits)) {
+	case "", "auto", "ask":
+		return nil
+	}
+	return fmt.Errorf("autonomy.lead_limits: %q is not auto or ask", a.LeadLimits)
 }
 
 // StandInsOr is how many tasks a day a kitty without a backup hands to a free kitty: def when

@@ -60,6 +60,7 @@ autonomy:                        # Settings → Preferences → Working on their
   follow_ups: 10m 30m 2h         # waits before an unfinished goal runs again; off: never
   brain_wait: 30m                # how long a task waits for a model that is down; off: not at all
   stand_ins: 3                   # tasks a day a kitty without a backup hands to a free one; off: none
+  lead_limits: ask               # the lead's lasting changes of the others' limits wait for a yes; auto (default)
 kitties:
   - name: mimi
     backup: luna                 # takes over what mimi gives up on
@@ -71,6 +72,61 @@ kitties:
       - title: Triage new issues
         on: [github]             # the github connector's inbound_secret signs the hook
 ```
+
+## The lead kitty
+
+One kitty of the fleet can be the **lead**: the principal one, your main contact and the
+orchestrator of the others. There is one at most; making another kitty the lead takes it from the
+one before.
+
+- **It hands the work out.** Its prompt names the team (what each kitty is good at, whether it has
+  a computer, the services it may use, whether it is busy) and tells it to split what you ask:
+  it does what is quick or its own, delegates each piece to the kitty best placed for it (several
+  pieces to several kitties if need be), checks their answers and gives you **one report** of the
+  whole: what was done, by whom, what failed and what is left. The other kitties know who leads,
+  and treat a task it hands them as coming from you.
+- **The reports come back through it.** What another kitty has to tell you (a goal done or
+  stuck, help it needs, an action waiting for a yes, its day's tokens) lands in the lead's
+  **Reports** thread, from the kitty that sent it, and the notification goes out in the lead's
+  name (*luna: mimi finished a goal*). The daily summary is the lead's too, and stays in that
+  thread. Nothing is lost: the original thread is linked, and the notification still arrives.
+- **It gives the others more room.** For a long task it hands out, the lead can give a kitty more
+  rounds of actions, tokens or seconds per task (or fewer, to keep one short), within caps: 500
+  rounds, 2,000,000 tokens, 7,200 seconds (0 goes back to the default). Only the lead may, never
+  for itself.
+  - *For one task alone*: it passes `max_rounds`, `max_tokens` or `max_seconds` to `delegate`
+    (`@delegate tom {"task": "...", "max_rounds": 200}`). They hold while that task runs and end
+    with it; the delegation and the kitty's journal say so.
+  - *For good*: `@task_limits tom {"max_rounds": 120, "max_seconds": 1800}` (or its native
+    `task_limits` tool) changes the kitty's limits (Settings → Limits shows them), lands in both
+    journals and in the Reports thread, and the lead says so in its report.
+  - *With your yes*: *Settings → Preferences → Working on their own → Ask me before the lead
+    kitty changes another's limits* (`autonomy.lead_limits: ask`) holds each lasting change in
+    Approvals until you approve it.
+- **Ask it how things are going.** Write in the Reports thread: the lead reads the reports
+  there and answers from them, or hands out the next round of work.
+
+| | |
+| --- | --- |
+| ![The lead kitty's drawer](screenshots/71-lead-kitty.png) | ![The lead's Reports thread](screenshots/72-lead-reports.png) |
+
+Choose it in the kitty's drawer (*Make luna the lead*, *Open reports*, *Stop leading*), in the YAML,
+from the terminal or through the API and MCP:
+
+```yaml
+kitties:
+  - name: luna
+    lead: true          # at most one; a kitty with replicas cannot lead
+```
+
+```sh
+kitties lead luna      # or: kitties lead (who leads), kitties lead none
+curl -X PUT -H "Authorization: Bearer $(kitties token)" -d '{"kitty":"luna"}' http://127.0.0.1:7488/v1/lead
+```
+
+A lead set in the YAML applies when the fleet has none; one chosen in the interface wins. With
+Claude, `fleet_lead`, `fleet_lead_set` and `lead_ask` (a task for the whole fleet, answered with one
+report) do the same ([MCP](MCP.md)).
 
 ## Learning, trust and being told
 
@@ -116,7 +172,8 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   (`notify.replies: true`), the gateway listens to the same topic: what you write there goes to
   the kitty that notified you last (in the last day), or to the one you name (`luna: …`,
   `@luna …`, `luna y bo: …`, or the ntfy message's title), or to every kitty (`all: …`,
-  `todos: …`). With nothing named, the lead kitty answers when there is one. A kitty waiting for
+  `todos: …`). With nothing named, the lead kitty answers when there is one; a request the
+  lead signed for another kitty is answered by naming that kitty (`bo: …`). A kitty waiting for
   your help takes the message as its answer; one that starts a task on its desktop says so and
   sends the result when it is done. Answers come back to the topic, marked with a 🐱 so the
   gateway never reads its own. Write from the ntfy web app (it installs on the phone and has a

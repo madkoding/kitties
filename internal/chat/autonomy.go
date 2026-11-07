@@ -186,6 +186,16 @@ func (s *Service) delegate(ctx context.Context, id string, a action, k *kitty.Ki
 	}
 	d := Delegation{Kitty: target.Name, KittyID: target.ID, Chat: did, Task: clip(task, 300)}
 	s.note(k, agenda.KindDelegated, "", id, "to "+target.Name+": "+firstLine(task))
+	// The lead may give the kitty more (or less) for this task alone: it ends with the task.
+	if t := taskLimitsArg(a.args); k.Lead && !t.Empty() {
+		if err := t.Validate(); err != nil {
+			return outcome{action: a, err: err.Error()}
+		}
+		defer s.setTaskOverride(did, t)()
+		line := "for this task only, " + target.Name + "'s " + t.Describe(target.Limits)
+		d.Limits = line
+		s.note(target, agenda.KindLimit, "", did, k.Name+" gave "+line)
+	}
 	answer, err := s.askKitty(ctx, did, k, target, task)
 	if err != nil {
 		d.Error = err.Error()
@@ -220,7 +230,7 @@ func (s *Service) delegationChat(from, to *kitty.Kitty, depth int) (string, erro
 // askKitty sends a task to another kitty in a thread and waits for its answer, including the
 // background work it may start, within its time limit.
 func (s *Service) askKitty(ctx context.Context, did string, from, to *kitty.Kitty, task string) (string, error) {
-	limit := to.Limits.Or(s.DefaultLimits).MaxSeconds
+	limit := s.limitsFor(to, did).MaxSeconds
 	if limit > 0 {
 		var cancel context.CancelFunc
 		ctx, cancel = context.WithTimeout(ctx, time.Duration(limit)*time.Second)

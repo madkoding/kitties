@@ -53,3 +53,15 @@ func TestAutonomy(t *testing.T) {
 		t.Errorf("parse: %+v %v", c.Autonomy, err)
 	}
 }
+
+func TestLeadLimitsSetting(t *testing.T) {
+	for v, ask := range map[string]bool{"": false, "auto": false, "ask": true, " ASK ": true} {
+		a := Autonomy{LeadLimits: v}
+		if err := a.Validate(); err != nil || a.LeadLimitsAsk() != ask {
+			t.Errorf("%q: %v %v", v, err, a.LeadLimitsAsk())
+		}
+	}
+	if err := (Autonomy{LeadLimits: "maybe"}).Validate(); err == nil {
+		t.Error("maybe is not a setting")
+	}
+}

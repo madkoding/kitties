@@ -27,6 +27,9 @@ export interface Kitty {
   // Limits bound one task; zero fields take the defaults. Backup takes over a task this kitty gives up on.
   limits?: Limits;
   backup?: string;
+  // lead marks the principal kitty, the orchestrator of the fleet (one at most): it hands the
+  // work to the others and their reports reach the person through it.
+  lead?: boolean;
   // approvals is "ask" (the default: an action that reaches other people waits for a yes until
   // the kitty is trusted with it) or "auto".
   approvals?: "ask" | "auto" | "";
@@ -171,6 +174,7 @@ export interface JournalEntry {
     | "recovered"
     | "skipped"
     | "off"
+    | "limit"
     | "event";
   text: string;
   goal?: string;
@@ -185,6 +189,8 @@ export interface Delegation {
   task: string;
   result?: string;
   error?: string;
+  // limits says what the lead gave the kitty for this task alone, when it did.
+  limits?: string;
 }
 
 export interface Step {
@@ -247,6 +253,8 @@ export interface Session {
   owner?: string;
   depth?: number;
   needs_help?: boolean;
+  // reports marks the lead kitty's Reports thread, where the other kitties' news land.
+  reports?: boolean;
 }
 
 export interface ProviderKind {
@@ -394,7 +402,7 @@ export interface SettingsView {
   notify: { connector: string; on: string[]; digest?: string; day?: boolean; replies?: boolean };
   notify_events: string[];
   // autonomy is how long the kitties keep at a task on their own: empty takes the defaults.
-  autonomy?: { follow_ups: string; brain_wait: string; stand_ins?: string };
+  autonomy?: { follow_ups: string; brain_wait: string; stand_ins?: string; lead_limits?: string };
   accounts: Account[];
   // oauth_ready are the services a connection signs in to without an app of the person's own.
   oauth_ready?: string[];
@@ -750,12 +758,18 @@ export const api = {
       soul?: Kitty["soul"];
       limits?: Limits;
       backup?: string;
+      lead?: boolean;
       approvals?: string;
       theme?: string;
       auto_off_minutes?: number;
       auto_off_default?: boolean;
     },
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
+  // lead is the fleet's lead kitty and its Reports thread; setLead makes another the lead
+  // (an empty kitty leaves the fleet without one).
+  lead: () => request<{ lead: Kitty | null; reports?: string }>("GET", "/v1/lead"),
+  setLead: (kitty: string) =>
+    request<{ lead: Kitty | null; reports?: string }>("PUT", "/v1/lead", { kitty }),
   // power is the state of a kitty's machine; setPower turns it on (it comes up in the background)
   // or off (a 409 says what is using it; force turns it off anyway).
   power: (ref: string) =>
@@ -1014,8 +1028,12 @@ export const api = {
     day?: boolean;
     replies?: boolean;
   }) => request<SettingsView>("PUT", "/v1/settings/notify", c),
-  setAutonomy: (a: { follow_ups: string; brain_wait: string; stand_ins: string }) =>
-    request<SettingsView>("PUT", "/v1/settings/autonomy", a),
+  setAutonomy: (a: {
+    follow_ups: string;
+    brain_wait: string;
+    stand_ins: string;
+    lead_limits?: string;
+  }) => request<SettingsView>("PUT", "/v1/settings/autonomy", a),
   testNotify: (connector = "") =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),
   // The browser session of a gateway served on a network: who is signed in, and the way in and out.

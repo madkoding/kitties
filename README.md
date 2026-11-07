@@ -37,6 +37,9 @@ a desktop app and an Android app.
   keep; a kitty's files export to one `.tar.gz` without its secrets ([details](docs/DESKTOP.md#what-outlives-the-desktop-home-programs-and-shared)).
 - **Autonomy.** Goals on a schedule or triggered by events, limits and a daily budget, retries, a
   backup kitty, delegation between kitties and a journal of everything.
+- **A lead kitty.** Make one kitty the lead and it orchestrates the rest: it splits what you ask among
+  them, gathers their answers into one report, and the others' news reach you through it
+  ([details](docs/AUTONOMY.md#the-lead-kitty)).
 - **Trust and memory.** Notes that persist, thumbs that teach it your standards, action limits and
   approvals that loosen as it earns trust, and notifications to your phone when it needs you.
 - **Connectors.** Slack, GitHub, Gmail, Google Workspace, Microsoft 365, Spotify, Stripe, Home

@@ -46,14 +46,17 @@ func (s *Service) demandOf(k *kitty.Kitty) int {
 }
 
 // tell sends a notification when there is a notifier.
+// With a lead kitty, the news of the others also lands in its Reports thread and the
+// notification goes out in its name (lead.go).
 func (s *Service) tell(e notify.Event, k *kitty.Kitty, title, body, chatID string) {
+	lead := s.leadFor(k)
+	if lead != nil {
+		s.report(lead, k, e, title, body, chatID)
+	}
 	if s.notifier == nil {
 		return
 	}
-	name := ""
-	if k != nil {
-		name = k.Name
-	}
+	name, title := signed(lead, k, title)
 	s.notifier.Notify(notify.Notification{Event: e, Kitty: name, Title: title, Body: body, Chat: chatID})
 }
 
@@ -165,6 +168,19 @@ func (s *Service) DecideApproval(ctx context.Context, id string, approve bool, r
 	}
 	k, _ := s.fleet.Get(ap.Kitty)
 	turn := Turn{At: s.now(), From: "approval", Kitty: ""}
+	if approve && ap.Connector == LeadLimitsConnector && ap.Kind == "limits" {
+		// A change of limits the lead asked for: made here, not through a connector.
+		line, err := s.decideLeadLimits(ap)
+		s.approvals.Done(id, line, errText(err))
+		ap.Result, ap.Error = line, errText(err)
+		if err != nil {
+			turn.Text = "Approved, but it failed: " + ap.Summary + "\n" + err.Error()
+		} else {
+			turn.Text = "Approved and done: " + line
+		}
+		s.appendTurn(ap.Chat, turn)
+		return ap, nil
+	}
 	if approve {
 		var allow []string
 		if k != nil {
@@ -220,3 +236,11 @@ func (s *Service) appendTurn(id string, t Turn) {
 
 // summaryLine keeps a long text to a line for a notification.
 func summaryLine(s string) string { return clip(strings.Join(strings.Fields(s), " "), 200) }
+
+// errText is an error's text, empty for none.
+func errText(err error) string {
+	if err == nil {
+		return ""
+	}
+	return err.Error()
+}
