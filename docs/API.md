@@ -17,7 +17,7 @@
 | `GET /v1/kitties/{ref}/rects`             | its display live as what changed on it, like VNC (`?fps=1-30`; `SCREEN`, `UPDATE`, `RECT` lines with JPEG bodies) |
 | `GET/PUT /v1/kitties/{ref}/clipboard` `{text}` | its clipboard, both ways                  |
 | `POST /v1/scale/{name}` `{replicas}`      | run n replicas of a configured kitty           |
-| `GET/POST /v1/chats`                      | threads; create `{title, members: [names]}`. Each carries `gist`, its last words in one line (no markdown; secrets, addresses, long numbers and link paths masked), and `gist_by`, who said them (`user` or a kitty's name) |
+| `GET/POST /v1/chats`                      | threads; create `{title, members: [names]}`. Each carries `gist`, its last words, at most 200 characters on one line (no markdown; secrets, addresses, long numbers and link paths masked), and `gist_by`, who said them (`user` or a kitty's name) |
 | `POST /v1/chats/{id}/members` · `DELETE /v1/chats/{id}/members/{ref}` | who is in the group |
 | `POST /v1/chats/{id}/messages` `{text, files: [{name, mime, data}]}` | send a message; returns the kitties' turns (a desktop task goes on in the background: poll the chat). `files` is optional, `data` is base64; up to 6 files and 20 MB in all, checked by their real type (a program is refused with 400, a body over the limit with 413). The turn lists them in `attachments` |
 | `GET /v1/chats/{id}/files/{file}`         | a file of the chat: a picture inline, anything else as a download |

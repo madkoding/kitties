@@ -164,7 +164,7 @@ test("the sidebar lists the kitties first, and each chat says what it is about",
   expect(k.y + k.height).toBeLessThanOrEqual(c.y + 1);
   await expect(kitties.getByRole("button", { name: "mimi", exact: true })).toBeVisible();
 
-  // Each chat row carries its gist: one line, read with the row by a screen reader, and
+  // Each chat row carries its gist: up to three lines, read with the row by a screen reader, and
   // nothing that looks like a link's path or an address.
   const group = chats.getByRole("button", { name: "Launch team", exact: true });
   await expect(group).toHaveAttribute("aria-current", "page");
@@ -179,12 +179,14 @@ test("the sidebar lists the kitties first, and each chat says what it is about",
   const lines = await chats.getByTestId("chat-gist").allTextContents();
   expect(lines.length).toBeGreaterThan(3);
   for (const line of lines) {
-    expect(line.length).toBeLessThanOrEqual(100);
+    expect(line.length).toBeLessThanOrEqual(220);
     expect(line).not.toMatch(/https?:\/\/|@\w+\.\w/);
   }
-  // A gist never wraps: its row keeps one line of it.
+  // A long gist wraps, and is cut at three lines.
+  const lineHeight = await gist.evaluate((el) => parseFloat(getComputedStyle(el).lineHeight));
   const box = (await gist.boundingBox())!;
-  expect(box.height).toBeLessThan(20);
+  expect(box.height).toBeGreaterThan(lineHeight * 1.5);
+  expect(box.height).toBeLessThanOrEqual(lineHeight * 3 + 1);
   await shot(page, "73-sidebar-gists");
 });
 
@@ -2245,7 +2247,9 @@ test("a kitty that needs the person asks for help: a window shows what it sees, 
   await expect(live.getByTestId("live-state")).toContainText("You have the controls");
   await live.getByTestId("give-back").click();
   await live.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(page.getByText("Signed in to the shop: thank you for the password.")).toBeVisible({
+  await expect(
+    page.getByRole("log").getByText("Signed in to the shop: thank you for the password."),
+  ).toBeVisible({
     timeout: 15000,
   });
   await expect(callout).toHaveCount(0);
