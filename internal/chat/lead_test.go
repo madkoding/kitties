@@ -6,7 +6,9 @@ import (
 	"testing"
 
 	"github.com/madkoding/kitties/internal/agenda"
+	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/notify"
+	"github.com/madkoding/kitties/internal/provider"
 )
 
 func TestLeadReportsForTheOthers(t *testing.T) {
@@ -104,4 +106,96 @@ func TestLeadReportsForTheOthers(t *testing.T) {
 	if n := s.LeadDigest(notify.Notification{Title: "x"}); n.Kitty != "" || n.Chat != "" {
 		t.Errorf("no lead, digest as it was: %+v", n)
 	}
+}
+
+// roundsFleet is the fake fleet that can change a kitty's rounds, as the orchestrator does.
+type roundsFleet struct{ *fakeFleet }
+
+func (f roundsFleet) SetRounds(ref string, n int) (*kitty.Kitty, error) {
+	k, err := f.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	k.Limits.MaxRounds = n
+	return k, nil
+}
+
+func TestLeadSetsRounds(t *testing.T) {
+	ff, sa, sb, _ := fleet(t)
+	f := roundsFleet{ff}
+	s := service(t, f)
+	j, _ := withAgenda(t, s)
+	ana, _ := f.Get("ana")
+	bo, _ := f.Get("bo")
+	// Nobody leads: nobody gets the tool, and the line is refused.
+	if s.canSetRounds(bo) {
+		t.Fatal("only the lead")
+	}
+	sb.replies = []string{"@rounds ana {\"max_rounds\": 60}", "ok"}
+	c, _ := s.Create("", []string{"bo"})
+	if _, err := s.Send(context.Background(), c.ID, "go"); err != nil {
+		t.Fatal(err)
+	}
+	if ana.Limits.MaxRounds != 0 {
+		t.Fatalf("a kitty that does not lead changed ana's rounds: %d", ana.Limits.MaxRounds)
+	}
+
+	bo.Lead = true
+	if !s.canSetRounds(bo) || s.canSetRounds(ana) {
+		t.Fatal("the lead, and only it, may")
+	}
+	found := false
+	for _, tool := range s.toolSet(bo, nil) {
+		found = found || tool.Name == "rounds"
+	}
+	if !found {
+		t.Error("the lead is offered the rounds tool")
+	}
+	sb.replies = []string{"@rounds ana {\"max_rounds\": 60}", "Gave ana 60 rounds."}
+	if _, err := s.Send(context.Background(), c.ID, "ana needs more rounds"); err != nil {
+		t.Fatal(err)
+	}
+	if ana.Limits.MaxRounds != 60 {
+		t.Fatalf("rounds = %d", ana.Limits.MaxRounds)
+	}
+	if kinds(j, "a1") != "limit" || !strings.Contains(kinds(j, "b1"), "limit") {
+		t.Errorf("journals: ana %s, bo %s", kinds(j, "a1"), kinds(j, "b1"))
+	}
+	reports, _ := s.ReportsChat(bo)
+	rep, _ := s.Get(reports)
+	if last := rep.Turns[len(rep.Turns)-1]; last.Report == nil || last.Report.Event != "rounds" || !strings.Contains(last.Text, "from the default to 60") {
+		t.Errorf("reported = %+v", last)
+	}
+	// The lead's prompt shows the team's rounds.
+	if p := sb.seen[len(sb.seen)-1][0].Content; !strings.Contains(p, "@rounds") {
+		t.Errorf("lead prompt names the tool: %s", p)
+	}
+
+	// Refused: past the cap, itself, nobody, no number.
+	for line, want := range map[string]string{
+		"@rounds ana {\"max_rounds\": 9999}": "1 to 500",
+		"@rounds bo {\"max_rounds\": 10}":    "not its own",
+		"@rounds zed {\"max_rounds\": 10}":   "no such kitty",
+		"@rounds ana {}":                     "say how many",
+	} {
+		sb.replies = []string{line, "ok"}
+		if _, err := s.Send(context.Background(), c.ID, "x"); err != nil {
+			t.Fatal(err)
+		}
+		msgs := sb.seen[len(sb.seen)-1]
+		if got := msgs[len(msgs)-1].Content; !strings.Contains(got, want) {
+			t.Errorf("%s: %s", line, got)
+		}
+	}
+	if ana.Limits.MaxRounds != 60 {
+		t.Errorf("a refused change changed nothing: %d", ana.Limits.MaxRounds)
+	}
+	// Plain words work too, and 0 goes back to the default.
+	if o := s.runRounds(c.ID, action{kind: "rounds", name: "ana", args: map[string]any{"max_rounds": "0"}}, bo); o.err != "" || ana.Limits.MaxRounds != 0 {
+		t.Errorf("back to the default: %+v %d", o, ana.Limits.MaxRounds)
+	}
+	if a := fromCalls([]provider.ToolCall{{ID: "1", Name: "rounds", Args: map[string]any{"kitty": "ana", "max_rounds": 30.0}}}); a[0].kind != "rounds" || a[0].name != "ana" {
+		t.Errorf("native call = %+v", a[0])
+	}
+	_ = sa
 }

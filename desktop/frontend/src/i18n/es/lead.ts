@@ -16,6 +16,7 @@ const dict: Dictionary = {
   "Open reports": "Abrir reportes",
   "Stop leading": "Dejar de ser principal",
   "Make {name} the lead": "Hacer principal a {name}",
+  limit: "límite",
 };
 
 export default dict;

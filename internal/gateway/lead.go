@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -111,6 +112,36 @@ func (s *Server) mcpLeadTools() []mcp.Tool {
 					return mcp.Result{}, err
 				}
 				return jsonResult(out)
+			}},
+		{Name: "kitty_set_rounds", Description: fmt.Sprintf("Change how many rounds of actions a kitty may take on one task (1 to %d; 0 goes back to the default), as its lead does.", kitty.MaxRoundsCap),
+			InputSchema: obj([]string{"ref", "max_rounds"}, map[string]any{"ref": str("the kitty's id or name"),
+				"max_rounds": map[string]any{"type": "integer", "description": "rounds per task; 0 for the default"}}),
+			Annotations: mcp.Annotations{},
+			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					Ref       string `json:"ref"`
+					MaxRounds *int   `json:"max_rounds"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				if a.MaxRounds == nil {
+					return mcp.Result{}, &mcp.ArgError{Msg: "max_rounds is required"}
+				}
+				if *a.MaxRounds < 0 || *a.MaxRounds > kitty.MaxRoundsCap {
+					return mcp.Result{}, &mcp.ArgError{Msg: fmt.Sprintf("max_rounds goes from 1 to %d (0 for the default)", kitty.MaxRoundsCap)}
+				}
+				k, err := s.fleet.Get(a.Ref)
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				limits := k.Limits
+				limits.MaxRounds = *a.MaxRounds
+				k, err = s.fleet.Edit(k.ID, orchestrator.Update{Limits: &limits})
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				return jsonResult(map[string]any{"kitty": k.Name, "limits": k.Limits})
 			}},
 		{Name: "lead_ask", Description: "Give the lead kitty a task for the whole fleet, in its Reports thread: it hands the pieces to the others and answers with one report. A desktop task goes on after this returns: follow the thread with chat_get.",
 			InputSchema: obj([]string{"text"}, map[string]any{"text": str("what the fleet should do, or a question about how things are going")}),

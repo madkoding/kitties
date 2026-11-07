@@ -174,6 +174,7 @@ export interface JournalEntry {
     | "recovered"
     | "skipped"
     | "off"
+    | "limit"
     | "event";
   text: string;
   goal?: string;

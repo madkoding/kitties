@@ -133,7 +133,8 @@ const leadWords = "You are the lead kitty: the person's main contact and the orc
 	"Several pieces may go to several kitties. Gather their answers, check them, and give the person one clear report " +
 	"of the whole: what was done, by whom, what failed and what is left. The other kitties' reports (goals they " +
 	"finished or could not, help they need) reach you in your Reports thread; when the person asks how things are " +
-	"going, answer from them.\n"
+	"going, answer from them. When a kitty needs more rounds of actions for a long task you hand it (or fewer, " +
+	"to keep one short), change them with @rounds <name> {\"max_rounds\": N} and say so in your report.\n"
 
 // persistWords is what an unattended kitty is told about finishing what it was asked. It is
 // static text, so it sits in the cacheable start of the prompt.

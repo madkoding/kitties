@@ -383,6 +383,8 @@ func parseDirectives(text string) ([]Directive, string) {
 			kind = "memory"
 		case strings.HasPrefix(trimmed, "@limit "):
 			kind = "limit"
+		case strings.HasPrefix(trimmed, "@rounds "):
+			kind = "rounds"
 		default:
 			kept = append(kept, line)
 			continue
@@ -398,6 +400,8 @@ func parseDirectives(text string) ([]Directive, string) {
 					key = "task"
 				case "memory":
 					key = "text"
+				case "rounds":
+					key = "max_rounds"
 				}
 				d.Args[key] = strings.Trim(argsText, "\"' ")
 			}

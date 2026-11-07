@@ -77,4 +77,14 @@ func TestMCPLeadTools(t *testing.T) {
 		t.Errorf("chat with the lead = %q %v", text, isErr)
 	}
 	_ = c
+	// Claude changes a kitty's rounds as the lead does, within the same cap.
+	f.kitties["a1"].Limits = kitty.Limits{MaxTokens: 7}
+	if text, isErr, _ := tool(t, s, "kitty_set_rounds", map[string]any{"ref": "ana", "max_rounds": 40}); isErr || f.kitties["a1"].Limits.MaxRounds != 40 || f.kitties["a1"].Limits.MaxTokens != 7 {
+		t.Errorf("rounds = %q %v %+v", text, isErr, f.kitties["a1"].Limits)
+	}
+	for _, bad := range []map[string]any{{"ref": "ana", "max_rounds": 501}, {"ref": "ana"}, {"ref": "zed", "max_rounds": 3}} {
+		if _, isErr, _ := tool(t, s, "kitty_set_rounds", bad); !isErr {
+			t.Errorf("%v accepted", bad)
+		}
+	}
 }

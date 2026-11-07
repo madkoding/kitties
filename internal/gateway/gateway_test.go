@@ -86,6 +86,9 @@ func (f *fakeFleet) Edit(ref string, u orchestrator.Update) (*kitty.Kitty, error
 		}
 		k.Avatar = a
 	}
+	if u.Limits != nil {
+		k.Limits = *u.Limits
+	}
 	if u.Lead != nil {
 		for _, other := range f.kitties {
 			if *u.Lead && other.ID != k.ID {

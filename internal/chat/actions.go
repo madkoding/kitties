@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/madkoding/kitties/internal/connector"
@@ -19,7 +20,7 @@ import (
 
 // action is one thing the model asked for.
 type action struct {
-	kind   string // tool | connector | skill | artifact | delegate | memory | limit
+	kind   string // tool | connector | skill | artifact | delegate | memory | limit | rounds
 	name   string // the tool, the connector, or the verb (skill/artifact)
 	args   map[string]any
 	raw    string
@@ -102,6 +103,10 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 		tools = append(tools, provider.Tool{Name: "delegate", Description: "Hand a subtask to another kitty and get its answer back. For work another kitty is better placed for, never the whole task.",
 			Parameters: obj(map[string]any{"kitty": str("the other kitty's name"), "task": str("what to do, with everything it needs to know")}, "kitty", "task")})
 	}
+	if s.canSetRounds(k) {
+		tools = append(tools, provider.Tool{Name: "rounds", Description: roundsHelp,
+			Parameters: obj(map[string]any{"kitty": str("the kitty's name"), "max_rounds": num(fmt.Sprintf("rounds per task, 1 to %d; 0 goes back to the default", kitty.MaxRoundsCap))}, "kitty", "max_rounds")})
+	}
 	if s.arts != nil {
 		tools = append(tools,
 			provider.Tool{Name: prefixArtifact + "save", Description: "Keep a file in the shared library for later (a report, a table, a draft).", Parameters: obj(map[string]any{"name": str("file name, like report.md"), "content": str("the text")}, "name", "content")},
@@ -148,6 +153,9 @@ func fromCalls(calls []provider.ToolCall) []action {
 			a.kind, a.name = "machine", "machine"
 		case c.Name == "delegate":
 			a.kind = "delegate"
+			a.name, _ = a.args["kitty"].(string)
+		case c.Name == "rounds":
+			a.kind = "rounds"
 			a.name, _ = a.args["kitty"].(string)
 		default:
 			a.kind, a.name = "tool", c.Name
@@ -224,6 +232,8 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 			out = append(out, s.runMemory(id, a, k))
 		case "limit":
 			out = append(out, s.runLimit(id, a, k, allowed, turn))
+		case "rounds":
+			out = append(out, s.runRounds(id, a, k))
 		case "machine":
 			out = append(out, s.runMachine(ctx, a, k))
 		case "connector":

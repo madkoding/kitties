@@ -25,6 +25,7 @@ const (
 	KindEvent     = "event"     // something arrived from a service
 	KindApproval  = "approval"  // an action waited for a yes, or went ahead on trust
 	KindLearned   = "learned"   // it noted something about the person or the work
+	KindLimit     = "limit"     // its limits were changed (the lead set its rounds)
 )
 
 // Entry is one line of a kitty's journal.

@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/madkoding/kitties/internal/config"
+	"github.com/madkoding/kitties/internal/kitty"
 )
 
 func TestOneLead(t *testing.T) {
@@ -76,5 +77,26 @@ func TestLeadFromConfig(t *testing.T) {
 	_ = m.Bootstrap(context.Background())
 	if l := m.Lead(); l == nil || l.Name != "ana" {
 		t.Errorf("lead after a second bootstrap = %v", l)
+	}
+}
+
+func TestSetRounds(t *testing.T) {
+	m, err := New(testConfig(t), WithContainers(newFake(), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k, _ := m.Create(context.Background(), Spec{Name: "ana", Limits: kitty.Limits{MaxTokens: 100}})
+	got, err := m.SetRounds("ana", 80)
+	if err != nil || got.Limits.MaxRounds != 80 || got.Limits.MaxTokens != 100 {
+		t.Fatalf("set = %+v %v", got, err)
+	}
+	if _, err := m.SetRounds("ana", kitty.MaxRoundsCap+1); err == nil {
+		t.Error("past the cap")
+	}
+	if _, err := m.SetRounds("nobody", 5); err == nil {
+		t.Error("unknown kitty")
+	}
+	if k, _ = m.Get(k.ID); k.Limits.MaxRounds != 80 {
+		t.Errorf("kept = %d", k.Limits.MaxRounds)
 	}
 }

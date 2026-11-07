@@ -93,6 +93,10 @@ type Limits struct {
 	Attended bool `json:"attended,omitempty" yaml:"attended"`
 }
 
+// MaxRoundsCap is the most rounds per task a kitty may be given by another (the lead): enough
+// for a long task, not a runaway one. The person may still set more themselves.
+const MaxRoundsCap = 500
+
 // Validate refuses a negative limit.
 func (l Limits) Validate() error {
 	if l.MaxTokens < 0 || l.MaxSeconds < 0 || l.MaxRounds < 0 || l.Retries < 0 || l.DayTokens < 0 || l.DayActions < 0 {
