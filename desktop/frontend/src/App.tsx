@@ -564,6 +564,10 @@ export default function App() {
             onNewChat={() => setModal("chat")}
             onConnections={() => go("#new-connectors-add")}
             onNotifications={() => go("#new-notifications")}
+            onQuickStarted={(id) => {
+              refresh();
+              openChat(id);
+            }}
           />
         )}
         {session && (

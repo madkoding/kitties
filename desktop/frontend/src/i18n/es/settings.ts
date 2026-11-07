@@ -416,6 +416,19 @@ const dict: Dictionary = {
   Hide: "Ocultar",
   "Keep the token to yourself: it is the only password of the page.":
     "Guarda el token para ti: es la única contraseña de la página.",
+  "Make a new token? Every browser and program that uses the old one is signed out; this app takes the new one by itself.":
+    "¿Crear un token nuevo? Todo navegador y programa que use el anterior queda fuera; esta app toma el nuevo sola.",
+  "Make a new token? Every browser and program that uses the old one is signed out, this page too. The new one is shown in the console where Kitties runs (or with kitties token) and in the desktop app.":
+    "¿Crear un token nuevo? Todo navegador y programa que use el anterior queda fuera, esta página también. El nuevo aparece en la consola donde corre Kitties (o con kitties token) y en la app de escritorio.",
+  "Make a new token": "Crear un token nuevo",
+  "Restarting Kitties…": "Reiniciando Kitties…",
+  "If the token got out, a new one signs everybody out.":
+    "Si el token se filtró, uno nuevo deja fuera a todos.",
+  "QR code to open Kitties on a phone": "Código QR para abrir Kitties en un teléfono",
+  "On a phone in the same network, point the camera here: Kitties opens signed in. Anyone who sees this code can get in.":
+    "En un teléfono de la misma red, apunta la cámara aquí: Kitties se abre con la sesión iniciada. Quien vea este código puede entrar.",
+  "To open it from a phone with a QR code, choose LAN above.":
+    "Para abrirlo desde un teléfono con un código QR, elige LAN arriba.",
 };
 
 export default dict;

@@ -778,6 +778,59 @@ test("adding a model: pick the provider, paste the key, keep the suggested model
   await shot(page, "34-add-model");
 });
 
+test("a first run starts in one screen: model, kitty and chat", async ({ page }) => {
+  const calls: string[] = [];
+  await page.route("**/v1/kitties", (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({ json: { kitties: [] } });
+    }
+    calls.push(`kitty ${route.request().postData()}`);
+    return route.fulfill({ json: { kitty: { id: "nala", name: "Nala", provider: "anthropic" } } });
+  });
+  await page.route("**/v1/chats", (route) => {
+    if (route.request().method() === "GET") {
+      return route.fulfill({ json: { chats: [] } });
+    }
+    calls.push(`chat ${route.request().postData()}`);
+    return route.fulfill({ json: { chat: { id: "c-first", title: "", members: ["nala"] } } });
+  });
+  await page.route("**/v1/providers", (route) =>
+    route.fulfill({ json: { providers: [], kinds: [] } }),
+  );
+  await page.route("**/v1/settings/providers/anthropic", (route) => {
+    calls.push(`model ${route.request().postData()}`);
+    return route.continue({
+      method: "GET",
+      url: route
+        .request()
+        .url()
+        .replace(/\/providers\/anthropic$/, ""),
+    });
+  });
+  await page.route("**/v1/settings/providers/anthropic/test", (route) => {
+    calls.push("test");
+    return route.fulfill({ json: { ok: true, reply: "hi" } });
+  });
+  await page.goto(`/${Q}`);
+  const quick = page.getByTestId("quick-start");
+  await expect(quick).toBeVisible();
+  // The key is needed for a provider that pays with one; Ollama needs none.
+  await expect(quick.getByTestId("quick-start-go")).toBeDisabled();
+  await expect(quick.getByTestId("missing")).toHaveText("Still needed: the key");
+  await quick.getByLabel("Its brain").selectOption("ollama");
+  await expect(quick.getByTestId("quick-start-go")).toBeEnabled();
+  await quick.getByLabel("Its brain").selectOption("anthropic");
+  await quick.getByLabel("Its key").fill("sk-ant-demo");
+  await quick.getByLabel("Your kitty's name").fill("Nala");
+  await quick.getByTestId("quick-start-go").click();
+  await expect.poll(() => calls.length).toBeGreaterThanOrEqual(4);
+  expect(calls[0]).toContain('"api_key":"sk-ant-demo"');
+  expect(calls[1]).toBe("test");
+  expect(calls[2]).toContain('"name":"Nala"');
+  expect(calls[3]).toContain('"members":["nala"]');
+  await expect(page).toHaveURL(/#chat\/c-first/);
+});
+
 test("a first run is a checklist, and nothing can be made out of order", async ({ page }) => {
   // A gateway with no model and no kitty yet.
   await page.route("**/v1/kitties", (route) =>
@@ -796,6 +849,8 @@ test("a first run is a checklist, and nothing can be made out of order", async (
   await expect(welcome).toContainText("Welcome to Kitties");
   await expect(welcome).toContainText("3 steps");
   await expect(welcome.getByRole("button", { name: "Create a kitty" })).toBeDisabled();
+  // The quick start asks for the three things a first kitty needs, all on this screen.
+  await expect(welcome.getByTestId("quick-start")).toBeVisible();
   await shot(page, "31-welcome");
   // A chat needs a kitty, and a kitty needs a model: each says so and leads to the next step.
   await page.locator("aside").getByRole("button", { name: "New chat" }).click();
@@ -2176,6 +2231,118 @@ test("Settings: the gateway is exposed local, LAN or WAN, WAN after accepting th
   await box.getByTestId("exposure-apply").click();
   await expect(box.getByTestId("exposure-restarting")).toBeVisible();
   expect(put).toEqual([{ mode: "wan", accept_risk: true }]);
+});
+
+test("in the desktop app, Network access opens Kitties in a browser signed in, and on a phone with a QR code", async ({
+  page,
+}) => {
+  // The page inside the app talks to the gateway through the app's bridge: here a stand-in that
+  // forwards to the test gateway, with the app's token and the QR it would draw.
+  // The QR the app draws for this address and token (desktop/qr.go), drawn once for the test.
+  const pixel = fs.readFileSync(
+    path.join(path.dirname(STATE), "fixtures", "sign-in-qr.txt"),
+    "utf8",
+  );
+  await page.addInitScript((pixel) => {
+    const token = "0123456789abcdef0123456789abcdef";
+    let local = "";
+    (window as unknown as { go: unknown }).go = {
+      main: {
+        App: {
+          Gateway: async () => ({ url: "http://127.0.0.1:7488", token }),
+          GatewayNote: async () => "",
+          SignInQR: async (base: string) => (
+            ((window as unknown as { qrFor: string }).qrFor = base),
+            pixel
+          ),
+          Request: async (method: string, path: string, body: string) => {
+            if (!local) {
+              local = (await (await fetch("/v1/local-token")).json()).token;
+            }
+            const r = await fetch(path, {
+              method,
+              body: body || undefined,
+              headers: { "Content-Type": "application/json", Authorization: `Bearer ${local}` },
+            });
+            return JSON.stringify({ status: r.status, body: await r.text() });
+          },
+        },
+      },
+    };
+  }, pixel.trim());
+  const opened: string[] = [];
+  await page.exposeFunction("openedURL", (u: string) => opened.push(u));
+  await page.addInitScript(() => {
+    (window as unknown as { runtime: unknown }).runtime = {
+      BrowserOpenURL: (u: string) =>
+        (window as unknown as { openedURL: (u: string) => void }).openedURL(u),
+    };
+  });
+  let exposure = {
+    mode: "local",
+    listen: "127.0.0.1:7488",
+    lan_ip: "192.168.1.20",
+    can_change: true,
+  };
+  await page.route("**/v1/exposure", (route) => route.fulfill({ json: exposure }));
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("in-browser");
+  await expect(box).toContainText("http://127.0.0.1:7488");
+  // The token stays hidden until asked for.
+  await expect(box.getByTestId("in-browser-token")).not.toContainText("0123456789abcdef");
+  await box.getByRole("button", { name: "Show" }).click();
+  await expect(box.getByTestId("in-browser-token")).toContainText("0123456789abcdef");
+  // Only this machine can reach it: the phone is told how.
+  await expect(box).toContainText("choose LAN above");
+  await box.getByTestId("in-browser-open").click();
+  await expect.poll(() => opened[0] || "").toContain("#signin=0123456789abcdef");
+  // On the local network a phone gets a QR code for the network address.
+  exposure = { ...exposure, mode: "lan", listen: "192.168.1.20:7488" };
+  await page.getByRole("tab", { name: "Connections" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  await expect(box.getByTestId("in-browser-qr")).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { qrFor: string }).qrFor)).toBe(
+    "http://192.168.1.20:7488",
+  );
+  // Drawn again, the token is hidden again.
+  await expect(box.getByRole("button", { name: "Show" })).toBeVisible();
+  await box.scrollIntoViewIfNeeded();
+  await shot(page, "56-settings-in-browser");
+});
+
+test("Settings: a new gateway token signs everybody out, unless the configuration sets it", async ({
+  page,
+}) => {
+  let exposure: Record<string, unknown> = {
+    mode: "local",
+    listen: "127.0.0.1:7488",
+    can_change: true,
+    token_rotate: false,
+    token_why: "the token is set in the configuration (gateway.token or KITTIES_TOKEN)",
+  };
+  let rotated = 0;
+  await page.route("**/v1/exposure", (route) => route.fulfill({ json: exposure }));
+  await page.route("**/v1/token/rotate", (route) => {
+    rotated++;
+    return route.fulfill({ status: 202, json: { restarting: true } });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const box = page.getByTestId("exposure");
+  await expect(box.getByTestId("token-fixed")).toContainText("KITTIES_TOKEN");
+  await expect(box.getByTestId("rotate-token")).toHaveCount(0);
+  exposure = { ...exposure, token_rotate: true, token_why: undefined };
+  await page.getByRole("tab", { name: "Connections" }).click();
+  await page.getByRole("tab", { name: "Preferences" }).click();
+  const rotate = box.getByTestId("rotate-token");
+  await rotate.getByRole("button", { name: "Make a new token" }).click();
+  const confirm = page.getByTestId("confirm");
+  await expect(confirm).toContainText("this page too");
+  await confirm.getByRole("button", { name: "Make a new token" }).click();
+  await expect.poll(() => rotated).toBe(1);
 });
 
 test("Settings: the Claude connector shows its switches, the command and the signed-in clients", async ({

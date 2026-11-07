@@ -1,3 +1,4 @@
+import QuickStart from "./QuickStart";
 import type { Kitty, ProviderInfo, Session } from "./api";
 import PixelCat from "./PixelCat";
 import { t } from "./i18n";
@@ -13,6 +14,7 @@ export default function Welcome({
   onNewChat,
   onConnections,
   onNotifications,
+  onQuickStarted,
 }: {
   models: ProviderInfo[];
   kitties: Kitty[];
@@ -22,6 +24,7 @@ export default function Welcome({
   onNewChat: () => void;
   onConnections: () => void;
   onNotifications: () => void;
+  onQuickStarted?: (chat: string) => void;
 }) {
   const steps = [
     {
@@ -70,6 +73,9 @@ export default function Welcome({
             </p>
           </div>
         </div>
+        {models.length === 0 && kitties.length === 0 && onQuickStarted && (
+          <QuickStart onDone={onQuickStarted} />
+        )}
         {left > 0 && (
           <ol class="checklist mt-3">
             {steps.map((s, i) => (

@@ -192,6 +192,21 @@ const dict: Dictionary = {
     "¿Dónde está? En la consola donde arrancó el gateway, o ejecuta",
   "on that machine. In the desktop app: Settings, Preferences, Network access.":
     "en esa máquina. En la app de escritorio: Ajustes, Preferencias, Acceso de red.",
+  // Quick start (Welcome, first start)
+  "Quick start": "Inicio rápido",
+  "Three answers and your first kitty is ready to chat. The rest can wait.":
+    "Tres respuestas y tu primer kitty queda listo para conversar. Lo demás puede esperar.",
+  "Its brain": "Su cerebro",
+  "Its key": "Su clave",
+  "paste the key": "pega la clave",
+  "Get a key": "Conseguir una clave",
+  "Ollama has to be running on this computer, at {addr}.":
+    "Ollama tiene que estar corriendo en este computador, en {addr}.",
+  "Your kitty's name": "El nombre de tu kitty",
+  "the key": "la clave",
+  "the kitty's name": "el nombre del kitty",
+  "Checking the model…": "Probando el modelo…",
+  "Creating {name}…": "Creando a {name}…",
 };
 
 export default dict;

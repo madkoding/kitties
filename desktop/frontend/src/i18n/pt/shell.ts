@@ -188,6 +188,25 @@ const dict: Dictionary = {
   "found on this machine when empty": "se ficar vazio, é buscado nesta máquina",
   Connect: "Conectar",
   Gateway: "Gateway",
+  "Where is it? In the console where the gateway started, or run":
+    "Onde está? No console onde o gateway foi iniciado, ou rode",
+  "on that machine. In the desktop app: Settings, Preferences, Network access.":
+    "nessa máquina. No app de desktop: Configurações, Preferências, Acesso de rede.",
+  // Quick start (Welcome, first start)
+  "Quick start": "Início rápido",
+  "Three answers and your first kitty is ready to chat. The rest can wait.":
+    "Três respostas e seu primeiro kitty fica pronto para conversar. O resto pode esperar.",
+  "Its brain": "O cérebro dele",
+  "Its key": "A chave dele",
+  "paste the key": "cole a chave",
+  "Get a key": "Conseguir uma chave",
+  "Ollama has to be running on this computer, at {addr}.":
+    "O Ollama tem que estar rodando neste computador, em {addr}.",
+  "Your kitty's name": "O nome do seu kitty",
+  "the key": "a chave",
+  "the kitty's name": "o nome do kitty",
+  "Checking the model…": "Testando o modelo…",
+  "Creating {name}…": "Criando {name}…",
 };
 
 export default dict;
