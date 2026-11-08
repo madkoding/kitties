@@ -52,7 +52,40 @@ type Status struct {
 	Error     string    `json:"error,omitempty"`
 	// Skipped is a newer version that was tried here and did not hold, and is not offered again.
 	Skipped string `json:"skipped,omitempty"`
+	// URL is the page of the newest release; Changes are the lines of its "What's Changed".
+	URL     string   `json:"url,omitempty"`
+	Changes []string `json:"changes,omitempty"`
+	// Progress is the update being made now (or the last one, when it failed).
+	Progress *Progress `json:"progress,omitempty"`
 }
+
+// Progress is how far an update has gone: the step it is at, the bytes of the download, and the
+// whole of it as a percentage.
+type Progress struct {
+	To string `json:"to"`
+	// Phase is check, download, verify, install, restart, or failed.
+	Phase   string `json:"phase"`
+	Percent int    `json:"percent"`
+	Done    int64  `json:"done,omitempty"`
+	Total   int64  `json:"total,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// Update phases.
+const (
+	PhaseCheck    = "check"
+	PhaseDownload = "download"
+	PhaseVerify   = "verify"
+	PhaseInstall  = "install"
+	PhaseRestart  = "restart"
+	PhaseFailed   = "failed"
+)
+
+// ErrInProgress is what a second update gets while one is being made.
+var ErrInProgress = errors.New("an update is already being made")
+
+// applyTimeout bounds an update made in the background.
+var applyTimeout = 15 * time.Minute
 
 // ErrBusy is what an update gets while kitties are in use.
 var ErrBusy = errors.New("the kitties are working or held: update when they are idle")
@@ -79,15 +112,19 @@ type Updater struct {
 	// Now is the clock.
 	Now func() time.Time
 
-	mu     sync.Mutex
-	status Status
-	rel    release
-	told   string
+	mu       sync.Mutex
+	status   Status
+	rel      release
+	told     string
+	progress *Progress
+	running  bool
 }
 
 type release struct {
-	Tag    string
-	Assets map[string]string
+	Tag     string
+	URL     string
+	Changes []string
+	Assets  map[string]string
 }
 
 // New makes the updater of the running binary.
@@ -191,7 +228,32 @@ func (u *Updater) canApply() (bool, string) {
 func (u *Updater) Status() Status {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	return u.status
+	st := u.status
+	if u.progress != nil {
+		p := *u.progress
+		st.Progress = &p
+	}
+	return st
+}
+
+// step records how far the update has gone.
+func (u *Updater) step(phase string, percent int, done, total int64) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.progress == nil {
+		u.progress = &Progress{}
+	}
+	u.progress.Phase, u.progress.Percent, u.progress.Done, u.progress.Total, u.progress.Error = phase, percent, done, total, ""
+}
+
+// fail records that the update stopped, and why.
+func (u *Updater) fail(err error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.progress == nil {
+		u.progress = &Progress{}
+	}
+	u.progress.Phase, u.progress.Error = PhaseFailed, err.Error()
 }
 
 // Check asks GitHub for the newest release.
@@ -210,6 +272,9 @@ func (u *Updater) Check(ctx context.Context) (Status, error) {
 		return st, err
 	}
 	st.Latest, st.Available = rel.Tag, Newer(u.Current, rel.Tag)
+	if st.Available {
+		st.URL, st.Changes = rel.URL, rel.Changes
+	}
 	// A version that did not hold on this installation is not offered again; a newer one is.
 	if st.Latest == u.skipped() {
 		st.Available = false
@@ -226,6 +291,24 @@ func (u *Updater) set(st Status, rel release) {
 }
 
 func (u *Updater) get(ctx context.Context, address string, limit int64, accept string) ([]byte, error) {
+	return u.fetch(ctx, address, limit, accept, nil)
+}
+
+// counter tells how many bytes have been read, and of how many, as they arrive.
+type counter struct {
+	r           io.Reader
+	done, total int64
+	tell        func(done, total int64)
+}
+
+func (c *counter) Read(p []byte) (int, error) {
+	n, err := c.r.Read(p)
+	c.done += int64(n)
+	c.tell(c.done, c.total)
+	return n, err
+}
+
+func (u *Updater) fetch(ctx context.Context, address string, limit int64, accept string, tell func(done, total int64)) ([]byte, error) {
 	parsed, err := url.Parse(address)
 	if err != nil || !secure(parsed) {
 		return nil, fmt.Errorf("%q is not an https address", address)
@@ -246,7 +329,11 @@ func (u *Updater) get(ctx context.Context, address string, limit int64, accept s
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("%s answered HTTP %d", parsed.Host, resp.StatusCode)
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, limit+1))
+	var body io.Reader = resp.Body
+	if tell != nil {
+		body = &counter{r: resp.Body, total: resp.ContentLength, tell: tell}
+	}
+	data, err := io.ReadAll(io.LimitReader(body, limit+1))
 	if err != nil {
 		return nil, err
 	}
@@ -263,6 +350,8 @@ func (u *Updater) latest(ctx context.Context) (release, error) {
 	}
 	var doc struct {
 		Tag        string `json:"tag_name"`
+		URL        string `json:"html_url"`
+		Body       string `json:"body"`
 		Prerelease bool   `json:"prerelease"`
 		Draft      bool   `json:"draft"`
 		Assets     []struct {
@@ -273,7 +362,10 @@ func (u *Updater) latest(ctx context.Context) (release, error) {
 	if err := json.Unmarshal(body, &doc); err != nil || doc.Tag == "" {
 		return release{}, errors.New("looking for a new version: the answer is not a release")
 	}
-	rel := release{Tag: doc.Tag, Assets: map[string]string{}}
+	rel := release{Tag: doc.Tag, Assets: map[string]string{}, Changes: changes(doc.Body)}
+	if u, err := url.Parse(doc.URL); err == nil && u.Scheme == "https" {
+		rel.URL = doc.URL
+	}
 	if doc.Prerelease || doc.Draft {
 		rel.Tag = u.Current // a pre-release is nothing to move to
 	}
@@ -283,25 +375,122 @@ func (u *Updater) latest(ctx context.Context) (release, error) {
 	return rel, nil
 }
 
-// Apply downloads the newest release for this system and puts it in place of the running binary.
-// The caller restarts (Relaunch) when it has answered whoever asked.
-func (u *Updater) Apply(ctx context.Context) (string, error) {
+// maxChanges bounds the lines of a release's changes that are told.
+const maxChanges = 20
+
+var byAuthor = regexp.MustCompile(`\s+by @[\w-]+(\s+in\s+https?://\S+)?\s*$`)
+
+// changes reads the "* …" lines of a release's notes (GitHub's "What's Changed"), without the
+// author and the link of each pull request.
+func changes(body string) []string {
+	var out []string
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "* ") && !strings.HasPrefix(line, "- ") {
+			continue
+		}
+		line = strings.TrimSpace(byAuthor.ReplaceAllString(line[2:], ""))
+		if line == "" {
+			continue
+		}
+		if len(line) > 200 {
+			line = line[:200] + "…"
+		}
+		if out = append(out, line); len(out) == maxChanges {
+			break
+		}
+	}
+	return out
+}
+
+// ready checks that the newest release can be installed now, and returns it.
+func (u *Updater) ready(ctx context.Context) (release, error) {
 	st, err := u.Check(ctx)
 	if err != nil {
-		return "", err
+		return release{}, err
 	}
 	switch {
 	case !st.CanApply:
-		return "", errors.New(st.Why)
+		return release{}, errors.New(st.Why)
 	case !st.Available:
-		return "", fmt.Errorf("%s is already the newest version", u.Current)
+		return release{}, fmt.Errorf("%s is already the newest version", u.Current)
 	}
 	if u.Idle != nil && !u.Idle() {
-		return "", ErrBusy
+		return release{}, ErrBusy
 	}
 	u.mu.Lock()
-	rel := u.rel
+	defer u.mu.Unlock()
+	return u.rel, nil
+}
+
+// Apply downloads the newest release for this system and puts it in place of the running binary.
+// The caller restarts (Relaunch) when it has answered whoever asked.
+func (u *Updater) Apply(ctx context.Context) (string, error) {
+	if !u.claim() {
+		return "", ErrInProgress
+	}
+	defer u.unclaim()
+	rel, err := u.ready(ctx)
+	if err != nil {
+		return "", err
+	}
+	return u.install(ctx, rel)
+}
+
+// Begin checks that the update can be made now and makes it in the background, telling how far it
+// has gone in the status (Progress); done hears how it ended. It answers the version it moves to,
+// or why it does not.
+func (u *Updater) Begin(ctx context.Context, done func(to string, err error)) (string, error) {
+	if !u.claim() {
+		return "", ErrInProgress
+	}
+	u.step(PhaseCheck, 2, 0, 0)
+	rel, err := u.ready(ctx)
+	if err != nil {
+		u.mu.Lock()
+		u.progress = nil
+		u.mu.Unlock()
+		u.unclaim()
+		return "", err
+	}
+	u.mu.Lock()
+	u.progress.To = rel.Tag
 	u.mu.Unlock()
+	go func() {
+		defer u.unclaim()
+		run, cancel := context.WithTimeout(context.Background(), applyTimeout)
+		defer cancel()
+		to, err := u.install(run, rel)
+		if err != nil {
+			u.fail(err)
+		} else {
+			u.step(PhaseRestart, 100, 0, 0)
+		}
+		if done != nil {
+			done(to, err)
+		}
+	}()
+	return rel.Tag, nil
+}
+
+func (u *Updater) claim() bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.running {
+		return false
+	}
+	u.running = true
+	return true
+}
+
+func (u *Updater) unclaim() {
+	u.mu.Lock()
+	u.running = false
+	u.mu.Unlock()
+}
+
+// install downloads the release's binary for this system, checks it, and puts it in place.
+func (u *Updater) install(ctx context.Context, rel release) (string, error) {
 	name := u.assetName()
 	binURL, sumsURL := rel.Assets[name], rel.Assets["SHA256SUMS"]
 	if binURL == "" || sumsURL == "" {
@@ -329,14 +518,24 @@ func (u *Updater) Apply(ctx context.Context) (string, error) {
 	if want == "" {
 		return "", fmt.Errorf("SHA256SUMS of %s does not list %s", rel.Tag, name)
 	}
-	bin, err := u.get(ctx, binURL, maxBinary, "application/octet-stream")
+	// The download is most of the update: from 5% to 85%.
+	u.step(PhaseDownload, 5, 0, 0)
+	bin, err := u.fetch(ctx, binURL, maxBinary, "application/octet-stream", func(done, total int64) {
+		pct := 5
+		if total > 0 {
+			pct += int(done * 80 / total)
+		}
+		u.step(PhaseDownload, min(pct, 85), done, total)
+	})
 	if err != nil {
 		return "", fmt.Errorf("downloading %s: %w", name, err)
 	}
+	u.step(PhaseVerify, 88, 0, 0)
 	if sum := sha256.Sum256(bin); hex.EncodeToString(sum[:]) != want {
 		return "", fmt.Errorf("%s does not match its SHA256SUMS: it was not installed", name)
 	}
-	if err := u.install(ctx, bin, rel.Tag); err != nil {
+	u.step(PhaseInstall, 92, 0, 0)
+	if err := u.swap(ctx, bin, rel.Tag); err != nil {
 		return "", err
 	}
 	// Until the new version has held for a while, it can be gone back from.
@@ -355,9 +554,9 @@ func checksum(sums, name string) string {
 	return ""
 }
 
-// install checks the new binary runs and says the version it should, then swaps it in: the
+// swap checks the new binary runs and says the version it should, then swaps it in: the
 // running one is kept as <name>.prev, so a bad update can be put back by hand.
-func (u *Updater) install(ctx context.Context, bin []byte, tag string) error {
+func (u *Updater) swap(ctx context.Context, bin []byte, tag string) error {
 	dir := filepath.Dir(u.Exe)
 	tmp, err := os.CreateTemp(dir, ".kitties-new-*")
 	if err != nil {
@@ -400,6 +599,9 @@ func (u *Updater) Relaunch() error {
 	if err != nil {
 		u.mu.Lock()
 		u.status.Error = "the new version is in place but Kitties could not restart into it: restart it by hand"
+		if u.progress != nil {
+			u.progress.Phase, u.progress.Error = PhaseFailed, u.status.Error
+		}
 		u.mu.Unlock()
 	}
 	return err

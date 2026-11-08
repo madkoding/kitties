@@ -29,6 +29,10 @@ type release_ struct {
 	status     int
 	// signedBy is the private key the checksums are signed with ("" leaves the release unsigned).
 	signedBy string
+	// body is the release's notes.
+	body string
+	// hold, when set, keeps the binary's download waiting until it is closed.
+	hold chan struct{}
 }
 
 // The release key of the tests.
@@ -58,9 +62,16 @@ func fakeGitHub(t *testing.T, r *release_) *httptest.Server {
 			if r.noAsset {
 				assets = "[]"
 			}
-			fmt.Fprintf(w, `{"tag_name":%q,"prerelease":%v,"assets":%s}`, r.tag, r.prerelease, assets)
+			fmt.Fprintf(w, `{"tag_name":%q,"html_url":"https://github.com/madkoding/kitties/releases/tag/%[1]s","body":%q,"prerelease":%v,"assets":%s}`, r.tag, r.body, r.prerelease, assets)
 		case "/dl/bin":
-			_, _ = w.Write([]byte(r.binary))
+			w.Header().Set("Content-Length", fmt.Sprint(len(r.binary)))
+			half := len(r.binary) / 2
+			_, _ = w.Write([]byte(r.binary[:half]))
+			if r.hold != nil {
+				w.(http.Flusher).Flush()
+				<-r.hold
+			}
+			_, _ = w.Write([]byte(r.binary[half:]))
 		case "/dl/sums":
 			_, _ = w.Write([]byte(r.sumsText()))
 		case "/dl/sig":
@@ -705,4 +716,104 @@ func TestAssetNamesAreTheMakefilesOnes(t *testing.T) {
 	if checked < 7 {
 		t.Errorf("only %d platforms were read from the Makefile", checked)
 	}
+}
+
+func TestTheNewsCarriesTheReleasesChanges(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), body: "## Which file?\n| a | b |\n\n## What's Changed\n* feat(chat): fold a task's actions by @madkoding in https://github.com/madkoding/kitties/pull/117\n* fix(menu): keep it open by @someone-else\n\n**Full Changelog**: x"}
+	u, _ := updater(t, fakeGitHub(t, r), config.UpdateNotify)
+	st, err := u.Check(context.Background())
+	if err != nil || st.URL != "https://github.com/madkoding/kitties/releases/tag/v1.1.0" {
+		t.Fatalf("Check = %+v, %v", st, err)
+	}
+	want := []string{"feat(chat): fold a task's actions", "fix(menu): keep it open"}
+	if strings.Join(st.Changes, "|") != strings.Join(want, "|") {
+		t.Errorf("changes = %q", st.Changes)
+	}
+	// Nothing newer: no changes to tell.
+	r.tag = "v1.0.0"
+	if st, _ := u.Check(context.Background()); st.URL != "" || len(st.Changes) != 0 {
+		t.Errorf("up to date = %+v", st)
+	}
+	long := "* " + strings.Repeat("x", 300)
+	if got := changes(strings.Repeat(long+"\n", 30)); len(got) != maxChanges || len(got[0]) > 210 {
+		t.Errorf("changes are not bounded: %d, %d", len(got), len(got[0]))
+	}
+}
+
+func TestBeginTellsHowFarTheUpdateHasGone(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0") + strings.Repeat("# padding\n", 200), hold: make(chan struct{})}
+	u, exe := updater(t, fakeGitHub(t, r), config.UpdateNotify)
+	ctx := context.Background()
+	done := make(chan error, 1)
+	to, err := u.Begin(ctx, func(to string, err error) { done <- err })
+	if err != nil || to != "v1.1.0" {
+		t.Fatalf("Begin = %q, %v", to, err)
+	}
+	// Half of the binary has arrived: the update is downloading, and a second one is refused.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		p := u.Status().Progress
+		if p != nil && p.Phase == PhaseDownload && p.Done > 0 {
+			if p.To != "v1.1.0" || p.Total != int64(len(r.binary)) || p.Percent < 5 || p.Percent > 85 {
+				t.Errorf("progress = %+v", p)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no download progress: %+v", p)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if _, err := u.Begin(ctx, nil); !errors.Is(err, ErrInProgress) {
+		t.Errorf("a second update = %v", err)
+	}
+	if _, err := u.Apply(ctx); !errors.Is(err, ErrInProgress) {
+		t.Errorf("an update by itself meanwhile = %v", err)
+	}
+	close(r.hold)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the update did not end")
+	}
+	if p := u.Status().Progress; p == nil || p.Phase != PhaseRestart || p.Percent != 100 {
+		t.Errorf("done = %+v", p)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != r.binary {
+		t.Error("the new binary is not in place")
+	}
+	// It can not restart: the status says so.
+	u.Restart = func(string, []string, []string) error { return errors.New("no exec") }
+	if err := u.Relaunch(); err == nil || u.Status().Progress.Phase != PhaseFailed {
+		t.Errorf("a failed restart = %v %+v", err, u.Status().Progress)
+	}
+}
+
+func TestBeginSaysWhyNotAndAFailedInstallIsTold(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), sums: strings.Repeat("0", 64) + "  kitties-linux-amd64\n"}
+	u, _ := updater(t, fakeGitHub(t, r), config.UpdateNotify)
+	ctx := context.Background()
+	u.Idle = func() bool { return false }
+	if _, err := u.Begin(ctx, nil); !errors.Is(err, ErrBusy) || u.Status().Progress != nil {
+		t.Fatalf("busy = %v %+v", err, u.Status().Progress)
+	}
+	u.Idle = nil
+	done := make(chan error, 1)
+	if _, err := u.Begin(ctx, func(_ string, err error) { done <- err }); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("bad sums = %v", err)
+	}
+	if p := u.Status().Progress; p == nil || p.Phase != PhaseFailed || !strings.Contains(p.Error, "does not match") {
+		t.Errorf("progress = %+v", p)
+	}
+	// Once it has ended another one may start.
+	if _, err := u.Begin(ctx, func(_ string, err error) { done <- err }); err != nil {
+		t.Errorf("again = %v", err)
+	}
+	<-done
 }

@@ -14,14 +14,16 @@ import (
 )
 
 type fakeUpdater struct {
-	mu        sync.Mutex
-	st        selfupdate.Status
-	checkErr  error
-	applyErr  error
-	checks    int
-	applied   int
-	relaunch  chan struct{}
-	relaunchE error
+	mu       sync.Mutex
+	st       selfupdate.Status
+	checkErr error
+	applyErr error
+	// installErr is how the background install ends.
+	installErr error
+	checks     int
+	applied    int
+	relaunch   chan struct{}
+	relaunchE  error
 }
 
 func (f *fakeUpdater) Status() selfupdate.Status { return f.st }
@@ -31,11 +33,15 @@ func (f *fakeUpdater) Check(context.Context) (selfupdate.Status, error) {
 	f.checks++
 	return f.st, f.checkErr
 }
-func (f *fakeUpdater) Apply(context.Context) (string, error) {
+func (f *fakeUpdater) Begin(_ context.Context, done func(string, error)) (string, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.applied++
-	return f.st.Latest, f.applyErr
+	if f.applyErr != nil {
+		return "", f.applyErr
+	}
+	go done(f.st.Latest, f.installErr)
+	return f.st.Latest, nil
 }
 func (f *fakeUpdater) Relaunch() error { close(f.relaunch); return f.relaunchE }
 
@@ -63,9 +69,9 @@ func TestUpdateRoutes(t *testing.T) {
 	if code, _, _ := call(t, srv, "GET", "/v1/update?refresh=1", "tok", nil); code != 200 || f.checks != 1 {
 		t.Errorf("refresh = %d checks %d", code, f.checks)
 	}
-	// Applying installs and, once it has answered, restarts.
+	// Applying starts the install, answers at once and, once it is in place, restarts.
 	code, got, _ = call(t, srv, "POST", "/v1/update/apply", "tok", nil)
-	if code != 202 || got["updated_to"] != "v1.1.0" || got["restarting"] != true || f.applied != 1 {
+	if code != 202 || got["updating_to"] != "v1.1.0" || f.applied != 1 {
 		t.Fatalf("apply = %d %v", code, got)
 	}
 	select {
@@ -73,8 +79,19 @@ func TestUpdateRoutes(t *testing.T) {
 	case <-time.After(3 * time.Second):
 		t.Fatal("it did not restart")
 	}
-	// Why it does not: cannot, already the newest, busy, a failed install, a GitHub that does not answer.
+	// An install that fails does not restart.
 	f.relaunch = make(chan struct{})
+	f.installErr = errors.New("does not match its SHA256SUMS")
+	if code, _, _ := call(t, srv, "POST", "/v1/update/apply", "tok", nil); code != 202 {
+		t.Fatalf("a failing install = %d", code)
+	}
+	select {
+	case <-f.relaunch:
+		t.Fatal("it restarted after a failed install")
+	case <-time.After(50 * time.Millisecond):
+	}
+	f.applied = 1
+	// Why it does not: cannot, already the newest, busy, one in progress, a GitHub that does not answer.
 	for _, c := range []struct {
 		name string
 		set  func()
@@ -83,7 +100,8 @@ func TestUpdateRoutes(t *testing.T) {
 		{"it cannot", func() { f.st.CanApply, f.st.Why = false, "in a container" }, 400},
 		{"the newest", func() { f.st.CanApply, f.st.Why, f.st.Available = true, "", false }, 409},
 		{"busy", func() { f.st.Available, f.applyErr = true, selfupdate.ErrBusy }, 409},
-		{"a bad install", func() { f.applyErr = errors.New("does not match its SHA256SUMS") }, 502},
+		{"in progress", func() { f.applyErr = selfupdate.ErrInProgress }, 409},
+		{"a bad start", func() { f.applyErr = errors.New("no SHA256SUMS") }, 502},
 		{"no GitHub", func() { f.checkErr = errors.New("down") }, 502},
 	} {
 		c.set()
@@ -91,7 +109,7 @@ func TestUpdateRoutes(t *testing.T) {
 			t.Errorf("%s = %d, want %d", c.name, code, c.want)
 		}
 	}
-	if f.applied != 3 {
+	if f.applied != 4 {
 		t.Errorf("applied %d times", f.applied)
 	}
 	if code, _, _ := call(t, srv, "GET", "/v1/update", "", nil); code != 401 {

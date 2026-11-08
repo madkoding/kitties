@@ -17,6 +17,7 @@ import Sidebar, { moodOf } from "./Sidebar";
 import PixelCat from "./PixelCat";
 import { cycleMode } from "./theme";
 import { t } from "./i18n";
+import { UpdateModal, useUpdateNews } from "./Updates";
 
 type ModalKind =
   | "none"
@@ -108,6 +109,9 @@ export default function App() {
   const [models, setModels] = useState<ProviderInfo[]>([]);
   const [containers, setContainers] = useState(true);
   const [dockerState, setDockerState] = useState<"not_installed" | "not_running" | undefined>();
+  // The news of a newer Kitties, and whether its window is open.
+  const news = useUpdateNews(online === true);
+  const [upgrading, setUpgrading] = useState(false);
 
   const user = t("You");
 
@@ -516,6 +520,7 @@ export default function App() {
   return (
     <div class="app-bg h-full flex overflow-hidden">
       <ConfirmHost />
+      {upgrading && news && <UpdateModal status={news} onClose={() => setUpgrading(false)} />}
       <Sidebar
         chats={chats}
         kitties={kitties}
@@ -537,6 +542,8 @@ export default function App() {
         approvals={waiting}
         onTheme={cycleMode}
         onSignOut={canSignOut ? signOut : undefined}
+        update={news?.available ? news.latest || "" : ""}
+        onUpdate={() => setUpgrading(true)}
       />
       <div class="flex-1 flex flex-col min-w-0">
         <header class="titlebar frosted flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-white/5 flex-none z-10">

@@ -13,7 +13,7 @@ import (
 type Updating interface {
 	Status() selfupdate.Status
 	Check(ctx context.Context) (selfupdate.Status, error)
-	Apply(ctx context.Context) (string, error)
+	Begin(ctx context.Context, done func(to string, err error)) (string, error)
 	Relaunch() error
 }
 
@@ -45,10 +45,12 @@ func (s *Server) handleUpdateStatus(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, st)
 }
 
-// restartAfter is the pause between answering an update and restarting into it, for the answer to arrive.
+// restartAfter is the pause between finishing an update and restarting into it, for the page to see
+// that it is done.
 var restartAfter = 700 * time.Millisecond
 
-// handleApplyUpdate installs the newer version and restarts into it once it has answered.
+// handleApplyUpdate starts installing the newer version and answers at once: GET /v1/update tells
+// how far it has gone (progress), and once it is in place the gateway restarts into it.
 func (s *Server) handleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 	if s.updater == nil {
 		fail(w, http.StatusNotFound, errNoUpdater)
@@ -67,18 +69,20 @@ func (s *Server) handleApplyUpdate(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusConflict, errors.New(st.Current+" is already the newest version"))
 		return
 	}
-	to, err := s.updater.Apply(r.Context())
+	to, err := s.updater.Begin(r.Context(), func(_ string, err error) {
+		if err != nil {
+			return
+		}
+		time.Sleep(restartAfter)
+		_ = s.updater.Relaunch()
+	})
 	switch {
-	case errors.Is(err, selfupdate.ErrBusy):
+	case errors.Is(err, selfupdate.ErrBusy), errors.Is(err, selfupdate.ErrInProgress):
 		fail(w, http.StatusConflict, err)
 		return
 	case err != nil:
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
-	reply(w, http.StatusAccepted, map[string]any{"updated_to": to, "restarting": true})
-	go func() {
-		time.Sleep(restartAfter)
-		_ = s.updater.Relaunch()
-	}()
+	reply(w, http.StatusAccepted, map[string]any{"updating_to": to})
 }
