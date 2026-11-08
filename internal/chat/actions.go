@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/desktop"
@@ -234,10 +235,11 @@ func (o outcome) result() string {
 // background task's business) and records them on the turn.
 func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action, k *kitty.Kitty, allowed map[string]string, turn *Turn) []outcome {
 	var out []outcome
-	for _, a := range actions {
+	handed := s.delegateAll(ctx, id, actions, k, turn)
+	for i, a := range actions {
 		switch a.kind {
 		case "delegate":
-			out = append(out, s.delegate(ctx, id, a, k, turn))
+			out = append(out, handed[i])
 		case "memory":
 			out = append(out, s.runMemory(id, a, k))
 		case "limit":
@@ -309,4 +311,47 @@ func hasDesktopAction(actions []action) bool {
 		}
 	}
 	return false
+}
+
+// delegateAll runs the batch's hand-overs, by their index in actions. Hand-overs to different
+// kitties run at the same time, so a lead that splits a task among several waits for the
+// slowest instead of for all of them in a row; two to the same kitty go one after the other.
+func (s *Service) delegateAll(ctx context.Context, id string, actions []action, k *kitty.Kitty, turn *Turn) map[int]outcome {
+	byKitty := map[string][]int{}
+	var order []string
+	for i, a := range actions {
+		if a.kind != "delegate" {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(a.name))
+		if _, seen := byKitty[key]; !seen {
+			order = append(order, key)
+		}
+		byKitty[key] = append(byKitty[key], i)
+	}
+	out := map[int]outcome{}
+	if len(order) == 0 {
+		return out
+	}
+	turns := make([]Turn, len(actions))
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, key := range order {
+		wg.Add(1)
+		go func(idx []int) {
+			defer wg.Done()
+			for _, i := range idx {
+				o := s.delegate(ctx, id, actions[i], k, &turns[i])
+				mu.Lock()
+				out[i] = o
+				mu.Unlock()
+			}
+		}(byKitty[key])
+	}
+	wg.Wait()
+	// The hand-overs are shown in the order they were asked for.
+	for i := range actions {
+		turn.Delegations = append(turn.Delegations, turns[i].Delegations...)
+	}
+	return out
 }

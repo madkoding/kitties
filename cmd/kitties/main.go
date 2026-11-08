@@ -73,7 +73,7 @@ Commands:
   lead [<name> | none]      show the lead kitty (the one that orchestrates the others and reports for
                             all of them), make another the lead, or leave the fleet without one
   scale <name> <n>          run n replicas of a configured kitty (name-1 ... name-n)
-  chat <name>[,<name>...]   talk to one kitty, or to a group of them, from the terminal
+  chat [<name>[,<name>...]] talk to one kitty, or to a group of them, from the terminal (no name: the lead)
   exec <name> <cmd...>      run a command inside the kitty's container
   shot <name> <file.png>    save a screenshot of the kitty's display
   providers                 list the configured AI profiles and the supported kinds
@@ -1038,8 +1038,14 @@ func (a *app) cmdShot(ctx context.Context, args []string) error {
 
 // cmdChat is the terminal chat: one kitty, or a group of them.
 func (a *app) cmdChat(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		// No kitty named: the lead, which hands the work to the others.
+		if lead := a.fleet.Lead(); lead != nil {
+			args = []string{lead.Name}
+		}
+	}
 	if len(args) != 1 {
-		return errors.New("usage: kitties chat <name>[,<name>...]")
+		return errors.New("usage: kitties chat <name>[,<name>...] (or no name, for the lead kitty)")
 	}
 	members := strings.Split(args[0], ",")
 	sess, err := a.chats.Create("", members)

@@ -20,6 +20,10 @@ const dict: Dictionary = {
     "Pregúntame antes de que el kitty principal cambie los límites de otro",
   "The lead may give a kitty more rounds, tokens or seconds per task (up to 500 rounds, 2M tokens, 2 hours). On: each lasting change waits in Approvals. What it gives for one task alone ends with the task.":
     "El principal puede darle a un kitty más rondas, tokens o segundos por tarea (hasta 500 rondas, 2M de tokens, 2 horas). Activado: cada cambio permanente espera en Aprobaciones. Lo que da para una sola tarea termina con la tarea.",
+  "The lead kitty ({name})": "El kitty principal ({name})",
+  "Summarize reports": "Resumir reportes",
+  "Summarize the reports in this thread since your last summary: what each kitty did, what is stuck or failed, what waits for me, and what you suggest next. Short, in bullets.":
+    "Resume los reportes de este hilo desde tu último resumen: qué hizo cada kitty, qué está trabado o falló, qué espera por mí y qué sugieres hacer ahora. Breve, en viñetas.",
   limit: "límite",
 };
 

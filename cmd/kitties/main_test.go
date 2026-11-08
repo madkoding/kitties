@@ -308,6 +308,16 @@ func TestFleetCommands(t *testing.T) {
 	if code, _, _ := exec(t, "", "-config", cfg, "chat"); code != 1 {
 		t.Error("chat usage")
 	}
+	// With no name, the chat is with the lead.
+	if code, _, _ := exec(t, "", "-config", cfg, "lead", "brain"); code != 0 {
+		t.Error("lead brain")
+	}
+	if code, out, _ := exec(t, "hi\n", "-config", cfg, "chat"); code != 0 || !strings.Contains(out, "brain: hello there") {
+		t.Errorf("chat with the lead: %d %s", code, out)
+	}
+	if code, _, _ := exec(t, "", "-config", cfg, "lead", "none"); code != 0 {
+		t.Error("lead none")
+	}
 	if code, _, _ := exec(t, "", "-config", cfg, "chat", "nobody"); code != 1 {
 		t.Error("chat unknown kitty")
 	}

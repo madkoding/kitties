@@ -4,13 +4,16 @@ import (
 	"context"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/soul"
 )
 
 func TestLeadReportsForTheOthers(t *testing.T) {
@@ -318,3 +321,43 @@ func (p probe) Complete(context.Context, []provider.Message) (provider.Reply, er
 	return provider.Reply{Content: "done"}, nil
 }
 func (p probe) Describe() string { return "probe" }
+
+func TestHandOversToSeveralKittiesRunAtOnce(t *testing.T) {
+	f, sa, _, _ := fleet(t)
+	var mu sync.Mutex
+	in := 0
+	both := make(chan struct{})
+	together := 0
+	// Each helper waits for the other: in a row, the first would wait in vain.
+	meet := func() {
+		mu.Lock()
+		in++
+		if in == 2 {
+			close(both)
+		}
+		mu.Unlock()
+		select {
+		case <-both:
+			mu.Lock()
+			together++
+			mu.Unlock()
+		case <-time.After(2 * time.Second):
+		}
+	}
+	for _, name := range []string{"cy", "di"} {
+		k := &kitty.Kitty{ID: name + "1", Name: name, Soul: soul.Default(name)}
+		f.kitties[k.ID] = k
+		f.brains[k.ID] = probe(meet)
+	}
+	s := service(t, f)
+	sa.replies = []string{"@delegate cy {\"task\": \"one\"}\n@delegate di {\"task\": \"two\"}", "both done"}
+	sess, _ := s.Create("", []string{"ana"})
+	turns, err := s.Send(context.Background(), sess.ID, "split it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := turns[0].Delegations
+	if together != 2 || len(d) != 2 || d[0].Kitty != "cy" || d[1].Kitty != "di" {
+		t.Fatalf("together = %d, delegations = %+v", together, d)
+	}
+}

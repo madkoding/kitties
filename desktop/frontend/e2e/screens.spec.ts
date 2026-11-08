@@ -3652,6 +3652,13 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     await page.getByRole("button", { name: "Open reports" }).click();
     await expect(page.getByText("finished a goal", { exact: false }).first()).toBeVisible();
     await shot(page, "72-lead-reports");
+
+    // One click asks the lead to sum the reports up, in that same thread.
+    await open(page, `#kitty/${luna.id}`);
+    await page.getByTestId("lead-summary").click();
+    await expect(
+      page.getByText("Summarize the reports in this thread", { exact: false }).first(),
+    ).toBeVisible();
   } finally {
     await page.request.put(`${GATEWAY}/v1/lead`, { headers: H, data: { kitty: "" } });
   }

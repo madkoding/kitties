@@ -26,7 +26,8 @@ escribirles con el conector `whatsapp-web`.
 ## Activarlo
 
 1. Ajustes, **Conexiones**, la sección **WhatsApp (dispositivo vinculado)** al final.
-2. Elige **el kitty que responde** y agrega los **números que pueden escribir** con su código de
+2. Elige **el kitty que responde** (si no eliges ninguno, responde el
+   [kitty principal](AUTONOMY.md#the-lead-kitty)) y agrega los **números que pueden escribir** con su código de
    país (`+56 9 1234 5678`). La lista parte vacía: hasta que agregues a alguien, se ignora todo
    mensaje. Marca **Responder en grupos cuando alguien nombra al kitty** para que también hable en
    grupos, y elige los grupos: ahí aparecen los que escribieron hace poco (WhatsApp no le da a un

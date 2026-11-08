@@ -1624,3 +1624,27 @@ func TestProgressWaitsItsGap(t *testing.T) {
 		t.Fatalf("within the gap nothing goes out: %v %v", f.messages(), st.seen)
 	}
 }
+
+func TestTheLeadAnswersWhenNoKittyIsChosen(t *testing.T) {
+	r := newRig(t)
+	if err := r.b.Apply(Settings{Enabled: true, Allow: []string{"+56 9 1234 5678"}}, true); err == nil {
+		t.Fatal("on with no kitty and no lead was accepted")
+	}
+	var lead *kitty.Kitty
+	r.b.opt.Lead = func() *kitty.Kitty { return lead }
+	lead, _ = kittyOf("luna")
+	r.b.Start(context.Background())
+	if err := r.b.Apply(Settings{Enabled: true, Allow: []string{"+56 9 1234 5678"}}, true); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.b.Status(); st.Kitty != "" || st.KittyName != "luna" {
+		t.Fatalf("status = %+v", st)
+	}
+	f := r.next(t)
+	f.push(Event{Kind: EvConnected, Phone: "15550001"})
+	f.push(Event{Kind: EvMessage, From: "56912345678", Name: "Mad", Text: "hola"})
+	eventually(t, "the reply", func() bool { return len(f.messages()) == 1 })
+	if s, _ := r.chats.Get("c1"); s.Members[0] != "k2" {
+		t.Fatalf("chat = %+v", s)
+	}
+}
