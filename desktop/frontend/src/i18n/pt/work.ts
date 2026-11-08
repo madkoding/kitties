@@ -551,6 +551,15 @@ const dict: Dictionary = {
   "Wrote {file}": "Escreveu {file}",
   "Wrote a file": "Escreveu um arquivo",
   "Ran a command": "Executou um comando",
+  "plays its saved steps “{name}” first": "primeiro reproduz os seus passos guardados «{name}»",
+  "Saved steps to play first (optional)": "Passos guardados para reproduzir primeiro (opcional)",
+  "the name of a page flow the kitty saved, like prices":
+    "o nome de um fluxo de página que o kitty guardou, como precos",
+  "Each run plays them on its desktop without the model (no tokens); the kitty only takes over when they fail.":
+    "Cada execução os reproduz na sua área de trabalho sem o modelo (sem tokens); o kitty só assume quando falham.",
+  "{shots} screenshots · {reads} read as text": "{shots} capturas · {reads} leituras de texto",
+  "About {shot} tokens in screenshots and {read} in text it read instead (estimates)":
+    "Cerca de {shot} tokens em capturas e {read} no texto que leu em vez delas (estimativas)",
   "Brought “{title}” to the front": "Trouxe “{title}” para a frente",
   "Brought a window to the front": "Trouxe uma janela para a frente",
   "Opened a program": "Abriu um programa",

@@ -173,6 +173,8 @@ export interface Goal {
   text: string;
   every?: string;
   on?: string[];
+  // flow is a page flow the kitty saved: each run plays it first, without the model.
+  flow?: string;
   enabled: boolean;
   chat?: string;
   created_at: string;
@@ -268,6 +270,9 @@ export interface Turn {
   // limits are the limits the kitty set on itself in this turn (an empty mode lifted one).
   limits?: { connector: string; action: string; mode: string; previous?: string }[];
   usage?: { input: number; output: number; cache_read?: number; cache_write?: number };
+  // looks is how the kitty saw its work: screenshots sent to the model, and answers it read as
+  // text instead, each with about what it weighed in tokens.
+  looks?: { shots?: number; shot_tokens?: number; reads?: number; read_tokens?: number };
 }
 
 export interface Session {
@@ -1062,11 +1067,19 @@ export const api = {
     text?: string;
     every?: string;
     on?: string[];
+    flow?: string;
     enabled?: boolean;
   }) => request<{ goal: Goal }>("POST", "/v1/goals", g).then((r) => r.goal),
   updateGoal: (
     id: string,
-    g: { title: string; text?: string; every?: string; on?: string[]; enabled?: boolean },
+    g: {
+      title: string;
+      text?: string;
+      every?: string;
+      on?: string[];
+      flow?: string;
+      enabled?: boolean;
+    },
   ) => request<{ goal: Goal }>("PUT", `/v1/goals/${id}`, g).then((r) => r.goal),
   removeGoal: (id: string) => request("DELETE", `/v1/goals/${id}`),
   runGoal: (id: string) =>

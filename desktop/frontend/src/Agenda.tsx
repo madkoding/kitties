@@ -109,6 +109,7 @@ export function GoalsPanel({
   const [preset, setPreset] = useState(PRESETS[2].every);
   const [custom, setCustom] = useState("");
   const [on, setOn] = useState<string[]>([]);
+  const [flow, setFlow] = useState("");
   const load = () => {
     api
       .goals(kitty.id)
@@ -139,11 +140,19 @@ export function GoalsPanel({
   const add = () =>
     act(async () => {
       const every = preset === "" ? custom.trim() : preset;
-      await api.addGoal({ kitty: kitty.id, title: title.trim(), text: text.trim(), every, on });
+      await api.addGoal({
+        kitty: kitty.id,
+        title: title.trim(),
+        text: text.trim(),
+        every,
+        on,
+        flow: flow.trim(),
+      });
       setAdding(false);
       setTitle("");
       setText("");
       setOn([]);
+      setFlow("");
     });
   return (
     <div>
@@ -170,6 +179,11 @@ export function GoalsPanel({
               {g.every && (
                 <span class="inline-flex items-center gap-1">
                   <IconClock size={11} /> {describeEvery(g.every)}
+                </span>
+              )}
+              {g.flow && (
+                <span data-testid="goal-flow">
+                  {t("plays its saved steps “{name}” first", { name: g.flow })}
                 </span>
               )}
               {g.on && g.on.length > 0 && (
@@ -207,6 +221,7 @@ export function GoalsPanel({
                         text: g.text,
                         every: g.every,
                         on: g.on,
+                        flow: g.flow ?? "",
                         enabled: !g.enabled,
                       }),
                     )
@@ -278,6 +293,19 @@ export function GoalsPanel({
               placeholder={t("cron: minute hour day month weekday (leave empty for events only)")}
             />
           )}
+          <label class={LABEL}>{t("Saved steps to play first (optional)")}</label>
+          <input
+            class={`${INPUT} font-mono`}
+            aria-label={t("Saved steps to play first (optional)")}
+            value={flow}
+            onInput={(e) => setFlow((e.target as HTMLInputElement).value)}
+            placeholder={t("the name of a page flow the kitty saved, like prices")}
+          />
+          <p class="text-xs text-[var(--t4)] mt-1">
+            {t(
+              "Each run plays them on its desktop without the model (no tokens); the kitty only takes over when they fail.",
+            )}
+          </p>
           {connectors.length > 0 && (
             <>
               <label class={LABEL}>{t("Also when these services report something")}</label>

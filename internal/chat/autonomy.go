@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/madkoding/kitties/internal/agenda"
+	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/notify"
 )
@@ -67,6 +68,14 @@ func (s *Service) RunGoal(ctx context.Context, g agenda.Goal, t agenda.Trigger) 
 	}
 	text := "Goal: " + g.Title + "\n" + g.Text + "\n\nWhy now: " + t.Text() +
 		"\n\nWork on it now. When you are done, say what you did and what is left. If you are stuck, say what you need."
+	if g.Flow != "" && k.Desktop {
+		out, ok := s.playFlow(ctx, id, g, k)
+		if ok {
+			return id, nil
+		}
+		text += "\n\nYour saved page flow \"" + g.Flow + "\" ran first and did not get through:\n" + clip(out, maxFlowOut) +
+			"\nFinish the goal yourself; once you know the right steps, save them again with page_flow and \"save\": \"" + g.Flow + "\"."
+	}
 	if t.Kind == "follow_up" {
 		text += s.todoNote(ctx, k)
 	}
@@ -74,6 +83,56 @@ func (s *Service) RunGoal(ctx context.Context, g agenda.Goal, t agenda.Trigger) 
 		return id, err
 	}
 	return id, nil
+}
+
+// maxFlowOut is how much of a saved flow's output goes into a turn or to the kitty.
+const maxFlowOut = 6000
+
+// playFlow plays a goal's saved page flow on the kitty's desktop, without the model: a run of a
+// routine the kitty already knows costs no tokens. The thread gets a turn with what it did; a
+// flow that went through reports the goal done. It returns the flow's output and whether it went
+// through; one that did not (or a thread at work) leaves the goal to the kitty.
+func (s *Service) playFlow(ctx context.Context, id string, g agenda.Goal, k *kitty.Kitty) (string, bool) {
+	runner := s.runner()
+	if runner == nil {
+		return "this gateway has no desktops", false
+	}
+	if sess, err := s.Get(id); err == nil && sess.Working() {
+		return "the thread was at work", false
+	}
+	if m := s.machine(); m != nil {
+		if p, err := m.Power(k.ID); err == nil && p.State != kitty.PowerOn {
+			if err := m.PowerOnWait(ctx, k.ID, machineWait); err != nil {
+				return "the machine could not be turned on: " + err.Error(), false
+			}
+		}
+	}
+	a := desktop.Action{Name: "page_flow", Args: map[string]any{"name": g.Flow}}
+	ctx, cancel := context.WithTimeout(ctx, flowTimeout)
+	defer cancel()
+	out, err := desktop.Run(ctx, runner, k.ID, a)
+	if err != nil {
+		if out == "" {
+			out = err.Error()
+		}
+		return out, false
+	}
+	text := fmt.Sprintf("I played my saved steps \u201c%s\u201d for this goal, without thinking them over again.\n\n%s", g.Flow, lastRead(out))
+	s.appendTurn(id, Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: text, Steps: []Step{{At: s.now(), Action: "page_flow", Args: a.Args, Result: clip(out, maxFlowOut)}}, Looks: &Looks{Reads: 1, ReadTokens: (len(out) + 3) / 4}})
+	s.reportGoal(k, g.ID, id, "done", text)
+	return out, true
+}
+
+// flowTimeout bounds a saved flow played for a goal: 30 steps of at most 30 seconds each.
+const flowTimeout = 16 * time.Minute
+
+// lastRead is the end of a flow's output, where it says how it finished and what the page
+// showed, for the turn's text.
+func lastRead(out string) string {
+	if i := strings.Index(out, "the flow finished"); i >= 0 {
+		return clip(strings.TrimSpace(out[i:]), 1500)
+	}
+	return clip(out, 1500)
 }
 
 // maxTodo is how much of a kitty's TODO.md goes with a follow-up.

@@ -178,6 +178,8 @@ type Goal struct {
 	Text string `yaml:"text"`
 	// Every is a cron expression (five fields, or @hourly, @daily, @weekly, @monthly).
 	Every string `yaml:"every"`
+	// Flow is a page flow the kitty saved: each run plays it first, without the model.
+	Flow string `yaml:"flow"`
 	// On names the connectors whose incoming events run the goal.
 	On []string `yaml:"on"`
 }

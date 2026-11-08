@@ -349,7 +349,7 @@ jobs:
           # by name (no screenshot needed for any of it).
           docker exec kitty-ci sh -c 'printf "<title>flow</title><input aria-label=Search><p id=r hidden>found it</p><button onclick=\"r.hidden=false\">Find</button>" > /tmp/f.html && (cd /tmp && nohup python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &) && sleep 1 && kitty-page goto http://127.0.0.1:8765/f.html | grep -q "^title: flow" && kitty-page click --text Find | grep -q "^found it" && kitty-page flow --steps "[{\"type\": \"cats\", \"field\": \"Search\"}, {\"click\": \"Find\"}, {\"wait\": \"found it\"}]" --save ci | grep -q "flow finished" && kitty-page flow --list | grep -q ci'
           # Files are read, listed and written as text.
-          docker exec kitty-ci sh -c 'printf "one\ntwo\n" | kitty-file write ci/notes.txt && kitty-file read ci/notes.txt | grep -q "2  two" && kitty-file list ci | grep -q notes.txt && ! printf x | kitty-file write /etc/x'
+          docker exec kitty-ci sh -c 'printf "one\ntwo\n" | kitty-file write ci/notes.txt && kitty-file read ci/notes.txt | grep -q "2  two" && kitty-file list ci | grep -q notes.txt && ! printf x | kitty-file write /etc/x && command -v pdftotext'
           docker exec kitty-ci kitty-page quit
           # The live stream sends pictures, and ends when its input closes.
           docker exec kitty-ci sh -c 'command -v kitty-grab && ldd "$(command -v kitty-grab)" | grep -vq "not found"'

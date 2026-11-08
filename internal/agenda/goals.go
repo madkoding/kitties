@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -22,6 +23,9 @@ type Goal struct {
 	Title string `json:"title"`
 	// Text is what the kitty is told each time the goal runs.
 	Text string `json:"text"`
+	// Flow names a page flow the kitty saved (page_flow save): each run plays it on the kitty's
+	// desktop first, without the model, and only a flow that fails hands the goal to the kitty.
+	Flow string `json:"flow,omitempty"`
 	// Every is a cron expression; empty for a goal that only runs on events or by hand.
 	Every string `json:"every,omitempty"`
 	// On names the connectors whose incoming events run the goal.
@@ -44,11 +48,18 @@ type Goal struct {
 	FollowUpAt time.Time `json:"follow_up_at,omitempty"`
 }
 
+// flowName is the name of a saved page flow (the image's kitty-page keeps it as <name>.json).
+var flowName = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,39}$`)
+
 // Validate checks a goal's fields and parses its schedule.
 func (g *Goal) Validate() error {
 	g.Title = strings.TrimSpace(g.Title)
 	g.Text = strings.TrimSpace(g.Text)
 	g.Every = strings.TrimSpace(g.Every)
+	g.Flow = strings.TrimSpace(g.Flow)
+	if g.Flow != "" && !flowName.MatchString(g.Flow) {
+		return errors.New("flow: the name is not valid (1 to 40 lowercase letters, digits, - or _)")
+	}
 	if g.Kitty == "" {
 		return errors.New("a goal belongs to a kitty")
 	}
@@ -208,7 +219,7 @@ func (s *Store) Update(id string, u Goal) (*Goal, error) {
 		return nil, errors.New("this goal comes from the configuration file; edit it there")
 	}
 	next := *g
-	next.Title, next.Text, next.Every, next.On, next.Enabled = u.Title, u.Text, u.Every, u.On, u.Enabled
+	next.Title, next.Text, next.Every, next.On, next.Enabled, next.Flow = u.Title, u.Text, u.Every, u.On, u.Enabled, u.Flow
 	if err := next.Validate(); err != nil {
 		return nil, err
 	}

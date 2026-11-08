@@ -93,7 +93,8 @@ trabajar por texto y mirar solo cuando el texto no basta (un canvas, una imagen,
 de un programa):
 
 1. **Archivos y terminal.** `file_read` (líneas numeradas, una parte de un archivo largo con `from`
-   y `lines`), `file_list` (carpetas, archivos y tamaños) y `file_write` (en su home o en `/tmp`; el
+   y `lines`; un PDF con `pdftotext`, y los archivos de Word, Excel, PowerPoint y OpenDocument desde
+   su XML, sin abrir ningún programa), `file_list` (carpetas, archivos y tamaños) y `file_write` (en su home o en `/tmp`; el
    texto va por la entrada del comando, no por su línea de comandos) son el `kitty-file` de la
    imagen; `shell` ejecuta una línea de comandos con bash, tuberías incluidas, en la carpeta de
    trabajo; `shell` y `run` se detienen tras `timeout` segundos (300 por defecto, 600 como máximo) y
@@ -102,7 +103,10 @@ de un programa):
 3. **La pantalla**: `screenshot`, `read_screen` (OCR) y clics en coordenadas.
 
 Ninguna herramienta de texto trae una captura después; un lote con un clic en coordenadas, una
-tecla o un `open` sí.
+tecla o un `open` sí. Cada mensaje de un kitty cuenta cómo vio su trabajo: *3 capturas · 12
+lecturas de texto*, y al pasar el ratón cuánto pesaron más o menos (una captura de la pantalla son
+unos 1.365 tokens, como cuenta Anthropic una imagen; el texto, unos cuatro caracteres por token:
+estimaciones, no una factura).
 
 ## Leer y actuar en las páginas por dentro
 
@@ -124,7 +128,8 @@ clic. Esa lectura reemplaza a la captura.
 los pasos se guardan con un nombre en la carpeta de trabajo (`.flows/`) y `{"name": ...}` los
 vuelve a ejecutar: una rutina que el kitty aprendió (una búsqueda, un informe que descarga cada
 mañana) cuesta una sola llamada. Un flujo que escribe en un campo de contraseña nunca se guarda; los
-secretos van por `type_secret`.
+secretos van por `type_secret`. Una [meta](AUTONOMY.md) puede reproducir un flujo guardado en su
+horario sin pasar por el modelo.
 
 Es el DevTools del propio navegador, al que llega `kitty-page` de la imagen por el loopback del
 contenedor: el puerto no se publica, así que solo lo usa lo que corre dentro del contenedor. Lo que

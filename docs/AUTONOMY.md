@@ -7,6 +7,12 @@ A kitty is not only something you talk to. Each one has an agenda:
 - **Goals.** Standing tasks it pursues without being asked: on a schedule (cron, or
   *hourly*, *daily*, *weekdays at nine*), when a service reports something, or when you press
   *run now*. Each goal works in a thread of its own, so you can read along and chime in.
+- **Saved steps, no tokens.** A goal can name a page flow the kitty saved (`page_flow` with
+  `save`, see [the desktop](DESKTOP.md#reading-and-acting-on-pages-from-the-inside)): *Saved steps
+  to play first* in the goal's form, `flow:` in the configuration or in `goal_add`. Each run plays
+  it on the desktop without the model and reports the goal done, with the page as it ended in the
+  thread; only a flow that fails hands the goal to the kitty, told what went wrong, so it finishes
+  by hand and saves the corrected steps under the same name.
 - **Incoming events.** GitHub, Slack, Discord, Jira and any service that can POST send their
   events to `POST /v1/hooks/<connector>`, signed with the connector's incoming events secret
   (GitHub's HMAC signature, or an `X-Kitties-Secret` header). The goals that listen to that

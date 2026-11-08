@@ -910,6 +910,23 @@ function TurnCard({
               })}
             </span>
           ) : null}
+          {turn.looks && (turn.looks.shots || turn.looks.reads) ? (
+            <span
+              data-testid="looks"
+              title={t(
+                "About {shot} tokens in screenshots and {read} in text it read instead (estimates)",
+                {
+                  shot: turn.looks.shot_tokens ?? 0,
+                  read: turn.looks.read_tokens ?? 0,
+                },
+              )}
+            >
+              {t("{shots} screenshots · {reads} read as text", {
+                shots: turn.looks.shots ?? 0,
+                reads: turn.looks.reads ?? 0,
+              })}
+            </span>
+          ) : null}
           {turn.approvals?.map((a) => (
             <a key={a.id} class="tag tag-amber tag-logo" href="#new-approvals" title={a.summary}>
               <IconShield size={11} />{" "}

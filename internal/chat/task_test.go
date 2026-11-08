@@ -375,6 +375,27 @@ func TestPageAndFileToolsBringNoScreenshot(t *testing.T) {
 			t.Error("a text tool brought a picture")
 		}
 	}
+	// The turn counts what it read as text, and no picture.
+	got, _ := s.Get(sess.ID)
+	l := got.Turns[len(got.Turns)-1].Looks
+	if l == nil || l.Shots != 0 || l.Reads != 6 || l.ReadTokens < 6 {
+		t.Errorf("looks = %+v, want 6 text reads and no screenshot", l)
+	}
+}
+
+// A screenshot is counted with what it weighs, as an estimate.
+func TestScreenshotsAreCountedWithTheirTokens(t *testing.T) {
+	s, _, _ := deskService(t, "@tool click {\"x\": 1, \"y\": 2}", "@tool done {\"summary\": \"ok\"}")
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "click"); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, sess.ID)
+	got, _ := s.Get(sess.ID)
+	l := got.Turns[len(got.Turns)-1].Looks
+	if l == nil || l.Shots != 1 || l.ShotTokens != ShotTokens {
+		t.Errorf("looks = %+v, want one screenshot of %d tokens", l, ShotTokens)
+	}
 }
 
 // A kitty whose model calls tools natively has every tool of the text catalogue, ask_help

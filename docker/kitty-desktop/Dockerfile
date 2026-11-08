@@ -128,7 +128,7 @@ RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgra
         ca-certificates curl git jq python3 python3-websocket openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
         inkscape imagemagick mtpaint mousepad \
-        tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa poppler-utils \
         libx11-6 libxext6 libjpeg62-turbo \
         libx264-164 libyuv0 libopus0 libpulse0 pulseaudio pulseaudio-utils socat \
         tini procps tzdata \

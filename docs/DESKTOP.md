@@ -74,7 +74,8 @@ A screenshot costs many times the tokens of the text it shows, so a kitty is tol
 and to look only when text cannot tell (a canvas, a picture, a program's own window):
 
 1. **Files and the terminal.** `file_read` (numbered lines, a part of a long file with `from` and
-   `lines`), `file_list` (folders, files and sizes) and `file_write` (in its home or `/tmp`; the text
+   `lines`; a PDF through `pdftotext`, and Word, Excel, PowerPoint and OpenDocument files from their
+   XML, with no program to open), `file_list` (folders, files and sizes) and `file_write` (in its home or `/tmp`; the text
    goes on the command's input, not its command line) are the image's `kitty-file`; `shell` runs a
    command line with bash, pipes and all, in the working folder; `shell` and `run` are stopped after
    `timeout` seconds (300 by default, at most 600) and their output is cut at 12,000 characters.
@@ -82,7 +83,9 @@ and to look only when text cannot tell (a canvas, a picture, a program's own win
 3. **The display**: `screenshot`, `read_screen` (OCR) and clicks at coordinates.
 
 None of the text tools brings a screenshot after it; a batch with a click at coordinates, a key or
-an `open` still does.
+an `open` still does. Each kitty message counts how it saw its work: *3 screenshots · 12 read as
+text*, and on hover about what they weighed (a screenshot of the display is some 1,365 tokens, the
+way Anthropic counts an image; text at about four characters a token: estimates, not a bill).
 
 ## Reading and acting on pages from the inside
 
@@ -102,7 +105,8 @@ That read replaces the screenshot.
 `goto`, `click`, `type`, `wait`, `read` and `back`, stopping at the first that fails. With `save`
 the steps are kept by name in the working folder (`.flows/`) and `{"name": ...}` runs them again: a
 routine the kitty learned (a search, a report it downloads every morning) costs one call. A flow
-that types into a password field is never kept; secrets go through `type_secret`.
+that types into a password field is never kept; secrets go through `type_secret`. A
+[goal](AUTONOMY.md) can play a kept flow on its schedule without the model at all.
 
 It is the browser's own DevTools, reached by the image's `kitty-page` on the container's loopback:
 the port is not published, so only what runs inside the container can use it. What a page says

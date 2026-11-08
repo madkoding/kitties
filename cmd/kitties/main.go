@@ -871,7 +871,7 @@ func (a *app) syncGoals() error {
 				continue
 			}
 			for _, g := range k.Goals {
-				goals = append(goals, agenda.Goal{Kitty: kit.ID, Title: g.Title, Text: g.Text, Every: g.Every, On: g.On})
+				goals = append(goals, agenda.Goal{Kitty: kit.ID, Title: g.Title, Text: g.Text, Every: g.Every, On: g.On, Flow: g.Flow})
 			}
 		}
 	}

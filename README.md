@@ -25,8 +25,9 @@ a desktop app and an Android app.
 ## Features
 
 - **A real desktop per kitty.** Ask it to open a site or fill a form: it works in the background,
-  by text first (it reads web pages from the inside, its files and a shell, and runs several page steps
-  in one go) and by screenshots only where text cannot tell, which spends far fewer tokens, while the chat shows a short line of what it is about to
+  by text first (it reads web pages from the inside, its files, PDFs and Office documents and a shell, and
+  runs several page steps in one go, which a goal can replay with no model) and by screenshots only where
+  text cannot tell, which spends far fewer tokens (each message counts them), while the chat shows a short line of what it is about to
   do, with the actions folded under how many they were (a tap opens them) and the view following the
   latest. You can watch it live and **take control** for what it cannot do alone (a password, a captcha).
 - **Files in the chat.** Attach pictures, PDFs, Office documents and text with the paperclip, by dragging

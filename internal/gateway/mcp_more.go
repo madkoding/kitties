@@ -153,7 +153,8 @@ func (s *Server) mcpMoreTools() []mcp.Tool {
 			InputSchema: obj([]string{"kitty", "title"}, map[string]any{"kitty": str("a kitty's id or name"), "title": str("short name"),
 				"text":  str("what the kitty is told each run; defaults to the title"),
 				"every": str("cron expression, e.g. '0 9 * * 1-5' or '@hourly'"),
-				"on":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "connector names whose events run it"}}),
+				"on":    map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "connector names whose events run it"},
+				"flow":  str("a page flow the kitty saved (page_flow save): each run plays it first without the model; the kitty takes over only when it fails")}),
 			Annotations: write,
 			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
 				var a goalBody
