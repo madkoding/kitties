@@ -14,6 +14,7 @@ import { RULE_LABEL, ruleTarget } from "./Approvals";
 import HelpModal from "./Help";
 import { Sent } from "./Attachments";
 import LiveDesktop from "./LiveDesktop";
+import { FollowButton, useFollow } from "./follow";
 
 // Text is a message: a kitty's answer is drawn as markdown (lists, tables, code); what the person
 // wrote stays as they typed it.
@@ -167,8 +168,133 @@ function StepRow({
 const hasSteps = (turn: Turn) => (turn.steps?.length ?? 0) > 0;
 const lastShotIndex = (turn: Turn) => (turn.steps || []).map((s) => !!s.shot).lastIndexOf(true);
 
-// How many steps of a task the desktop column lists before folding the earlier ones.
-const STEPS_SHOWN = 5;
+// A plan is what the kitty said it was about to do (a line of its own, not an action): the
+// person follows a task by these, and the actions between two of them stay folded under a count.
+const isPlan = (s: Step) => s.action === "plan";
+const actionCount = (steps: Step[]) => steps.filter((s) => !isPlan(s)).length;
+const actionsLabel = (n: number) => (n === 1 ? t("1 action") : t("{n} actions", { n }));
+// The latest thing a task says it does: its last plan, or else its last action as a sentence.
+function latestLine(steps: Step[]): string {
+  const last = steps[steps.length - 1];
+  const plan = [...steps].reverse().find(isPlan);
+  return plan?.result || (last ? stepSentence(last.action, last.args) : "");
+}
+
+// A part of a task: the plan it starts with (none before the first one) and its actions, by
+// their place in the turn's steps.
+interface Part {
+  plan?: Step;
+  items: number[];
+}
+function partsOf(steps: Step[]): Part[] {
+  const parts: Part[] = [];
+  steps.forEach((s, i) => {
+    if (isPlan(s)) {
+      parts.push({ plan: s, items: [] });
+    } else {
+      if (parts.length === 0) {
+        parts.push({ items: [] });
+      }
+      parts[parts.length - 1].items.push(i);
+    }
+  });
+  return parts;
+}
+
+// StepParts is a task as the person follows it: each plan of the kitty as a line, and the actions
+// it took for it folded under how many they were; a tap opens them, one by one.
+function StepParts({
+  steps,
+  chat,
+  onOpen,
+  working,
+  shot,
+  hero,
+}: {
+  steps: Step[];
+  chat: string;
+  onOpen: (src: string) => void;
+  working?: boolean;
+  // shot is the step whose screenshot is the one that shows (the others stay shut); hero is
+  // whether it is shown big elsewhere already (the desktop column), so its row does not repeat it.
+  shot: number;
+  hero?: boolean;
+}) {
+  const parts = partsOf(steps);
+  return (
+    <div class="trail" aria-label={t("steps")} data-testid="step-parts">
+      {parts.map((part, n) => (
+        <StepPart
+          key={n}
+          part={part}
+          steps={steps}
+          chat={chat}
+          onOpen={onOpen}
+          live={!!working && n === parts.length - 1}
+          shot={shot}
+          hero={hero}
+        />
+      ))}
+    </div>
+  );
+}
+
+function StepPart({
+  part,
+  steps,
+  chat,
+  onOpen,
+  live,
+  shot,
+  hero,
+}: {
+  part: Part;
+  steps: Step[];
+  chat: string;
+  onOpen: (src: string) => void;
+  live: boolean;
+  shot: number;
+  hero?: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+  const last = part.items.length > 0 ? steps[part.items[part.items.length - 1]] : undefined;
+  return (
+    <div class="step-part" data-testid="step-part">
+      {part.plan && (
+        <div class={`step-plan ${live ? "is-live" : ""}`} data-testid="step-plan">
+          {live ? <span class="spinner" /> : <span class="what" aria-hidden="true" />}
+          <span class="min-w-0">{part.plan.result}</span>
+        </div>
+      )}
+      {part.items.length > 0 && (
+        <button
+          class="plain step-count"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+          data-testid="steps-toggle"
+          title={open ? t("Hide the steps") : t("Show the steps")}
+        >
+          <span aria-hidden="true">{open ? "▾" : "▸"}</span>
+          <span>{actionsLabel(part.items.length)}</span>
+          {!open && live && last && (
+            <span class="steps-last">· {stepSentence(last.action, last.args)}</span>
+          )}
+        </button>
+      )}
+      {open &&
+        part.items.map((i) => (
+          <StepRow
+            key={i}
+            step={steps[i]}
+            chat={chat}
+            onOpen={onOpen}
+            folded={i !== shot}
+            hero={!!hero && i === shot}
+          />
+        ))}
+    </div>
+  );
+}
 
 // Desk is the second column when a kitty works on its desktop: the steps of one task and the
 // latest screenshot, big and fixed; the earlier ones stay folded so the column is not all pictures.
@@ -206,18 +332,9 @@ function Desk({
     }
   };
   const list = useRef<HTMLElement>(null);
-  // A task that goes on keeps its newest step in view.
-  useEffect(() => {
-    if (turn.working && list.current) {
-      list.current.scrollTop = list.current.scrollHeight;
-    }
-  }, [steps.length, turn.working, index]);
+  // A task that goes on keeps its newest line in view, unless the person scrolled up to read.
+  const follow = useFollow(list, `${chat}:${index}`);
   const [listOpen, setListOpen] = useState(false);
-  // Only the latest steps of a long task are listed; the earlier ones open on demand.
-  const [allSteps, setAllSteps] = useState(false);
-  useEffect(() => setAllSteps(false), [index]);
-  const earlier = Math.max(0, steps.length - STEPS_SHOWN);
-  const hidden = allSteps ? 0 : earlier;
   const who = (i: number) =>
     (turns[i].kitty && kitties.get(turns[i].kitty!)?.name) || turns[i].from;
   // A task is named by what the person asked (the turn before it), not by the kitty, which is
@@ -343,31 +460,16 @@ function Desk({
           )}
         </div>
       )}
-      <div class="trail" aria-label={t("steps")}>
-        {earlier > 0 && (
-          <button
-            class="plain trail-more"
-            data-testid="trail-more"
-            aria-expanded={allSteps}
-            onClick={() => setAllSteps(!allSteps)}
-          >
-            {allSteps ? t("Hide earlier steps") : t("{n} earlier steps", { n: earlier })}
-          </button>
-        )}
-        {steps.map(
-          (s, i) =>
-            i >= hidden && (
-              <StepRow
-                key={i}
-                step={s}
-                chat={chat}
-                onOpen={onOpen}
-                folded={i !== shot}
-                hero={i === shot}
-              />
-            ),
-        )}
-      </div>
+      <StepParts
+        key={`${chat}:${index}`}
+        steps={steps}
+        chat={chat}
+        onOpen={onOpen}
+        working={turn.working}
+        shot={shot}
+        hero
+      />
+      <FollowButton follow={follow} />
       {!turn.working && steps.filter((s) => s.shot).length > 1 && (
         <ReplayButtons chat={chat} index={index} onOpen={onOpen} />
       )}
@@ -559,9 +661,9 @@ function Feedback({ chat, index, current }: { chat: string; index: number; curre
   );
 }
 
-// StepsFold is the steps of a turn folded under one line, for where there is no desktop column
-// (the chat beside a live desktop, which already is the picture). It opens on a tap; a task still
-// at work stays open so its latest step can be followed.
+// StepsFold is the steps of a turn under its message, for where there is no desktop column (the
+// chat beside a live desktop, which already is the picture): the plans as lines, the actions
+// folded under their count.
 function StepsFold({
   steps,
   chat,
@@ -573,29 +675,15 @@ function StepsFold({
   working?: boolean;
   onOpen: (src: string) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const shown = open || !!working;
-  const last = steps[steps.length - 1];
   return (
     <div class="steps-fold" data-testid="steps-fold">
-      <button
-        class="plain desk-link"
-        aria-expanded={shown}
-        onClick={() => setOpen(!open)}
-        data-testid="steps-toggle"
-        title={shown ? t("Hide the steps") : t("Show the steps")}
-      >
-        <IconMonitor size={12} />
-        {t("{n} steps on the desktop", { n: steps.length })}
-      </button>
-      {!shown && last && <div class="steps-last">{stepSentence(last.action, last.args)}</div>}
-      {shown && (
-        <div class="trail" aria-label={t("steps")}>
-          {steps.map((s, i) => (
-            <StepRow key={i} step={s} chat={chat} onOpen={onOpen} folded={i !== steps.length - 1} />
-          ))}
-        </div>
-      )}
+      <StepParts
+        steps={steps}
+        chat={chat}
+        onOpen={onOpen}
+        working={working}
+        shot={lastShotIndex({ steps } as Turn)}
+      />
     </div>
   );
 }
@@ -688,7 +776,9 @@ function TurnCard({
           title={t("Show it on the desktop")}
         >
           <IconMonitor size={12} />
-          {t("{n} steps on the desktop", { n: turn.steps.length })}
+          {actionCount(turn.steps) === 1
+            ? t("1 action on the desktop")
+            : t("{n} actions on the desktop", { n: actionCount(turn.steps) })}
         </button>
       )}
       {turn.resumable && !turn.working && latest && onContinue && (
@@ -841,8 +931,10 @@ export default function Conversation({
   const [helping, setHelping] = useState<Kitty | null>(null);
   // The requests for help the person put off, by the step that asked: a new request opens again.
   const [later, setLater] = useState<Record<string, boolean>>({});
-  const end = useRef<HTMLDivElement>(null);
-  const count = session?.turns?.length ?? 0;
+  // The chat follows what comes in while the person is at its end (beside a live desktop too, where
+  // the kitty's latest line is what they want in view); scrolled up, it waits for them.
+  const log = useRef<HTMLDivElement>(null);
+  const follow = useFollow(log, session?.id);
   // With a task on a desktop the chat has two columns: what the kitty says, and what it does.
   // On a phone they are two tabs, and a strip under the chat keeps the latest picture in view.
   const [tab, setTab] = useState<"chat" | "desk">("chat");
@@ -896,9 +988,12 @@ export default function Conversation({
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
   }, [zoom]);
+  // What the person sends takes them to the end, wherever they were.
   useEffect(() => {
-    end.current?.scrollIntoView({ block: "end" });
-  }, [count, pending, session?.id]);
+    if (pending) {
+      follow.toEnd();
+    }
+  }, [pending]);
 
   if (!session) {
     return (
@@ -947,6 +1042,7 @@ export default function Conversation({
       )}
       <div class="conv-chat">
         <div
+          ref={log}
           class="flex-1 overflow-y-auto px-4 sm:px-8 py-5 flex flex-col gap-3 scroll-thin"
           role="log"
         >
@@ -1022,7 +1118,7 @@ export default function Conversation({
               </div>
             </>
           )}
-          <div ref={end} />
+          <FollowButton follow={follow} />
           {session &&
             !helping &&
             !sidebar &&
@@ -1057,7 +1153,7 @@ export default function Conversation({
             )}
             <button class="plain desk-strip-text" onClick={() => setTab("desk")}>
               {strip.working && <span class="spinner" />}
-              <span class="flex-1">{stepSentence(stripStep.action, stripStep.args)}</span>
+              <span class="flex-1">{latestLine(strip.steps!)}</span>
               <IconMonitor size={14} />
             </button>
           </div>

@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import fs from "node:fs";
 import path from "node:path";
 import zlib from "node:zlib";
@@ -28,6 +28,15 @@ const kittyRow = (page: Page, name: string) =>
 async function open(page: Page, hash: string, query = Q): Promise<void> {
   await page.goto(`/${query}${hash}`);
   await expect(kittyRow(page, "mimi")).toBeAttached();
+}
+
+// openSteps unfolds every count of actions in a scope, to read the actions one by one.
+async function openSteps(scope: Locator): Promise<void> {
+  await expect(scope.getByTestId("steps-toggle").first()).toBeVisible();
+  const toggles = scope.locator('[data-testid="steps-toggle"][aria-expanded="false"]');
+  while ((await toggles.count()) > 0) {
+    await toggles.first().click();
+  }
 }
 
 async function shot(page: Page, name: string): Promise<void> {
@@ -63,10 +72,13 @@ test("a group chat shows every member", async ({ page }) => {
 test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await open(page, `#chat/${ids.desktop}`);
   const trail = page.locator(".trail").first();
-  // A long task lists its latest steps; the earlier ones open behind a button.
+  // A task reads as what the kitty said it was about to do; its actions fold under their count.
+  await expect(trail.getByTestId("step-plan").first()).toHaveText(
+    "I follow the page's link to see where it leads.",
+  );
+  await expect(trail.getByTestId("steps-toggle").first()).toContainText("2 actions");
   await expect(trail.getByText("Opened example.com", { exact: true })).toBeHidden();
-  await page.getByTestId("trail-more").click();
-  await expect(page.getByTestId("trail-more")).toContainText("Hide earlier steps");
+  await openSteps(trail);
   // Each step reads as a sentence; the coordinates and the tokens are only on hover.
   await expect(trail.getByText("Opened example.com", { exact: true })).toBeVisible();
   await expect(trail.getByText("Clicked on the screen", { exact: true })).toBeVisible();
@@ -81,7 +93,7 @@ test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await expect(page.locator(".desk-hero .shot-thumb img")).toBeVisible();
   await shot(page, "04-desktop-task");
   await page.goto(`/?theme=light&motion=off#chat/${ids.desktop}`);
-  await expect(trail.getByText("Finished", { exact: true })).toBeVisible();
+  await expect(trail.getByTestId("step-plan").first()).toBeVisible();
   await shot(page, "11-light");
   await page.setViewportSize({ width: 430, height: 900 });
   await page.goto(`/${Q}#chat/${ids.desktop}`);
@@ -90,7 +102,7 @@ test("a desktop task: the steps and their screenshots", async ({ page }) => {
   await expect(page.locator(".trail").first()).toBeHidden();
   await shot(page, "12-phone");
   await page.getByTestId("tab-desk").click();
-  await expect(page.locator(".trail").first().getByText("Finished", { exact: true })).toBeVisible();
+  await expect(page.locator(".trail").first().getByTestId("step-plan").first()).toBeVisible();
   await shot(page, "12-phone-desktop");
 });
 
@@ -103,6 +115,7 @@ test("a desktop task: two columns, the latest screenshot in view and the earlier
   // The chat column has what the kitty said and no steps; the desktop column has the steps.
   await expect(chat.locator(".msg").first()).toBeVisible();
   await expect(chat.locator(".trail")).toHaveCount(0);
+  await openSteps(desk);
   await expect(desk.locator(".trail").getByText("Finished", { exact: true })).toBeVisible();
   const [c, d] = [await chat.boundingBox(), await desk.boundingBox()];
   expect(c!.x + c!.width).toBeLessThanOrEqual(d!.x + 1);
@@ -232,15 +245,18 @@ test("the technical details show only when asked for", async ({ page }) => {
   await box.check();
   await open(page, `#chat/${ids.desktop}`);
   const trail = page.locator(".trail").first();
+  await openSteps(trail);
   await expect(trail.getByTestId("step-detail").first()).toBeVisible();
   await expect(trail).toContainText("640, 420");
   await expect(page.getByTestId("tokens").first()).toContainText("tokens");
   // It is the person's choice in this browser: it stays after a reload, and goes when unticked.
   await page.reload();
+  await openSteps(page.locator(".trail").first());
   await expect(page.locator(".trail").first()).toContainText("640, 420");
   await open(page, "#new-preferences");
   await page.getByTestId("tech-details").uncheck();
   await open(page, `#chat/${ids.desktop}`);
+  await openSteps(page.locator(".trail").first());
   await expect(page.locator(".trail").first()).not.toContainText("640, 420");
 });
 
@@ -1735,9 +1751,9 @@ test("the page speaks Spanish: the system's language, or the one picked", async 
   await expect(page.locator("aside").getByRole("button", { name: "Nuevo chat" })).toBeVisible();
   await expect(page.locator("textarea")).toHaveAttribute("placeholder", "Escribe algo…");
   const trail = page.locator(".trail").first();
-  // The earlier steps of a long task wait behind a button that speaks Spanish too.
-  await page.getByTestId("trail-more").click();
-  await expect(page.getByTestId("trail-more")).toHaveText("Ocultar pasos anteriores");
+  // The actions of a task wait behind their count, which speaks Spanish too.
+  await expect(trail.getByTestId("steps-toggle").first()).toContainText("2 acciones");
+  await openSteps(trail);
   await expect(trail.getByText("Abrió example.com", { exact: true })).toBeVisible();
   await expect(trail.getByText("Terminó", { exact: true })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "es");
@@ -1963,6 +1979,28 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live).toHaveCount(0);
 });
 
+test("the chat follows what comes in, and waits while the person scrolls up to read", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 900, height: 420 });
+  await open(page, `#chat/${ids.group}`);
+  const log = page.getByRole("log");
+  const gap = () => log.evaluate((el) => el.scrollHeight - el.scrollTop - el.clientHeight);
+  // It opens at the end, with the latest message in view.
+  await expect.poll(gap).toBeLessThan(50);
+  await expect(page.getByTestId("follow-jump")).toHaveCount(0);
+  // Scrolled up, it stops following and offers the way back.
+  await log.evaluate((el) => {
+    el.scrollTop = 0;
+    el.dispatchEvent(new Event("scroll"));
+  });
+  await expect(page.getByTestId("follow-jump")).toBeVisible();
+  expect(await gap()).toBeGreaterThan(50);
+  await page.getByTestId("follow-jump").click();
+  await expect.poll(gap).toBeLessThan(50);
+  await expect(page.getByTestId("follow-jump")).toHaveCount(0);
+});
+
 test("the live desktop has the kitty's chat beside it: write to it, follow its steps, fold it", async ({
   page,
 }) => {
@@ -1971,10 +2009,13 @@ test("the live desktop has the kitty's chat beside it: write to it, follow its s
   const live = page.getByTestId("live-desktop");
   const chat = live.getByTestId("live-chat");
   await expect(chat).toBeVisible();
-  // The steps of the kitty's task read under its message, folded, and open on a tap.
+  // The kitty's task reads under its message as what it said it does; the actions stay folded
+  // under their count, and open on a tap.
   const fold = chat.getByTestId("steps-fold").first();
   await expect(fold).toBeVisible();
-  await fold.getByTestId("steps-toggle").click();
+  await expect(fold.getByTestId("step-plan").first()).toBeVisible();
+  await expect(fold.locator(".step")).toHaveCount(0);
+  await fold.getByTestId("steps-toggle").first().click();
   await expect(fold.locator(".step").first()).toBeVisible();
   // It is the same chat: a message written here is the chat's.
   await chat.getByRole("textbox").fill("hello from the window");
@@ -2134,7 +2175,8 @@ test("in a kitty's drawer the desktop is there, live, and one click on it takes 
   await expect(drawer.getByTestId("live-frame")).toHaveCount(1);
   await expect(drawer.getByTestId("open-desktop")).toHaveCount(0);
   await expect(live.getByTestId("live-state")).toHaveText("Watching live");
-  await expect(live.getByText("Click the picture to take control")).toBeVisible();
+  // No hint box over the picture: the pointer cursor and the "Take control" button say it.
+  await expect(live.getByText("Click the picture to take control")).toHaveCount(0);
   // A click on the picture takes the controls; Escape is then a key of the display, not a way out.
   await live.getByTestId("live-frame").click({ position: { x: 60, y: 40 } });
   await expect(live.getByTestId("live-state")).toContainText("You have the controls");
@@ -2246,6 +2288,7 @@ test("a kitty that needs the person asks for help: a window shows what it sees, 
   await expect(modal).toHaveCount(0);
   const callout = page.getByTestId("help-callout");
   await expect(callout).toBeVisible();
+  await openSteps(page.locator(".trail"));
   await expect(
     page.locator(".trail").getByText("Asked you for help: the shop's sign-in needs your password"),
   ).toBeVisible();
@@ -2288,12 +2331,13 @@ test("a kitty that needs the person gets what it asked for typed in the window, 
   await expect(send).toHaveText("Type it on the desktop");
   await send.click();
   await expect(modal).toHaveCount(0);
-  await expect(page.getByText("You typed it on its desktop").first()).toBeVisible();
   await expect(
     page.getByText("Signed in to the shop: thank you for the password.").last(),
   ).toBeVisible({
     timeout: 15000,
   });
+  await openSteps(page.getByTestId("desk"));
+  await expect(page.getByText("You typed it on its desktop").first()).toBeVisible();
   expect(JSON.parse(typed[0])).toEqual({
     text: "hunter2",
     secret: true,
