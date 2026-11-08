@@ -17,7 +17,7 @@ import Sidebar, { moodOf } from "./Sidebar";
 import PixelCat from "./PixelCat";
 import { cycleMode } from "./theme";
 import { t } from "./i18n";
-import { UpdateModal, useUpdateNews } from "./Updates";
+import { UpdateModal, skippedVersion, useUpdateNews } from "./Updates";
 
 type ModalKind =
   | "none"
@@ -112,6 +112,8 @@ export default function App() {
   // The news of a newer Kitties, and whether its window is open.
   const news = useUpdateNews(online === true);
   const [upgrading, setUpgrading] = useState(false);
+  // The version the person chose not to be told about (in this browser).
+  const [skipped, setSkipped] = useState(skippedVersion);
 
   const user = t("You");
 
@@ -520,7 +522,16 @@ export default function App() {
   return (
     <div class="app-bg h-full flex overflow-hidden">
       <ConfirmHost />
-      {upgrading && news && <UpdateModal status={news} onClose={() => setUpgrading(false)} />}
+      {upgrading && news && (
+        <UpdateModal
+          status={news}
+          onClose={() => setUpgrading(false)}
+          onSkip={() => {
+            setSkipped(news.latest || "");
+            setUpgrading(false);
+          }}
+        />
+      )}
       <Sidebar
         chats={chats}
         kitties={kitties}
@@ -542,7 +553,7 @@ export default function App() {
         approvals={waiting}
         onTheme={cycleMode}
         onSignOut={canSignOut ? signOut : undefined}
-        update={news?.available ? news.latest || "" : ""}
+        update={news?.available && news.latest !== skipped ? news.latest || "" : ""}
         onUpdate={() => setUpgrading(true)}
       />
       <div class="flex-1 flex flex-col min-w-0">

@@ -249,6 +249,10 @@ const dict: Dictionary = {
     "O Kitties {version} está rodando: atualizando a janela…",
   "Kitties restarts when it is done; the kitties' desktops keep running and this window refreshes by itself.":
     "O Kitties reinicia ao terminar; os desktops dos kitties continuam rodando e esta janela se atualiza sozinha.",
+  "Skip this version": "Pular esta versão",
+  "Opening the app again on the new version…": "Abrindo o app de novo na versão nova…",
+  "The app closes and opens again on the new version when it is done; the kitties' desktops keep running.":
+    "O app fecha e abre de novo na versão nova ao terminar; os desktops dos kitties continuam rodando.",
   "Look for a new version": "Procurar uma versão nova",
   "Looked {when}.": "Procurada {when}.",
   "Kitties does not look for new versions: turn it on with updates.gateway in the configuration.":

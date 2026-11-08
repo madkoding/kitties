@@ -48,6 +48,26 @@ export function useUpdateNews(enabled: boolean): UpdateStatus | null {
   return st;
 }
 
+// SKIP is where this browser keeps the version the person chose not to be told about.
+const SKIP = "kitties.update.skip";
+
+// skippedVersion is the version the sidebar does not tell about any more ("" when none).
+export function skippedVersion(): string {
+  try {
+    return localStorage.getItem(SKIP) || "";
+  } catch {
+    return "";
+  }
+}
+
+function skipVersion(v: string): void {
+  try {
+    localStorage.setItem(SKIP, v);
+  } catch {
+    /* a browser that keeps nothing tells again */
+  }
+}
+
 // size is a number of bytes for people.
 function size(n: number): string {
   return n >= 1 << 20
@@ -56,7 +76,7 @@ function size(n: number): string {
 }
 
 // stepText is what the update is doing, for people.
-function stepText(p: UpdateProgress): string {
+function stepText(p: UpdateProgress, app: boolean): string {
   switch (p.phase) {
     case "download":
       return p.total
@@ -67,7 +87,7 @@ function stepText(p: UpdateProgress): string {
     case "install":
       return t("Putting the new version in place…");
     case "restart":
-      return t("Restarting Kitties…");
+      return app ? t("Opening the app again on the new version…") : t("Restarting Kitties…");
     default:
       return t("Getting ready…");
   }
@@ -76,8 +96,17 @@ function stepText(p: UpdateProgress): string {
 type Stage = "offer" | "working" | "restarting" | "back" | "failed";
 
 // UpdateModal offers the newer version and makes the update: its progress, the restart of the
-// gateway, and the page reloaded on the new version.
-export function UpdateModal({ status, onClose }: { status: UpdateStatus; onClose: () => void }) {
+// gateway (or of the whole app), and the page reloaded on the new version. onSkip, when given,
+// offers not to be told about this version again.
+export function UpdateModal({
+  status,
+  onClose,
+  onSkip,
+}: {
+  status: UpdateStatus;
+  onClose: () => void;
+  onSkip?: () => void;
+}) {
   const [stage, setStage] = useState<Stage>("offer");
   const [progress, setProgress] = useState<UpdateProgress | null>(null);
   const [err, setErr] = useState("");
@@ -226,9 +255,13 @@ export function UpdateModal({ status, onClose }: { status: UpdateStatus; onClose
         )}
         {stage === "offer" && status.can_apply && (
           <p class="text-xs text-[var(--t3)] mt-3">
-            {t(
-              "Kitties restarts when it is done; the kitties' desktops keep running and this window refreshes by itself.",
-            )}
+            {status.app
+              ? t(
+                  "The app closes and opens again on the new version when it is done; the kitties' desktops keep running.",
+                )
+              : t(
+                  "Kitties restarts when it is done; the kitties' desktops keep running and this window refreshes by itself.",
+                )}
           </p>
         )}
         {stage !== "offer" && (
@@ -254,7 +287,7 @@ export function UpdateModal({ status, onClose }: { status: UpdateStatus; onClose
                   })
                 : stage === "failed"
                   ? t("The update did not finish.")
-                  : progress && stepText(progress)}
+                  : progress && stepText(progress, !!status.app)}
               {stage === "working" && <span class="ml-auto text-xs text-[var(--t3)]">{pct}%</span>}
             </p>
           </div>
@@ -265,6 +298,18 @@ export function UpdateModal({ status, onClose }: { status: UpdateStatus; onClose
           </p>
         )}
         <div class="flex justify-end gap-2 mt-5">
+          {stage === "offer" && onSkip && (
+            <button
+              class="btn-ghost px-3 py-1.5 text-sm mr-auto"
+              onClick={() => {
+                skipVersion(status.latest || "");
+                onSkip();
+              }}
+              data-testid="update-skip"
+            >
+              {t("Skip this version")}
+            </button>
+          )}
           {!busy && (
             <button class="btn-ghost px-3 py-1.5 text-sm" onClick={onClose}>
               {stage === "offer" ? t("Later") : t("Close")}

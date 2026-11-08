@@ -2605,6 +2605,30 @@ test("a newer Kitties is told in the sidebar, installed with its progress, and t
   expect(applied).toBe(1);
 });
 
+test("the desktop app updates as a whole, and a version can be skipped", async ({ page }) => {
+  const status = {
+    current: "v1.0.0",
+    latest: "v1.1.0",
+    available: true,
+    mode: "notify",
+    can_apply: true,
+    signed: true,
+    app: true,
+  };
+  await page.route("**/v1/update**", (route) => route.fulfill({ json: status }));
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("update-notice").click();
+  const modal = page.getByTestId("update-modal");
+  await expect(modal).toContainText("The app closes and opens again on the new version");
+  // Skipped: the sidebar does not tell about it again, not even after a reload.
+  await modal.getByTestId("update-skip").click();
+  await expect(modal).toHaveCount(0);
+  await expect(page.getByTestId("update-notice")).toHaveCount(0);
+  await page.reload();
+  await expect(kittyRow(page, "mimi")).toBeAttached();
+  await expect(page.getByTestId("update-notice")).toHaveCount(0);
+});
+
 test("an update that fails says why and can be tried again", async ({ page }) => {
   let status: Record<string, unknown> = {
     current: "v1.0.0",

@@ -1550,6 +1550,8 @@ export type UpdateStatus = {
   changes?: string[];
   // progress is the update being made (or the last one, when it failed).
   progress?: UpdateProgress;
+  // app is true for the gateway of the desktop app: the whole app is updated and opened again.
+  app?: boolean;
 };
 
 // UpdateProgress is how far an update has gone: its step, the bytes of the download, the whole.
