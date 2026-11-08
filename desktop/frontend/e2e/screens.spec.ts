@@ -260,6 +260,26 @@ test("the technical details show only when asked for", async ({ page }) => {
   await expect(page.locator(".trail").first()).not.toContainText("640, 420");
 });
 
+test("every action of a task shows unfolded when the person prefers it", async ({ page }) => {
+  await open(page, "#new-preferences");
+  const box = page.getByTestId("all-steps");
+  await expect(box).not.toBeChecked();
+  await box.check();
+  await open(page, `#chat/${ids.desktop}`);
+  const trail = page.locator(".trail").first();
+  await expect(trail.getByText("Opened example.com", { exact: true })).toBeVisible();
+  await expect(trail.getByTestId("steps-toggle").first()).toHaveAttribute("aria-expanded", "true");
+  // A part can still be folded by hand.
+  await trail.getByTestId("steps-toggle").first().click();
+  await expect(trail.getByText("Opened example.com", { exact: true })).toBeHidden();
+  await open(page, "#new-preferences");
+  await page.getByTestId("all-steps").uncheck();
+  await open(page, `#chat/${ids.desktop}`);
+  await expect(
+    page.locator(".trail").first().getByText("Opened example.com", { exact: true }),
+  ).toBeHidden();
+});
+
 // openConfig unfolds the configuration of the kitty's drawer, where its options are edited.
 async function openConfig(page: Page) {
   const config = page.getByTestId("kitty-config");
@@ -2288,7 +2308,7 @@ test("a kitty that needs the person asks for help: a window shows what it sees, 
   await expect(modal).toHaveCount(0);
   const callout = page.getByTestId("help-callout");
   await expect(callout).toBeVisible();
-  await openSteps(page.locator(".trail"));
+  // A call for help never folds away under the count of actions.
   await expect(
     page.locator(".trail").getByText("Asked you for help: the shop's sign-in needs your password"),
   ).toBeVisible();

@@ -222,6 +222,8 @@ const dict: Dictionary = {
     "O idioma do sistema é usado até você escolher um.",
   "A desktop or Kitties was updated, or a new version is waiting":
     "Um desktop ou o Kitties foi atualizado, ou há uma versão nova esperando",
+  "What a kitty goes on to do in a long task (one every 10 minutes at most)":
+    "O que uma kitty vai fazer em uma tarefa longa (no máximo um a cada 10 minutos)",
   "Kitties did not come back in a minute: restart it by hand.":
     "O Kitties não voltou em um minuto: reinicie-o manualmente.",
   "Update Kitties to {version}? It restarts in a moment; the kitties' desktops keep running.":

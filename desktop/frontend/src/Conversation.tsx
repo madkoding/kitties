@@ -6,7 +6,7 @@ import { stepArgs, stepSentence, when } from "./format";
 import { actionLabel, plainError } from "./friendly";
 import { gatewayText } from "./gatewayText";
 import { t } from "./i18n";
-import { useTechDetails } from "./prefs";
+import { useAllSteps, useTechDetails } from "./prefs";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
 import { IconCamera, IconHand, IconMonitor, IconShield, IconThumbDown, IconThumbUp } from "./icons";
@@ -256,8 +256,13 @@ function StepPart({
   shot: number;
   hero?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const all = useAllSteps();
+  const [toggled, setOpen] = useState<boolean | null>(null);
+  // The person's choice in the preferences, until they open or close this one by hand.
+  const open = toggled ?? all;
   const last = part.items.length > 0 ? steps[part.items[part.items.length - 1]] : undefined;
+  // A call for help is the one action that asks something of the person: it never folds away.
+  const shown = open ? part.items : part.items.filter((i) => steps[i].action === "ask_help");
   return (
     <div class="step-part" data-testid="step-part">
       {part.plan && (
@@ -276,22 +281,21 @@ function StepPart({
         >
           <span aria-hidden="true">{open ? "▾" : "▸"}</span>
           <span>{actionsLabel(part.items.length)}</span>
-          {!open && live && last && (
+          {!open && live && last && last.action !== "ask_help" && (
             <span class="steps-last">· {stepSentence(last.action, last.args)}</span>
           )}
         </button>
       )}
-      {open &&
-        part.items.map((i) => (
-          <StepRow
-            key={i}
-            step={steps[i]}
-            chat={chat}
-            onOpen={onOpen}
-            folded={i !== shot}
-            hero={!!hero && i === shot}
-          />
-        ))}
+      {shown.map((i) => (
+        <StepRow
+          key={i}
+          step={steps[i]}
+          chat={chat}
+          onOpen={onOpen}
+          folded={i !== shot}
+          hero={!!hero && i === shot}
+        />
+      ))}
     </div>
   );
 }
