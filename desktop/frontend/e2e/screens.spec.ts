@@ -1184,15 +1184,108 @@ test("a first run is a checklist, and nothing can be made out of order", async (
   await expect(page.getByTestId("provider-picker")).toBeVisible();
 });
 
-test("a kitty hands a subtask to another and the chip leads to their thread", async ({ page }) => {
+test("a chat where a kitty hands a subtask to another reads as a group of both", async ({
+  page,
+}) => {
   await open(page, `#chat/${ids.delegated}`);
   await expect(page.getByText("luna took care of it").first()).toBeVisible();
-  const chip = page.locator(".tag", { hasText: "→ luna" }).first();
-  await expect(chip).toBeVisible();
+  // luna's answer shows in the chat with its own name and cat, under mimi's turn that asked.
+  const reply = page.getByTestId("delegate-reply").first();
+  await expect(reply).toHaveAttribute("data-who", "luna");
+  await expect(reply.locator(".msg-cat > *").first()).toBeVisible();
+  await expect(reply).toContainText("mimi asked: summarise the launch plan");
+  // The header lists both kitties, luna marked as a helper, and says it is a group.
+  await expect(page.getByTestId("chat-group")).toBeVisible();
+  await expect(page.getByTestId("chat-kitty")).toHaveText(["mimi", "luna"]);
+  await expect(page.locator(".tag-delegate", { hasText: "luna" })).toBeVisible();
+  // In the sidebar the chat huddles both cats, with the count among its tags.
+  const row = page
+    .getByTestId("sidebar-chats")
+    .getByRole("button", { name: "Plan review", exact: true })
+    .locator("xpath=..");
+  await expect(row.getByTestId("chat-cats").locator("> *")).toHaveCount(2);
+  await expect(row.getByTestId("chat-count")).toHaveText("2");
+  await expect(row.getByTestId("chat-count")).toHaveAttribute("title", "mimi, luna");
+  // The API says the same: mimi is the member, luna a delegate, both kitties of the chat.
+  const res = await page.request.get(`${GATEWAY}/v1/chats/${ids.delegated}`, {
+    headers: { Authorization: "Bearer e2e-token" },
+  });
+  const chat = (await res.json()).chat;
+  expect(chat.members).toEqual([ids.mimi]);
+  expect(chat.kitties).toHaveLength(2);
+  expect(chat.delegates).toHaveLength(1);
+  // A long answer shows its start, and all of it on request.
+  const answer = reply.getByTestId("delegate-answer");
+  const short = (await answer.textContent())!.length;
+  await reply.getByTestId("delegate-more").click();
+  await expect(reply.getByTestId("delegate-more")).toHaveAttribute("aria-expanded", "true");
+  expect((await answer.textContent())!.length).toBeGreaterThan(short);
   await shot(page, "20-delegation");
-  await chip.click();
+  // The sidebar can list only the group chats: the hand-over is there, a chat of one is not.
+  const chats = page.getByTestId("sidebar-chats");
+  await chats.getByTestId("chats-groups").click();
+  await expect(chats.getByTestId("chats-groups")).toHaveAttribute("aria-pressed", "true");
+  await expect(chats.getByRole("button", { name: "Plan review", exact: true })).toBeVisible();
+  await expect(chats.getByRole("button", { name: "Launch team", exact: true })).toBeVisible();
+  await expect(chats.getByRole("button", { name: "Announcement", exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(chats.getByTestId("chats-groups")).toHaveAttribute("aria-pressed", "true");
+  await chats.getByTestId("chats-groups").click();
+  await expect(chats.getByRole("button", { name: "Announcement", exact: true })).toBeVisible();
+  // The thread between the two is a group of both as well.
+  await reply.getByRole("link").click();
   await expect(page.getByText("mimi → luna").first()).toBeVisible();
   await expect(page.getByText("summarise the launch plan").first()).toBeVisible();
+  await expect(page.getByTestId("chat-kitty")).toHaveCount(2);
+});
+
+test("a kitty that helped through a hand-over can be made a member of the chat, or taken off it", async ({
+  page,
+}) => {
+  const headers = { Authorization: "Bearer e2e-token" };
+  const created = await page.request.post(`${GATEWAY}/v1/chats`, {
+    headers,
+    data: { members: ["mimi"], title: "Budget check" },
+  });
+  const chat = ((await created.json()) as { chat: { id: string } }).chat.id;
+  const sent = await page.request.post(`${GATEWAY}/v1/chats/${chat}/messages`, {
+    headers,
+    data: { text: "Mimi, ask tom to check the budget numbers." },
+  });
+  expect(sent.ok()).toBeTruthy();
+  await open(page, `#chat/${chat}`);
+  const promote = page.getByTestId("promote-delegate");
+  await expect(promote).toHaveCount(1);
+  await promote.click();
+  await page.getByTestId("confirm").getByRole("button", { name: "Make it a member" }).click();
+  await expect(page.getByTestId("promote-delegate")).toHaveCount(0);
+  await expect(page.locator(".tag-delegate")).toHaveCount(0);
+  const res = await page.request.get(`${GATEWAY}/v1/chats/${chat}`, { headers });
+  const after = (await res.json()).chat;
+  expect(after.members).toHaveLength(2);
+  expect(after.delegates ?? []).toHaveLength(0);
+
+  // Another helper is taken off its chat instead: it is no longer one of the chat's kitties.
+  const other = await page.request.post(`${GATEWAY}/v1/chats`, {
+    headers,
+    data: { members: ["mimi"], title: "Quick question" },
+  });
+  const quick = ((await other.json()) as { chat: { id: string } }).chat.id;
+  await page.request.post(`${GATEWAY}/v1/chats/${quick}/messages`, {
+    headers,
+    data: { text: "Mimi, ask luna to name three colours." },
+  });
+  await open(page, `#chat/${quick}`);
+  await page.getByTestId("dismiss-delegate").click();
+  await page.getByTestId("confirm").getByRole("button", { name: "Take it off" }).click();
+  await expect(page.getByTestId("chat-kitty")).toHaveText(["mimi"]);
+  await expect(page.getByTestId("chat-group")).toHaveCount(0);
+  // Its answer stays in the chat.
+  await expect(page.getByTestId("delegate-reply")).toHaveCount(1);
+  // And it can be brought back from the header.
+  await page.getByTestId("restore-delegate").click();
+  await expect(page.getByTestId("chat-kitty")).toHaveText(["mimi", "luna"]);
+  await expect(page.getByTestId("restore-delegate")).toHaveCount(0);
 });
 
 test("a long list of goals shows its first few, and the rest on request", async ({ page }) => {
@@ -3504,7 +3597,17 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     await expect(panel).toContainText("luna is the lead kitty");
     await expect(page.getByTestId("lead-tag")).toBeVisible();
     await expect(page.locator("aside").getByTestId("lead-badge")).toHaveCount(1);
+    // The lead sees how the team hands work around: mimi asked luna (and tom) earlier.
+    const stats = panel.getByTestId("handover-stats");
+    await expect(stats).toBeVisible();
+    await expect(stats.getByTestId("handover-row").filter({ hasText: "mimi" })).toBeVisible();
     await shot(page, "71-lead-kitty");
+    // Each row lists the kitty's hand-over threads, one click from opening them.
+    await stats.getByTestId("handover-row").filter({ hasText: "mimi" }).getByRole("button").click();
+    const threads = stats.getByTestId("handover-threads");
+    await expect(threads.getByRole("button", { name: "mimi → luna" })).toBeVisible();
+    await threads.getByRole("button", { name: "mimi → luna" }).click();
+    await expect(page.locator("h1", { hasText: "mimi → luna" })).toBeVisible();
 
     // Another kitty's drawer offers to take the lead.
     await open(page, `#kitty/${ids.mimi}`);

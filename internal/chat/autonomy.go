@@ -184,6 +184,8 @@ func (s *Service) delegate(ctx context.Context, id string, a action, k *kitty.Ki
 	if err != nil {
 		return outcome{action: a, err: err.Error()}
 	}
+	// The kitty joins the chat it helps in at once, so the chat reads as a group while it works.
+	s.addDelegate(id, target.ID)
 	d := Delegation{Kitty: target.Name, KittyID: target.ID, Chat: did, Task: clip(task, 300)}
 	s.note(k, agenda.KindDelegated, "", id, "to "+target.Name+": "+firstLine(task))
 	// The lead may give the kitty more (or less) for this task alone: it ends with the task.
@@ -196,14 +198,23 @@ func (s *Service) delegate(ctx context.Context, id string, a action, k *kitty.Ki
 		d.Limits = line
 		s.note(target, agenda.KindLimit, "", did, k.Name+" gave "+line)
 	}
+	done := s.helping(id, Helper{Kitty: target.Name, KittyID: target.ID, From: k.Name, Task: d.Task, Chat: did, Since: s.now()})
 	answer, err := s.askKitty(ctx, did, k, target, task)
+	done()
 	if err != nil {
 		d.Error = err.Error()
 		turn.Delegations = append(turn.Delegations, d)
+		// The lead (its Reports thread) and the person, when they asked for it, hear how it went,
+		// with secrets masked as in the sidebar.
+		s.tellDelegation(k, target, "could not do "+k.Name+"'s subtask", Gist(task)+" — "+Gist(err.Error()), id)
+		s.handOverFailed(target, err, id)
 		return outcome{action: a, err: target.Name + ": " + err.Error()}
 	}
 	d.Result = clip(answer, 300)
+	d.Answer = wholeAnswer(answer, 300)
 	turn.Delegations = append(turn.Delegations, d)
+	s.tellDelegation(k, target, "finished "+k.Name+"'s subtask", Gist(task)+" — "+Gist(answer), id)
+	s.handOverDone(target)
 	return outcome{action: a, text: target.Name + " answered:\n" + answer}
 }
 

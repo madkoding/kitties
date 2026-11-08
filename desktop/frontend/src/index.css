@@ -2403,3 +2403,103 @@ html.mac-inset .live-head {
 .mem-compact {
   margin: 0;
 }
+
+/* ─── A kitty handed a subtask answers in the chat ─────────────────────────────────────────
+ * Its reply sits under the turn that asked, a step in, with its own cat and name: the chat
+ * reads as a group. The bar is magenta, the colour of a hand-over. */
+.msg.agent.delegate-reply {
+  margin-left: 1.5rem;
+  padding-left: 3.5rem;
+  border-left-color: rgba(255, 43, 214, 0.55);
+}
+.msg.agent.delegate-reply.failed {
+  border-left-color: var(--c-red);
+}
+.delegate-reply .msg-cat {
+  left: 0.75rem;
+}
+.delegate-task {
+  margin-bottom: 0.25rem;
+  font-size: 0.78rem;
+  color: var(--t3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.delegate-open {
+  display: inline-block;
+  margin-top: 0.375rem;
+  font-size: 0.75rem;
+  color: var(--t3);
+}
+.delegate-open:hover {
+  color: var(--color-accent);
+}
+/* A kitty in the header that is there because it was handed a subtask. */
+.tag.tag-delegate {
+  border-style: dashed;
+}
+.msg.agent.delegate-reply.working {
+  border-left-color: var(--c-amber);
+}
+.delegate-more {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-accent);
+}
+.chat-filter {
+  margin: 0.875rem 0.625rem 0.375rem;
+  cursor: pointer;
+}
+.tag-promote {
+  display: inline-flex;
+  margin-left: 0.25rem;
+  padding: 0 0.125rem;
+  color: var(--t3);
+}
+.tag-promote:hover {
+  color: var(--color-accent);
+}
+/* A helper taken off the chat: dim, a click brings it back. */
+.tag.tag-dismissed {
+  opacity: 0.55;
+  border-style: dashed;
+  cursor: pointer;
+}
+.tag.tag-dismissed:hover {
+  opacity: 1;
+}
+.handover-stats {
+  width: 100%;
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  border-collapse: collapse;
+}
+.handover-stats th,
+.handover-stats td {
+  padding: 0.25rem 0.5rem;
+  text-align: right;
+  border-bottom: 1px solid rgb(var(--ov-rgb) / 0.08);
+}
+.handover-stats th:first-child,
+.handover-stats td:first-child {
+  text-align: left;
+}
+.handover-stats th {
+  color: var(--t4);
+  font-weight: 500;
+}
+.handover-kitty {
+  color: var(--color-accent);
+}
+.handover-threads {
+  margin: 0;
+  padding-left: 1rem;
+  text-align: left;
+  list-style: disc;
+}
+.handover-threads button {
+  color: var(--t2);
+  text-decoration: underline;
+}

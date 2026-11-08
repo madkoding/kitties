@@ -1697,6 +1697,7 @@ const NOTIFY_LABELS: Record<string, string> = {
   recovered: t("A kitty's container was brought back"),
   budget: t("A kitty spent its day's tokens"),
   updated: t("A desktop or Kitties was updated, or a new version is waiting"),
+  delegated: t("A kitty finished a subtask another handed it, or could not"),
 };
 
 // NotifyForm chooses where the kitties tell you what happened while you were away (a push to

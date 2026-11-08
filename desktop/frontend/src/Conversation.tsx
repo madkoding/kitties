@@ -1,3 +1,4 @@
+import { Fragment } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import type { Kitty, Session, Step, Turn } from "./api";
 import { api, shotData } from "./api";
@@ -14,6 +15,7 @@ import { RULE_LABEL, ruleTarget } from "./Approvals";
 import HelpModal from "./Help";
 import { Sent } from "./Attachments";
 import LiveDesktop from "./LiveDesktop";
+import Delegations, { Helping } from "./Delegations";
 import { FollowButton, useFollow } from "./follow";
 
 // Text is a message: a kitty's answer is drawn as markdown (lists, tables, code); what the person
@@ -865,16 +867,6 @@ function TurnCard({
               })}
             </a>
           ))}
-          {turn.delegations?.map((d, i) => (
-            <a
-              key={"d" + i}
-              class={`tag ${d.error ? "tag-red" : "tag-magenta"}`}
-              href={`#chat/${d.chat}`}
-              title={[d.error || d.result || d.task, d.limits].filter(Boolean).join("\n")}
-            >
-              → {d.kitty}
-            </a>
-          ))}
           {turn.skills?.map((n) => (
             <span key={"s" + n} class="tag tag-amber">
               {t("skill · {name}", { name: n })}
@@ -1059,43 +1051,56 @@ export default function Conversation({
             </div>
           )}
           {(session.turns || []).map((turn, i, all) => (
-            <TurnCard
-              key={i}
-              turn={turn}
-              index={i}
-              chat={session.id}
-              user={user}
-              kitty={turn.kitty ? byId.get(turn.kitty) : undefined}
-              latest={i >= all.length - session.members.length}
-              onDesk={showDesk}
-              onOpen={setZoom}
-              onArtifact={setReading}
-              fold={sidebar}
-              onHelp={
-                sidebar
-                  ? undefined
-                  : () => {
-                      const k = turn.kitty ? byId.get(turn.kitty) : undefined;
-                      if (k) {
-                        setHelping(k);
+            <Fragment key={i}>
+              <TurnCard
+                key={i}
+                turn={turn}
+                index={i}
+                chat={session.id}
+                user={user}
+                kitty={turn.kitty ? byId.get(turn.kitty) : undefined}
+                latest={i >= all.length - session.members.length}
+                onDesk={showDesk}
+                onOpen={setZoom}
+                onArtifact={setReading}
+                fold={sidebar}
+                onHelp={
+                  sidebar
+                    ? undefined
+                    : () => {
+                        const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+                        if (k) {
+                          setHelping(k);
+                        }
                       }
-                    }
-              }
-              onContinue={
-                onSend
-                  ? () => {
-                      const k = turn.kitty ? byId.get(turn.kitty) : undefined;
-                      const who = k && session.members.length > 1 ? `@${k.name} ` : "";
-                      onSend(who + t("Continue where you left off."));
-                    }
-                  : undefined
-              }
-            />
+                }
+                onContinue={
+                  onSend
+                    ? () => {
+                        const k = turn.kitty ? byId.get(turn.kitty) : undefined;
+                        const who = k && session.members.length > 1 ? `@${k.name} ` : "";
+                        onSend(who + t("Continue where you left off."));
+                      }
+                    : undefined
+                }
+              />
+              {turn.delegations && turn.delegations.length > 0 && (
+                <Delegations
+                  delegations={turn.delegations}
+                  from={turn.from}
+                  kitties={byId}
+                  onOpen={setReading}
+                />
+              )}
+            </Fragment>
           ))}
           {pending && (
             <div class="msg user" data-who={user}>
               <Text text={pending} />
             </div>
+          )}
+          {session.helping && session.helping.length > 0 && (
+            <Helping helping={session.helping} kitties={byId} />
           )}
           {(pending || waiting) && (
             <>

@@ -108,7 +108,9 @@ type Delegation struct {
 	Chat    string `json:"chat"` // where it happened
 	Task    string `json:"task"`
 	Result  string `json:"result,omitempty"`
-	Error   string `json:"error,omitempty"`
+	// Answer is the whole answer, up to answerMax, when Result had to be cut.
+	Answer string `json:"answer,omitempty"`
+	Error  string `json:"error,omitempty"`
 	// Limits says what the lead gave the kitty for this task alone, when it did.
 	Limits string `json:"limits,omitempty"`
 }
@@ -170,6 +172,16 @@ type Session struct {
 	// public chat): the guardrails apply (guard.go). Audience says who writes there.
 	Exposed  bool   `json:"exposed,omitempty"`
 	Audience string `json:"audience,omitempty"`
+	// Delegates are the kitties that took part through a hand-over without being members (they
+	// do not answer what the person writes), and Kitties every kitty of the chat: members,
+	// owner and delegates (crew.go). More than one makes the chat a group of kitties.
+	Delegates []string `json:"delegates,omitempty"`
+	Kitties   []string `json:"kitties,omitempty"`
+	// Dismissed are delegates the person took off the chat: its old hand-overs no longer count.
+	Dismissed []string `json:"dismissed,omitempty"`
+	// Helping are the kitties at work on a subtask handed over from this chat right now: the page
+	// shows them working until they answer. Cleared when the gateway starts.
+	Helping []Helper `json:"helping,omitempty"`
 }
 
 // NeedsHelp reports whether the last turn is a kitty asking the person for help.
@@ -211,6 +223,13 @@ type Service struct {
 	sessions map[string]*Session
 	// running serialises the turns of one session.
 	running map[string]*sync.Mutex
+	// handOvers holds the notices of hand-overs that ended, per chat, for HandOverWait so the
+	// ones that end close together go out as one message (crew.go).
+	handOverMu   sync.Mutex
+	handOvers    map[string][]notify.Notification
+	HandOverWait time.Duration
+	// failStreak counts, per kitty, the subtasks handed to it that failed in a row (crew.go).
+	failStreak map[string]int
 	// vault holds the secrets a kitty may type without reading them, nil when there is none.
 	vault *vault.Store
 	// helps are the kitties waiting for the person's answer, by turn (help.go).
@@ -303,7 +322,7 @@ type task struct {
 
 // Event is what a watcher of a session is told.
 type Event struct {
-	Type    string `json:"type"` // turn | update | done | deleted
+	Type    string `json:"type"` // turn | update | done | deleted | helping
 	Session string `json:"session"`
 	Index   int    `json:"index"`
 	Turn    *Turn  `json:"turn,omitempty"`
@@ -347,7 +366,8 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 // New creates the service, loading the sessions kept in dir.
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
-		now: time.Now, newID: randomID, MaxRounds: 4, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
+		HandOverWait: time.Minute,
+		now:          time.Now, newID: randomID, MaxRounds: 4, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
 		DefaultLimits: kitty.Limits{MaxTokens: 0, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
 		BrainWait: DefaultBrainWait, brainEvery: 15 * time.Second,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
@@ -565,6 +585,8 @@ func (s *Service) load() error {
 		}
 		// Recomputed rather than trusted: a chat saved before gists, or under older masking rules.
 		refreshGist(&sess)
+		refreshKitties(&sess)
+		sess.Helping = nil // nobody is still at work after a restart
 		s.sessions[sess.ID] = &sess
 	}
 	return nil
@@ -572,6 +594,7 @@ func (s *Service) load() error {
 
 func (s *Service) save(sess *Session) error {
 	refreshGist(sess)
+	refreshKitties(sess)
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return fmt.Errorf("create the chats folder: %w", err)
 	}
@@ -642,7 +665,8 @@ func (s *Service) AddMembers(id string, members []string) (*Session, error) {
 	return sess, s.save(sess)
 }
 
-// RemoveMember takes a kitty out of a session.
+// RemoveMember takes a kitty out of a session: a member, or a delegate, which then stays out of
+// the chat's kitties until it is handed work there again (crew.go).
 func (s *Service) RemoveMember(id, ref string) (*Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -653,6 +677,11 @@ func (s *Service) RemoveMember(id, ref string) (*Session, error) {
 	k, err := s.fleet.Get(ref)
 	if err != nil {
 		return nil, err
+	}
+	if !contains(sess.Members, k.ID) && contains(sess.Delegates, k.ID) {
+		dismissDelegate(sess, k.ID)
+		sess.UpdatedAt = s.now()
+		return sess, s.save(sess)
 	}
 	if len(sess.Members) == 1 && sess.Members[0] == k.ID {
 		return nil, errors.New("a chat needs at least one kitty: delete the chat instead")
@@ -687,6 +716,13 @@ func (s *Service) Prune(exists func(id string) bool) error {
 				kept = append(kept, m)
 			}
 		}
+		// A kitty that is gone is no delegate, nor owner, of any chat either (crew.go).
+		if pruneHelpers(sess, exists) && len(kept) == len(sess.Members) {
+			if err := s.save(sess); err != nil && firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
 		if len(kept) == len(sess.Members) {
 			continue
 		}
@@ -718,6 +754,9 @@ func (s *Service) Get(id string) (*Session, error) {
 	}
 	c := *sess
 	c.Members = append([]string(nil), sess.Members...)
+	c.Delegates = append([]string(nil), sess.Delegates...)
+	c.Kitties = append([]string(nil), sess.Kitties...)
+	c.Helping = append([]Helper(nil), sess.Helping...)
 	c.Turns = append([]Turn(nil), sess.Turns...)
 	c.Help = sess.NeedsHelp()
 	return &c, nil

@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo, Session } from "./api";
-import { ApiError, api, cookieLogin, errText, inWails, watchChat } from "./api";
+import { ApiError, api, chatKitties, cookieLogin, errText, inWails, watchChat } from "./api";
 import ArtifactReader from "./ArtifactReader";
 import { ConfirmHost, ask } from "./Confirm";
 import Login from "./Login";
 import Welcome from "./Welcome";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
-import { IconMenu, IconMonitor, IconShield, IconTrash, IconUsers } from "./icons";
+import { IconMenu, IconMonitor, IconPlus, IconShield, IconTrash, IconUsers, IconX } from "./icons";
 import LiveDesktop from "./LiveDesktop";
 import { ConnectModal, KittyDrawer, NewChatModal, NewKittyModal } from "./Modals";
 import SettingsModal from "./Settings";
@@ -279,6 +279,10 @@ export default function App() {
         refresh();
         return;
       }
+      if (ev.type === "helping") {
+        loadSession(current);
+        return;
+      }
       if (ev.turn === undefined || ev.index === undefined) {
         return;
       }
@@ -294,7 +298,7 @@ export default function App() {
         refresh();
       }
     });
-  }, [current, refresh]);
+  }, [current, refresh, loadSession]);
   useEffect(() => {
     const id = setInterval(() => {
       refresh();
@@ -437,8 +441,73 @@ export default function App() {
     }
   };
 
+  // promote makes a kitty that helped through a hand-over a member of the chat: from then on it
+  // answers what the person writes there too.
+  const promote = async (k: Kitty) => {
+    if (!session) {
+      return;
+    }
+    if (
+      !(await ask(
+        t("Make {name} a member of this chat? It will answer what you write here too.", {
+          name: k.name,
+        }),
+        t("Make it a member"),
+      ))
+    ) {
+      return;
+    }
+    try {
+      setSession(await api.addMembers(session.id, [k.id]));
+      refresh();
+    } catch (e) {
+      setError(errText(e));
+    }
+  };
+
+  // dismiss takes a kitty that helped through a hand-over off the chat: it is no longer shown as
+  // one of its kitties, until it is handed work there again.
+  const dismiss = async (k: Kitty) => {
+    if (!session) {
+      return;
+    }
+    if (
+      !(await ask(
+        t(
+          "Take {name} off this chat? Its answers stay; it shows again if it is handed work here.",
+          { name: k.name },
+        ),
+        t("Take it off"),
+      ))
+    ) {
+      return;
+    }
+    try {
+      setSession(await api.removeMember(session.id, k.id));
+      refresh();
+    } catch (e) {
+      setError(errText(e));
+    }
+  };
+
+  // restore brings back a kitty the person took off the chat.
+  const restore = async (k: Kitty) => {
+    if (!session) {
+      return;
+    }
+    try {
+      setSession(await api.restoreDelegate(session.id, k.id));
+      refresh();
+    } catch (e) {
+      setError(errText(e));
+    }
+  };
+
+  // Every kitty of the chat: its members and the ones handed a subtask in it.
   const members = session
-    ? session.members.map((id) => kitties.find((k) => k.id === id)).filter(Boolean)
+    ? chatKitties(session)
+        .map((id) => kitties.find((k) => k.id === id))
+        .filter(Boolean)
     : [];
   const kitty = kittyOpen
     ? kitties.find((k) => k.id === kittyOpen || k.name === kittyOpen)
@@ -481,8 +550,12 @@ export default function App() {
           <h1 class="text-sm sm:text-base font-semibold tracking-wide truncate min-w-0 flex-1">
             {session ? session.title : "Kitties"}
           </h1>
-          {session && session.members.length > 1 && (
-            <span class="tag tag-accent">
+          {session && members.length > 1 && (
+            <span
+              class="tag tag-accent"
+              data-testid="chat-group"
+              title={t("{count} kitties", { count: members.length })}
+            >
               <IconUsers size={10} /> {t("group")}
             </span>
           )}
@@ -509,7 +582,16 @@ export default function App() {
             </button>
           )}
           {members.map((k) => (
-            <span key={k!.id} class="hidden sm:inline-flex tag items-center">
+            <span
+              key={k!.id}
+              class={`hidden sm:inline-flex tag items-center ${session?.members.includes(k!.id) ? "" : "tag-delegate"}`}
+              title={
+                session?.members.includes(k!.id)
+                  ? undefined
+                  : t("{name} helps in this chat: a subtask was handed to it", { name: k!.name })
+              }
+              data-testid="chat-kitty"
+            >
               <PixelCat
                 breed={k!.avatar?.breed}
                 color={k!.avatar?.color}
@@ -517,8 +599,44 @@ export default function App() {
                 size={18}
               />{" "}
               {k!.name}
+              {session?.delegates?.includes(k!.id) && (
+                <button
+                  class="plain tag-promote"
+                  onClick={() => promote(k!)}
+                  title={t("Make {name} a member: it answers here too", { name: k!.name })}
+                  aria-label={t("Make {name} a member: it answers here too", { name: k!.name })}
+                  data-testid="promote-delegate"
+                >
+                  <IconPlus size={10} />
+                </button>
+              )}
+              {session?.delegates?.includes(k!.id) && (
+                <button
+                  class="plain tag-promote"
+                  onClick={() => dismiss(k!)}
+                  title={t("Take {name} off this chat", { name: k!.name })}
+                  aria-label={t("Take {name} off this chat", { name: k!.name })}
+                  data-testid="dismiss-delegate"
+                >
+                  <IconX size={10} />
+                </button>
+              )}
             </span>
           ))}
+          {session?.dismissed
+            ?.map((id) => kitties.find((k) => k.id === id))
+            .filter(Boolean)
+            .map((k) => (
+              <button
+                key={"off-" + k!.id}
+                class="hidden sm:inline-flex tag tag-dismissed items-center gap-1"
+                onClick={() => restore(k!)}
+                title={t("Bring {name} back to this chat", { name: k!.name })}
+                data-testid="restore-delegate"
+              >
+                <IconPlus size={10} /> {k!.name}
+              </button>
+            ))}
           {members
             .filter((k) => k!.desktop && k!.status === "running")
             .map((k) => (
@@ -571,7 +689,7 @@ export default function App() {
             kitty={live}
             onClose={() => setLive(null)}
             chat={
-              session && session.members.includes(live.id)
+              session && chatKitties(session).includes(live.id)
                 ? {
                     session,
                     kitties,

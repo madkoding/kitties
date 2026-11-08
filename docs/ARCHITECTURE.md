@@ -224,6 +224,25 @@ other kitty may start, within that kitty's time limit, and feeds the answer back
 action's result. `MaxDepth` (2) bounds how deep hand-overs go; at the limit the prompt names
 no peers and the action is refused.
 
+The kitty handed the work joins the chat it was asked from as a delegate (`Session.Delegates`,
+`internal/chat/crew.go`): it is not a member, so it answers nothing the person writes there.
+`Session.Kitties` is every kitty of the chat (members, the `Owner` of a hand-over thread, the
+delegates), recomputed on every save and load (a chat saved before the field gets its delegates
+from its turns). The page, `GET /v1/chats` and the MCP `chat_list` read it: more than one kitty
+makes the chat a group (`Session.Crew`), while `Session.Group` still says whether several answer.
+While a delegate works, `Session.Helping` lists it (cleared on start-up) and the chat's watchers get a
+`helping` event at the start and the end, so the page reads the chat again. `Delegation.Result` keeps
+the first 300 bytes; `Delegation.Answer` the whole answer (up to 20,000 characters) when it was longer.
+`DELETE /v1/chats/{id}/members/{kitty}` on a delegate dismisses it (`Session.Dismissed`: its old
+hand-overs no longer count) until a new hand-over brings it back. The `delegated` notices of a chat
+wait `HandOverWait` (a minute) and go out as one message listing them; when the gateway stops,
+`FlushHandOvers` sends the ones still waiting. Removing a kitty (`Prune`) also takes it off every
+chat's delegates and owner. `POST /v1/chats/{id}/delegates/{kitty}` brings a dismissed delegate
+back. `GET /v1/lead` (and the MCP `fleet_lead`) adds `handovers`: per kitty, the subtasks it handed
+out (`asked`, `asked_failed`) and took on (`took`, `took_failed`), counted over the chats kept, with
+its five latest hand-over `threads`. Every `FailStreakAlert` (3) subtasks a kitty fails in a row, `tell`
+reports it to the lead and the person; a subtask done resets the count (kept in memory).
+
 The orchestrator's `Watch` is the watchdog: every 30 seconds a running kitty whose container
 stopped or vanished is started again and a kitty in error is tried once more; recoveries are
 journaled.
@@ -259,7 +278,7 @@ yes runs it and counts it. `MemoryView.Spent` shows today's counts in the kitty'
 
 **Notifications** (`internal/notify`). A `Notifier` sends through any connector that can send a
 message (ntfy preferred, with a click link to the page), for the events `help`, `approval`,
-`goal_done`, `goal_blocked`, `recovered` and `budget`. Events of the same kind within ten minutes fold into
+`goal_done`, `goal_blocked`, `recovered`, `budget` and `delegated` (a hand-over finished or failed). Events of the same kind within ten minutes fold into
 one message. The choice is kept in `settings.json` over the YAML's `notify`; deleting the
 connector clears it.
 
