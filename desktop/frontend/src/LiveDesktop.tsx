@@ -853,10 +853,9 @@ export default function LiveDesktop({
             </span>
           ))}
         </div>
-        {!control && loaded && (
+        {!control && loaded && busy && (
           <span class="live-hint" aria-hidden="true">
-            {busy ? <span class="spinner" /> : null}
-            {t("Click the picture to take control")}
+            <span class="spinner" />
           </span>
         )}
         {!loaded && (
