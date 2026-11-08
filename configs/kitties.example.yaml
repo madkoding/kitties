@@ -66,6 +66,9 @@ kitties:
       - title: Triage new issues
         text: Read the new issue, label it and answer it if it is easy.
         on: [repo]               # runs when the repo connector receives an event (see inbound_secret)
+      - title: Morning prices
+        every: "0 8 * * *"
+        flow: prices             # a page flow the kitty saved (page_flow save): played without the model; the kitty takes over if it fails
   - name: tom
     provider: fast
     soul_file: souls/tom.yaml    # a soul from a file; inline fields override it

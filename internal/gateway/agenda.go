@@ -80,16 +80,21 @@ func (s *Server) handleGoals(w http.ResponseWriter, r *http.Request) {
 
 // goalBody is what the page sends for a goal; the kitty may be a name or an id.
 type goalBody struct {
-	Kitty   string   `json:"kitty"`
-	Title   string   `json:"title"`
-	Text    string   `json:"text"`
-	Every   string   `json:"every"`
-	On      []string `json:"on"`
-	Enabled *bool    `json:"enabled"`
+	Kitty string   `json:"kitty"`
+	Title string   `json:"title"`
+	Text  string   `json:"text"`
+	Every string   `json:"every"`
+	On    []string `json:"on"`
+	// Flow is nil when the body leaves it out: an update then keeps the goal's own.
+	Flow    *string `json:"flow"`
+	Enabled *bool   `json:"enabled"`
 }
 
 func (b goalBody) goal() agenda.Goal {
 	g := agenda.Goal{Kitty: b.Kitty, Title: b.Title, Text: b.Text, Every: b.Every, On: b.On, Enabled: true}
+	if b.Flow != nil {
+		g.Flow = *b.Flow
+	}
 	if b.Enabled != nil {
 		g.Enabled = *b.Enabled
 	}
@@ -159,6 +164,12 @@ func (s *Server) handleUpdateGoal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	g := body.goal()
+	if body.Flow == nil {
+		// A page that does not know flows (an older one) pauses a goal without dropping its flow.
+		if old, err := s.agenda.Goal(r.PathValue("id")); err == nil {
+			g.Flow = old.Flow
+		}
+	}
 	if err := s.checkTriggers(g); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return

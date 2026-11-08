@@ -53,8 +53,8 @@ func TestArgv(t *testing.T) {
 		`scroll {"direction": "up", "amount": 2}`:       "xdotool click --repeat 2 --delay 40 4",
 		`scroll {}`:                                     "xdotool click --repeat 3 --delay 40 5",
 		`open {"url": "https://example.com"}`:           "kitty-open https://example.com",
-		`run {"argv": ["ls", "-la", 2]}`:                "ls -la 2",
-		`run {"command": "echo hi"}`:                    "echo hi",
+		`run {"argv": ["ls", "-la", 2]}`:                "timeout -k 5 300 ls -la 2",
+		`run {"command": "echo hi", "timeout": 30}`:     "timeout -k 5 30 echo hi",
 		`type {"text": 5}`:                              "xdotool type --delay 20 -- 5",
 		`drag {"x": 1, "y": 2, "to_x": 30, "to_y": 40}`: "xdotool mousemove 1 2 mousedown 1 sleep 0.15 mousemove 15 21 sleep 0.05 mousemove --sync 30 40 sleep 0.15 mouseup 1",
 		`windows {}`:                                    "wmctrl -l",
@@ -75,7 +75,7 @@ func TestArgv(t *testing.T) {
 	bad := []string{
 		`click {"y": 1}`, `click {"x": 1}`, `click {"x": "a", "y": 1}`, `click {"x": -1, "y": 1}`, `click {"x": 1, "y": 1, "button": "x"}`,
 		`click {"x": true, "y": 1}`, `type {}`, `key {}`, `key {"keys": "a b"}`, `scroll {"amount": 99}`, `open {"url": "ftp://x"}`,
-		`run {}`, `run {"argv": []}`, `explode {}`,
+		`run {}`, `run {"argv": []}`, `run {"argv": ["ls"], "timeout": 9999}`, `explode {}`,
 		`drag {"x": 1, "y": 2, "to_x": 3}`, `drag {"x": 1, "y": 2, "to_x": 3, "to_y": -4}`, `focus {}`, `launch {}`,
 		`install {}`, `install {"packages": ["-o", "x"]}`, `install {"packages": ["vlc; rm -rf /"]}`,
 	}
@@ -118,7 +118,7 @@ func TestRun(t *testing.T) {
 		t.Error("open waits for the browser")
 	}
 	r.out = strings.Repeat("x", 5000)
-	if out, _ := Run(ctx, r, "mimi", Action{Name: "run", Args: map[string]any{"argv": []any{"ls"}}}); len(out) != 4003 {
+	if out, _ := Run(ctx, r, "mimi", Action{Name: "windows"}); len(out) != 4003 {
 		t.Error("output is clipped")
 	}
 	r.out, r.err = "", errors.New("boom")
@@ -186,7 +186,8 @@ func TestReadScreenAndWhichActionsLookAtTheDisplay(t *testing.T) {
 	if err != nil || len(argv) != 1 || argv[0] != "kitty-ocr" {
 		t.Errorf("read_screen = %v, %v", argv, err)
 	}
-	for name, visual := range map[string]bool{"read_screen": false, "page_read": false, "page_click": true, "page_type": true, "windows": false, "run": false, "install": false,
+	for name, visual := range map[string]bool{"read_screen": false, "page_read": false, "page_click": false, "page_type": false, "page_goto": false, "page_flow": false,
+		"file_read": false, "file_write": false, "shell": false, "windows": false, "run": false, "install": false,
 		"click": true, "type": true, "wait": true, "open": true, "screenshot": true, "focus": true} {
 		if got := (Action{Name: name}).Visual(); got != visual {
 			t.Errorf("%s.Visual() = %v, want %v", name, got, visual)
@@ -198,9 +199,13 @@ func TestReadScreenAndWhichActionsLookAtTheDisplay(t *testing.T) {
 	if len(out) < 9000 {
 		t.Errorf("read_screen was cut at %d", len(out))
 	}
-	out, _ = Run(context.Background(), &fakeRunner{out: long}, "k", Action{Name: "run", Args: map[string]any{"command": "cat big"}})
+	out, _ = Run(context.Background(), &fakeRunner{out: long}, "k", Action{Name: "windows"})
 	if len(out) > 4010 {
-		t.Errorf("run was not cut: %d", len(out))
+		t.Errorf("windows was not cut: %d", len(out))
+	}
+	out, _ = Run(context.Background(), &fakeRunner{out: long + long}, "k", Action{Name: "shell", Args: map[string]any{"command": "cat big"}})
+	if len(out) < 9000 || len(out) > 12010 {
+		t.Errorf("shell output is %d long, want up to 12000", len(out))
 	}
 }
 
@@ -226,6 +231,35 @@ func TestPageTools(t *testing.T) {
 		{"page_type", map[string]any{"text": "hello"}, "", true},
 		{"page_type", map[string]any{"ref": 2.0}, "", true},
 		{"page_type", map[string]any{"ref": 2.0, "text": strings.Repeat("a", 2001)}, "", true},
+		{"page_type", map[string]any{"field": " Email ", "text": "a@b.c"}, "kitty-page type --field=Email -- a@b.c", false},
+		{"page_read", map[string]any{"from": 6000.0}, "kitty-page read --from=6000", false},
+		{"page_read", map[string]any{"find": "price"}, "kitty-page read --find=price", false},
+		{"page_read", map[string]any{"find": strings.Repeat("a", 201)}, "", true},
+		{"page_goto", map[string]any{"url": "https://example.com"}, "kitty-page goto -- https://example.com", false},
+		{"page_goto", map[string]any{"url": "file:///etc/passwd"}, "", true},
+		{"page_goto", map[string]any{"url": "javascript:alert(1)"}, "", true},
+		{"page_wait", map[string]any{"text": "Done", "seconds": 5.0}, "kitty-page wait --seconds=5 --text=Done", false},
+		{"page_wait", nil, "kitty-page wait", false},
+		{"page_wait", map[string]any{"seconds": 99.0}, "", true},
+		{"page_flow", map[string]any{"steps": []any{map[string]any{"goto": "https://x"}, map[string]any{"click": "Go"}}, "save": "search"},
+			`kitty-page flow --steps=[{"goto":"https://x"},{"click":"Go"}] --save=search`, false},
+		{"page_flow", map[string]any{"name": "search"}, "kitty-page flow --name=search", false},
+		{"page_flow", map[string]any{"list": true}, "kitty-page flow --list", false},
+		{"page_flow", map[string]any{"name": "../etc"}, "", true},
+		{"page_flow", map[string]any{"steps": []any{map[string]any{"read": true}}, "save": "A B"}, "", true},
+		{"page_flow", map[string]any{"steps": []any{}}, "", true},
+		{"file_read", map[string]any{"path": "notes.txt"}, "kitty-file read -- notes.txt", false},
+		{"file_read", map[string]any{"path": "-rf", "from": 10.0, "lines": 20.0}, "kitty-file read --from=10 --lines=20 -- -rf", false},
+		{"file_read", map[string]any{}, "", true},
+		{"file_list", nil, "kitty-file list -- .", false},
+		{"file_list", map[string]any{"path": "/home/kitty", "depth": 3.0}, "kitty-file list --depth=3 -- /home/kitty", false},
+		{"file_write", map[string]any{"path": "a.md", "content": "hi"}, "kitty-file write -- a.md", false},
+		{"file_write", map[string]any{"path": "a.md", "content": "hi", "append": true}, "kitty-file write --append -- a.md", false},
+		{"file_write", map[string]any{"path": "a.md"}, "", true},
+		{"shell", map[string]any{"command": "ls | wc -l"}, "timeout -k 5 300 bash -c ls | wc -l", false},
+		{"shell", map[string]any{"command": "sleep 1", "timeout": 10.0}, "timeout -k 5 10 bash -c sleep 1", false},
+		{"shell", map[string]any{"command": " "}, "", true},
+		{"shell", map[string]any{"command": "x", "timeout": 0.0}, "", true},
 	}
 	for _, c := range cases {
 		argv, err := Argv(Action{Name: c.name, Args: c.args})
@@ -308,5 +342,43 @@ func TestCatalogueAsksForShortPlans(t *testing.T) {
 	c := Catalogue()
 	if !strings.Contains(c, "one short sentence, in the person's language") || !strings.Contains(c, "never the clicks, keys or coordinates") {
 		t.Error("the catalogue asks for a short line of what the kitty is about to do")
+	}
+}
+
+// A file's text goes on the command's input, not in its command line (where the size of an
+// argument is limited and every process sees it); a desktop that cannot take an input says so.
+func TestFileWriteGoesOnTheInput(t *testing.T) {
+	r := &inputRunner{}
+	a := Action{Name: "file_write", Args: map[string]any{"path": "notes/a.md", "content": "# hi\nthere"}}
+	if _, err := Run(context.Background(), r, "k", a); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.stdin) != 1 || r.stdin[0] != "k:# hi\nthere:kitty-file write -- notes/a.md" || len(r.calls) != 0 {
+		t.Errorf("file_write ran %v / %v", r.stdin, r.calls)
+	}
+	if _, err := Run(context.Background(), &fakeRunner{}, "k", a); err == nil {
+		t.Error("a runner without an input must refuse file_write")
+	}
+}
+
+// The prompt puts text first: files and the shell, then the page tools, and the picture last.
+func TestCatalogueWorksByTextFirst(t *testing.T) {
+	c := Catalogue()
+	for _, want := range []string{"Work by text first", "file_read", "shell", "page_flow", "a screenshot costs many times the tokens"} {
+		if !strings.Contains(c, want) {
+			t.Errorf("the catalogue lacks %q", want)
+		}
+	}
+}
+
+func TestPageNeedsPerson(t *testing.T) {
+	if r, ok := PageNeedsPerson("page_goto", "PAGE\ntitle: Just a moment\nVerify you are human"); !ok || !strings.Contains(r, "CAPTCHA") {
+		t.Errorf("a CAPTCHA page was not seen: %q %v", r, ok)
+	}
+	if _, ok := PageNeedsPerson("shell", "verify you are human"); ok {
+		t.Error("only page tools are checked")
+	}
+	if _, ok := PageNeedsPerson("page_read", "Inbox (3)"); ok {
+		t.Error("an ordinary page needs nobody")
 	}
 }

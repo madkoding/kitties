@@ -428,6 +428,46 @@ func TestRunGoal(t *testing.T) {
 	}
 }
 
+// A goal with a saved page flow plays it without the model; only a flow that fails hands the
+// goal to the kitty, with what went wrong.
+func TestRunGoalPlaysItsSavedFlowFirst(t *testing.T) {
+	s, d, sa := deskService(t)
+	_, r := withAgenda(t, s)
+	ana, _ := s.fleet.Get("ana")
+	g := agenda.Goal{ID: "g9", Kitty: ana.ID, Title: "Prices", Text: "Download the prices.", Flow: "prices"}
+	id, err := s.RunGoal(context.Background(), g, agenda.Trigger{Kind: "schedule"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(d.execs, "\n"), "kitty-page flow --name=prices") {
+		t.Errorf("the flow did not run: %v", d.execs)
+	}
+	if len(sa.seen) != 0 {
+		t.Errorf("the model was asked %d times for a flow that went through", len(sa.seen))
+	}
+	sess, _ := s.Get(id)
+	if len(sess.Turns) != 1 || sess.Turns[0].Kitty != ana.ID || !strings.Contains(sess.Turns[0].Text, "prices") || sess.Turns[0].Looks == nil {
+		t.Errorf("turns = %+v", sess.Turns)
+	}
+	if got := r.all(); len(got) != 1 || got[0] != "g9=done" {
+		t.Errorf("reports = %v", got)
+	}
+	// A flow that fails: the kitty is told the goal and what the flow said.
+	d.execErr = errors.New("exit status 1")
+	sa.replies = []string{"Done by hand."}
+	g.Chat = id
+	if _, err := s.RunGoal(context.Background(), g, agenda.Trigger{Kind: "manual"}); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, id)
+	if len(sa.seen) == 0 {
+		t.Fatal("the kitty was not asked after the flow failed")
+	}
+	if last := sa.seen[0][len(sa.seen[0])-1].Content; !strings.Contains(last, `saved page flow "prices" ran first and did not get through`) {
+		t.Errorf("the kitty was not told the flow failed: %q", last)
+	}
+}
+
 // A provider that could not read the request says so in JSON; the person reads plain words in
 // every line of the turn, and the error as it came stays in the detail.
 func TestBodyUnreadReadsPlain(t *testing.T) {

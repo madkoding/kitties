@@ -128,7 +128,7 @@ RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgra
         ca-certificates curl git jq python3 python3-websocket openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
         inkscape imagemagick mtpaint mousepad \
-        tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa \
+        tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa poppler-utils \
         libx11-6 libxext6 libjpeg62-turbo \
         libx264-164 libyuv0 libopus0 libpulse0 pulseaudio pulseaudio-utils socat \
         tini procps tzdata \
@@ -164,6 +164,7 @@ COPY --chmod=755 kitty-restore.sh /usr/local/bin/kitty-restore
 # across a restart, which an update of the desktop is.
 COPY chromium-policy.json /etc/chromium/policies/managed/kitties.json
 COPY --chmod=755 kitty-page.py /usr/local/bin/kitty-page
+COPY --chmod=755 kitty-file.py /usr/local/bin/kitty-file
 COPY --chmod=755 chromium-wrapper.sh /usr/local/bin/chromium
 COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch

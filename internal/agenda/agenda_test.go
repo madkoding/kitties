@@ -516,3 +516,16 @@ func TestSummariseHomeAssistant(t *testing.T) {
 		t.Errorf("bare event = %+v", ev)
 	}
 }
+
+func TestGoalFlowName(t *testing.T) {
+	g := Goal{Kitty: "k", Title: "t", Every: "@daily", Flow: " prices "}
+	if err := g.Validate(); err != nil || g.Flow != "prices" {
+		t.Errorf("Validate = %v, flow %q", err, g.Flow)
+	}
+	for _, bad := range []string{"../x", "A B", "x/y"} {
+		g := Goal{Kitty: "k", Title: "t", Every: "@daily", Flow: bad}
+		if err := g.Validate(); err == nil {
+			t.Errorf("flow %q must be refused", bad)
+		}
+	}
+}

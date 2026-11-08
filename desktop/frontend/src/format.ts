@@ -91,6 +91,31 @@ export function stepSentence(action: string, args?: Record<string, unknown>): st
         : t("Clicked on the page");
     case "page_type":
       return t("Filled in a field of the page");
+    case "page_goto": {
+      let host = String(a.url ?? "");
+      try {
+        host = new URL(host).hostname.replace(/^www\./, "");
+      } catch {
+        /* not an address: said as it is */
+      }
+      return host ? t("Went to {host}", { host }) : t("Went to a page");
+    }
+    case "page_wait":
+      return t("Waited for the page");
+    case "page_flow":
+      return a.name
+        ? t("Ran the steps “{name}” on the page", { name: String(a.name) })
+        : a.list
+          ? t("Looked at its saved steps")
+          : t("Ran several steps on the page");
+    case "file_read":
+      return a.path ? t("Read {file}", { file: baseName(String(a.path)) }) : t("Read a file");
+    case "file_list":
+      return t("Looked at a folder");
+    case "file_write":
+      return a.path ? t("Wrote {file}", { file: baseName(String(a.path)) }) : t("Wrote a file");
+    case "shell":
+      return t("Ran a command");
     case "launch":
       return t("Opened a program");
     case "install": {
@@ -126,6 +151,12 @@ export function stepSentence(action: string, args?: Record<string, unknown>): st
   }
   const words = action.replace(/_/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+// baseName is a path's last part: the file a person would name.
+function baseName(path: string): string {
+  const parts = path.split("/").filter(Boolean);
+  return parts.length ? parts[parts.length - 1] : path;
 }
 
 // keyName says a key combination as it reads on a keyboard: Return is Enter, ctrl+l is Ctrl+L.

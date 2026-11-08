@@ -284,7 +284,7 @@ jobs:
       - name: shell scripts parse
         run: |
           for f in docker/kitty-desktop/*.sh docker/kitty-desktop/test/*.sh; do sh -n "$f"; done
-          python3 -m py_compile docker/kitty-desktop/kitty-page.py
+          python3 -m py_compile docker/kitty-desktop/kitty-page.py docker/kitty-desktop/kitty-file.py
       - name: the desktop's fonts are the app's
         run: for f in docker/kitty-desktop/fonts/*.woff2; do cmp "$f" "desktop/frontend/public/$(basename "$f")"; done
       - name: lumen-wm's main (the image always builds it; the commit is also the cache key)
@@ -345,6 +345,11 @@ jobs:
           printf 'x' | docker exec -i kitty-ci xdotool type --delay 20 --file -
           # A page is read and acted on from the inside, through the browser's DevTools port.
           docker exec kitty-ci sh -c 'printf "<title>ci page</title><button onclick=\"document.title=1\">Go</button>" > /tmp/p.html && kitty-open file:///tmp/p.html >/dev/null && sleep 5 && kitty-page read | grep -q "ci page" && kitty-page click --text Go && sleep 1 && kitty-page read | grep -q "^title: 1"'
+          # goto and a click answer with a read of the page after them, and a flow runs its steps and is kept
+          # by name (no screenshot needed for any of it).
+          docker exec kitty-ci sh -c 'printf "<title>flow</title><input aria-label=Search><p id=r hidden>found it</p><button onclick=\"r.hidden=false\">Find</button>" > /tmp/f.html && (cd /tmp && nohup python3 -m http.server 8765 --bind 127.0.0.1 >/dev/null 2>&1 &) && sleep 1 && kitty-page goto http://127.0.0.1:8765/f.html | grep -q "^title: flow" && kitty-page click --text Find | grep -q "^found it" && kitty-page flow --steps "[{\"type\": \"cats\", \"field\": \"Search\"}, {\"click\": \"Find\"}, {\"wait\": \"found it\"}]" --save ci | grep -q "flow finished" && kitty-page flow --list | grep -q ci'
+          # Files are read, listed and written as text.
+          docker exec kitty-ci sh -c 'printf "one\ntwo\n" | kitty-file write ci/notes.txt && kitty-file read ci/notes.txt | grep -q "2  two" && kitty-file list ci | grep -q notes.txt && ! printf x | kitty-file write /etc/x && command -v pdftotext'
           docker exec kitty-ci kitty-page quit
           # The live stream sends pictures, and ends when its input closes.
           docker exec kitty-ci sh -c 'command -v kitty-grab && ldd "$(command -v kitty-grab)" | grep -vq "not found"'

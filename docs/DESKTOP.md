@@ -68,16 +68,51 @@ sequenceDiagram
 It runs in the background; every step, with its screenshot, shows up in the chat. A task has
 limits (time, rounds, tokens) and can be cancelled at any moment.
 
+## Text first, pictures last
+
+A screenshot costs many times the tokens of the text it shows, so a kitty is told to work by text
+and to look only when text cannot tell (a canvas, a picture, a program's own window):
+
+1. **Files and the terminal.** `file_read` (numbered lines, a part of a long file with `from` and
+   `lines`; a PDF through `pdftotext`, and Word, Excel, PowerPoint and OpenDocument files from their
+   XML, with no program to open), `file_list` (folders, files and sizes) and `file_write` (in its home or `/tmp`; the text
+   goes on the command's input, not its command line) are the image's `kitty-file`; `shell` runs a
+   command line with bash, pipes and all, in the working folder; `shell` and `run` are stopped after
+   `timeout` seconds (300 by default, at most 600) and their output is cut at 12,000 characters.
+2. **Web pages from the inside** (below).
+3. **The display**: `screenshot`, `read_screen` (OCR) and clicks at coordinates.
+
+None of the text tools brings a screenshot after it; a batch with a click at coordinates, a key or
+an `open` still does. Each kitty message counts how it saw its work: *3 screenshots · 12 read as
+text*, and on hover about what they weighed (a screenshot of the display is some 1,365 tokens, the
+way Anthropic counts an image; text at about four characters a token: estimates, not a bill).
+
 ## Reading and acting on pages from the inside
 
 In the browser a kitty does not have to guess from pixels. `page_read` gives it the page's
-address, title and text, and a numbered list of what can be clicked or filled in; `page_click`
-and `page_type` act on an element of that list (or on the one that shows some text), wherever it
-is on the screen, in a shadow root or scrolled out of view. It is the browser's own DevTools,
-reached by the image's `kitty-page` on the container's loopback: the port is not published, so
-only what runs inside the container can use it. What a page says comes back marked as the page's
-own text, and the kitty is told never to take it as an instruction; a password field's value is
-never printed.
+address, title and text, and a numbered list of what can be clicked or filled in (`from` goes on
+with a long text, `find` prints only the passages with some words); `page_click` and `page_type`
+act on an element of that list (or on the one that shows some text, or the field with some label),
+wherever it is on the screen, in a shadow root or scrolled out of view. `page_goto` goes to an
+address (opening the browser if needed) and `page_wait` waits until the page shows some text.
+
+Every one of them answers with a short read of the page as the action left it (once it has loaded
+and its DOM has been still a moment): the lines the action added come first, so the result at the
+end of a long page is seen without reading it all again, and a tab the click opened is followed.
+That read replaces the screenshot.
+
+`page_flow` runs several of those steps in one go, without a round of the model for each:
+`goto`, `click`, `type`, `wait`, `read` and `back`, stopping at the first that fails. With `save`
+the steps are kept by name in the working folder (`.flows/`) and `{"name": ...}` runs them again: a
+routine the kitty learned (a search, a report it downloads every morning) costs one call. A flow
+that types into a password field is never kept; secrets go through `type_secret`. A
+[goal](AUTONOMY.md) can play a kept flow on its schedule without the model at all.
+
+It is the browser's own DevTools, reached by the image's `kitty-page` on the container's loopback:
+the port is not published, so only what runs inside the container can use it. What a page says
+comes back marked as the page's own text, and the kitty is told never to take it as an
+instruction; a password field's value is never printed. When a page's text reads like a CAPTCHA or
+a code only you receive, the kitty is told to ask you (`ask_help`), as it is when the screen says so.
 
 ## When it needs a person
 

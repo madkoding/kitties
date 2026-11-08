@@ -40,6 +40,22 @@ import (
 	"github.com/madkoding/kitties/internal/vault"
 )
 
+// ShotTokens is about what one screenshot of the 1280x800 display weighs for a model
+// (width*height/750, the way Anthropic counts an image; others are near it): an estimate, for
+// comparing pictures with text, not a bill.
+const ShotTokens = 1280 * 800 / 750
+
+// Looks is how a turn saw its work: by picture or by text.
+type Looks struct {
+	Shots int `json:"shots,omitempty"`
+	// ShotTokens is the estimate of what the screenshots weighed (ShotTokens each).
+	ShotTokens int `json:"shot_tokens,omitempty"`
+	// Reads are the text answers that took the place of a picture; ReadTokens what they
+	// weighed, at about four characters a token.
+	Reads      int `json:"reads,omitempty"`
+	ReadTokens int `json:"read_tokens,omitempty"`
+}
+
 // Turn is one message of a thread.
 type Turn struct {
 	At   time.Time `json:"at"`
@@ -50,6 +66,9 @@ type Turn struct {
 	// Calls are the connectors the kitty used in this turn, if any.
 	Calls []connector.Result `json:"calls,omitempty"`
 	Usage provider.Usage     `json:"usage,omitempty"`
+	// Looks counts how the kitty saw its work in this turn: screenshots sent to the model, and
+	// answers it read as text instead (a page, a file, a command).
+	Looks *Looks `json:"looks,omitempty"`
 	// Steps are the actions the kitty took on its desktop in this turn, with their screenshots.
 	Steps []Step `json:"steps,omitempty"`
 	// Artifacts names the files the kitty saved to the library in this turn.
@@ -1512,12 +1531,19 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			out, err := desktop.Run(ctx, runner, k.ID, da)
 			step := Step{At: s.now(), Action: a.name, Args: a.args, Result: out}
 			o := outcome{action: a, text: out}
+			if reason, ok := desktop.PageNeedsPerson(da.Name, out); ok {
+				// No screenshot follows a page tool: the page's own words say it is for the person.
+				o.text += "\n(This page seems to ask for " + reason + ": that is the person's to pass. Use ask_help now; never try to solve or get around it.)"
+			}
 			if err != nil {
 				step.Error = err.Error()
 				o.err = err.Error()
 			}
 			outs = append(outs, o)
 			s.appendStep(id, index, step)
+			if !da.Visual() && o.text != "" {
+				s.addLooks(id, index, Looks{Reads: 1, ReadTokens: (len(o.text) + 3) / 4})
+			}
 			if ctx.Err() != nil {
 				break
 			}
@@ -1638,6 +1664,7 @@ func (s *Service) screenMessageWith(id string, index int, png []byte, err error,
 	} else if name, err := s.saveShot(id, index, png); err == nil {
 		s.markShot(id, index, name)
 		m.Images = []provider.Image{forModel(png)}
+		s.addLooks(id, index, Looks{Shots: 1, ShotTokens: ShotTokens})
 	}
 	if before != "" {
 		m.Content = before + "\n" + m.Content
@@ -1744,6 +1771,21 @@ func (s *Service) markShot(id string, index int, name string) {
 		} else {
 			t.Steps = append(t.Steps, Step{At: s.now(), Action: "screenshot", Shot: name})
 		}
+	})
+}
+
+// addLooks adds to how a turn saw its work.
+func (s *Service) addLooks(id string, index int, l Looks) {
+	s.edit(id, index, func(t *Turn) {
+		sum := Looks{}
+		if t.Looks != nil {
+			sum = *t.Looks
+		}
+		sum.Shots += l.Shots
+		sum.ShotTokens += l.ShotTokens
+		sum.Reads += l.Reads
+		sum.ReadTokens += l.ReadTokens
+		t.Looks = &sum
 	})
 }
 

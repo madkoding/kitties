@@ -191,6 +191,20 @@ func TestGoalsAPI(t *testing.T) {
 	if code, m, _ := call(t, srv, "PUT", "/v1/goals/"+id, "tok", map[string]any{"title": "Mail", "every": "@daily", "enabled": off}); code != 200 || m["goal"].(map[string]any)["title"] != "Mail" || m["goal"].(map[string]any)["enabled"] != false {
 		t.Errorf("update = %d %v", code, m)
 	}
+	// A saved flow is set, kept by an update that leaves it out, and cleared by an empty one.
+	flowOf := func(m map[string]any) any { return m["goal"].(map[string]any)["flow"] }
+	if code, m, _ := call(t, srv, "PUT", "/v1/goals/"+id, "tok", map[string]any{"title": "Mail", "every": "@daily", "flow": "prices"}); code != 200 || flowOf(m) != "prices" {
+		t.Errorf("flow set = %d %v", code, m)
+	}
+	if code, m, _ := call(t, srv, "PUT", "/v1/goals/"+id, "tok", map[string]any{"title": "Mail", "every": "@daily", "enabled": off}); code != 200 || flowOf(m) != "prices" {
+		t.Errorf("flow kept = %d %v", code, m)
+	}
+	if code, m, _ := call(t, srv, "PUT", "/v1/goals/"+id, "tok", map[string]any{"title": "Mail", "every": "@daily", "flow": ""}); code != 200 || flowOf(m) != nil {
+		t.Errorf("flow cleared = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/goals/"+id, "tok", map[string]any{"title": "Mail", "every": "@daily", "flow": "../x"}); code != 400 {
+		t.Error("a bad flow name is refused")
+	}
 	if code, _, _ := call(t, srv, "PUT", "/v1/goals/"+id, "tok", map[string]any{"title": "", "every": "@daily"}); code != 400 {
 		t.Error("update validates")
 	}
