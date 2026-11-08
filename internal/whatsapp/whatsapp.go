@@ -1536,6 +1536,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 	// The replies are the last turns of the chat: their indexes tell their later updates.
 	first := len(sess.Turns) - len(turns)
 	working := map[int]string{}
+	plans := &progressState{seen: map[int]int{}}
 	for i, t := range turns {
 		b.say(ctx, c, in.to, in.who, &in, t.Text, voice && !t.Working)
 		b.replyFiles(ctx, c, in.to, t.Artifacts)
@@ -1553,6 +1554,10 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 			return
 		case ev := <-events:
 			sent, ok := working[ev.Index]
+			if ok && ev.Type == "update" {
+				b.progress(ctx, c, in.to, in.who, id, ev.Index, plans)
+				continue
+			}
 			if !ok || ev.Type != "done" || ev.Turn == nil {
 				continue
 			}
@@ -1561,6 +1566,37 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 			b.replyFiles(ctx, c, in.to, ev.Turn.Artifacts)
 		}
 	}
+}
+
+// progressGap is the least time between two progress lines of a task on WhatsApp.
+var progressGap = time.Minute
+
+// progressState is what a conversation's progress lines have said: how many plans of each turn
+// were seen, and when the last line went out.
+type progressState struct {
+	seen map[int]int
+	last time.Time
+}
+
+// progress sends what the kitty says it goes on to do in a task still at work (its plan lines),
+// so a long task is not silence until its answer: one line at a time, a minute apart at least,
+// the newest when several came meanwhile. The turn is read again (the event's is the live one).
+func (b *Bridge) progress(ctx context.Context, c Client, to, who, id string, index int, st *progressState) {
+	sess, err := b.opt.Chats.Get(id)
+	if err != nil || index >= len(sess.Turns) {
+		return
+	}
+	var lines []string
+	for _, step := range sess.Turns[index].Steps {
+		if step.Action == chat.StepPlan {
+			lines = append(lines, step.Result)
+		}
+	}
+	if len(lines) <= st.seen[index] || time.Since(st.last) < progressGap {
+		return
+	}
+	st.seen[index], st.last = len(lines), time.Now()
+	b.say(ctx, c, to, who, nil, "⏳ "+lines[len(lines)-1], false)
 }
 
 // busy is what a person who writes while the kitty still works on their last message reads, in

@@ -19,6 +19,7 @@ import (
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/soul"
@@ -574,5 +575,42 @@ func TestShotAfterAPlanIsItsOwnStep(t *testing.T) {
 	steps := got.Turns[0].Steps
 	if len(steps) != 2 || steps[0].Shot != "" || steps[1].Action != "screenshot" || steps[1].Shot != "0-1.png" {
 		t.Errorf("steps = %+v", steps)
+	}
+}
+
+func TestPlansGoOutAsProgress(t *testing.T) {
+	s, _, _ := deskService(t,
+		"On it.\n@tool open {\"url\": \"https://example.com\"}",
+		"I follow the link to the prices.\n@tool click {\"x\": 10, \"y\": 20}",
+		"@tool done {\"summary\": \"Read the prices.\"}")
+	b := &bell{}
+	s.SetNotifier(b)
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "look up the prices"); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, sess.ID)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.seen) != 1 || b.seen[0].Event != notify.Progress || b.seen[0].Body != "I follow the link to the prices." || b.seen[0].Chat != sess.ID {
+		t.Errorf("progress = %+v", b.seen)
+	}
+}
+
+func TestPlansOfAKitty(t *testing.T) {
+	s, _, _ := deskService(t, "@tool done {\"summary\": \"x\"}")
+	sess, _ := s.Create("", []string{"ana"})
+	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	s.mu.Lock()
+	s.sessions[sess.ID].Turns = append(s.sessions[sess.ID].Turns,
+		Turn{Kitty: "a1", Steps: []Step{{At: day.Add(-48 * time.Hour), Action: StepPlan, Result: "old"}, {At: day.Add(time.Hour), Action: StepPlan, Result: "first"}, {At: day.Add(2 * time.Hour), Action: "click"}}},
+		Turn{Kitty: "b2", Steps: []Step{{At: day.Add(3 * time.Hour), Action: StepPlan, Result: "not hers"}}},
+		Turn{Kitty: "a1", Steps: []Step{{At: day.Add(4 * time.Hour), Action: StepPlan, Result: "second"}}})
+	s.mu.Unlock()
+	if got := strings.Join(s.Plans("a1", day, 5), ","); got != "second,first" {
+		t.Errorf("plans = %s", got)
+	}
+	if got := s.Plans("a1", day, 1); len(got) != 1 || got[0] != "second" {
+		t.Errorf("one plan = %v", got)
 	}
 }

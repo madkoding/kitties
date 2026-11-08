@@ -44,7 +44,7 @@ import {
   withConnection,
 } from "./friendly";
 import { IconPlus, IconTrash, IconX } from "./icons";
-import { setTechDetails, useTechDetails } from "./prefs";
+import { setAllSteps, setTechDetails, useAllSteps, useTechDetails } from "./prefs";
 import { ConnectModal } from "./Modals";
 import { Missing, Required, RequiredLegend } from "./Required";
 import { AccountSignIn } from "./SignIn";
@@ -1698,6 +1698,7 @@ const NOTIFY_LABELS: Record<string, string> = {
   budget: t("A kitty spent its day's tokens"),
   updated: t("A desktop or Kitties was updated, or a new version is waiting"),
   delegated: t("A kitty finished a subtask another handed it, or could not"),
+  progress: t("What a kitty goes on to do in a long task (one every 10 minutes at most)"),
 };
 
 // NotifyForm chooses where the kitties tell you what happened while you were away (a push to
@@ -1984,9 +1985,10 @@ function AutonomyForm({
   );
 }
 
-// Preferences are this browser's: whether the technical details show.
+// Preferences are this browser's: whether the technical details show, and how a task's actions do.
 function Preferences() {
   const tech = useTechDetails();
+  const allSteps = useAllSteps();
   return (
     <div data-testid="preferences">
       <label class={LABEL} for="pref-lang">
@@ -2018,6 +2020,23 @@ function Preferences() {
           <span class="block text-xs text-[var(--t3)]">
             {t(
               "What a kitty did exactly (coordinates, commands, results), the tokens each answer used, and errors as the services wrote them.",
+            )}
+          </span>
+        </span>
+      </label>
+      <label class="flex items-start gap-2 mt-4 text-sm cursor-pointer">
+        <input
+          type="checkbox"
+          class="mt-1"
+          checked={allSteps}
+          onChange={() => setAllSteps(!allSteps)}
+          data-testid="all-steps"
+        />
+        <span>
+          {t("Show every action of a task")}
+          <span class="block text-xs text-[var(--t3)]">
+            {t(
+              "Off, a task reads as what the kitty says it is about to do, with its actions folded under how many they were.",
             )}
           </span>
         </span>

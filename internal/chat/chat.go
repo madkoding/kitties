@@ -1570,8 +1570,10 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			st.actions, text = fromText(answer.Content)
 		}
 		if plan, ok := planStep(s.now(), text, st.actions); ok {
-			// The kitty says what it goes on to do: a line the person follows, not the answer.
+			// The kitty says what it goes on to do: a line the person follows, not the answer,
+			// and, when they chose it, news of a long task on their phone.
 			s.appendStep(id, index, plan)
+			s.progress(k, plan.Result, id)
 		} else if text = strings.TrimSpace(text); text != "" {
 			st.parts = append(st.parts, text)
 		}
@@ -1682,6 +1684,47 @@ func (s *Service) edit(id string, index int, fn func(*Turn)) {
 		kind = "done"
 	}
 	s.emitLocked(Event{Type: kind, Session: id, Index: index, Turn: &sess.Turns[index]})
+}
+
+// Plans are what a kitty said it went on to do on its desktop since a time (its plan lines in
+// every chat), newest first, at most n; the daily summary repeats them.
+func (s *Service) Plans(kittyID string, since time.Time, n int) []string {
+	type said struct {
+		at   time.Time
+		text string
+	}
+	var all []said
+	s.mu.RLock()
+	for _, sess := range s.sessions {
+		for _, t := range sess.Turns {
+			if t.Kitty != kittyID {
+				continue
+			}
+			for _, st := range t.Steps {
+				if st.Action == StepPlan && !st.At.Before(since) {
+					all = append(all, said{st.At, st.Result})
+				}
+			}
+		}
+	}
+	s.mu.RUnlock()
+	sort.Slice(all, func(i, j int) bool { return all[i].at.After(all[j].at) })
+	var out []string
+	for i := 0; i < len(all) && i < n; i++ {
+		out = append(out, all[i].text)
+	}
+	return out
+}
+
+// progress tells the person, away from the page, what a kitty goes on to do in a long task. It
+// goes straight to the notifier (the lead's Reports thread would only repeat the chat), which sends
+// it when the person chose progress and holds back the next of the same chat for a while.
+func (s *Service) progress(k *kitty.Kitty, line, chatID string) {
+	if s.notifier == nil {
+		return
+	}
+	name, title := signed(s.leadFor(k), k, "is working on it")
+	s.notifier.Notify(notify.Notification{Event: notify.Progress, Kitty: name, Title: title, Body: summaryLine(line), Chat: chatID})
 }
 
 func (s *Service) appendStep(id string, index int, step Step) {

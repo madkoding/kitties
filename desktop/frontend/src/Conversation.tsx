@@ -7,14 +7,23 @@ import { stepArgs, stepSentence, when } from "./format";
 import { actionLabel, plainError } from "./friendly";
 import { gatewayText } from "./gatewayText";
 import { t } from "./i18n";
-import { useTechDetails } from "./prefs";
+import { useAllSteps, useTechDetails } from "./prefs";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
-import { IconCamera, IconHand, IconMonitor, IconShield, IconThumbDown, IconThumbUp } from "./icons";
+import {
+  IconCamera,
+  IconHand,
+  IconMonitor,
+  IconStop,
+  IconShield,
+  IconThumbDown,
+  IconThumbUp,
+} from "./icons";
 import { RULE_LABEL, ruleTarget } from "./Approvals";
 import HelpModal from "./Help";
 import { Sent } from "./Attachments";
 import LiveDesktop from "./LiveDesktop";
+import { ask } from "./Confirm";
 import Delegations, { Helping } from "./Delegations";
 import { FollowButton, useFollow } from "./follow";
 
@@ -241,6 +250,43 @@ function StepParts({
   );
 }
 
+// A task at work longer than this asks before it is stopped: much of it would have to run again.
+const STOP_ASKS_AFTER = 5 * 60_000;
+
+// StopTask stops the task at work in a chat, right where the person reads what it is doing; the
+// chat's Continue picks it up again. A task that has gone on for a while asks first.
+function StopTask({ chat, since }: { chat: string; since?: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      class="plain step-stop"
+      disabled={busy}
+      onClick={async () => {
+        const ran = since ? Date.now() - new Date(since).getTime() : 0;
+        if (
+          ran > STOP_ASKS_AFTER &&
+          !(await ask(
+            t(
+              "This task has been at work for {n} minutes. Stop it? Continue in the chat picks it up again.",
+              { n: Math.round(ran / 60_000) },
+            ),
+            t("Stop"),
+          ))
+        ) {
+          return;
+        }
+        setBusy(true);
+        await api.cancel(chat).catch(() => undefined);
+        setBusy(false);
+      }}
+      data-testid="step-stop"
+      title={t("Stop this task")}
+    >
+      <IconStop size={11} /> {t("Stop")}
+    </button>
+  );
+}
+
 function StepPart({
   part,
   steps,
@@ -258,14 +304,20 @@ function StepPart({
   shot: number;
   hero?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
+  const all = useAllSteps();
+  const [toggled, setOpen] = useState<boolean | null>(null);
+  // The person's choice in the preferences, until they open or close this one by hand.
+  const open = toggled ?? all;
   const last = part.items.length > 0 ? steps[part.items[part.items.length - 1]] : undefined;
+  // A call for help is the one action that asks something of the person: it never folds away.
+  const shown = open ? part.items : part.items.filter((i) => steps[i].action === "ask_help");
   return (
     <div class="step-part" data-testid="step-part">
       {part.plan && (
         <div class={`step-plan ${live ? "is-live" : ""}`} data-testid="step-plan">
           {live ? <span class="spinner" /> : <span class="what" aria-hidden="true" />}
-          <span class="min-w-0">{part.plan.result}</span>
+          <span class="min-w-0 flex-1">{part.plan.result}</span>
+          {live && <StopTask chat={chat} since={steps[0]?.at} />}
         </div>
       )}
       {part.items.length > 0 && (
@@ -278,22 +330,22 @@ function StepPart({
         >
           <span aria-hidden="true">{open ? "▾" : "▸"}</span>
           <span>{actionsLabel(part.items.length)}</span>
-          {!open && live && last && (
+          {!open && live && last && last.action !== "ask_help" && (
             <span class="steps-last">· {stepSentence(last.action, last.args)}</span>
           )}
         </button>
       )}
-      {open &&
-        part.items.map((i) => (
-          <StepRow
-            key={i}
-            step={steps[i]}
-            chat={chat}
-            onOpen={onOpen}
-            folded={i !== shot}
-            hero={!!hero && i === shot}
-          />
-        ))}
+      {live && !part.plan && <StopTask chat={chat} since={steps[0]?.at} />}
+      {shown.map((i) => (
+        <StepRow
+          key={i}
+          step={steps[i]}
+          chat={chat}
+          onOpen={onOpen}
+          folded={i !== shot}
+          hero={!!hero && i === shot}
+        />
+      ))}
     </div>
   );
 }

@@ -52,8 +52,9 @@ session, without a new code. **Unlink** removes the device from the phone and fo
 - **One chat per number.** The first message of a number opens a chat titled `WhatsApp: <name>`
   with the chosen kitty; the next ones go to the same chat, so you see the whole conversation on the
   page too. The kitty's answer goes back to WhatsApp, with its Markdown turned into WhatsApp's own
-  marks (`*bold*`, `_italics_`). A desktop task is followed: the first words go at once and the
-  result when it is done.
+  marks (`*bold*`, `_italics_`). A desktop task is followed: the first words go at once, then
+  each line the kitty writes about what it goes on to do (`⏳ …`, a minute apart at least, the newest
+  when several came meanwhile), and the result when it is done.
 - **Read, and reactions.** A message is marked read (blue ticks) when the kitty starts on it. An
   answer that is only an emoji goes as a reaction to the message, and the kitties can react with
   the connector.

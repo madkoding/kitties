@@ -54,8 +54,9 @@ olvida la sesión.
 - **Un chat por número.** El primer mensaje de un número abre un chat `WhatsApp: <nombre>` con el
   kitty elegido; los siguientes van al mismo chat, así que también ves la conversación en la página.
   La respuesta vuelve a WhatsApp con su Markdown convertido a las marcas de WhatsApp (`*negrita*`,
-  `_cursiva_`). Una tarea en el escritorio se sigue: las primeras palabras van al tiro y el resultado
-  cuando termina.
+  `_cursiva_`). Una tarea en el escritorio se sigue: las primeras palabras van al tiro, luego
+  cada frase en que el kitty dice lo que va a hacer (`⏳ …`, con un minuto entre una y otra como
+  mínimo, la más nueva si llegaron varias) y el resultado cuando termina.
 - **Leído y reacciones.** Un mensaje se marca como leído (ticks azules) cuando el kitty lo toma. Una
   respuesta que es solo un emoji va como reacción al mensaje, y los kitties pueden reaccionar con
   el conector.

@@ -44,6 +44,12 @@ const dict: Dictionary = {
   "{n} actions on the desktop": "{n} acciones en el escritorio",
   "1 action": "1 acción",
   "{n} actions": "{n} acciones",
+  "Show every action of a task": "Mostrar cada acción de una tarea",
+  "Off, a task reads as what the kitty says it is about to do, with its actions folded under how many they were.":
+    "Si está apagado, una tarea se lee como lo que la kitty dice que va a hacer, con sus acciones plegadas bajo cuántas fueron.",
+  "Stop this task": "Detener esta tarea",
+  "This task has been at work for {n} minutes. Stop it? Continue in the chat picks it up again.":
+    "Esta tarea lleva {n} minutos en marcha. ¿Detenerla? Continuar en el chat la retoma.",
   "Go to the latest": "Ir a lo último",
 
   "Hide the steps": "Ocultar los pasos",

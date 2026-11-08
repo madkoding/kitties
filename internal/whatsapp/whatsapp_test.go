@@ -1570,3 +1570,57 @@ func TestQuietQueueDamaged(t *testing.T) {
 		t.Fatal("unlink kept the queue")
 	}
 }
+
+func TestDesktopTaskSendsItsPlans(t *testing.T) {
+	gap := progressGap
+	t.Cleanup(func() { progressGap = gap })
+	progressGap = 0
+	r := newRig(t)
+	f := r.linked(t)
+	r.chats.reply = func(string) ([]chat.Turn, error) {
+		return []chat.Turn{{From: "mimi", Text: "On it.", Working: true}}, nil
+	}
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "buy the tickets"})
+	eventually(t, "the first reply", func() bool { return len(f.messages()) == 1 })
+	plan := func(lines ...string) {
+		r.chats.mu.Lock()
+		steps := []chat.Step{{Action: "click"}}
+		for _, l := range lines {
+			steps = append(steps, chat.Step{Action: chat.StepPlan, Result: l})
+		}
+		r.chats.sessions["c1"].Turns[1].Steps = steps
+		r.chats.mu.Unlock()
+		r.chats.emit("c1", chat.Event{Type: "update", Index: 1, Turn: &chat.Turn{}})
+	}
+	// A new plan line goes out as it comes; a step that is no plan does not.
+	plan("I open the shop and look for the tickets.")
+	eventually(t, "the plan", func() bool { return len(f.messages()) == 2 })
+	if got := f.messages()[1]; got != "56912345678: ⏳ I open the shop and look for the tickets." {
+		t.Fatalf("plan = %q", got)
+	}
+	plan("I open the shop and look for the tickets.")
+	// When several came meanwhile, the newest goes out.
+	plan("I open the shop and look for the tickets.", "I fill in the form.", "I pay.")
+	eventually(t, "the newest plan", func() bool { return len(f.messages()) == 3 })
+	if got := f.messages()[2]; got != "56912345678: ⏳ I pay." {
+		t.Fatalf("newest = %q", got)
+	}
+	r.chats.emit("c1", chat.Event{Type: "done", Index: 1, Turn: &chat.Turn{Text: "On it.\n\nBought."}})
+	eventually(t, "the final reply", func() bool { return len(f.messages()) == 4 })
+}
+
+func TestProgressWaitsItsGap(t *testing.T) {
+	gap := progressGap
+	t.Cleanup(func() { progressGap = gap })
+	progressGap = time.Hour
+	r := newRig(t)
+	f := r.linked(t)
+	r.chats.sessions["c9"] = &chat.Session{ID: "c9", Turns: []chat.Turn{{Steps: []chat.Step{{Action: chat.StepPlan, Result: "I look."}}}}}
+	st := &progressState{seen: map[int]int{}, last: time.Now()}
+	r.b.progress(context.Background(), f, "56912345678", "", "c9", 0, st)
+	r.b.progress(context.Background(), f, "56912345678", "", "c9", 5, st)
+	r.b.progress(context.Background(), f, "56912345678", "", "gone", 0, st)
+	if len(f.messages()) != 0 || st.seen[0] != 0 {
+		t.Fatalf("within the gap nothing goes out: %v %v", f.messages(), st.seen)
+	}
+}

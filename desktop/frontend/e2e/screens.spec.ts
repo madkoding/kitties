@@ -260,6 +260,26 @@ test("the technical details show only when asked for", async ({ page }) => {
   await expect(page.locator(".trail").first()).not.toContainText("640, 420");
 });
 
+test("every action of a task shows unfolded when the person prefers it", async ({ page }) => {
+  await open(page, "#new-preferences");
+  const box = page.getByTestId("all-steps");
+  await expect(box).not.toBeChecked();
+  await box.check();
+  await open(page, `#chat/${ids.desktop}`);
+  const trail = page.locator(".trail").first();
+  await expect(trail.getByText("Opened example.com", { exact: true })).toBeVisible();
+  await expect(trail.getByTestId("steps-toggle").first()).toHaveAttribute("aria-expanded", "true");
+  // A part can still be folded by hand.
+  await trail.getByTestId("steps-toggle").first().click();
+  await expect(trail.getByText("Opened example.com", { exact: true })).toBeHidden();
+  await open(page, "#new-preferences");
+  await page.getByTestId("all-steps").uncheck();
+  await open(page, `#chat/${ids.desktop}`);
+  await expect(
+    page.locator(".trail").first().getByText("Opened example.com", { exact: true }),
+  ).toBeHidden();
+});
+
 // openConfig unfolds the configuration of the kitty's drawer, where its options are edited.
 async function openConfig(page: Page) {
   const config = page.getByTestId("kitty-config");
@@ -2072,6 +2092,17 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live).toHaveCount(0);
 });
 
+test("a notification's link to a task at work opens the chat with the desktop live", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}/live`);
+  await expect(page.getByTestId("live-desktop")).toBeVisible();
+  // The address goes back to the chat's own, so a reload does not open it again.
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#chat/${ids.desktop}`);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("live-desktop")).toHaveCount(0);
+});
+
 test("the chat follows what comes in, and waits while the person scrolls up to read", async ({
   page,
 }) => {
@@ -2381,10 +2412,12 @@ test("a kitty that needs the person asks for help: a window shows what it sees, 
   await expect(modal).toHaveCount(0);
   const callout = page.getByTestId("help-callout");
   await expect(callout).toBeVisible();
-  await openSteps(page.locator(".trail"));
+  // A call for help never folds away under the count of actions.
   await expect(
     page.locator(".trail").getByText("Asked you for help: the shop's sign-in needs your password"),
   ).toBeVisible();
+  // The task at work can be stopped right where it reads.
+  await expect(page.locator(".trail").getByTestId("step-stop")).toBeVisible();
   await callout.getByTestId("help-take-control").click();
   const live = page.getByTestId("live-desktop");
   await expect(live.getByTestId("live-state")).toContainText("You have the controls");
@@ -3502,7 +3535,8 @@ test("files attach by button, paste and drop, and the kitty reads them", async (
 
   await textarea.fill("Here is the photo and the numbers");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Got it, I have")).toBeVisible();
+  // The answer in the chat (the sidebar's gist of the chat may say it too).
+  await expect(page.getByRole("log").getByText("Got it, I have")).toBeVisible();
   await expect(page.getByText("**numbers.csv**")).toHaveCount(0);
 
   // The message shows its files: thumbnails that load, and a chip that downloads.

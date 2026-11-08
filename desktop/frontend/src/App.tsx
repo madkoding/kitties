@@ -80,6 +80,31 @@ export default function App() {
   const [modal, setModal] = useState<ModalKind>(routeFromHash().modal);
   // live is the kitty whose desktop is open live, over the chat.
   const [live, setLive] = useState<Kitty | null>(null);
+  // #chat/<id>/live (the link of a notification about a task at work) opens the chat with its
+  // kitty's desktop live once the chat and the kitties are there; the address then drops it.
+  const wantsLive = useRef(/^#chat\/[a-z0-9-]+\/live$/.test(location.hash));
+  useEffect(() => {
+    const onHash = () => {
+      if (/^#chat\/[a-z0-9-]+\/live$/.test(location.hash)) {
+        wantsLive.current = true;
+      }
+    };
+    addEventListener("hashchange", onHash);
+    return () => removeEventListener("hashchange", onHash);
+  }, []);
+  useEffect(() => {
+    if (!wantsLive.current || !session || kitties.length === 0) {
+      return;
+    }
+    wantsLive.current = false;
+    const k = kitties.find(
+      (k) => session.members.includes(k.id) && k.desktop && k.status === "running",
+    );
+    if (k) {
+      setLive(k);
+    }
+    history.replaceState(null, "", `#chat/${session.id}`);
+  }, [session, kitties]);
   // lastChat is the chat open before a dialog's address took its place, to go back to.
   const lastChat = useRef<string | null>(routeFromHash().chat);
   // connectDismissed: the person closed the gateway dialog while the gateway is away; it is not

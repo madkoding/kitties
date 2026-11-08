@@ -27,6 +27,9 @@ const (
 	Budget      Event = "budget"       // a kitty is near or at its day's tokens
 	Updated     Event = "updated"      // a desktop or Kitties itself was updated, or a new version waits
 	Delegated   Event = "delegated"    // a kitty handed a subtask to another, which finished it or could not
+	// Progress is what a kitty says it goes on to do in a long desktop task (its plan lines
+	// after the first), at most one per chat every Quiet; it is sent only when chosen.
+	Progress Event = "progress"
 	// Reply is a kitty answering what the person wrote to the notification channel
 	// (internal/reply). It is not one of Events: it goes out because the person wrote.
 	Reply Event = "reply"
@@ -36,7 +39,7 @@ const (
 )
 
 // Events lists them in order, for the page.
-var Events = []Event{Help, Approval, GoalDone, GoalBlocked, Recovered, Budget, Updated, Delegated}
+var Events = []Event{Help, Approval, GoalDone, GoalBlocked, Recovered, Budget, Updated, Delegated, Progress}
 
 // Default is what is sent when the person chose nothing: the two that need them.
 var Default = []Event{Help, Approval}
@@ -288,6 +291,10 @@ func (n *Notifier) call(ctx context.Context, name string, note Notification) err
 		return fmt.Errorf("no such connector %q", name)
 	}
 	link := n.Link(note.Chat)
+	if note.Event == Progress && note.Chat != "" && link != "" {
+		// News of a task at work opens it where it is seen: the chat with the desktop live.
+		link += "/live"
+	}
 	title := note.Title
 	if note.Kitty != "" {
 		title = note.Kitty + ": " + title
