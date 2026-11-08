@@ -274,9 +274,15 @@ test("a chat's ⋯ menu renames it, gives it a description the kitties work from
   await expect(page.getByTestId("chat-description")).toHaveText(
     "Plan the trip to Chiloé in March: ferry and lodging.",
   );
-  // A click on the description opens it to change it.
+  // A click on the description opens it to change it; the earlier ones are there to go back to.
   await page.getByTestId("chat-description").click();
   await expect(edit.getByTestId("chat-edit-description")).toBeFocused();
+  await edit.getByTestId("chat-edit-history").locator("summary").click();
+  const version = edit.getByTestId("chat-edit-version").first();
+  await expect(version).toContainText(about);
+  await expect(version).toContainText("by you");
+  await version.getByRole("button", { name: "Use this one" }).click();
+  await expect(edit.getByTestId("chat-edit-description")).toHaveValue(about);
   await page.keyboard.press("Escape");
   await expect(edit).toHaveCount(0);
 
@@ -299,13 +305,47 @@ test("a chat's ⋯ menu renames it, gives it a description the kitties work from
   await menu.getByRole("menuitem", { name: "Write them from the chat" }).click();
   await expect(edit.getByTestId("chat-edit-written")).toBeVisible();
   await expect(edit.getByTestId("chat-edit-title")).toHaveValue("Plan the launch of the new app");
-  await expect(edit.getByTestId("chat-edit-description")).toHaveValue(/^Work through plan the launch/);
+  await expect(edit.getByTestId("chat-edit-description")).toHaveValue(
+    /^Work through plan the launch/,
+  );
   expect((await kept()).title).toBe("Trip to Chiloé");
   await shot(page, "78-chat-suggest");
   await edit.getByRole("button", { name: "Save" }).click();
   await expect(page.getByTestId("chat-title")).toHaveText("Plan the launch of the new app");
   await expect(page.getByTestId("chat-description")).toHaveText(/^Work through plan the launch/);
   expect((await kept()).description).toMatch(/^Work through plan the launch/);
+
+  // The chat changes course: the kitty proposes a new description, which waits for a yes.
+  await page
+    .getByPlaceholder("Say something…")
+    .fill("Change of plans: book the ferry and the hotel in Castro.");
+  await page.keyboard.press("Enter");
+  const proposal = page.getByTestId("chat-proposal");
+  await expect(proposal).toContainText("mimi proposes a new description for this chat:", {
+    timeout: 30_000,
+  });
+  await expect(proposal).toContainText("book the ferry and the hotel in Castro.");
+  await expect(page.getByTestId("chat-description")).toHaveText(/^Work through plan the launch/);
+  await shot(page, "79-chat-proposal");
+  await proposal.getByRole("button", { name: "Use it" }).click();
+  await expect(proposal).toHaveCount(0);
+  await expect(page.getByTestId("chat-description")).toHaveText(
+    "book the ferry and the hotel in Castro.",
+  );
+  expect((await kept()).description).toBe("book the ferry and the hotel in Castro.");
+
+  // The sidebar finds chats by their description too, without accents.
+  const search = page.getByTestId("chat-search");
+  await search.fill("CASTRÓ");
+  await expect(
+    chats.getByRole("button", { name: "Plan the launch of the new app", exact: true }),
+  ).toBeVisible();
+  await expect(chats.getByRole("button", { name: "Launch team", exact: true })).toHaveCount(0);
+  await search.fill("nothing like this");
+  await expect(page.getByTestId("chat-search-none")).toBeVisible();
+  await search.press("Escape");
+  await expect(search).toHaveValue("");
+  await expect(chats.getByRole("button", { name: "Launch team", exact: true })).toBeVisible();
 
   // Delete: asked first; a no keeps it, a yes takes it away and closes it.
   await page.getByTestId("chat-menu-header").click();

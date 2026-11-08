@@ -4,6 +4,15 @@ import { ApiError, api, errText, type Session } from "./api";
 import { IconDots, IconPencil, IconSparkles, IconText, IconTrash } from "./icons";
 import { Modal } from "./Modal";
 import { t } from "./i18n";
+import { when } from "./format";
+
+// byLine says who wrote a description: the person, or the kitty whose proposal was taken.
+function byLine(by?: string): string {
+  if (!by || by === "user") {
+    return t("by you");
+  }
+  return t("proposed by {name}", { name: by });
+}
 
 // The ⋯ menu of a chat, in its sidebar row and in the header: rename it, change its description
 // (what the chat is for, which the kitties read on every turn) or delete it.
@@ -289,6 +298,37 @@ export function ChatEditModal({
             {description.length}/{MAX_DESCRIPTION}
           </span>
         </p>
+        {(chat.descriptions?.length ?? 0) > 0 && (
+          <details class="chat-history mt-3" data-testid="chat-edit-history">
+            <summary class="text-xs text-[var(--t3)] cursor-pointer">
+              {t("Earlier descriptions ({count})", { count: chat.descriptions!.length })}
+            </summary>
+            <ul class="mt-2 flex flex-col gap-1.5 max-h-48 overflow-y-auto scroll-thin">
+              {chat.descriptions!.map((d, i) => (
+                <li key={i} class="chat-history-item" data-testid="chat-edit-version">
+                  <span class="flex-1 min-w-0">
+                    <span class="block text-xs text-[var(--t2)]">{d.text}</span>
+                    <span class="block text-[0.625rem] text-[var(--t4)] font-mono">
+                      {byLine(d.by)}
+                      {d.at && !d.at.startsWith("0001") ? ` · ${when(d.at)}` : ""}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    class="btn-ghost px-2 py-1 text-xs flex-none"
+                    onClick={() => {
+                      setDescription(d.text);
+                      second.current?.focus();
+                    }}
+                    disabled={reading}
+                  >
+                    {t("Use this one")}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
         {written && !reading && (
           <p class="text-xs text-[var(--t3)] mt-2" role="status" data-testid="chat-edit-written">
             {t("Written from the chat: check it, change what you want and save.")}

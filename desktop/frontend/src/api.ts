@@ -280,6 +280,13 @@ export interface Session {
   title: string;
   // description is what the chat is for, in the person's words: the kitties read it every turn.
   description?: string;
+  // description_by wrote it ("user", or the kitty whose proposal was accepted); descriptions are the
+  // earlier ones, newest first.
+  description_by?: string;
+  description_at?: string;
+  descriptions?: { text: string; by?: string; at: string }[];
+  // proposal is a description a kitty proposes because the chat changed course.
+  proposal?: { description: string; by: string; at: string };
   members: string[];
   turns?: Turn[];
   created_at: string;
@@ -994,6 +1001,9 @@ export const api = {
   // editChat renames a chat or changes its description; a field left out stays as it is.
   editChat: (id: string, change: { title?: string; description?: string }) =>
     request<{ chat: Session }>("PATCH", `/v1/chats/${id}`, change).then((r) => r.chat),
+  // answerProposal takes the description a kitty proposed, or dismisses it.
+  answerProposal: (id: string, accept: boolean) =>
+    request<{ chat: Session }>("POST", `/v1/chats/${id}/proposal`, { accept }).then((r) => r.chat),
   // suggestChat has one of the chat's kitties read it all and propose a title and a description;
   // with apply it saves them too.
   suggestChat: (id: string, apply = false) =>

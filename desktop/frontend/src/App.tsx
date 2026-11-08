@@ -7,7 +7,15 @@ import Login from "./Login";
 import Welcome from "./Welcome";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
-import { IconMenu, IconMonitor, IconPlus, IconShield, IconUsers, IconX } from "./icons";
+import {
+  IconMenu,
+  IconMonitor,
+  IconPlus,
+  IconShield,
+  IconSparkles,
+  IconUsers,
+  IconX,
+} from "./icons";
 import { ChatEditModal, ChatMenu, type ChatField } from "./ChatMenu";
 import LiveDesktop from "./LiveDesktop";
 import { ConnectModal, KittyDrawer, NewChatModal, NewKittyModal } from "./Modals";
@@ -469,13 +477,25 @@ export default function App() {
     refresh();
   };
 
+  // answerProposal takes or drops the description a kitty proposed for the open chat.
+  const answerProposal = async (accept: boolean) => {
+    if (!session) {
+      return;
+    }
+    try {
+      const c = await api.answerProposal(session.id, accept);
+      setSession((prev) => (prev && prev.id === c.id ? c : prev));
+      refresh();
+    } catch (e) {
+      setError(errText(e));
+    }
+  };
+
   // A renamed chat, or one with a new description, is shown as the gateway keeps it.
   const edited = (c: Session) => {
     setEditing(null);
     if (c.id === current) {
-      setSession((prev) =>
-        prev && prev.id === c.id ? { ...prev, ...c, turns: prev.turns } : prev,
-      );
+      setSession((prev) => (prev && prev.id === c.id ? c : prev));
     }
     refresh();
   };
@@ -769,6 +789,31 @@ export default function App() {
         {error && (
           <div class="px-4 py-2 text-sm bg-[rgba(255,107,107,0.12)] text-[var(--c-red)] border-b border-[rgba(255,107,107,0.3)]">
             {error}
+          </div>
+        )}
+        {session?.proposal && (
+          <div
+            class="callout chat-proposal !border-x-0 !border-t-0 flex flex-wrap items-center gap-2"
+            role="status"
+            data-testid="chat-proposal"
+          >
+            <IconSparkles size={14} class="text-accent flex-none mt-0.5" />
+            <span class="flex-1 min-w-0">
+              <span class="text-[var(--t2)]">
+                {t("{name} proposes a new description for this chat:", {
+                  name: session.proposal.by,
+                })}
+              </span>{" "}
+              <span class="text-[var(--t1)]">{session.proposal.description}</span>
+            </span>
+            <span class="flex gap-1.5 flex-none">
+              <button class="btn-ghost px-3 py-1 text-xs" onClick={() => answerProposal(false)}>
+                {t("Dismiss")}
+              </button>
+              <button class="btn-accent px-3 py-1 text-xs" onClick={() => answerProposal(true)}>
+                {t("Use it")}
+              </button>
+            </span>
           </div>
         )}
         {note && (

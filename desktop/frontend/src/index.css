@@ -516,6 +516,46 @@ select:focus {
   margin: 0.25rem 0.375rem;
   background: rgb(var(--ov-rgb) / 0.1);
 }
+/* A kitty's proposal for the chat's description: solid, so it reads over the wallpaper. */
+.callout.chat-proposal {
+  position: relative;
+  z-index: 1;
+  background:
+    linear-gradient(rgb(var(--accent-rgb) / 0.12), rgb(var(--accent-rgb) / 0.12)), var(--s1);
+}
+/* The search box over the sidebar's chats. */
+.chat-search {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin: 0 0.25rem 0.375rem;
+  padding: 0 0.5rem;
+  border-radius: var(--radius-cut);
+  border: 1px solid rgb(var(--ov-rgb) / 0.1);
+  background: rgb(var(--ov-rgb) / 0.03);
+}
+.chat-search:focus-within {
+  border-color: rgb(var(--accent-rgb) / 0.5);
+}
+.chat-search input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.375rem 0;
+  font-size: 0.75rem;
+  background: transparent;
+  border: 0;
+  outline: none;
+  box-shadow: none;
+}
+/* A chat's earlier descriptions, in its editor. */
+.chat-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  border-radius: var(--radius-cut);
+  background: rgb(var(--ov-rgb) / 0.04);
+}
 /* The open chat's description, under its title in the header. */
 .chat-description {
   font-size: 0.6875rem;

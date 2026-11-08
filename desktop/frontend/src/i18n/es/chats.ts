@@ -26,6 +26,16 @@ const dict: Dictionary = {
   "Reading the chat…": "Leyendo el chat…",
   "There is nothing to read in this chat yet: write to it first.":
     "Todavía no hay nada que leer en este chat: escríbele primero.",
+  "{name} proposes a new description for this chat:":
+    "{name} propone una nueva descripción para este chat:",
+  "by you": "tuya",
+  "proposed by {name}": "propuesta por {name}",
+  "Earlier descriptions ({count})": "Descripciones anteriores ({count})",
+  "Use this one": "Usar esta",
+  "Search chats": "Buscar chats",
+  "Search chats by title, description or last words":
+    "Buscar chats por título, descripción o últimas palabras",
+  "No chat matches “{query}”.": "Ningún chat coincide con «{query}».",
 };
 
 export default dict;
