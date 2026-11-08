@@ -393,7 +393,7 @@ func (a *app) open(cmd string) error {
 			return a.notifier.Deliver(ctx, chats.LeadDigest(n))
 		},
 		Plans: chats.Plans,
-		Link: a.notifier.Link,
+		Link:  a.notifier.Link,
 		// The scheduled tasks whose last run did not end well, with the link to their runs.
 		Attention: func() []digest.Task {
 			var out []digest.Task
@@ -409,7 +409,7 @@ func (a *app) open(cmd string) error {
 			}
 			return out
 		},
-		Day:   digest.MyDay(fleet.Connectors()),
+		Day: digest.MyDay(fleet.Connectors()),
 	}, filepath.Join(dataDir, "digest.json"))
 	a.summaries = &chat.LeadSummaries{
 		Chats: chats,
