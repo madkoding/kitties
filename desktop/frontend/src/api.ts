@@ -1258,9 +1258,7 @@ export const api = {
   testNotify: (connector = "") =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),
   // The browser session of a gateway served on a network: who is signed in, and the way in and out.
-  session: () => request<{ signed_in: boolean; local_token: boolean }>("GET", "/v1/session"),
   login: (token: string) => request<{ ok: boolean }>("POST", "/v1/login", { token: token.trim() }),
-  logout: () => request<{ ok: boolean }>("POST", "/v1/logout"),
   sendDigest: () => request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/digest"),
   journal: (kitty: string, n = 50) =>
     request<{ journal: JournalEntry[] }>("GET", `/v1/kitties/${kitty}/journal?n=${n}`).then(

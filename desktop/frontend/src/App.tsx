@@ -156,8 +156,6 @@ export default function App() {
   const [online, setOnline] = useState<boolean | null>(null);
   // How many actions wait for a yes; null when this gateway holds none back.
   const [waiting, setWaiting] = useState<number | null>(null);
-  // Whether this page holds a session that can be ended (a gateway served on a network).
-  const [canSignOut, setCanSignOut] = useState(false);
   // The models (to guide a first run) and whether the gateway can give kitties a desktop.
   const [models, setModels] = useState<ProviderInfo[]>([]);
   const [containers, setContainers] = useState(true);
@@ -193,12 +191,6 @@ export default function App() {
         .approvals("pending")
         .then((l) => setWaiting(l.length))
         .catch(() => setWaiting(null));
-      if (cookieLogin()) {
-        api
-          .session()
-          .then((s) => setCanSignOut(s.signed_in && !s.local_token))
-          .catch(() => setCanSignOut(false));
-      }
     } catch (e) {
       setOnline(false);
       if (e instanceof ApiError && e.status === 401) {
@@ -423,17 +415,6 @@ export default function App() {
   const openKitty = (id: string) => {
     location.hash = `#kitty/${id}`;
     setSidebar(false);
-  };
-
-  const signOut = async () => {
-    await api.logout().catch(() => {});
-    setCanSignOut(false);
-    setSession(null);
-    setChats([]);
-    setKitties([]);
-    lastChat.current = null;
-    location.hash = "";
-    setModal("login");
   };
 
   const send = async (text: string, files: File[] = []) => {
@@ -672,7 +653,6 @@ export default function App() {
         }}
         approvals={waiting}
         onTheme={cycleMode}
-        onSignOut={canSignOut ? signOut : undefined}
         update={news?.available && news.latest !== skipped ? news.latest || "" : ""}
         onUpdate={() => setUpgrading(true)}
       />
