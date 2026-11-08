@@ -44,7 +44,12 @@ A kitty is not only something you talk to. Each one has an agenda:
   with the spare instead of waiting ([Configuration](CONFIGURATION.md#a-spare-brain)).
 - **Delegation.** A kitty can hand a subtask to another (`@delegate luna {"task": "..."}`,
   or the native `delegate` tool), waits for the answer and goes on. Hand-overs are bounded in
-  depth so two kitties cannot bounce a task back and forth.
+  depth so two kitties cannot bounce a task back and forth. The chat it happens in becomes a
+  group of kitties: the helper joins it as a *delegate* (it does not answer what you write
+  there; `@name` still picks among the members), the sidebar huddles their cats with the count,
+  the header lists the helper with a dashed edge, and its answer shows under the turn that
+  asked, with its own name and cat, and a link to the thread between the two. An exposed chat
+  (guardrails) never delegates, so it stays a chat of one kitty.
 - **A journal.** Every run, event, retry, hand-over, cry for help and recovery is a line in the
   kitty's journal, in its drawer.
 

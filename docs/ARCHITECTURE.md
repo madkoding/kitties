@@ -224,6 +224,13 @@ other kitty may start, within that kitty's time limit, and feeds the answer back
 action's result. `MaxDepth` (2) bounds how deep hand-overs go; at the limit the prompt names
 no peers and the action is refused.
 
+The kitty handed the work joins the chat it was asked from as a delegate (`Session.Delegates`,
+`internal/chat/crew.go`): it is not a member, so it answers nothing the person writes there.
+`Session.Kitties` is every kitty of the chat (members, the `Owner` of a hand-over thread, the
+delegates), recomputed on every save and load (a chat saved before the field gets its delegates
+from its turns). The page, `GET /v1/chats` and the MCP `chat_list` read it: more than one kitty
+makes the chat a group (`Session.Crew`), while `Session.Group` still says whether several answer.
+
 The orchestrator's `Watch` is the watchdog: every 30 seconds a running kitty whose container
 stopped or vanished is started again and a kitty in error is tried once more; recoveries are
 journaled.
