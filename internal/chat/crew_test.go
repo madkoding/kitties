@@ -271,3 +271,31 @@ func TestFlushHandOversAndPruneHelpers(t *testing.T) {
 		}
 	}
 }
+
+// A delegate taken off a chat can be brought back; the hand-overs are counted per kitty.
+func TestRestoreDelegateAndStats(t *testing.T) {
+	f, sa, sb, _ := fleet(t)
+	s := service(t, f)
+	sa.replies = []string{"@delegate bo {\"task\": \"count\"}", "ok"}
+	sb.replies = []string{"three"}
+	sess, _ := s.Create("", []string{"ana"})
+	_, _ = s.Send(context.Background(), sess.ID, "go")
+	if _, err := s.RestoreDelegate(sess.ID, "bo"); err == nil {
+		t.Error("restored a kitty that was never taken off")
+	}
+	_, _ = s.RemoveMember(sess.ID, "bo")
+	got, err := s.RestoreDelegate(sess.ID, "bo")
+	if err != nil || !got.Crew() || len(got.Dismissed) != 0 {
+		t.Fatalf("restored: %+v %v", got, err)
+	}
+	stats := s.HandOverStats()
+	want := map[string]HandOverStat{"ana": {KittyID: "a1", Kitty: "ana", Asked: 1}, "bo": {KittyID: "b1", Kitty: "bo", Took: 1}}
+	if len(stats) != 2 {
+		t.Fatalf("stats = %+v", stats)
+	}
+	for _, st := range stats {
+		if st != want[st.Kitty] {
+			t.Errorf("%s: %+v", st.Kitty, st)
+		}
+	}
+}

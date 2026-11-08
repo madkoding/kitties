@@ -249,6 +249,7 @@ func (s *Server) routes() {
 	s.mux.Handle("DELETE /v1/chats/{id}", api(s.handleDeleteChat))
 	s.mux.Handle("POST /v1/chats/{id}/members", api(s.handleAddMembers))
 	s.mux.Handle("DELETE /v1/chats/{id}/members/{ref}", api(s.handleRemoveMember))
+	s.mux.Handle("POST /v1/chats/{id}/delegates/{ref}", api(s.handleRestoreDelegate))
 	s.mux.Handle("POST /v1/chats/{id}/messages", api(s.handleSend))
 	s.mux.Handle("POST /v1/chats/{id}/cancel", api(s.handleCancel))
 	s.mux.Handle("GET /v1/chats/{id}/shots/{name}", api(s.handleShot))
@@ -925,6 +926,25 @@ func (s *Server) handleAddMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess, err := s.chats.AddMembers(r.PathValue("id"), body.Members)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"chat": sess})
+}
+
+// Delegates brings back a delegate the person took off a chat.
+type Delegates interface {
+	RestoreDelegate(id, ref string) (*chat.Session, error)
+}
+
+func (s *Server) handleRestoreDelegate(w http.ResponseWriter, r *http.Request) {
+	d, ok := s.chats.(Delegates)
+	if !ok {
+		fail(w, http.StatusNotImplemented, errors.New("this gateway cannot bring a delegate back"))
+		return
+	}
+	sess, err := d.RestoreDelegate(r.PathValue("id"), r.PathValue("ref"))
 	if err != nil {
 		fail(w, codeFor(err), err)
 		return

@@ -2,6 +2,7 @@ package chat
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -240,4 +241,93 @@ func pruneHelpers(sess *Session, exists func(id string) bool) bool {
 		changed = true
 	}
 	return changed
+}
+
+// RestoreDelegate brings back a delegate the person took off a chat: it counts among the chat's
+// kitties again, as its hand-overs say.
+func (s *Service) RestoreDelegate(id, ref string) (*Session, error) {
+	k, err := s.fleet.Get(ref)
+	if err != nil {
+		return nil, err
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	if !ok {
+		return nil, fmt.Errorf("no such chat %q", id)
+	}
+	if !contains(sess.Dismissed, k.ID) {
+		return nil, fmt.Errorf("%s was not taken off this chat", k.Name)
+	}
+	sess.Dismissed = without(sess.Dismissed, k.ID)
+	if !contains(sess.Members, k.ID) && !contains(sess.Delegates, k.ID) {
+		sess.Delegates = append(sess.Delegates, k.ID)
+	}
+	sess.UpdatedAt = s.now()
+	if err := s.save(sess); err != nil {
+		return nil, err
+	}
+	c := *sess
+	return &c, nil
+}
+
+// HandOverStat is how one kitty has handed work out and taken it on, over every chat kept.
+type HandOverStat struct {
+	KittyID string `json:"kitty_id"`
+	Kitty   string `json:"kitty"`
+	// Asked is how many subtasks it handed to others, AskedFailed how many of those were not done.
+	Asked       int `json:"asked"`
+	AskedFailed int `json:"asked_failed"`
+	// Took is how many subtasks others handed it, TookFailed how many of those it could not do.
+	Took       int `json:"took"`
+	TookFailed int `json:"took_failed"`
+}
+
+// HandOverStats counts the hand-overs of every chat kept, per kitty of the fleet, busiest first;
+// kitties that never handed nor took work are left out.
+func (s *Service) HandOverStats() []HandOverStat {
+	byID := map[string]*HandOverStat{}
+	get := func(id string) *HandOverStat {
+		if st, ok := byID[id]; ok {
+			return st
+		}
+		st := &HandOverStat{KittyID: id}
+		byID[id] = st
+		return st
+	}
+	s.mu.RLock()
+	for _, sess := range s.sessions {
+		for i := range sess.Turns {
+			t := &sess.Turns[i]
+			for _, d := range t.Delegations {
+				failed := d.Error != ""
+				if t.Kitty != "" {
+					st := get(t.Kitty)
+					st.Asked++
+					if failed {
+						st.AskedFailed++
+					}
+				}
+				if d.KittyID != "" {
+					st := get(d.KittyID)
+					st.Took++
+					if failed {
+						st.TookFailed++
+					}
+				}
+			}
+		}
+	}
+	s.mu.RUnlock()
+	out := make([]HandOverStat, 0, len(byID))
+	for _, k := range s.fleet.List() {
+		if st, ok := byID[k.ID]; ok {
+			st.Kitty = k.Name
+			out = append(out, *st)
+		}
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return out[i].Asked+out[i].Took > out[j].Asked+out[j].Took
+	})
+	return out
 }

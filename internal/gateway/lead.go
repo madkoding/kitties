@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/mcp"
 	"github.com/madkoding/kitties/internal/orchestrator"
@@ -20,6 +21,11 @@ import (
 // Reporter opens the lead's Reports thread, where the other kitties' news land.
 type Reporter interface {
 	ReportsChat(lead *kitty.Kitty) (string, error)
+}
+
+// HandOvers counts the hand-overs per kitty, for the lead's panel.
+type HandOvers interface {
+	HandOverStats() []chat.HandOverStat
 }
 
 // lead is the fleet's lead kitty, nil when none is.
@@ -44,6 +50,10 @@ func (s *Server) leadView() map[string]any {
 		if id, err := r.ReportsChat(lead); err == nil {
 			out["reports"] = id
 		}
+	}
+	// How the team hands work around: who asks, who takes it on, and how much fails.
+	if h, ok := s.chats.(HandOvers); ok {
+		out["handovers"] = h.HandOverStats()
 	}
 	return out
 }
@@ -92,7 +102,7 @@ func (s *Server) routesLead(api func(http.HandlerFunc) http.Handler) {
 // mcpLeadTools let Claude see and change the lead, and talk to it.
 func (s *Server) mcpLeadTools() []mcp.Tool {
 	return []mcp.Tool{
-		{Name: "fleet_lead", Description: "The lead kitty (the principal one, which orchestrates the others and reports for all of them) and the id of its Reports thread; lead is null when there is none.",
+		{Name: "fleet_lead", Description: "The lead kitty (the principal one, which orchestrates the others and reports for all of them) and the id of its Reports thread and how many subtasks each kitty handed out or took on (and how many failed); lead is null when there is none.",
 			InputSchema: obj(nil, map[string]any{}), Annotations: mcp.Annotations{ReadOnly: true},
 			Call: func(context.Context, json.RawMessage) (mcp.Result, error) {
 				return jsonResult(s.leadView())
