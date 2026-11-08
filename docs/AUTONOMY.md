@@ -4,9 +4,15 @@
 
 A kitty is not only something you talk to. Each one has an agenda:
 
-- **Goals.** Standing tasks it pursues without being asked: on a schedule (cron, or
-  *hourly*, *daily*, *weekdays at nine*), when a service reports something, or when you press
-  *run now*. Each goal works in a thread of its own, so you can read along and chime in.
+- **Scheduled tasks (goals).** Standing tasks it pursues without being asked: on a schedule
+  (cron, or *hourly*, *daily*, *weekdays at nine*), when a service reports something, or when you
+  press *run now*. They have a section of their own in the sidebar, *Scheduled tasks*, apart from
+  the chats: a task opens the window of every kitty's tasks, where *history* lists its runs,
+  newest first (when and why it ran, how it ended, the kitty's last words), and *Open every run
+  in full* opens its thread, so you can read along and chime in. That thread is not a chat: the
+  sidebar does not list it, and a line over it says whose task it is. The same tasks are in the
+  kitty's drawer. API: `GET /v1/goals/{id}/runs`; MCP: `goal_runs`. A task you remove gives its
+  thread back to the chats.
 - **Saved steps, no tokens.** A goal can name a page flow the kitty saved (`page_flow` with
   `save`, see [the desktop](DESKTOP.md#reading-and-acting-on-pages-from-the-inside)): *Saved steps
   to play first* in the goal's form, `flow:` in the configuration or in `goal_add`. Each run plays
@@ -55,7 +61,12 @@ A kitty is not only something you talk to. Each one has an agenda:
   there; `@name` still picks among the members), the sidebar huddles their cats with the count,
   the header lists the helper with a dashed edge, and its answer shows under the turn that
   asked, with its own name and cat (a long answer opens whole on request), and a link to the
-  thread between the two. While it works, the chat shows it at work with its cat and a link to
+  thread between the two. That thread is a detail, not a chat: the sidebar does not list it (the
+  answer is already in the chat that asked, so it would read twice), the kitty that asked is told
+  not to repeat the answer, and the thread is deleted `handover_keep` after its work ended (72
+  hours by default). *Keep* in the line over the thread keeps it (it then shows among the chats,
+  tagged *kept*); *Let it go* puts it back on the clock. API: `PUT /v1/chats/{id}/keep`
+  `{"keep": true}`; MCP: `chat_keep`. While it works, the chat shows it at work with its cat and a link to
   follow it. The sidebar's *groups* button lists only the chats with more than one kitty. The
   **+** beside a helper in the header makes it a member (it then answers there too), and the
   **×** takes it off the chat (its answers stay; it is back if handed work there again, or when
@@ -73,8 +84,9 @@ A kitty is not only something you talk to. Each one has an agenda:
 
 | | |
 | --- | --- |
-| ![A kitty's goals and journal](screenshots/21-goals-journal.png) | ![A goal's thread: the scheduler's call and the answer](screenshots/22-goal-chat.png) |
-| ![A kitty hands a subtask to another](screenshots/20-delegation.png) | ![How long they keep at it on their own](screenshots/60-autonomy.png) |
+| ![Every kitty's scheduled tasks, each with its history of runs](screenshots/78-scheduled-tasks.png) | ![A kitty's scheduled tasks and journal](screenshots/21-goals-journal.png) |
+| ![A scheduled task's thread: every run in full](screenshots/22-goal-chat.png) | ![A kitty hands a subtask to another](screenshots/20-delegation.png) |
+| ![The thread between two kitties of a hand-over, which goes unless kept](screenshots/77-handover-thread.png) | ![How long they keep at it on their own](screenshots/60-autonomy.png) |
 
 In the YAML, under a kitty:
 
@@ -86,6 +98,7 @@ autonomy:                        # Settings → Preferences → Working on their
   lead_limits: ask               # the lead's lasting changes of the others' limits wait for a yes; auto (default)
   parallel_handovers: 4          # hand-overs of one reply that run at the same time (1 to 16); off: one at a time
   lead_summary: "18:00"          # the lead sums its Reports thread up every day at this time; empty: never
+  handover_keep: 72h             # how long a thread between two kitties stays after its hand-over ended (1h to 2160h); off: always
 kitties:
   - name: mimi
     backup: luna                 # takes over what mimi gives up on

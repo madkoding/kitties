@@ -19,8 +19,9 @@
 | `GET /v1/kitties/{ref}/rects`             | its display live as what changed on it, like VNC (`?fps=1-30`; `SCREEN`, `UPDATE`, `RECT` lines with JPEG bodies) |
 | `GET/PUT /v1/kitties/{ref}/clipboard` `{text}` | its clipboard, both ways                  |
 | `POST /v1/scale/{name}` `{replicas}`      | run n replicas of a configured kitty           |
-| `GET/POST /v1/chats`                      | threads; create `{title, members: [names]}`. Each carries `gist`, its last words, at most 140 characters on one line (no markdown; secrets, addresses, long numbers and link paths masked), and `gist_by`, who said them (`user` or a kitty's name) |
+| `GET/POST /v1/chats`                      | threads; create `{title, members: [names]}`. `?kind=chat` lists the ones the sidebar shows (`listed`), `goal` the threads of scheduled tasks, `handover` the threads between two kitties; none or `all` lists every one. Each carries `kind`, `listed`, and for a hand-over `keep`, `ended_at` and `expires_at` (when it is deleted unless kept); each carries `gist`, its last words, at most 140 characters on one line (no markdown; secrets, addresses, long numbers and link paths masked), and `gist_by`, who said them (`user` or a kitty's name) |
 | `POST /v1/chats/{id}/members` · `DELETE /v1/chats/{id}/members/{ref}` | who is in the group |
+| `PUT /v1/chats/{id}/keep` `{keep}` | keep a hand-over thread (it stays and is listed) or let it go (deleted `autonomy.handover_keep` after its work ended); 400 for a thread that is no hand-over |
 | `POST /v1/chats/{id}/messages` `{text, files: [{name, mime, data}]}` | send a message; returns the kitties' turns (a desktop task goes on in the background: poll the chat). `files` is optional, `data` is base64; up to 6 files and 20 MB in all, checked by their real type (a program is refused with 400, a body over the limit with 413). The turn lists them in `attachments` |
 | `GET /v1/chats/{id}/files/{file}`         | a file of the chat: a picture inline, anything else as a download |
 | `POST /v1/chats/{id}/cancel` · `GET /v1/chats/{id}/shots/{name}` | stop a task; a step's screenshot |
@@ -33,13 +34,14 @@
 | `GET /v1/lead` · `PUT /v1/lead` `{kitty}` · `PATCH /v1/kitties/{ref}` `{lead}` | the lead kitty (`null` when none) and the id of its Reports thread (`reports`); make another the lead (the one before stops being it), or `""` for none ([the lead kitty](AUTONOMY.md#the-lead-kitty)) |
 | `GET/PUT/DELETE /v1/skills/{name}` · `POST …/accept` | the skills library and its proposals |
 | `GET/PUT/DELETE /v1/artifacts/{name}`     | the artifacts library (raw file bodies) |
+| `GET/POST /v1/goals` (`?kitty=`) · `GET/PUT/DELETE /v1/goals/{id}` · `POST /v1/goals/{id}/run` · `GET /v1/goals/{id}/runs?n=30` | scheduled tasks (goals); `runs` is a task's history, newest first: `at`, `why`, `result` (running, done, blocked, escalated, delegated, failed), the kitty's last words (`answer`, masked) and `turn`, where the run starts in its thread (`chat`) |
 | `GET /v1/approvals?status=pending` · `POST /v1/approvals/{id}/approve` `{always}` · `…/reject` `{reason}` | the actions held for a yes, and the answer |
 | `GET /v1/approvals/rules` · `POST /v1/approvals/rules` `{kitty, connector, action, mode}` · `DELETE /v1/approvals/rules/{id}` | the action limits (ask, never, auto; an empty action is all of the connection's), and taking one away |
 | `GET/POST /v1/kitties/{ref}/memory` · `PUT/DELETE …/memory/{id}` · `PUT …/memory/profile` · `POST …/memory/distill` | a kitty's notes (correct one with `{"text": …}`), its picture of you, and a distillation now |
 | `GET/POST /v1/memory/shared` · `PUT/DELETE /v1/memory/shared/{id}` | the notes every kitty knows |
 | `POST /v1/chats/{id}/turns/{index}/feedback` `{rating, note}` | a thumb under an answer |
 | `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` · `POST …/notify/digest` | where and when kitties tell you; a test; the daily summary now |
-| `PUT /v1/settings/autonomy` | `{"follow_ups": "10m 30m 2h", "brain_wait": "30m", "stand_ins": "3", "lead_limits": "ask", "parallel_handovers": "4", "lead_summary": "18:00"}`: how long the kitties keep at a task on their own (empty: defaults, `off`: none) |
+| `PUT /v1/settings/autonomy` | `{"follow_ups": "10m 30m 2h", "brain_wait": "30m", "stand_ins": "3", "lead_limits": "ask", "parallel_handovers": "4", "lead_summary": "18:00", "handover_keep": "72h"}`: how long the kitties keep at a task on their own (empty: defaults, `off`: none) |
 | `GET /v1/chats/{id}/turns/{n}/replay.gif` · `POST …/turns/{n}/help` `{text, secret, enter, save}` | a task as an animated GIF; the person's answer to a kitty that asked for help (a secret is typed on its desktop, not told) |
 | `GET /v1/vault` · `PUT/DELETE /v1/vault/{name}` `{value, kitties}` | the secrets a kitty may type: names and who may use them, never values |
 | `GET /v1/kitties/{ref}/desktop` · `POST …/backup` · `POST …/update` | its desktop's image and whether a newer one waits, the backup of its cookies, sessions and passwords, and moving it to the newest image |

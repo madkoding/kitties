@@ -46,8 +46,11 @@ a desktop app and an Android app.
   Machines** for every kitty or for each one. The kitty sees what is used and free, opens only the tabs
   and programs that fit, and a new tab is refused when the memory is nearly full
   ([details](docs/DESKTOP.md#the-machines-memory)).
-- **Autonomy.** Goals on a schedule or triggered by events, limits and a daily budget, retries, a
-  backup kitty, delegation between kitties and a journal of everything.
+- **Autonomy.** Scheduled tasks on a schedule or triggered by events, in a section of their own with
+  each one's history of runs (out of your chats), limits and a daily budget, retries, a backup kitty,
+  delegation between kitties (the answer shows once, in the chat that asked; the thread between the
+  two goes after 72 hours unless you keep it) and a journal of everything
+  ([details](docs/AUTONOMY.md)).
 - **A lead kitty.** Make one kitty the lead and it orchestrates the rest: it splits what you ask among
   them, gathers their answers into one report, and the others' news reach you through it
   ([details](docs/AUTONOMY.md#the-lead-kitty)).
