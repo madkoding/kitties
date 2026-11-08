@@ -1,6 +1,11 @@
 package chat
 
-import "time"
+import (
+	"time"
+
+	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/notify"
+)
 
 // THE KITTIES OF A CHAT.
 //
@@ -117,4 +122,17 @@ func wholeAnswer(answer string, cut int) string {
 		return string(r[:answerMax]) + "…"
 	}
 	return answer
+}
+
+// tellDelegation says how a hand-over went: in the lead's Reports thread, unless the lead itself
+// asked (it has the answer already), and to the person when they chose to hear of hand-overs.
+func (s *Service) tellDelegation(from, to *kitty.Kitty, title, body, chatID string) {
+	if lead := s.leadFor(to); lead != nil && lead.ID == from.ID {
+		if s.notifier != nil {
+			name, line := signed(lead, to, title)
+			s.notifier.Notify(notify.Notification{Event: notify.Delegated, Kitty: name, Title: line, Body: body, Chat: chatID})
+		}
+		return
+	}
+	s.tell(notify.Delegated, to, title, body, chatID)
 }

@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/madkoding/kitties/internal/notify"
 )
 
 // A chat where a kitty hands work to another reads as a group of both, and so does the thread
@@ -124,5 +126,45 @@ func TestDelegateHelpingAndWholeAnswer(t *testing.T) {
 	// A short answer is not kept twice.
 	if wholeAnswer("short", 300) != "" {
 		t.Error("short answer kept twice")
+	}
+}
+
+// How a hand-over went reaches the person (and, through tell, the lead's Reports thread), with
+// secrets masked; the lead's own hand-overs are not reported back to it.
+func TestDelegationIsReported(t *testing.T) {
+	f, sa, sb, _ := fleet(t)
+	s := service(t, f)
+	b := &bell{}
+	s.SetNotifier(b)
+	chat, _ := s.Create("", []string{"bo"})
+	delegated := func() *notify.Notification {
+		for i := range b.seen {
+			if b.seen[i].Event == notify.Delegated {
+				return &b.seen[i]
+			}
+		}
+		return nil
+	}
+	// No lead: ana's news goes out in its own name, masked.
+	sb.replies = []string{"@delegate ana {\"task\": \"count\"}", "ok"}
+	sa.replies = []string{"one, two; the key is sk-proj-abcdefghijklmnopqrstuvwxyz012345"}
+	if _, err := s.Send(context.Background(), chat.ID, "go"); err != nil {
+		t.Fatal(err)
+	}
+	if n := delegated(); n == nil || n.Kitty != "ana" || n.Title != "finished bo's subtask" || strings.Contains(n.Body, "sk-proj-") || n.Chat != chat.ID {
+		t.Fatalf("notification = %+v", n)
+	}
+	// bo leads and asked: the person is told, bo's Reports thread is not.
+	f.kitties["b1"].Lead = true
+	b.seen = nil
+	sb.replies = []string{"@delegate ana {\"task\": \"count again\"}", "ok"}
+	sa.replies = []string{"three"}
+	if _, err := s.Send(context.Background(), chat.ID, "again"); err != nil {
+		t.Fatal(err)
+	}
+	lead, _ := f.Get("bo")
+	rid, _ := s.ReportsChat(lead)
+	if rep, _ := s.Get(rid); delegated() == nil || len(rep.Turns) != 0 {
+		t.Errorf("lead's own hand-over: notified %v, reports %d", delegated() != nil, len(rep.Turns))
 	}
 }

@@ -204,11 +204,15 @@ func (s *Service) delegate(ctx context.Context, id string, a action, k *kitty.Ki
 	if err != nil {
 		d.Error = err.Error()
 		turn.Delegations = append(turn.Delegations, d)
+		// The lead (its Reports thread) and the person, when they asked for it, hear how it went,
+		// with secrets masked as in the sidebar.
+		s.tellDelegation(k, target, "could not do "+k.Name+"'s subtask", Gist(task)+" — "+Gist(err.Error()), id)
 		return outcome{action: a, err: target.Name + ": " + err.Error()}
 	}
 	d.Result = clip(answer, 300)
 	d.Answer = wholeAnswer(answer, 300)
 	turn.Delegations = append(turn.Delegations, d)
+	s.tellDelegation(k, target, "finished "+k.Name+"'s subtask", Gist(task)+" — "+Gist(answer), id)
 	return outcome{action: a, text: target.Name + " answered:\n" + answer}
 }
 
