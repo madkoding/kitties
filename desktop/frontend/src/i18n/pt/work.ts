@@ -48,6 +48,8 @@ const dict: Dictionary = {
   "Off, a task reads as what the kitty says it is about to do, with its actions folded under how many they were.":
     "Desligado, uma tarefa se lê como o que a kitty diz que vai fazer, com suas ações recolhidas sob quantas foram.",
   "Stop this task": "Parar esta tarefa",
+  "This task has been at work for {n} minutes. Stop it? Continue in the chat picks it up again.":
+    "Esta tarefa está em andamento há {n} minutos. Parar? Continuar no chat a retoma.",
   "Go to the latest": "Ir para o mais recente",
 
   "Hide the steps": "Ocultar os passos",

@@ -1999,6 +1999,17 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live).toHaveCount(0);
 });
 
+test("a notification's link to a task at work opens the chat with the desktop live", async ({
+  page,
+}) => {
+  await open(page, `#chat/${ids.desktop}/live`);
+  await expect(page.getByTestId("live-desktop")).toBeVisible();
+  // The address goes back to the chat's own, so a reload does not open it again.
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(`#chat/${ids.desktop}`);
+  await page.keyboard.press("Escape");
+  await expect(page.getByTestId("live-desktop")).toHaveCount(0);
+});
+
 test("the chat follows what comes in, and waits while the person scrolls up to read", async ({
   page,
 }) => {
