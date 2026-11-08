@@ -365,7 +365,7 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
 		HandOverWait: time.Minute,
-		now: time.Now, newID: randomID, MaxRounds: 4, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
+		now:          time.Now, newID: randomID, MaxRounds: 4, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
 		DefaultLimits: kitty.Limits{MaxTokens: 0, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
 		BrainWait: DefaultBrainWait, brainEvery: 15 * time.Second,
 		distilling: map[string]bool{}, CompactAfter: 40, CompactKeep: 16}
