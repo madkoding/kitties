@@ -135,7 +135,8 @@ Caddy: `flush_interval -1`). `deploy/nginx.conf` is a complete example.
   label); the kitties' desktops are updated by the gateway itself (below).
 - Update by itself, as a binary: Kitties looks at its own releases on GitHub (`updates:` in the
   configuration). `gateway: notify` (the default) tells you, through your notifications and from
-  Settings, Preferences, where **Update and restart** installs it; `gateway: auto` installs it by
+  the sidebar's **New version** and Settings, Preferences, whose update window installs it with a
+  progress bar, restarts the gateway and refreshes the page; `gateway: auto` installs it by
   itself. It downloads the file for this system, checks it against the release's `SHA256SUMS`, runs
   it once to see it is the version it claims to be, keeps the old one as `<name>.prev` and restarts
   into it (same process id, so a supervisor follows it), only when no kitty is working and no

@@ -183,6 +183,17 @@ run from a writable folder update themselves: a container is updated with its im
 desktop app's bundle is signed, so those are told instead. How the releases are signed:
 [RELEASING.md](RELEASING.md).
 
+When a newer version is out, the sidebar shows **New version**. A click opens the update window:
+the version you have and the new one, what changed (the release's "What's Changed") and a link to
+its notes. **Update now** installs it with a progress bar (download, check, install); then the
+gateway restarts into it and the window waits for the new version to answer and refreshes by
+itself. The desktops of the kitties keep running. A gateway that cannot replace itself (in a
+container, inside the desktop app) says how to update in the same window, with a **Download**
+link to the release. The gateway looks every `updates.check_hours` (12 by default); the page reads
+what it found when it opens and every half hour.
+
+![The update window, with its progress](screenshots/76-update-progress.png)
+
 The kitties' desktop image updates on its own too (`containers.auto_update`): a new image is
 downloaded and idle desktops are made anew with their sessions kept
 ([DESKTOP.md](DESKTOP.md#updating-a-desktop-without-losing-what-it-knows)).
