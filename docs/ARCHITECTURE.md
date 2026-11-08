@@ -237,7 +237,9 @@ the first 300 bytes; `Delegation.Answer` the whole answer (up to 20,000 characte
 hand-overs no longer count) until a new hand-over brings it back. The `delegated` notices of a chat
 wait `HandOverWait` (a minute) and go out as one message listing them; when the gateway stops,
 `FlushHandOvers` sends the ones still waiting. Removing a kitty (`Prune`) also takes it off every
-chat's delegates and owner.
+chat's delegates and owner. `POST /v1/chats/{id}/delegates/{kitty}` brings a dismissed delegate
+back. `GET /v1/lead` (and the MCP `fleet_lead`) adds `handovers`: per kitty, the subtasks it handed
+out (`asked`, `asked_failed`) and took on (`took`, `took_failed`), counted over the chats kept.
 
 The orchestrator's `Watch` is the watchdog: every 30 seconds a running kitty whose container
 stopped or vanished is started again and a kitty in error is tried once more; recoveries are

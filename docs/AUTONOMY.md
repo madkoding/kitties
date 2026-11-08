@@ -52,7 +52,9 @@ A kitty is not only something you talk to. Each one has an agenda:
   thread between the two. While it works, the chat shows it at work with its cat and a link to
   follow it. The sidebar's *groups* button lists only the chats with more than one kitty. The
   **+** beside a helper in the header makes it a member (it then answers there too), and the
-  **×** takes it off the chat (its answers stay; it is back if handed work there again). When a
+  **×** takes it off the chat (its answers stay; it is back if handed work there again, or when
+  you click its dimmed tag in the header). The lead's panel, in its drawer, counts the subtasks
+  each kitty handed out, took on and failed. When a
   hand-over finishes or fails, the lead hears it in its Reports thread (unless the lead asked),
   and you do too if *Notifications* has "A kitty finished a subtask…" (`delegated`) on; the
   hand-overs of a chat that end within a minute arrive as one message (sent at once if the
