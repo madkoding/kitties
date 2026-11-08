@@ -239,7 +239,9 @@ wait `HandOverWait` (a minute) and go out as one message listing them; when the 
 `FlushHandOvers` sends the ones still waiting. Removing a kitty (`Prune`) also takes it off every
 chat's delegates and owner. `POST /v1/chats/{id}/delegates/{kitty}` brings a dismissed delegate
 back. `GET /v1/lead` (and the MCP `fleet_lead`) adds `handovers`: per kitty, the subtasks it handed
-out (`asked`, `asked_failed`) and took on (`took`, `took_failed`), counted over the chats kept.
+out (`asked`, `asked_failed`) and took on (`took`, `took_failed`), counted over the chats kept, with
+its five latest hand-over `threads`. Every `FailStreakAlert` (3) subtasks a kitty fails in a row, `tell`
+reports it to the lead and the person; a subtask done resets the count (kept in memory).
 
 The orchestrator's `Watch` is the watchdog: every 30 seconds a running kitty whose container
 stopped or vanished is started again and a kitty in error is tried once more; recoveries are

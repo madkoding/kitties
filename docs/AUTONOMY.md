@@ -54,7 +54,9 @@ A kitty is not only something you talk to. Each one has an agenda:
   **+** beside a helper in the header makes it a member (it then answers there too), and the
   **×** takes it off the chat (its answers stay; it is back if handed work there again, or when
   you click its dimmed tag in the header). The lead's panel, in its drawer, counts the subtasks
-  each kitty handed out, took on and failed. When a
+  each kitty handed out, took on and failed; a row opens the kitty's latest hand-over threads.
+  A kitty that fails three subtasks in a row is reported to the lead (and to you, with
+  `delegated` notices on), so a broken model, limit or desktop does not go unnoticed. When a
   hand-over finishes or fails, the lead hears it in its Reports thread (unless the lead asked),
   and you do too if *Notifications* has "A kitty finished a subtask…" (`delegated`) on; the
   hand-overs of a chat that end within a minute arrive as one message (sent at once if the
