@@ -86,3 +86,25 @@ func TestUnattendedPromptKeepsTheListInTheWorkspace(t *testing.T) {
 		t.Error("the list lives in the workspace")
 	}
 }
+
+func TestLeadAndFollowersPrompts(t *testing.T) {
+	s := Default("luna")
+	lead := s.SystemPrompt(Context{KittyName: "luna", Lead: true, Team: []string{"mimi: good at mail"}})
+	for _, want := range []string{"You are the lead kitty", "starts it fresh", "@answer_kitty", "Your team:\n- mimi: good at mail"} {
+		if !strings.Contains(lead, want) {
+			t.Errorf("lead prompt lacks %q", want)
+		}
+	}
+	follow := s.SystemPrompt(Context{KittyName: "mimi", LeadName: "luna", User: "mad"})
+	if !strings.Contains(follow, "luna is the lead kitty: it coordinates the fleet and is the one who talks with mad") ||
+		!strings.Contains(follow, "Follow its instructions first") || strings.Contains(follow, "@ask_lead") {
+		t.Errorf("follower prompt = %s", follow)
+	}
+	asks := s.SystemPrompt(Context{KittyName: "mimi", LeadName: "luna", User: "mad", AskLead: true})
+	if !strings.Contains(asks, "do not ask mad: ask luna with @ask_lead") {
+		t.Errorf("follower that may ask = %s", asks)
+	}
+	if none := s.SystemPrompt(Context{KittyName: "mimi"}); strings.Contains(none, "lead kitty") {
+		t.Errorf("no lead: %s", none)
+	}
+}

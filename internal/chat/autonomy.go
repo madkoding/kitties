@@ -39,6 +39,13 @@ func (s *Service) reportGoal(k *kitty.Kitty, goal, chatID, result, text string) 
 	if s.goals != nil {
 		s.goals.Report(goal, result)
 	}
+	if result == "asked" {
+		// It waits for the lead's answer: the run goes on when it comes, and reports then.
+		if lead := s.leadFor(k); lead != nil {
+			s.note(k, agenda.KindEscalated, goal, chatID, "asked "+lead.Name+": "+firstLine(text))
+		}
+		return
+	}
 	kind := agenda.KindDone
 	switch result {
 	case "blocked":
@@ -66,6 +73,10 @@ func (s *Service) RunGoal(ctx context.Context, g agenda.Goal, t agenda.Trigger) 
 	id, err := s.goalChat(g, k)
 	if err != nil {
 		return "", err
+	}
+	// A task from the lead goes first: the kitty's own goal waits for it.
+	if s.waitForLeadWork(ctx, k) {
+		s.note(k, agenda.KindSkipped, g.ID, id, "waited for "+s.Lead().Name+"'s task before "+g.Title)
 	}
 	call := goalPrefix + g.Title + "\n" + g.Text + "\n\nWhy now: " + t.Text()
 	text := call + "\n\nWork on it now. When you are done, say what you did and what is left. If you are stuck, say what you need."
@@ -382,6 +393,14 @@ func (s *Service) giveUp(id string, index int, k *kitty.Kitty, fail string) (res
 				return "delegated", false, "Handed over to " + target.Name + ", who answered:\n" + strings.TrimPrefix(o.text, answeredBy(target.Name))
 			}
 			fail += "; " + target.Name + " could not take over: " + o.err
+		}
+	}
+	if s.goalOf(id) != "" {
+		// Work of its own (a goal): with a lead, the lead is asked first, not the person.
+		question := fmt.Sprintf("I could not finish a task: %s.\nThe task: %s\nWhat should I do?", fail, clip(request, 1000))
+		if lead, ok := s.askLead(k, id, question); ok {
+			s.edit(id, index, func(t *Turn) { t.AskedLead = lead.Name })
+			return "asked", false, "(" + k.Name + " asked " + lead.Name + " for help: " + Plain(fail) + ")"
 		}
 	}
 	s.note(k, agenda.KindEscalated, "", id, fail)

@@ -98,6 +98,9 @@ type Turn struct {
 	Limits []LimitRef `json:"limits,omitempty"`
 	// Report, in the lead's Reports thread, says what news this turn brings from another kitty.
 	Report *Report `json:"report,omitempty"`
+	// AskedLead names the lead kitty this turn asked a question of (ask.go): its answer comes
+	// back in the thread.
+	AskedLead string `json:"asked_lead,omitempty"`
 	// Detail is the technical form of what the text says in plain words (an error as the
 	// service wrote it), for whoever asks to see technical details.
 	Detail string `json:"detail,omitempty"`
@@ -196,6 +199,8 @@ type Session struct {
 	SummaryUpTo int    `json:"summary_up_to,omitempty"`
 	// Reports marks the lead kitty's Reports thread, where the other kitties' news land.
 	Reports bool `json:"reports,omitempty"`
+	// Asks, on the Reports thread, are the questions the other kitties put to the lead (ask.go).
+	Asks []LeadAsk `json:"asks,omitempty"`
 	// Gist is the chat's last words, up to two lines in the sidebar, with secrets and personal details masked, and
 	// GistBy who said them ("user" or a kitty's name): what the sidebar shows under the title.
 	Gist   string `json:"gist,omitempty"`
@@ -487,12 +492,20 @@ func parseDirectives(text string) ([]Directive, string) {
 			kind = "task_limits"
 		case strings.HasPrefix(trimmed, "@describe "):
 			kind = "describe"
+		case strings.HasPrefix(trimmed, "@ask_lead "):
+			kind = "ask_lead"
+		case strings.HasPrefix(trimmed, "@answer_kitty "):
+			kind = "answer_kitty"
 		default:
 			kept = append(kept, line)
 			continue
 		}
 		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, "@"+kind+" "))
 		verb, argsText, _ := strings.Cut(rest, " ")
+		if kind == "ask_lead" {
+			// The question is all there is: no name before it.
+			verb, argsText = "ask", rest
+		}
 		d := Directive{Kind: kind, Verb: strings.ToLower(strings.TrimSpace(verb)), Raw: trimmed, Args: map[string]any{}}
 		if argsText = strings.TrimSpace(argsText); argsText != "" {
 			if err := json.Unmarshal([]byte(argsText), &d.Args); err != nil {
@@ -506,6 +519,10 @@ func parseDirectives(text string) ([]Directive, string) {
 					key = "max_rounds"
 				case "describe":
 					key = "description"
+				case "ask_lead":
+					key = "question"
+				case "answer_kitty":
+					key = "text"
 				}
 				d.Args[key] = strings.Trim(argsText, "\"' ")
 			}
@@ -972,10 +989,12 @@ func (s *Service) sendWith(ctx context.Context, id, from, fromID, text string, f
 			return replies, nil
 		}
 		if goal != "" {
-			// A goal answered in words alone: the run is over.
+			// A goal answered in words alone: the run is over, or waits for the lead's answer.
 			result := "done"
 			if err != nil {
 				result = "blocked"
+			} else if turn.AskedLead != "" {
+				result = "asked"
 			}
 			s.reportGoal(k, goal, id, result, turn.Text)
 		}
@@ -1154,6 +1173,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		sc.Lead, sc.Team = true, s.team(k)
 	} else if lead := s.Lead(); lead != nil {
 		sc.LeadName = lead.Name
+		sc.AskLead = s.canAskLead(k, id) != nil
 	}
 	system := k.Soul.SystemPrompt(sc)
 	if k.Desktop {
@@ -1175,10 +1195,13 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	system += s.memoryPrompt(k, sess)
 	system += s.limitPrompt(allowed)
 	system += descriptionPrompt(sess) + proposePrompt(sess)
-	if sess.Summary != "" {
+	window := sess.Turns[min(sess.SummaryUpTo, len(sess.Turns)):]
+	if from := s.goldfishFrom(sess, k); from >= 0 {
+		// A task from the lead is all the kitty needs: it starts from it, without the earlier ones.
+		window = sess.Turns[from:]
+	} else if sess.Summary != "" {
 		system += fmt.Sprintf("\nEarlier in this conversation (a summary of its first %d messages, which you no longer see one by one):\n%s\n", sess.SummaryUpTo, sess.Summary)
 	}
-	window := sess.Turns[min(sess.SummaryUpTo, len(sess.Turns)):]
 	messages := s.transcriptFor(id, brain, s.deliver(ctx, id, k, window), system, window, k)
 
 	native := false
@@ -1522,6 +1545,9 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 					t.Artifacts = append(t.Artifacts, turn.Artifacts...)
 					t.Skills = append(t.Skills, turn.Skills...)
 					t.Delegations = append(t.Delegations, turn.Delegations...)
+					if turn.AskedLead != "" {
+						t.AskedLead = turn.AskedLead
+					}
 				})
 				outs = append(outs, o...)
 				if a.kind == "machine" {
@@ -1852,6 +1878,9 @@ func (s *Service) closeTask(id string, index int, k *kitty.Kitty, text string, n
 	})
 	if needsHelp {
 		s.tell(notify.Help, k, "needs your help", summaryLine(text), id)
+	}
+	if result == "done" && s.askedLead(id, index) {
+		result = "asked"
 	}
 	if goal := s.goalOf(id); goal != "" {
 		s.reportGoal(k, goal, id, result, text)

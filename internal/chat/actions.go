@@ -21,7 +21,7 @@ import (
 
 // action is one thing the model asked for.
 type action struct {
-	kind   string // tool | connector | skill | artifact | delegate | memory | limit | task_limits | describe
+	kind   string // tool | connector | skill | artifact | delegate | memory | limit | task_limits | describe | ask_lead | answer_kitty
 	name   string // the tool, the connector, or the verb (skill/artifact)
 	args   map[string]any
 	raw    string
@@ -131,6 +131,13 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 				"max_tokens":  num(fmt.Sprintf("tokens per task, 1 to %d; 0 for the default", kitty.MaxTokensCap)),
 				"max_seconds": num(fmt.Sprintf("seconds per task, 1 to %d; 0 for the default", kitty.MaxSecondsCap))}, "kitty")})
 	}
+	if k.Lead {
+		tools = append(tools, provider.Tool{Name: "answer_kitty", Description: answerKittyHelp,
+			Parameters: obj(map[string]any{"kitty": str("the kitty that asked"), "text": str("your answer, or the person's")}, "kitty", "text")})
+	} else if s.Lead() != nil {
+		tools = append(tools, provider.Tool{Name: "ask_lead", Description: askLeadHelp,
+			Parameters: obj(map[string]any{"question": str("what you need to know, with what the lead needs to answer it")}, "question")})
+	}
 	if s.arts != nil {
 		tools = append(tools,
 			provider.Tool{Name: prefixArtifact + "save", Description: "Keep a file in the shared library for later (a report, a table, a draft).", Parameters: obj(map[string]any{"name": str("file name, like report.md"), "content": str("the text")}, "name", "content")},
@@ -182,6 +189,11 @@ func fromCalls(calls []provider.ToolCall) []action {
 			a.kind, a.name = "describe", "propose"
 		case c.Name == "task_limits":
 			a.kind = "task_limits"
+			a.name, _ = a.args["kitty"].(string)
+		case c.Name == "ask_lead":
+			a.kind, a.name = "ask_lead", "ask"
+		case c.Name == "answer_kitty":
+			a.kind = "answer_kitty"
 			a.name, _ = a.args["kitty"].(string)
 		default:
 			a.kind, a.name = "tool", c.Name
@@ -261,6 +273,10 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 			out = append(out, s.runLimit(id, a, k, allowed, turn))
 		case "task_limits":
 			out = append(out, s.runTaskLimits(id, a, k, turn))
+		case "ask_lead":
+			out = append(out, s.runAskLead(id, a, k, turn))
+		case "answer_kitty":
+			out = append(out, s.runAnswerKitty(a, k))
 		case "describe":
 			out = append(out, s.runDescribe(id, a, k))
 		case "machine":

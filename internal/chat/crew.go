@@ -149,7 +149,11 @@ func (s *Service) tellDelegation(from, to *kitty.Kitty, title, body, chatID stri
 
 // queueHandOver keeps a hand-over's notice for HandOverWait, the first of a chat starting the
 // wait; with no wait it goes out at once.
-func (s *Service) queueHandOver(n notify.Notification) {
+func (s *Service) queueHandOver(n notify.Notification) { s.queueNotice(n.Chat, n) }
+
+// queueNotice keeps a notice under a key for HandOverWait, the first of the key starting the
+// wait; with no wait it goes out at once. The notices of a key go out together.
+func (s *Service) queueNotice(key string, n notify.Notification) {
 	if s.HandOverWait <= 0 {
 		s.notifier.Notify(n)
 		return
@@ -159,11 +163,10 @@ func (s *Service) queueHandOver(n notify.Notification) {
 	if s.handOvers == nil {
 		s.handOvers = map[string][]notify.Notification{}
 	}
-	if len(s.handOvers[n.Chat]) == 0 {
-		chat := n.Chat
-		time.AfterFunc(s.HandOverWait, func() { s.flushHandOvers(chat) })
+	if len(s.handOvers[key]) == 0 {
+		time.AfterFunc(s.HandOverWait, func() { s.flushHandOvers(key) })
 	}
-	s.handOvers[n.Chat] = append(s.handOvers[n.Chat], n)
+	s.handOvers[key] = append(s.handOvers[key], n)
 }
 
 // flushHandOvers sends a chat's waiting hand-over notices: one as it is, several as one message
@@ -179,7 +182,8 @@ func (s *Service) flushHandOvers(chat string) {
 	s.notifier.Notify(combineHandOvers(list))
 }
 
-// combineHandOvers is one notice for several hand-overs of a chat, in the name of the first.
+// combineHandOvers is one notice for several hand-overs of a chat (or several goals the team
+// finished, for the lead), in the name of the first.
 func combineHandOvers(list []notify.Notification) notify.Notification {
 	if len(list) == 1 {
 		return list[0]
@@ -192,8 +196,12 @@ func combineHandOvers(list []notify.Notification) notify.Notification {
 		}
 	}
 	first := list[0]
-	return notify.Notification{Event: notify.Delegated, Kitty: first.Kitty, Chat: first.Chat,
-		Title: fmt.Sprintf("%d hand-overs ended", len(list)), Body: strings.Join(lines, "\n")}
+	title := fmt.Sprintf("%d hand-overs ended", len(list))
+	if first.Event == notify.GoalDone {
+		title = fmt.Sprintf("%d goals finished", len(list))
+	}
+	return notify.Notification{Event: first.Event, Kitty: first.Kitty, Chat: first.Chat,
+		Title: title, Body: strings.Join(lines, "\n")}
 }
 
 // dismissDelegate takes a delegate off a chat for good: its old hand-overs no longer bring it back.

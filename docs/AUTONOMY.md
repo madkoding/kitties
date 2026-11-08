@@ -117,7 +117,13 @@ kitties:
 
 One kitty of the fleet can be the **lead**: the principal one, your main contact and the
 orchestrator of the others. There is one at most; making another kitty the lead takes it from the
-one before.
+one before. Without a lead, nothing below applies and every kitty speaks for itself.
+
+The fleet follows the [elephant-goldfish model](https://github.com/google/elephant-goldfish-model):
+the lead is the *elephant*, which keeps the long memory and the whole picture (what you want, what
+was decided, what each kitty did) and talks with you; the others are *goldfish*, which take each
+task fresh, from what the lead wrote alone, and give back a short result. It is a flat
+organisation: the lead orchestrates and decides, it does not do everyone's work.
 
 - **It hands the work out.** Its prompt names the team (what each kitty is good at, whether it has
   a computer, the services it may use, whether it is busy) and tells it to split what you ask:
@@ -127,6 +133,27 @@ one before.
   in a row; the chat shows who is working and who waits its turn), checks their answers and gives you **one report** of the
   whole: what was done, by whom, what failed and what is left. The other kitties know who leads,
   and treat a task it hands them as coming from you.
+- **The others follow it first.** A task the lead hands a kitty goes before the kitty's own work:
+  a goal of its own due while it works on one waits until the lead's task ends (up to 30 minutes;
+  the journal says it waited).
+- **Each task stands on its own.** A kitty reads a task from the lead fresh: it sees that task,
+  not the earlier ones in their thread nor the lead's conversation with you, so the lead writes
+  every task with the goal, the facts and limits it needs and what to give back. The kitty ends
+  with a short report (done, failed, left). To check an important result, the lead can hand it to
+  another kitty to review with fresh eyes.
+- **Doubts go to the lead, not to you.** A kitty that doubts something in work it does on its own
+  (a goal, a scheduled task) asks the lead (`@ask_lead {"question": "..."}`, or its native
+  `ask_lead` tool), and a goal it gives up on goes to the lead as a question too. The question
+  lands in the lead's Reports thread and wakes it. If the lead knows, it answers
+  (`@answer_kitty mimi {"text": "..."}`) and the answer goes back to the thread that asked, where
+  the kitty carries on; the turn that asked says *mimi asked luna; the answer comes back here*.
+  If only you can decide, the lead asks you in its Reports thread, in its name (the thread shows
+  *help*, and you are notified); you answer the lead there, and it passes your answer on. A
+  hand-over from the lead is never asked back (the lead reads the doubt in the answer), an exposed
+  chat never reaches the lead, and a thread asks at most 3 times between two of your messages:
+  past that, or when the lead cannot be reached in 30 minutes, you are asked as before, still in
+  the lead's name. A kitty's request to take its desktop (`ask_help`: a password, a captcha) still
+  comes to you, since only you can do it.
 - **The reports come back through it.** What another kitty has to tell you (a goal done or
   stuck, help it needs, an action waiting for a yes, its day's tokens) lands in the lead's
   **Reports** thread, from the kitty that sent it, and the notification goes out in the lead's
@@ -136,6 +163,8 @@ one before.
   the goal that ended through it read as one message, each line by the kitty that sent it; the
   same line twice is kept once). The Reports thread has a section of its own in the sidebar,
   after the chats: the sidebar reads *Chats*, *Reports*, *Scheduled tasks*.
+  The goals the team finishes within a minute reach you as **one** message of the lead
+  (*luna: 3 goals finished*, with a line each), which opens its Reports thread.
 - **It gives the others more room.** For a long task it hands out, the lead can give a kitty more
   rounds of actions, tokens or seconds per task (or fewer, to keep one short), within caps: 500
   rounds, 2,000,000 tokens, 7,200 seconds (0 goes back to the default). Only the lead may, never

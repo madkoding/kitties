@@ -701,7 +701,7 @@ export function LeadPanel({
           <p class="text-xs text-[var(--t4)]">
             {kitty.lead
               ? t(
-                  "It splits what you ask among the other kitties, gathers their answers and gives you one report. Their news (goals done or stuck, help, approvals) reach you through it, in its Reports thread.",
+                  "It splits what you ask among the other kitties, gives each a task that stands on its own, gathers their answers and gives you one report. The others report to it and ask it their doubts; it asks you only what it cannot decide. Everything reaches you through it, in its Reports thread.",
                 )
               : current
                 ? t("{lead} leads the fleet now; making {name} the lead takes it from {lead}.", {

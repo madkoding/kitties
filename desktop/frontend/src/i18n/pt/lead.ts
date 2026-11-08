@@ -7,8 +7,10 @@ const dict: Dictionary = {
   reports: "relatórios",
   "{name} is the lead kitty": "{name} é o kitty principal",
   "Lead kitty (orchestrator)": "Kitty principal (orquestrador)",
-  "It splits what you ask among the other kitties, gathers their answers and gives you one report. Their news (goals done or stuck, help, approvals) reach you through it, in its Reports thread.":
-    "Divide o que você pede entre os outros kitties, junta as respostas e entrega um só relatório. As novidades deles (metas cumpridas ou travadas, ajuda, aprovações) chegam a você por ele, no seu tópico Relatórios.",
+  "It splits what you ask among the other kitties, gives each a task that stands on its own, gathers their answers and gives you one report. The others report to it and ask it their doubts; it asks you only what it cannot decide. Everything reaches you through it, in its Reports thread.":
+    "Divide o que você pede entre os outros kitties, dá a cada um uma tarefa que se entende sozinha, junta as respostas e te entrega um só relatório. Os outros se reportam a ele e tiram suas dúvidas com ele; a você ele pergunta só o que não consegue decidir. Tudo chega a você por meio dele, no seu tópico Relatórios.",
+  "{name} asked {lead}; the answer comes back here.":
+    "{name} perguntou a {lead}; a resposta chega aqui.",
   "{lead} leads the fleet now; making {name} the lead takes it from {lead}.":
     "{lead} é o principal agora; tornar {name} o principal tira isso de {lead}.",
   "One kitty can lead the others: you talk to it, it hands the work out and reports for all of them.":

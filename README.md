@@ -52,8 +52,10 @@ a desktop app and an Android app.
   two goes after 72 hours unless you keep it) and a journal of everything
   ([details](docs/AUTONOMY.md)).
 - **A lead kitty.** Make one kitty the lead and it orchestrates the rest: it splits what you ask among
-  them, gathers their answers into one report, and the others' news reach you through it
-  ([details](docs/AUTONOMY.md#the-lead-kitty)).
+  them in tasks that stand on their own, gathers their answers into one report, and the others
+  report to it and ask it their doubts; it asks you only what it cannot decide, so you talk with
+  one kitty (the [elephant-goldfish model](https://github.com/google/elephant-goldfish-model);
+  [details](docs/AUTONOMY.md#the-lead-kitty)).
 - **Hand-overs read as group chats.** When a kitty hands a subtask to another, the chat becomes a group
   of both: the sidebar huddles their cats with the count, the header lists the helper, and its answer
   shows in the chat with its own name and cat, working live until it answers; the sidebar can list only

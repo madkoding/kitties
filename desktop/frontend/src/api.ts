@@ -283,6 +283,8 @@ export interface Turn {
   resumable?: boolean;
   working?: boolean;
   needs_help?: boolean;
+  // asked_lead names the lead kitty this turn asked a question of: its answer comes back here.
+  asked_lead?: string;
   delegations?: Delegation[];
   approvals?: { id: string; connector: string; action: string; summary: string }[];
   feedback?: "up" | "down" | "";
