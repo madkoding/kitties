@@ -14,6 +14,7 @@
 | [MCP.md](MCP.md) | Claude as the orchestrator: the MCP connector |
 | [WHATSAPP.md](WHATSAPP.md) · [es](WHATSAPP.es.md) | WhatsApp as a linked device: a number of the kitties' own, the allow list, the risk |
 | [GUARDRAILS.md](GUARDRAILS.md) · [es](GUARDRAILS.es.md) | Kitties that answer other people: what they get, what is taken out, attempts, the record |
+| [STORAGE.md](STORAGE.md) · [es](STORAGE.es.md) | Disk use: what is swept by itself (screenshots, old desktop images, logs), what is yours, the retention |
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The packages and how they fit together |
 | [DEVELOPMENT.md](DEVELOPMENT.md) | Build, test, end-to-end run, conventions |
 | [RELEASING.md](RELEASING.md) | How releases are tagged, built and signed |

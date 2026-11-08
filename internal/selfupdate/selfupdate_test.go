@@ -1103,3 +1103,52 @@ func TestDetachOutlivesTheCaller(t *testing.T) {
 	}
 	t.Error("the detached program did not run")
 }
+
+// A start sweeps what an update cut off halfway left beside the binary, and a confirmed version
+// drops the one that did not hold before it.
+func TestBootTidiesWhatUpdatesLeft(t *testing.T) {
+	u, exe, _ := installed(t)
+	dir := filepath.Dir(exe)
+	clock := time.Now()
+	u.Now = func() time.Time { return clock }
+	stale, fresh, probe := filepath.Join(dir, ".kitties-new-123"), filepath.Join(dir, ".kitties-new-456"), filepath.Join(dir, ".kitties-update-789")
+	for _, p := range []string{stale, fresh, probe} {
+		if err := os.WriteFile(p, []byte("half"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	long := clock.Add(-2 * time.Hour)
+	_ = os.Chtimes(stale, long, long)
+	_ = os.Chtimes(probe, long, long)
+	_ = os.WriteFile(exe+".failed", []byte("bad"), 0o600)
+	if _, err := u.Boot(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); err == nil {
+		t.Error("a stale half-written version stays")
+	}
+	if _, err := os.Stat(probe); err == nil {
+		t.Error("a stale probe stays")
+	}
+	if _, err := os.Stat(fresh); err != nil {
+		t.Error("a fresh one may be another update's and must stay")
+	}
+	clock = clock.Add(10 * time.Minute)
+	if res, _ := u.Boot(); !res.Confirmed {
+		t.Fatalf("not confirmed: %+v", res)
+	}
+	if _, err := os.Stat(exe + ".failed"); err == nil {
+		t.Error("the version that did not hold stays after a confirmed one")
+	}
+	// Confirmed from inside drops it too.
+	u, exe, _ = installed(t)
+	_, _ = u.Boot()
+	_ = os.WriteFile(exe+".failed", []byte("bad"), 0o600)
+	old := Probation
+	Probation = time.Millisecond
+	t.Cleanup(func() { Probation = old })
+	u.Confirm(context.Background())
+	if _, err := os.Stat(exe + ".failed"); err == nil {
+		t.Error("Confirm keeps the failed version")
+	}
+}

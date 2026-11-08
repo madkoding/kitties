@@ -4,6 +4,14 @@
 set -eu
 # The home may be a folder of the host (it outlives the container): it gets what the image brings.
 kitty-home || echo "kitty-home: the home could not be seeded" >&2
+# What a start before left in /tmp, and logs that grew too big, go; then the logs are kept small
+# while the desktop runs (kitty-tidy).
+kitty-tidy --boot
+(
+    while sleep 900; do
+        kitty-tidy
+    done
+) &
 : "${DISPLAY:=:99}"
 : "${SCREEN:=1280x800x24}"
 # The mark of a desktop that has come up (see kitty-ready): /dev/shm is new on every start, and it
@@ -11,7 +19,7 @@ kitty-home || echo "kitty-home: the home could not be seeded" >&2
 READY=/dev/shm/kitty-desktop.ready
 rm -f "$READY" 2>/dev/null || true
 # -noreset: without it the display forgets the resources (xrdb) when its last client leaves.
-Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp -ac -noreset -shmem +extension RANDR >/tmp/xvfb.log 2>&1 &
+Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp -ac -noreset -shmem +extension RANDR >>/tmp/xvfb.log 2>&1 &
 XVFB=$!
 # Wait until the display answers, then hand the process over so signals stop the container.
 for _ in $(seq 1 50); do
@@ -83,7 +91,7 @@ if [ -s "$pins" ] && ! grep -q '|kitty-open|' "$pins"; then
 fi
 # Under a session bus: the browser announces what it plays there (MPRIS), and the shelf's player
 # island reads it.
-dbus-launch --exit-with-session openbox-session >/tmp/lumen.log 2>&1 &
+dbus-launch --exit-with-session openbox-session >>/tmp/lumen.log 2>&1 &
 # The programs the kitty installed come back on a container made anew (they are listed in its
 # workspace, which outlives the container).
 if [ -s "$HOME/work/.desktop/packages" ]; then

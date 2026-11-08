@@ -10,6 +10,7 @@
 | `PATCH /v1/kitties/{ref}` `{auto_off_minutes}` | minutes without use before its machine turns itself off (`0` never; `auto_off_default: true` goes back to the gateway's default) |
 | `PATCH /v1/kitties/{ref}` `{memory_mb, swap_mb}` | the RAM and swap of its machine, in MB (together; `memory_default: true` goes back to the defaults); applied at once when the engine can, else `memory_pending` until it is turned on again |
 | `GET /v1/settings/machines` · `PUT /v1/settings/machines` `{memory_mb, swap_mb}` | the RAM and swap of every machine without its own, and `engine_mb`, what the container engine has |
+| `GET /v1/settings/storage` · `PUT /v1/settings/storage` `{shot_days, shots_mb}` · `POST /v1/settings/storage/clean` | what the data takes on disk by area (`areas`, `total`, `free`), the retention of the screenshots (`0` the default, `-1` forever / no cap) and the last sweep; a change sweeps at once, `clean` sweeps now and prunes the old desktop images ([STORAGE.md](STORAGE.md)) |
 | `POST /v1/kitties/{ref}/exec` `{argv}`    | run a command in its container                 |
 | `GET /v1/kitties/{ref}/screenshot`        | a PNG of its display                           |
 | `POST /v1/kitties/{ref}/control` `{hold}` | take its display over, or give it back         |

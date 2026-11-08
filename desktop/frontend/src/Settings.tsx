@@ -51,6 +51,7 @@ import { AccountSignIn } from "./SignIn";
 import { ask } from "./Confirm";
 import Secrets from "./Secrets";
 import MachinesSettings from "./MachinesSettings";
+import StorageSettings from "./StorageSettings";
 import Exposure from "./Exposure";
 import Guardrails from "./Guardrails";
 import McpConnector from "./McpConnector";
@@ -2412,6 +2413,7 @@ export default function SettingsModal({
             <Preferences />
             {view && <AutonomyForm view={view} onSaved={setView} />}
             <Exposure />
+            <StorageSettings />
             <McpConnector />
             <Updates />
           </>

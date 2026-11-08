@@ -499,6 +499,34 @@ const dict: Dictionary = {
   "A change reaches a machine at once when the engine can; otherwise the next time it is turned on. A machine in the cloud has the size of its provider.":
     "Un cambio llega a la máquina al instante cuando el motor puede; si no, la próxima vez que se encienda. Una máquina en la nube tiene el tamaño de su proveedor.",
   "Each kitty": "Cada kitty",
+
+  // Storage: what the data takes and what is kept
+  Storage: "Almacenamiento",
+  "Kitties takes {total} in {dir}.": "Kitties ocupa {total} en {dir}.",
+  "Kitties takes {total} in {dir}; {free} free on that disk.":
+    "Kitties ocupa {total} en {dir}; quedan {free} libres en ese disco.",
+  "Screenshots of the tasks": "Capturas de las tareas",
+  "Files attached to chats": "Archivos adjuntos en chats",
+  "Chat history": "Historial de chats",
+  "Kitties' homes (settings and programs)": "Homes de los kitties (ajustes y programas)",
+  "Kitties' workspaces (files and browser)":
+    "Espacios de trabajo de los kitties (archivos y navegador)",
+  "Shared folders": "Carpetas compartidas",
+  "Backups of the sessions": "Copias de las sesiones",
+  Journals: "Diarios",
+  Logs: "Registros",
+  "Keep screenshots for": "Guardar capturas durante",
+  "At most, all together": "Como máximo, en total",
+  Forever: "Siempre",
+  "{n} days": "{n} días",
+  "No limit": "Sin límite",
+  "Older screenshots go by themselves every few hours; their steps stay in the chat. Chats, attached files and the kitties' folders are yours and are never deleted.":
+    "Las capturas más antiguas se borran solas cada pocas horas; sus pasos quedan en el chat. Los chats, los adjuntos y las carpetas de los kitties son tuyos y nunca se borran.",
+  "Free up space now": "Liberar espacio ahora",
+  "Freeing up…": "Liberando…",
+  "Freed {size} ({n} screenshots).": "Se liberaron {size} ({n} capturas).",
+  "No screenshot was old enough to go.": "Ninguna captura era lo bastante antigua para borrarse.",
+  "Old desktop images: {size}.": "Imágenes viejas del escritorio: {size}.",
 };
 
 export default dict;

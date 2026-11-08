@@ -157,6 +157,8 @@ type Server struct {
 	exposure Exposing
 	// mcpControl shows and changes the MCP connector, nil when it cannot.
 	mcpControl MCPControl
+	// storage tells what the data takes and sweeps what grows by itself, nil when nothing does.
+	storage Storage
 	// whatsapp links a WhatsApp number, nil when the gateway has none.
 	whatsapp WhatsApp
 	// guard keeps the exposed kitties from giving the person away, nil when there is none.
@@ -280,6 +282,7 @@ func (s *Server) routes() {
 	s.sharedRoutes()
 	s.updateRoutes()
 	s.exposureRoutes()
+	s.storageRoutes()
 	s.mcpControlRoutes()
 	s.whatsappRoutes()
 	s.guardRoutes()

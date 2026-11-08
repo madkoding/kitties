@@ -65,3 +65,25 @@ func TestSettingsAutonomy(t *testing.T) {
 		t.Errorf("after a restart: %+v %v", m2.Autonomy(), err)
 	}
 }
+
+func TestSettingsRetention(t *testing.T) {
+	cfg := testConfig(t)
+	m, err := New(cfg, WithContainers(newFake(), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetRetention(config.Retention{ShotDays: -7}); err == nil {
+		t.Error("a bad retention is refused")
+	}
+	r := config.Retention{ShotDays: 7, ShotsMB: 500}
+	if err := m.SetRetention(r); err != nil {
+		t.Fatal(err)
+	}
+	if m.Retention() != r {
+		t.Errorf("retention = %+v", m.Retention())
+	}
+	m2, err := New(cfg, WithContainers(newFake(), nil))
+	if err != nil || m2.Retention() != r {
+		t.Errorf("after a restart: %+v %v", m2.Retention(), err)
+	}
+}

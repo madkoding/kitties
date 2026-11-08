@@ -45,6 +45,7 @@ import (
 	"github.com/madkoding/kitties/internal/shared"
 	"github.com/madkoding/kitties/internal/skills"
 	"github.com/madkoding/kitties/internal/soul"
+	"github.com/madkoding/kitties/internal/tidy"
 	"github.com/madkoding/kitties/internal/vault"
 	"github.com/madkoding/kitties/internal/web"
 )
@@ -740,6 +741,10 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 		srv.WithGuard(a.guard)
 	}
 	srv.WithShared(shared.New(a.fleet.SharedRoot()), a.fleet.SharedQuotaMB())
+	// What grows by itself (the screenshots of the tasks, the desktop images updates leave) is
+	// swept on a schedule; Settings shows where the disk goes.
+	janitor := &tidy.Janitor{Dir: a.cfg.DataDirOr(), Chats: a.chats, Settings: a.fleet, Images: a.fleet}
+	srv.WithStorage(janitor)
 	if wa := a.whatsappBridge(a.err, func(format string, args ...any) { fmt.Fprintf(a.out, format+"\n", args...) }); wa != nil {
 		wa.Start(ctx)
 		defer wa.Stop()
@@ -777,6 +782,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	go a.summaries.Run(ctx, logf)
 	// A kitty that stopped on its day's tokens goes on by itself once they are back.
 	go a.chats.RunResumer(ctx, time.Minute)
+	go janitor.Run(ctx, tidyFirst, tidyEvery, logf)
 	// With notify.replies on, what the person writes to the ntfy topic reaches the kitties.
 	replies := reply.New(a.chats, a.fleet, a.notifier, logf)
 	if l, ok := any(a.chats).(interface{ Lead() *kitty.Kitty }); ok {
@@ -818,6 +824,12 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	a.notifier.Wait()
 	return err
 }
+
+// tidyFirst and tidyEvery are when the janitor sweeps: soon after the start, then every few hours.
+var (
+	tidyFirst = 10 * time.Minute
+	tidyEvery = 6 * time.Hour
+)
 
 // openSecretStores opens the vault of saved secrets and the store of session backups, which share
 // a key kept in the data folder. Where the folder cannot be written they are both off (nil) and it

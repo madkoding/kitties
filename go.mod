@@ -5,6 +5,7 @@ go 1.26.10
 require (
 	github.com/google/uuid v1.6.0
 	go.mau.fi/whatsmeow v0.0.0-20261105212532-307a2edf117d
+	golang.org/x/sys v0.49.0
 	google.golang.org/protobuf v1.36.12
 	rsc.io/qr v0.2.0
 )
@@ -23,6 +24,5 @@ require (
 	golang.org/x/crypto v0.58.1-0.20261009181718-2f1f834330b2 // indirect
 	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sync v0.24.0 // indirect
-	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
 )

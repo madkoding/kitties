@@ -34,6 +34,8 @@ type Settings struct {
 	Autonomy *config.Autonomy `json:"autonomy,omitempty"`
 	// Machines are the RAM and swap of every kitty's machine; nil keeps the file's.
 	Machines *MachineDefaults `json:"machines,omitempty"`
+	// Retention is how much of what grows by itself is kept on disk; nil keeps the file's.
+	Retention *config.Retention `json:"retention,omitempty"`
 	// Removed names entries of the file the person deleted from the page.
 	Removed struct {
 		Providers  []string `json:"providers,omitempty"`
@@ -89,7 +91,29 @@ func (m *Manager) loadSettings() error {
 	if s.Machines != nil {
 		m.cfg.Containers.MemoryMB, m.cfg.Containers.SwapMB = s.Machines.MemoryMB, s.Machines.SwapMB
 	}
+	if s.Retention != nil {
+		m.cfg.Retention = *s.Retention
+	}
 	return nil
+}
+
+// Retention is how much of what grows by itself (the screenshots of the tasks) is kept on disk.
+func (m *Manager) Retention() config.Retention {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.cfg.Retention
+}
+
+// SetRetention changes it; the next tidy-up follows it.
+func (m *Manager) SetRetention(r config.Retention) error {
+	if err := r.Validate(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cfg.Retention = r
+	m.overlay.Retention = &r
+	return m.saveSettings()
 }
 
 // Autonomy is how long the kitties keep at a task on their own.

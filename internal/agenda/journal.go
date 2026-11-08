@@ -71,10 +71,46 @@ func (j *Journal) Add(e Entry) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
 	data, _ := json.Marshal(e)
 	_, err = f.Write(append(data, '\n'))
-	return err
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return err
+	}
+	return j.trim(j.file(e.Kitty))
+}
+
+// MaxJournalBytes is the most a kitty's journal takes on disk: past it, the older half of its
+// entries go (the page and the digest read only the latest ones).
+var MaxJournalBytes int64 = 1 << 20
+
+// trim keeps a journal under MaxJournalBytes; callers hold the lock.
+func (j *Journal) trim(path string) error {
+	st, err := os.Stat(path)
+	if err != nil || st.Size() <= MaxJournalBytes {
+		return nil
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := strings.SplitAfter(string(raw), "\n")
+	if n := len(lines); n > 0 && lines[n-1] == "" {
+		lines = lines[:n-1]
+	}
+	// The newest entries that fill half the cap, so a trim is not needed at every entry.
+	start, size := len(lines), int64(0)
+	for start > 0 && size+int64(len(lines[start-1])) <= MaxJournalBytes/2 {
+		start--
+		size += int64(len(lines[start]))
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(strings.Join(lines[start:], "")), 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, path)
 }
 
 // Recent returns the last n entries of a kitty, newest first.

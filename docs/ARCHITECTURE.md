@@ -90,6 +90,9 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
   port is opened.
 - **Settings** (`internal/orchestrator/settings.go`): models and connectors edited from the app
   are kept in `settings.json` on top of the YAML, keys included and never shown again.
+- **Tidy** (`internal/tidy`): what the data takes on disk, by area, for Settings, and the janitor
+  that sweeps what grows by itself every 6 hours (the old screenshots of the tasks, by the
+  retention, and the desktop images updates left behind). See [STORAGE.md](STORAGE.md).
 - **Demo** (`internal/demo`): a scripted brain and a drawn desktop, for `kitties -demo`.
 - **Connectors** (`internal/connector`): a catalogue of services by category, each with its
   settings and actions. A kitty writes `@connector github {"action": "create_issue", "title":

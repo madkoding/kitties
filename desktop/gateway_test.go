@@ -148,3 +148,23 @@ func TestGatewayNoteIsKept(t *testing.T) {
 		t.Error("startup says what it did about the gateway")
 	}
 }
+
+func TestRotateLogKeepsTheLogsSmall(t *testing.T) {
+	dir := t.TempDir()
+	log := filepath.Join(dir, "gateway.log")
+	_ = os.WriteFile(log, []byte("small"), 0o600)
+	rotateLog(log, 10)
+	if _, err := os.Stat(log + ".1"); err == nil {
+		t.Error("a small log was rotated")
+	}
+	_ = os.WriteFile(log+".1", []byte("older"), 0o600)
+	_ = os.WriteFile(log, []byte("much more than ten bytes"), 0o600)
+	rotateLog(log, 10)
+	if _, err := os.Stat(log); err == nil {
+		t.Error("the big log stays in place")
+	}
+	if got, _ := os.ReadFile(log + ".1"); string(got) != "much more than ten bytes" {
+		t.Errorf(".1 = %q", got)
+	}
+	rotateLog(filepath.Join(dir, "missing.log"), 10)
+}
