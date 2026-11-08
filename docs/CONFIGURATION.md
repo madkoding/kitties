@@ -247,6 +247,18 @@ providers:
 PDFs go as native documents to Anthropic, Gemini and OpenAI; every other model gets their text.
 Limits (20 files, 100 MB a message) are in [ARCHITECTURE.md](ARCHITECTURE.md#attachments).
 
+## What is kept on disk
+
+The screenshots the kitties take at every step of a desktop task are kept 30 days and 2 GB in all,
+the oldest going first; Settings → Preferences → Storage changes it and shows where the disk goes.
+Everything else that grows by itself is bounded too: see [STORAGE.md](STORAGE.md).
+
+```yaml
+retention:
+  shot_days: 30   # -1: forever
+  shots_mb: 2048  # -1: no cap
+```
+
 ## Local or cloud desktops
 
 `containers.runtime` is `auto`, `docker`, `podman` or `cloud`. With `cloud`, every kitty's desktop
