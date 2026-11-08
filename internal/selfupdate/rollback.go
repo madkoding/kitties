@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -66,6 +67,7 @@ type BootResult struct {
 // one and restarts into it (and does not return on systems where the restart replaces the
 // process). It returns what it found, for the program to tell.
 func (u *Updater) Boot() (BootResult, error) {
+	u.tidy()
 	var res BootResult
 	var r refused
 	if readJSON(u.refusedPath(), &r) && !r.Told {
@@ -85,6 +87,7 @@ func (u *Updater) Boot() (BootResult, error) {
 	case m.Boots >= 1 && now.Sub(m.BootAt) >= Probation:
 		// Restarted after it had held long enough: it is the version now.
 		_ = os.Remove(u.markerPath())
+		_ = os.Remove(u.Exe + ".failed")
 		res.Confirmed = true
 	case m.Boots >= 1:
 		return res, u.rollback(m)
@@ -105,6 +108,27 @@ func (u *Updater) Confirm(ctx context.Context) {
 	case <-ctx.Done():
 	case <-time.After(Probation):
 		_ = os.Remove(u.markerPath())
+		// The version that did not hold before this one is of no use any more.
+		_ = os.Remove(u.Exe + ".failed")
+	}
+}
+
+// staleAfter is how old a half-written download must be to be taken for one left by an update
+// that was cut off (the program was killed while writing it).
+var staleAfter = time.Hour
+
+// tidy deletes what an update cut off halfway left beside the binary: the new version being
+// written (.kitties-new-*) and the probe of the folder (.kitties-update-*), each as big as the
+// program. One younger than staleAfter may be another update's, and stays.
+func (u *Updater) tidy() {
+	dir := filepath.Dir(u.Exe)
+	for _, pattern := range []string{".kitties-new-*", ".kitties-update-*"} {
+		names, _ := filepath.Glob(filepath.Join(dir, pattern))
+		for _, name := range names {
+			if st, err := os.Stat(name); err == nil && !st.IsDir() && u.Now().Sub(st.ModTime()) > staleAfter {
+				_ = os.Remove(name)
+			}
+		}
 	}
 }
 
