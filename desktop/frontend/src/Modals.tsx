@@ -644,7 +644,19 @@ function dayLabel(day: string): string {
 // HandOverChart is the team's hand-overs per day, the last two weeks: a bar a day, the ones that
 // failed stacked on the ones done, the tallest day as the scale. Each bar says its numbers on
 // hover, and a table under it says them all for a screen reader.
-export function HandOverChart({ days }: { days: HandOverDay[] }) {
+export function HandOverChart({
+  days: all,
+  kitties = [],
+}: {
+  days: HandOverDay[];
+  // kitties are the ones the chart can be narrowed to (the team's, from the stats).
+  kitties?: { id: string; name: string }[];
+}) {
+  // only is the kitty the chart shows ("" for the whole team): its hand-overs, asked or taken.
+  const [only, setOnly] = useState("");
+  const days = only
+    ? all.map((d) => ({ ...d, count: d.by?.[only]?.count || 0, failed: d.by?.[only]?.failed || 0 }))
+    : all;
   const top = Math.max(1, ...days.map((d) => d.count));
   const total = days.reduce((n, d) => n + d.count, 0);
   const failed = days.reduce((n, d) => n + d.failed, 0);
@@ -657,6 +669,22 @@ export function HandOverChart({ days }: { days: HandOverDay[] }) {
   return (
     <figure class="handover-chart" data-testid="handover-chart">
       <figcaption class="flex items-center gap-3 flex-wrap text-xs text-[var(--t4)] mb-1">
+        {kitties.length > 1 && all.some((d) => d.by) && (
+          <select
+            class="handover-who"
+            aria-label={t("Whose hand-overs")}
+            value={only}
+            onChange={(e) => setOnly((e.target as HTMLSelectElement).value)}
+            data-testid="handover-who"
+          >
+            <option value="">{t("The whole team")}</option>
+            {kitties.map((k) => (
+              <option key={k.id} value={k.id}>
+                {k.name}
+              </option>
+            ))}
+          </select>
+        )}
         <span class="flex-1 min-w-0">
           {t("Subtasks per day, last {n} days: {total} ({failed} failed)", {
             n: days.length,
@@ -824,7 +852,12 @@ export function LeadPanel({
           )}
         </div>
       </div>
-      {kitty.lead && days.length > 0 && <HandOverChart days={days} />}
+      {kitty.lead && days.length > 0 && (
+        <HandOverChart
+          days={days}
+          kitties={stats.map((s) => ({ id: s.kitty_id, name: s.kitty }))}
+        />
+      )}
       {kitty.lead && stats.length > 0 && (
         <table class="handover-stats" data-testid="handover-stats">
           <caption class="text-xs text-[var(--t4)] text-left mb-1">

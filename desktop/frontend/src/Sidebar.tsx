@@ -70,7 +70,8 @@ interface Props {
   // onEditChat and onDeleteChat are the chat row's ⋯ menu.
   onEditChat: (c: Session, field: ChatField) => void;
   onDeleteChat: (c: Session) => void;
-  onOpenKitty: (id: string) => void;
+  // onOpenKitty opens a kitty's drawer, on one of its tabs when given.
+  onOpenKitty: (id: string, tab?: string) => void;
   onNewChat: () => void;
   onNewKitty: () => void;
   onSettings: () => void;
@@ -150,12 +151,18 @@ export default function Sidebar(p: Props) {
   ).length;
   // pendingOf is what waits for the person in a kitty: its scheduled tasks that need a look and
   // its actions waiting for a yes.
-  const pendingOf = (k: Kitty) =>
+  const goalsOf = (k: Kitty) =>
     (p.goals || []).filter(
       (g) =>
         (g.kitty === k.id || g.kitty === k.name) &&
         ["blocked", "escalated", "failed"].includes(g.last_result || ""),
-    ).length + (p.approvalsBy?.[k.id] || (k.name !== k.id && p.approvalsBy?.[k.name]) || 0);
+    ).length;
+  const approvalsOf = (k: Kitty) =>
+    p.approvalsBy?.[k.id] || (k.name !== k.id && p.approvalsBy?.[k.name]) || 0;
+  const pendingOf = (k: Kitty) => goalsOf(k) + approvalsOf(k);
+  // openPending takes the person to what waits: the kitty's goals first, then the approvals.
+  const openPending = (k: Kitty) =>
+    goalsOf(k) > 0 ? p.onOpenKitty(k.id, "goals") : p.onApprovals();
   const groups = plain.filter((c) => chatKitties(c).length > 1);
   // query finds chats by their title, description or last words.
   const [query, setQuery] = useState("");
@@ -202,15 +209,19 @@ export default function Sidebar(p: Props) {
                 <span class={`dot ${k.status}`} />
                 <span class="flex-1 min-w-0 truncate text-sm">{k.name}</span>
                 {pendingOf(k) > 0 && (
-                  <span
-                    class="kitty-pending"
+                  <button
+                    class="plain kitty-pending"
                     data-testid="kitty-pending"
+                    onClick={() => openPending(k)}
                     title={t("{n} waiting for you: tasks to look at and actions to approve", {
+                      n: pendingOf(k),
+                    })}
+                    aria-label={t("{n} waiting for you: tasks to look at and actions to approve", {
                       n: pendingOf(k),
                     })}
                   >
                     {pendingOf(k)}
-                  </span>
+                  </button>
                 )}
                 {k.lead && (
                   <span class="text-accent" title={t("Lead kitty")} data-testid="lead-badge">

@@ -433,8 +433,8 @@ export default function App() {
     location.hash = `#chat/${id}`;
     setSidebar(false);
   };
-  const openKitty = (id: string) => {
-    location.hash = `#kitty/${id}`;
+  const openKitty = (id: string, tab?: string) => {
+    location.hash = `#kitty/${id}${tab ? `/${tab}` : ""}`;
     setSidebar(false);
   };
 

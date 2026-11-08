@@ -384,6 +384,8 @@ export interface HandOverDay {
   day: string;
   count: number;
   failed: number;
+  // by is the same per kitty id (the one that asked and the one that took it on).
+  by?: Record<string, { count: number; failed: number }>;
 }
 
 // Helper is a kitty at work on a subtask handed over from a chat.

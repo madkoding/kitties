@@ -1554,20 +1554,44 @@ test("a kitty's row counts what waits for the person, and the digits pick its dr
       },
     }),
   );
+  // tom has a scheduled task stuck on its last run.
+  await page.route(/\/v1\/goals(\?.*)?$/, async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    const kitty = new URL(route.request().url()).searchParams.get("kitty");
+    if (Array.isArray(body.goals) && (!kitty || kitty === ids.tom || kitty === "tom")) {
+      body.goals.push({
+        id: "e2e-stuck",
+        kitty: ids.tom,
+        title: "Stuck check",
+        text: "Check the stuck thing",
+        every: "1h",
+        enabled: true,
+        last_result: "blocked",
+        runs: 1,
+      });
+    }
+    await route.fulfill({ response: res, json: body });
+  });
   await open(page, `#chat/${ids.desktop}`);
-  const row = page
-    .getByTestId("sidebar-kitties")
-    .locator(".row")
-    .filter({ has: page.getByRole("button", { name: "mimi", exact: true }) });
-  await expect(row.getByTestId("kitty-pending")).toHaveText("1");
-  await expect(row.getByTestId("kitty-pending")).toHaveAttribute("title", /1 waiting for you/);
-  await expect(
+  const rowOf = (name: string) =>
     page
       .getByTestId("sidebar-kitties")
       .locator(".row")
-      .filter({ has: page.getByRole("button", { name: "tom", exact: true }) })
-      .getByTestId("kitty-pending"),
-  ).toHaveCount(0);
+      .filter({ has: page.getByRole("button", { name, exact: true }) });
+  const row = rowOf("mimi");
+  await expect(row.getByTestId("kitty-pending")).toHaveText("1");
+  await expect(row.getByTestId("kitty-pending")).toHaveAttribute("title", /1 waiting for you/);
+  await expect(rowOf("tom").getByTestId("kitty-pending")).toHaveText("1");
+  await expect(rowOf("luna").getByTestId("kitty-pending")).toHaveCount(0);
+  // A click on the count goes to what waits: tom's goals, on their tab, which counts it too.
+  await rowOf("tom").getByTestId("kitty-pending").click();
+  await expect(page).toHaveURL(new RegExp(`#kitty/${ids.tom}/goals$`));
+  await expect(page.getByTestId("kitty-tab-goals")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("kitty-tab-goals-count")).toHaveText("1");
+  await expect(page.getByTestId("goals")).toContainText("Stuck check");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   // In the drawer, 1 to 5 pick its tabs (the tooltip says so), but not while typing.
   await kittyRow(page, "mimi").click();
   await expect(page.getByTestId("kitty-tab-desktop")).toHaveAttribute("aria-selected", "true");
@@ -1581,6 +1605,13 @@ test("a kitty's row counts what waits for the person, and the digits pick its dr
   await page.keyboard.press("2");
   await expect(page.getByTestId("kitty-tab-config")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByLabel("How does it talk?")).toHaveValue(/2$/);
+  // mimi's count is an action waiting for a yes: a click on it opens the approvals.
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await row.getByTestId("kitty-pending").click();
+  await expect(page).toHaveURL(/#new-approvals$/);
+  await expect(page.getByRole("dialog").getByRole("heading", { name: "Approvals" })).toBeVisible();
 });
 
 test("the kitty's drawer: goals, the journal, limits and the backup", async ({ page }) => {
@@ -4126,6 +4157,13 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
       "title",
       /[1-9]\d* handed around/,
     );
+    // Narrowed to one kitty, the bars count only its hand-overs (tom took one on).
+    await chart.getByTestId("handover-who").selectOption({ label: "tom" });
+    await expect(chart.getByTestId("handover-day").last()).toHaveAttribute(
+      "title",
+      /: 1 handed around, 0 failed$/,
+    );
+    await chart.getByTestId("handover-who").selectOption("");
     await expect(panel).toContainText("luna is the lead kitty");
     await expect(page.getByTestId("lead-tag")).toBeVisible();
     await expect(page.locator("aside").getByTestId("lead-badge")).toHaveCount(1);

@@ -12,6 +12,8 @@ const dict: Dictionary = {
   "Subtasks per day, last {n} days: {total} ({failed} failed)":
     "Subtarefas por dia, últimos {n} dias: {total} ({failed} falharam)",
   "Subtasks per day": "Subtarefas por dia",
+  "Whose hand-overs": "De quem são os repasses",
+  "The whole team": "A equipe toda",
 };
 
 export default dict;
