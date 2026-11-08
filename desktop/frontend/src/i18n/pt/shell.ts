@@ -13,8 +13,8 @@ const dict: Dictionary = {
   "Checking…": "Verificando…",
   "Sign in": "Entrar",
   "the token": "o token",
-  "The token stays on the server: this browser keeps only a session that you can end with Sign out.":
-    "O token fica no servidor: este navegador guarda só uma sessão, que você pode encerrar com Sair.",
+  "The token stays on the server: this browser keeps only a session cookie.":
+    "O token fica no servidor: este navegador guarda só um cookie de sessão.",
 
   // Composer
   "A kitty is working on its desktop…": "Um kitty está trabalhando na área de trabalho dele…",
@@ -102,7 +102,6 @@ const dict: Dictionary = {
   Library: "Biblioteca",
   Settings: "Configurações",
   Theme: "Tema",
-  "Sign out": "Sair",
 
   // Header and banners
   You: "Você",

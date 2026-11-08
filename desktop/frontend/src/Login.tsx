@@ -97,9 +97,7 @@ export default function Login({ onDone }: { onDone: () => void }) {
           {t("on that machine. In the desktop app: Settings, Preferences, Network access.")}
         </p>
         <p class="text-xs text-[var(--t4)] mt-3">
-          {t(
-            "The token stays on the server: this browser keeps only a session that you can end with Sign out.",
-          )}
+          {t("The token stays on the server: this browser keeps only a session cookie.")}
         </p>
       </form>
     </div>

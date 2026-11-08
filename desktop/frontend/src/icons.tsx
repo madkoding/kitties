@@ -189,12 +189,6 @@ export const IconShield = ({ size = 16 }: { size?: number }) => (
   </svg>
 );
 
-export const IconLogOut = (p: P) =>
-  svg(p, [
-    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />,
-    <path d="m16 17 5-5-5-5" />,
-    <path d="M21 12H9" />,
-  ]);
 export const IconCrown = (p: P) =>
   svg(p, [<path d="M2 18h20" />, <path d="M3 18 2 7l5.5 4L12 4l4.5 7L22 7l-1 11" />]);
 export const IconChat = (p: P) =>

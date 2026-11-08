@@ -6,9 +6,7 @@ import { LOGIN_PAGE, SHOTS } from "./playwright.config";
 // a session cookie and keeps only that. This runs against a second gateway (local_token: false).
 const TOKEN = "login-e2e-token";
 
-test("a gateway on a network asks for the token, keeps a session, and signs out", async ({
-  page,
-}) => {
+test("a gateway on a network asks for the token and keeps a session", async ({ page }) => {
   await page.goto(`${LOGIN_PAGE}/?theme=dark&motion=off`);
   const login = page.getByTestId("login");
   await expect(login).toBeVisible();
@@ -40,15 +38,12 @@ test("a gateway on a network asks for the token, keeps a session, and signs out"
   const cookies = await page.context().cookies(LOGIN_PAGE);
   expect(cookies.find((c) => c.httpOnly && c.sameSite === "Strict")).toBeTruthy();
 
-  // Reloading keeps the session; signing out asks again.
+  // Reloading keeps the session, and the page offers no sign-out: rotating the token ends it.
   await page.reload();
   await expect(
     page.locator("aside").getByRole("button", { name: "mimi", exact: true }),
   ).toBeAttached();
-  await page.getByRole("button", { name: "Sign out" }).click();
-  await expect(login).toBeVisible();
-  await page.reload();
-  await expect(login).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sign out" })).toHaveCount(0);
 });
 
 test("a link from the desktop app's QR code signs in by itself and leaves no token behind", async ({
