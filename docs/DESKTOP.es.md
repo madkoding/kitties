@@ -69,7 +69,8 @@ Corre en segundo plano. En el chat la tarea se lee en frases cortas que la kitty
 algo nuevo ("Abro el navegador y busco vuelos a Lima": qué hace y para qué, nunca los clics), cada
 una con sus acciones plegadas bajo cuántas fueron; un toque las abre una por una, con su captura. El
 chat sigue lo último mientras estás al final; si subes para leer, espera y ofrece un botón para
-volver a lo último. Un pedido de ayuda nunca se pliega, y **Ajustes › Preferencias › Mostrar cada
+volver a lo último. Un pedido de ayuda nunca se pliega, la frase en curso tiene un botón **Detener** al lado (el
+Continuar del chat retoma la tarea), y **Ajustes › Preferencias › Mostrar cada
 acción de una tarea** deja todas las tareas abiertas acción por acción en este navegador. Fuera de la
 página, las frases de una tarea larga llegan por WhatsApp a medida que salen y, si lo eliges, por las
 notificaciones (`progress`). Una tarea tiene límites

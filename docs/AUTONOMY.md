@@ -166,8 +166,8 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   needs help, when an action waits for a yes, and optionally when a goal finishes, gets blocked or
   a container recovers or a kitty spends its day's tokens. Bursts are folded into one message every
   ten minutes. Optionally a **daily summary** arrives at the hour you choose: what each kitty did
-  in the last day, what it spent, which goals ran again on their own and how they ended, and
-  what waits for your yes.
+  in the last day (with its latest lines about what it did on its desktop, in its own words), what
+  it spent, which goals ran again on their own and how they ended, and what waits for your yes.
 - **Answer from the notification.** With an ntfy channel and *Let me answer from ntfy* ticked
   (`notify.replies: true`), the gateway listens to the same topic: what you write there goes to
   the kitty that notified you last (in the last day), or to the one you name (`luna: …`,
