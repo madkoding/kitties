@@ -313,9 +313,29 @@ func hasDesktopAction(actions []action) bool {
 	return false
 }
 
+// DefaultParallel is how many hand-overs of one reply run at the same time unless set.
+const DefaultParallel = 4
+
+// SetParallel sets how many hand-overs of one reply run at the same time
+// (autonomy.parallel_handovers); fn is asked each time, so a change applies at once.
+func (s *Service) SetParallel(fn func() int) { s.parallel = fn }
+
+// parallelOr is that number, at least one.
+func (s *Service) parallelOr() int {
+	n := DefaultParallel
+	if s.parallel != nil {
+		n = s.parallel()
+	}
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
 // delegateAll runs the batch's hand-overs, by their index in actions. Hand-overs to different
-// kitties run at the same time, so a lead that splits a task among several waits for the
-// slowest instead of for all of them in a row; two to the same kitty go one after the other.
+// kitties run at the same time, up to parallelOr at once, so a lead that splits a task among
+// several waits for the slowest instead of for all of them in a row; two to the same kitty go
+// one after the other. The ones waiting their turn show in the chat as queued until they start.
 func (s *Service) delegateAll(ctx context.Context, id string, actions []action, k *kitty.Kitty, turn *Turn) map[int]outcome {
 	byKitty := map[string][]int{}
 	var order []string
@@ -333,7 +353,17 @@ func (s *Service) delegateAll(ctx context.Context, id string, actions []action, 
 	if len(order) == 0 {
 		return out
 	}
+	// More than one piece: each shows as queued until it starts.
+	started := make([]func(), len(actions))
+	if len(byKitty) > 1 || len(byKitty[order[0]]) > 1 {
+		for _, key := range order {
+			for _, i := range byKitty[key] {
+				started[i] = s.queued(id, actions[i], k)
+			}
+		}
+	}
 	turns := make([]Turn, len(actions))
+	slots := make(chan struct{}, s.parallelOr())
 	var mu sync.Mutex
 	var wg sync.WaitGroup
 	for _, key := range order {
@@ -341,7 +371,12 @@ func (s *Service) delegateAll(ctx context.Context, id string, actions []action, 
 		go func(idx []int) {
 			defer wg.Done()
 			for _, i := range idx {
+				slots <- struct{}{}
+				if started[i] != nil {
+					started[i]()
+				}
 				o := s.delegate(ctx, id, actions[i], k, &turns[i])
+				<-slots
 				mu.Lock()
 				out[i] = o
 				mu.Unlock()
@@ -354,4 +389,33 @@ func (s *Service) delegateAll(ctx context.Context, id string, actions []action, 
 		turn.Delegations = append(turn.Delegations, turns[i].Delegations...)
 	}
 	return out
+}
+
+// queued shows a hand-over waiting its turn in the chat, and returns what takes it off; a
+// piece the fleet cannot hand over (no such kitty, no task) shows nothing and fails on its own.
+func (s *Service) queued(id string, a action, k *kitty.Kitty) func() {
+	task := strings.TrimSpace(argText(a.args, "task", "text"))
+	target, err := s.fleet.Get(a.name)
+	if err != nil || task == "" || target.ID == k.ID {
+		return nil
+	}
+	h := Helper{Kitty: target.Name, KittyID: target.ID, From: k.Name, Task: clip(task, 300), Since: s.now(), Queued: true}
+	s.setHelping(id, func(list []Helper) []Helper { return append(list, h) })
+	return func() {
+		s.setHelping(id, func(list []Helper) []Helper {
+			kept := list[:0]
+			gone := false
+			for _, x := range list {
+				if !gone && x.Queued && x.KittyID == h.KittyID && x.Task == h.Task && x.Since.Equal(h.Since) {
+					gone = true
+					continue
+				}
+				kept = append(kept, x)
+			}
+			if len(kept) == 0 {
+				return nil
+			}
+			return kept
+		})
+	}
 }

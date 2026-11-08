@@ -324,6 +324,8 @@ export interface Helper {
   task: string;
   chat: string;
   since: string;
+  // queued: it waits its turn (more pieces than run at once); it has no thread yet.
+  queued?: boolean;
 }
 
 // chatKitties is every kitty taking part in a chat, members first (a gateway older than the
@@ -478,7 +480,14 @@ export interface SettingsView {
   notify: { connector: string; on: string[]; digest?: string; day?: boolean; replies?: boolean };
   notify_events: string[];
   // autonomy is how long the kitties keep at a task on their own: empty takes the defaults.
-  autonomy?: { follow_ups: string; brain_wait: string; stand_ins?: string; lead_limits?: string };
+  autonomy?: {
+    follow_ups: string;
+    brain_wait: string;
+    stand_ins?: string;
+    lead_limits?: string;
+    parallel_handovers?: string;
+    lead_summary?: string;
+  };
   accounts: Account[];
   // oauth_ready are the services a connection signs in to without an app of the person's own.
   oauth_ready?: string[];
@@ -1140,6 +1149,8 @@ export const api = {
     brain_wait: string;
     stand_ins: string;
     lead_limits?: string;
+    parallel_handovers?: string;
+    lead_summary?: string;
   }) => request<SettingsView>("PUT", "/v1/settings/autonomy", a),
   testNotify: (connector = "") =>
     request<{ ok: boolean; error?: string }>("POST", "/v1/settings/notify/test", { connector }),

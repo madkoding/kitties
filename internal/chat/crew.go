@@ -80,6 +80,9 @@ type Helper struct {
 	Task    string    `json:"task"`
 	Chat    string    `json:"chat"` // the thread between the two
 	Since   time.Time `json:"since"`
+	// Queued says it waits its turn: the reply handed out more pieces than run at once, or
+	// another piece for the same kitty goes first. It has no thread yet.
+	Queued bool `json:"queued,omitempty"`
 }
 
 // helping marks a kitty at work for a chat, and returns what ends it: the watchers of the chat
@@ -90,7 +93,7 @@ func (s *Service) helping(id string, h Helper) func() {
 		s.setHelping(id, func(list []Helper) []Helper {
 			kept := list[:0]
 			for _, x := range list {
-				if x.KittyID != h.KittyID || x.Chat != h.Chat {
+				if x.Queued || x.KittyID != h.KittyID || x.Chat != h.Chat {
 					kept = append(kept, x)
 				}
 			}

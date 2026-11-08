@@ -25,6 +25,12 @@ const dict: Dictionary = {
   "Summarize the reports in this thread since your last summary: what each kitty did, what is stuck or failed, what waits for me, and what you suggest next. Short, in bullets.":
     "Resuma os relatórios deste tópico desde o seu último resumo: o que cada kitty fez, o que está travado ou falhou, o que espera por mim e o que você sugere agora. Curto, em tópicos.",
   limit: "limite",
+  "Hand-overs at the same time": "Repasses ao mesmo tempo",
+  "When a kitty hands several pieces of a task to others in one reply, this many work at once (1 to 16); the rest wait their turn. Write off for one at a time.":
+    "Quando um kitty reparte várias partes de uma tarefa numa mesma resposta, esta quantidade trabalha ao mesmo tempo (1 a 16); o resto espera a vez. Escreva off para uma de cada vez.",
+  "The lead sums up the reports every day at": "O principal resume os relatórios todo dia às",
+  "At this time the lead kitty writes a short summary in its Reports thread (what each kitty did, what is stuck, what waits for you, what next) and sends it to your notification channel. Empty: never.":
+    "Neste horário o kitty principal escreve um resumo curto no seu tópico Relatórios (o que cada kitty fez, o que está travado, o que espera por você, o que vem a seguir) e o envia ao seu canal de notificações. Vazio: nunca.",
 };
 
 export default dict;
