@@ -26,6 +26,9 @@ const (
 	Recovered   Event = "recovered"    // a container was brought back
 	Budget      Event = "budget"       // a kitty is near or at its day's tokens
 	Updated     Event = "updated"      // a desktop or Kitties itself was updated, or a new version waits
+	// Progress is what a kitty says it goes on to do in a long desktop task (its plan lines
+	// after the first), at most one per chat every Quiet; it is sent only when chosen.
+	Progress Event = "progress"
 	// Reply is a kitty answering what the person wrote to the notification channel
 	// (internal/reply). It is not one of Events: it goes out because the person wrote.
 	Reply Event = "reply"
@@ -35,7 +38,7 @@ const (
 )
 
 // Events lists them in order, for the page.
-var Events = []Event{Help, Approval, GoalDone, GoalBlocked, Recovered, Budget, Updated}
+var Events = []Event{Help, Approval, GoalDone, GoalBlocked, Recovered, Budget, Updated, Progress}
 
 // Default is what is sent when the person chose nothing: the two that need them.
 var Default = []Event{Help, Approval}

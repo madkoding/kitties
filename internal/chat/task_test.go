@@ -19,6 +19,7 @@ import (
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/desktop"
 	"github.com/madkoding/kitties/internal/kitty"
+	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
 	"github.com/madkoding/kitties/internal/replay"
 	"github.com/madkoding/kitties/internal/soul"
@@ -574,5 +575,24 @@ func TestShotAfterAPlanIsItsOwnStep(t *testing.T) {
 	steps := got.Turns[0].Steps
 	if len(steps) != 2 || steps[0].Shot != "" || steps[1].Action != "screenshot" || steps[1].Shot != "0-1.png" {
 		t.Errorf("steps = %+v", steps)
+	}
+}
+
+func TestPlansGoOutAsProgress(t *testing.T) {
+	s, _, _ := deskService(t,
+		"On it.\n@tool open {\"url\": \"https://example.com\"}",
+		"I follow the link to the prices.\n@tool click {\"x\": 10, \"y\": 20}",
+		"@tool done {\"summary\": \"Read the prices.\"}")
+	b := &bell{}
+	s.SetNotifier(b)
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "look up the prices"); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, sess.ID)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if len(b.seen) != 1 || b.seen[0].Event != notify.Progress || b.seen[0].Body != "I follow the link to the prices." || b.seen[0].Chat != sess.ID {
+		t.Errorf("progress = %+v", b.seen)
 	}
 }
