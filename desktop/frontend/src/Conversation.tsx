@@ -9,7 +9,15 @@ import { t } from "./i18n";
 import { useAllSteps, useTechDetails } from "./prefs";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
-import { IconCamera, IconHand, IconMonitor, IconShield, IconThumbDown, IconThumbUp } from "./icons";
+import {
+  IconCamera,
+  IconHand,
+  IconMonitor,
+  IconStop,
+  IconShield,
+  IconThumbDown,
+  IconThumbUp,
+} from "./icons";
 import { RULE_LABEL, ruleTarget } from "./Approvals";
 import HelpModal from "./Help";
 import { Sent } from "./Attachments";
@@ -239,6 +247,27 @@ function StepParts({
   );
 }
 
+// StopTask stops the task at work in a chat, right where the person reads what it is doing; the
+// chat's Continue picks it up again.
+function StopTask({ chat }: { chat: string }) {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      class="plain step-stop"
+      disabled={busy}
+      onClick={async () => {
+        setBusy(true);
+        await api.cancel(chat).catch(() => undefined);
+        setBusy(false);
+      }}
+      data-testid="step-stop"
+      title={t("Stop this task")}
+    >
+      <IconStop size={11} /> {t("Stop")}
+    </button>
+  );
+}
+
 function StepPart({
   part,
   steps,
@@ -268,7 +297,8 @@ function StepPart({
       {part.plan && (
         <div class={`step-plan ${live ? "is-live" : ""}`} data-testid="step-plan">
           {live ? <span class="spinner" /> : <span class="what" aria-hidden="true" />}
-          <span class="min-w-0">{part.plan.result}</span>
+          <span class="min-w-0 flex-1">{part.plan.result}</span>
+          {live && <StopTask chat={chat} />}
         </div>
       )}
       {part.items.length > 0 && (
@@ -286,6 +316,7 @@ function StepPart({
           )}
         </button>
       )}
+      {live && !part.plan && <StopTask chat={chat} />}
       {shown.map((i) => (
         <StepRow
           key={i}

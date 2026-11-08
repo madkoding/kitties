@@ -697,6 +697,22 @@ select:focus {
   margin: 0;
   font-family: var(--font-sans, inherit);
 }
+.step-stop {
+  flex: none;
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.0625rem 0.4375rem;
+  font-size: 0.6875rem;
+  color: var(--t3);
+  border: 1px solid rgb(var(--ov-rgb) / 0.16);
+  border-radius: var(--radius-cut);
+}
+.step-stop:hover {
+  color: var(--c-red);
+  border-color: var(--c-red);
+}
 /* The way back to the end of a list the person scrolled up in. */
 .follow-jump {
   position: sticky;

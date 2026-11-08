@@ -2312,6 +2312,8 @@ test("a kitty that needs the person asks for help: a window shows what it sees, 
   await expect(
     page.locator(".trail").getByText("Asked you for help: the shop's sign-in needs your password"),
   ).toBeVisible();
+  // The task at work can be stopped right where it reads.
+  await expect(page.locator(".trail").getByTestId("step-stop")).toBeVisible();
   await callout.getByTestId("help-take-control").click();
   const live = page.getByTestId("live-desktop");
   await expect(live.getByTestId("live-state")).toContainText("You have the controls");

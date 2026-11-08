@@ -47,6 +47,7 @@ const dict: Dictionary = {
   "Show every action of a task": "Mostrar cada acción de una tarea",
   "Off, a task reads as what the kitty says it is about to do, with its actions folded under how many they were.":
     "Si está apagado, una tarea se lee como lo que la kitty dice que va a hacer, con sus acciones plegadas bajo cuántas fueron.",
+  "Stop this task": "Detener esta tarea",
   "Go to the latest": "Ir a lo último",
 
   "Hide the steps": "Ocultar los pasos",
