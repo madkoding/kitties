@@ -1,6 +1,8 @@
 package selfupdate
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -29,6 +31,12 @@ type release_ struct {
 	status     int
 	// signedBy is the private key the checksums are signed with ("" leaves the release unsigned).
 	signedBy string
+	// body is the release's notes.
+	body string
+	// hold, when set, keeps the binary's download waiting until it is closed.
+	hold chan struct{}
+	// app are the desktop app's downloads, by name (listed in SHA256SUMS too).
+	app map[string]string
 }
 
 // The release key of the tests.
@@ -54,15 +62,27 @@ func fakeGitHub(t *testing.T, r *release_) *httptest.Server {
 			if r.signedBy != "" {
 				assets += fmt.Sprintf(`,{"name":"SHA256SUMS.sig","browser_download_url":"%s/dl/sig"}`, srv.URL)
 			}
+			for name := range r.app {
+				assets += fmt.Sprintf(`,{"name":%q,"browser_download_url":"%s/dl/app/%s"}`, name, srv.URL, name)
+			}
 			assets += "]"
 			if r.noAsset {
 				assets = "[]"
 			}
-			fmt.Fprintf(w, `{"tag_name":%q,"prerelease":%v,"assets":%s}`, r.tag, r.prerelease, assets)
+			fmt.Fprintf(w, `{"tag_name":%q,"html_url":"https://github.com/madkoding/kitties/releases/tag/%[1]s","body":%q,"prerelease":%v,"assets":%s}`, r.tag, r.body, r.prerelease, assets)
 		case "/dl/bin":
-			_, _ = w.Write([]byte(r.binary))
+			w.Header().Set("Content-Length", fmt.Sprint(len(r.binary)))
+			half := len(r.binary) / 2
+			_, _ = w.Write([]byte(r.binary[:half]))
+			if r.hold != nil {
+				w.(http.Flusher).Flush()
+				<-r.hold
+			}
+			_, _ = w.Write([]byte(r.binary[half:]))
 		case "/dl/sums":
 			_, _ = w.Write([]byte(r.sumsText()))
+		case "/dl/app/" + strings.TrimPrefix(req.URL.Path, "/dl/app/"):
+			_, _ = w.Write([]byte(r.app[strings.TrimPrefix(req.URL.Path, "/dl/app/")]))
 		case "/dl/sig":
 			sig, _ := Sign(r.signedBy, []byte(r.sumsText()))
 			_, _ = w.Write([]byte(sig + "\n"))
@@ -79,7 +99,12 @@ func (r *release_) sumsText() string {
 		return r.sums
 	}
 	h := sha256.Sum256([]byte(r.binary))
-	return hex.EncodeToString(h[:]) + "  kitties-linux-amd64\n0000  other-file\n"
+	out := hex.EncodeToString(h[:]) + "  kitties-linux-amd64\n0000  other-file\n"
+	for name, data := range r.app {
+		h := sha256.Sum256([]byte(data))
+		out += hex.EncodeToString(h[:]) + "  " + name + "\n"
+	}
+	return out
 }
 
 func script(version string) string { return "#!/bin/sh\necho kitties " + version + "\n" }
@@ -253,11 +278,11 @@ func TestWhereItDoesNotUpdateItself(t *testing.T) {
 	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), signedBy: testPriv}
 	u, exe := updater(t, fakeGitHub(t, r), config.UpdateAuto)
 	for name, set := range map[string]func(){
-		"a container":            func() { u.InDocker = true },
-		"the app":                func() { u.Exe = "/Applications/Kitties.app/Contents/MacOS/kitties-gateway" },
-		"the gateway of the app": func() { u.Exe = filepath.Join(filepath.Dir(exe), "kitties-gateway") },
-		"windows":                func() { u.OS = "windows" },
-		"a read-only place":      func() { u.Exe = filepath.Join(t.TempDir(), "missing", "kitties") },
+		"a container":               func() { u.InDocker = true },
+		"an app it cannot write":    func() { u.Exe = "/nonexistent/Kitties.app/Contents/MacOS/kitties-gateway" },
+		"a mac app out of a bundle": func() { u.OS, u.Exe = "darwin", filepath.Join(filepath.Dir(exe), "kitties-gateway") },
+		"windows":                   func() { u.OS = "windows" },
+		"a read-only place":         func() { u.Exe = filepath.Join(t.TempDir(), "missing", "kitties") },
 	} {
 		u.InDocker, u.OS, u.Exe = false, "linux", exe
 		set()
@@ -705,4 +730,376 @@ func TestAssetNamesAreTheMakefilesOnes(t *testing.T) {
 	if checked < 7 {
 		t.Errorf("only %d platforms were read from the Makefile", checked)
 	}
+}
+
+func TestTheNewsCarriesTheReleasesChanges(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), body: "## Which file?\n| a | b |\n\n## What's Changed\n* feat(chat): fold a task's actions by @madkoding in https://github.com/madkoding/kitties/pull/117\n* fix(menu): keep it open by @someone-else\n\n**Full Changelog**: x"}
+	u, _ := updater(t, fakeGitHub(t, r), config.UpdateNotify)
+	st, err := u.Check(context.Background())
+	if err != nil || st.URL != "https://github.com/madkoding/kitties/releases/tag/v1.1.0" {
+		t.Fatalf("Check = %+v, %v", st, err)
+	}
+	want := []string{"feat(chat): fold a task's actions", "fix(menu): keep it open"}
+	if strings.Join(st.Changes, "|") != strings.Join(want, "|") {
+		t.Errorf("changes = %q", st.Changes)
+	}
+	// Nothing newer: no changes to tell.
+	r.tag = "v1.0.0"
+	if st, _ := u.Check(context.Background()); st.URL != "" || len(st.Changes) != 0 {
+		t.Errorf("up to date = %+v", st)
+	}
+	long := "* " + strings.Repeat("x", 300)
+	if got := changes(strings.Repeat(long+"\n", 30)); len(got) != maxChanges || len(got[0]) > 210 {
+		t.Errorf("changes are not bounded: %d, %d", len(got), len(got[0]))
+	}
+}
+
+func TestBeginTellsHowFarTheUpdateHasGone(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0") + strings.Repeat("# padding\n", 200), hold: make(chan struct{})}
+	u, exe := updater(t, fakeGitHub(t, r), config.UpdateNotify)
+	ctx := context.Background()
+	done := make(chan error, 1)
+	to, err := u.Begin(ctx, func(to string, err error) { done <- err })
+	if err != nil || to != "v1.1.0" {
+		t.Fatalf("Begin = %q, %v", to, err)
+	}
+	// Half of the binary has arrived: the update is downloading, and a second one is refused.
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		p := u.Status().Progress
+		if p != nil && p.Phase == PhaseDownload && p.Done > 0 {
+			if p.To != "v1.1.0" || p.Total != int64(len(r.binary)) || p.Percent < 5 || p.Percent > 85 {
+				t.Errorf("progress = %+v", p)
+			}
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("no download progress: %+v", p)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	if _, err := u.Begin(ctx, nil); !errors.Is(err, ErrInProgress) {
+		t.Errorf("a second update = %v", err)
+	}
+	if _, err := u.Apply(ctx); !errors.Is(err, ErrInProgress) {
+		t.Errorf("an update by itself meanwhile = %v", err)
+	}
+	close(r.hold)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("the update did not end")
+	}
+	if p := u.Status().Progress; p == nil || p.Phase != PhaseRestart || p.Percent != 100 {
+		t.Errorf("done = %+v", p)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != r.binary {
+		t.Error("the new binary is not in place")
+	}
+	// It can not restart: the status says so.
+	u.Restart = func(string, []string, []string) error { return errors.New("no exec") }
+	if err := u.Relaunch(); err == nil || u.Status().Progress.Phase != PhaseFailed {
+		t.Errorf("a failed restart = %v %+v", err, u.Status().Progress)
+	}
+}
+
+func TestBeginSaysWhyNotAndAFailedInstallIsTold(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), sums: strings.Repeat("0", 64) + "  kitties-linux-amd64\n"}
+	u, _ := updater(t, fakeGitHub(t, r), config.UpdateNotify)
+	ctx := context.Background()
+	u.Idle = func() bool { return false }
+	if _, err := u.Begin(ctx, nil); !errors.Is(err, ErrBusy) || u.Status().Progress != nil {
+		t.Fatalf("busy = %v %+v", err, u.Status().Progress)
+	}
+	u.Idle = nil
+	done := make(chan error, 1)
+	if _, err := u.Begin(ctx, func(_ string, err error) { done <- err }); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err == nil || !strings.Contains(err.Error(), "does not match") {
+		t.Fatalf("bad sums = %v", err)
+	}
+	if p := u.Status().Progress; p == nil || p.Phase != PhaseFailed || !strings.Contains(p.Error, "does not match") {
+		t.Errorf("progress = %+v", p)
+	}
+	// Once it has ended another one may start.
+	if _, err := u.Begin(ctx, func(_ string, err error) { done <- err }); err != nil {
+		t.Errorf("again = %v", err)
+	}
+	<-done
+}
+
+func zipOf(t *testing.T, files map[string]string) string {
+	t.Helper()
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, data := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = w.Write([]byte(data))
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+// appUpdater is the gateway of the desktop app (Linux): kitties-gateway next to kitties-desktop.
+func appUpdater(t *testing.T, r *release_) (*Updater, string) {
+	t.Helper()
+	u, exe := updater(t, fakeGitHub(t, r), config.UpdateNotify)
+	dir := filepath.Dir(exe)
+	u.Exe = filepath.Join(dir, "kitties-gateway")
+	for name, data := range map[string]string{"kitties-gateway": script("v1.0.0"), "kitties-desktop": "old app"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(data), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return u, dir
+}
+
+func TestTheAppUpdatesItselfOnLinux(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), app: map[string]string{
+		"kitties-desktop-linux-amd64.zip": "",
+	}}
+	r.app["kitties-desktop-linux-amd64.zip"] = zipOf(t, map[string]string{"kitties-desktop": "new app", "kitties-gateway": script("v1.1.0")})
+	u, dir := appUpdater(t, r)
+	st, err := u.Check(context.Background())
+	if err != nil || !st.App || !st.CanApply || !st.Available {
+		t.Fatalf("Check = %+v, %v", st, err)
+	}
+	var detached []string
+	u.Detach = func(name string, args []string, env ...string) error {
+		detached = append(append([]string{name}, args...), env...)
+		return nil
+	}
+	done := make(chan error, 1)
+	if _, err := u.Begin(context.Background(), func(_ string, err error) { done <- err }); err != nil {
+		t.Fatal(err)
+	}
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	for name, want := range map[string]string{"kitties-desktop": "new app", "kitties-gateway": script("v1.1.0"), "kitties-desktop.prev": "old app", "kitties-gateway.prev": script("v1.0.0")} {
+		if got, _ := os.ReadFile(filepath.Join(dir, name)); string(got) != want {
+			t.Errorf("%s = %q", name, got)
+		}
+	}
+	// No marker: the app is not gone back from by itself.
+	if _, err := os.Stat(u.markerPath()); err == nil {
+		t.Error("an app update left a marker")
+	}
+	// The restart closes the app and opens it again from a helper of its own.
+	if err := u.Relaunch(); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(detached, " ")
+	if !strings.HasPrefix(joined, "/bin/sh -c") || !strings.Contains(joined, "./kitties-desktop") || !strings.Contains(joined, "DIR="+dir) || !strings.Contains(joined, fmt.Sprintf("GW=%d", os.Getpid())) {
+		t.Errorf("detached = %q", detached)
+	}
+	// A zip without the two programs is refused.
+	r.app["kitties-desktop-linux-amd64.zip"] = zipOf(t, map[string]string{"README": "x"})
+	u.Current = "v1.0.0"
+	if _, err := u.Apply(context.Background()); err == nil || !strings.Contains(err.Error(), "does not hold") {
+		t.Errorf("an empty zip = %v", err)
+	}
+}
+
+func TestTheAppUpdatesWithItsInstallerOnWindows(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), app: map[string]string{"kitties-desktop-windows-amd64-setup.exe": "installer"}}
+	u, _ := appUpdater(t, r)
+	u.OS = "windows"
+	var detached []string
+	u.Detach = func(name string, args []string, _ ...string) error {
+		detached = append([]string{name}, args...)
+		return nil
+	}
+	if ok, why := u.canApply(); !ok {
+		t.Fatalf("canApply = %q", why)
+	}
+	if _, err := u.Apply(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(os.TempDir(), AppInstaller)); string(got) != "installer" {
+		t.Errorf("the installer is %q", got)
+	}
+	t.Cleanup(func() { os.Remove(filepath.Join(os.TempDir(), AppInstaller)) })
+	if err := u.Relaunch(); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(detached, " ") != filepath.Join(os.TempDir(), AppInstaller)+" /S /RELAUNCH" {
+		t.Errorf("detached = %q", detached)
+	}
+}
+
+func TestTheAppUpdatesItsBundleOnMacOS(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), app: map[string]string{"kitties-desktop-macos-amd64.dmg": "disk image"}}
+	u, _ := updater(t, fakeGitHub(t, r), config.UpdateNotify)
+	apps := t.TempDir()
+	bundle := filepath.Join(apps, "Kitties.app")
+	macos := filepath.Join(bundle, "Contents", "MacOS")
+	if err := os.MkdirAll(macos, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.WriteFile(filepath.Join(macos, "kitties-gateway"), []byte(script("v1.0.0")), 0o755)
+	u.OS, u.Exe = "darwin", filepath.Join(macos, "kitties-gateway")
+	var ran []string
+	u.Run = func(ctx context.Context, name string, args ...string) ([]byte, error) {
+		ran = append(ran, name+" "+strings.Join(args, " "))
+		switch {
+		case name == "hdiutil" && args[0] == "attach":
+			mnt := args[len(args)-2]
+			gw := filepath.Join(mnt, "Kitties.app", "Contents", "MacOS")
+			_ = os.MkdirAll(gw, 0o755)
+			return nil, os.WriteFile(filepath.Join(gw, "kitties-gateway"), []byte(script("v1.1.0")), 0o755)
+		case name == "ditto":
+			return runCommand(ctx, "cp", "-R", args[0], args[1])
+		case name == "hdiutil":
+			return nil, nil
+		}
+		return runCommand(ctx, name, args...)
+	}
+	if _, err := u.Apply(context.Background()); err != nil {
+		t.Fatalf("Apply = %v (ran %q)", err, ran)
+	}
+	if got, _ := os.ReadFile(filepath.Join(macos, "kitties-gateway")); string(got) != script("v1.1.0") {
+		t.Errorf("the bundle holds %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(apps, ".Kitties.app.prev", "Contents", "MacOS", "kitties-gateway")); err != nil {
+		t.Errorf("the old bundle was not kept: %v", err)
+	}
+	if !strings.Contains(strings.Join(ran, "|"), "hdiutil detach") {
+		t.Errorf("the image was not closed: %q", ran)
+	}
+}
+
+func TestTheAppsUpdateSaysWhyNot(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), app: map[string]string{
+		"kitties-desktop-linux-amd64.zip": "", "kitties-desktop-macos-amd64.dmg": "dmg",
+	}}
+	r.app["kitties-desktop-linux-amd64.zip"] = zipOf(t, map[string]string{"kitties-desktop": "new", "kitties-gateway": script("v9.9.9")})
+	u, dir := appUpdater(t, r)
+	ctx := context.Background()
+	// A gateway that is not the version the release says is not installed; neither is a non-zip.
+	if _, err := u.Apply(ctx); err == nil || !strings.Contains(err.Error(), "did not run as v1.1.0") {
+		t.Errorf("a wrong gateway = %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "kitties-desktop")); string(got) != "old app" {
+		t.Errorf("the app was replaced: %q", got)
+	}
+	if err := u.installZip(ctx, []byte("not a zip"), "v1.1.0"); err == nil {
+		t.Error("a non-zip was installed")
+	}
+	// Folders it cannot write, and a Mac gateway out of a bundle.
+	u.Exe = "/nonexistent/kitties-gateway"
+	if ok, why := u.canApplyApp(); ok || !strings.Contains(why, "cannot be written") {
+		t.Errorf("linux, read-only = %v %q", ok, why)
+	}
+	u.OS = "darwin"
+	if ok, why := u.canApplyApp(); ok || !strings.Contains(why, "not inside Kitties.app") {
+		t.Errorf("mac, no bundle = %v %q", ok, why)
+	}
+	u.Exe = "/nonexistent/Kitties.app/Contents/MacOS/kitties-gateway"
+	if ok, _ := u.canApplyApp(); ok || u.bundle() != "/nonexistent/Kitties.app" {
+		t.Errorf("mac, read-only = %v, bundle %q", ok, u.bundle())
+	}
+	// The disk image: one that does not open, one without an app, one whose app is not the version.
+	apps := t.TempDir()
+	macos := filepath.Join(apps, "Kitties.app", "Contents", "MacOS")
+	_ = os.MkdirAll(macos, 0o755)
+	u.Exe = filepath.Join(macos, "kitties-gateway")
+	for name, c := range map[string]struct {
+		attach func(mnt string) error
+		want   string
+	}{
+		"no image": {func(string) error { return errors.New("no") }, "opening the disk image"},
+		"no app":   {func(mnt string) error { return os.MkdirAll(mnt, 0o755) }, "holds no app"},
+		"wrong version": {func(mnt string) error {
+			gw := filepath.Join(mnt, "Kitties.app", "Contents", "MacOS")
+			_ = os.MkdirAll(gw, 0o755)
+			return os.WriteFile(filepath.Join(gw, "kitties-gateway"), []byte(script("v0.0.1")), 0o755)
+		}, "did not run as"},
+	} {
+		u.Run = func(ctx context.Context, cmd string, args ...string) ([]byte, error) {
+			switch {
+			case cmd == "hdiutil" && args[0] == "attach":
+				return nil, c.attach(args[len(args)-2])
+			case cmd == "ditto":
+				return runCommand(ctx, "cp", "-R", args[0], args[1])
+			case cmd == "hdiutil":
+				return nil, nil
+			}
+			return runCommand(ctx, cmd, args...)
+		}
+		if err := u.installBundle(ctx, []byte("dmg"), "v1.1.0"); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s = %v", name, err)
+		}
+	}
+	if entries, _ := os.ReadDir(apps); len(entries) != 1 {
+		t.Errorf("something was left beside the app: %v", entries)
+	}
+}
+
+func TestTheAppIsOpenedAgain(t *testing.T) {
+	u, _ := appUpdater(t, &release_{tag: "v1.1.0"})
+	var got []string
+	u.Detach = func(name string, args []string, env ...string) error {
+		got = append(append([]string{name}, args...), env...)
+		return nil
+	}
+	// On Windows, nothing to run without a downloaded installer.
+	u.OS = "windows"
+	if err := u.relaunchApp(); err == nil {
+		t.Error("windows without an installer restarted")
+	}
+	// On a Mac the bundle is opened again; the parent is the app only when it runs from the bundle.
+	u.OS, u.Exe = "darwin", "/Applications/Kitties.app/Contents/MacOS/kitties-gateway"
+	u.Run = func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("/Applications/Kitties.app/Contents/MacOS/kitties-desktop\n"), nil
+	}
+	if !u.appParent() {
+		t.Error("the app is not seen as the parent")
+	}
+	if err := u.relaunchApp(); err != nil || !strings.Contains(strings.Join(got, " "), `open -n "$BUNDLE"`) || !strings.Contains(strings.Join(got, " "), "BUNDLE=/Applications/Kitties.app") {
+		t.Errorf("mac = %v %q", err, got)
+	}
+	u.Run = func(context.Context, string, ...string) ([]byte, error) { return []byte("/usr/bin/zsh"), nil }
+	if u.appParent() {
+		t.Error("a shell is seen as the app")
+	}
+	// On Linux the parent of the tests is not the app.
+	u.OS, u.Exe = "linux", filepath.Join(t.TempDir(), "kitties-gateway")
+	if u.appParent() {
+		t.Error("the test runner is seen as the app")
+	}
+	// A failed restart is told in the status.
+	u.Detach = func(string, []string, ...string) error { return errors.New("no shell") }
+	if err := u.Relaunch(); err == nil || u.Status().Error == "" {
+		t.Errorf("a failed restart = %v %+v", err, u.Status())
+	}
+}
+
+func TestDetachOutlivesTheCaller(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh")
+	}
+	if err := detach("/nonexistent/program", nil); err == nil {
+		t.Error("a missing program started")
+	}
+	out := filepath.Join(t.TempDir(), "ran")
+	if err := detach("/bin/sh", []string{"-c", `echo "$WHAT" > "$OUT"`}, "WHAT=yes", "OUT="+out); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 100; i++ {
+		if got, _ := os.ReadFile(out); strings.TrimSpace(string(got)) == "yes" {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Error("the detached program did not run")
 }

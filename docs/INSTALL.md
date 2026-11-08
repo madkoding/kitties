@@ -179,9 +179,28 @@ release is out: `off`, `notify` (the default: it tells you and you update from S
 Ed25519 signature, runs it once to see it is the version it claims to be, replaces the running one
 and restarts when nothing is in use). A version that does not hold is gone back from, and is not
 offered again. `updates.window` limits automatic updates to a time of day. Only release builds
-run from a writable folder update themselves: a container is updated with its image, and the
-desktop app's bundle is signed, so those are told instead. How the releases are signed:
+run from a writable folder update themselves (the desktop app as a whole, below): a container is
+updated with its image, so it is told instead. How the releases are signed:
 [RELEASING.md](RELEASING.md).
+
+When a newer version is out, the sidebar shows **New version**. A click opens the update window:
+the version you have and the new one, what changed (the release's "What's Changed") and a link to
+its notes. **Update now** installs it with a progress bar (download, check, install); then the
+gateway restarts into it and the window waits for the new version to answer and refreshes by
+itself. The desktops of the kitties keep running. **Skip this version** stops the sidebar telling
+about that version (a newer one is told again).
+
+In the **desktop app** the update is the whole app's: its gateway downloads the app for the system
+(`kitties-desktop-linux-<arch>.zip`, `-macos-<arch>.dmg` or `-windows-<arch>-setup.exe`), checks it
+against the same `SHA256SUMS` and signature, puts it in place (Linux: the two programs, kept as
+`<name>.prev`; macOS: the `Kitties.app` bundle, kept hidden as `.Kitties.app.prev`; Windows: the
+installer runs silently with `/S /RELAUNCH`), and the app closes and opens again on the new
+version. In `auto` mode the app is only told, never closed by itself. A gateway that cannot
+replace itself (in a container, a folder it cannot write) says how to update in the same window,
+with a **Download** link to the release. The gateway looks every `updates.check_hours` (12 by default); the page reads
+what it found when it opens and every half hour.
+
+![The update window, with its progress](screenshots/76-update-progress.png)
 
 The kitties' desktop image updates on its own too (`containers.auto_update`): a new image is
 downloaded and idle desktops are made anew with their sessions kept

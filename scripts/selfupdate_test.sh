@@ -58,6 +58,18 @@ updates:
   gateway: notify
   api: http://127.0.0.1:$GH
 YAML
+# failed_with TEXT waits for the update made in the background to end failed, saying TEXT.
+failed_with() {
+    for _ in $(seq 1 50); do
+        st="$(api "http://127.0.0.1:$GW/v1/update")"
+        if echo "$st" | grep -q '"phase":"failed"'; then
+            echo "$st" | grep -q "$1" && return 0
+            fail "the update failed otherwise: $st"
+        fi
+        sleep 0.3
+    done
+    fail "the update did not end: $st"
+}
 start() { (cd "$work" && "$work/rel/kitties" -config kitties.yaml gateway >>"$work/gw.log" 2>&1 &) ; sleep 0.5; }
 sleep 1
 
@@ -67,14 +79,15 @@ python3 -c 'import base64,os; open("'"$work"'/gh/SHA256SUMS.sig","w").write(base
 start
 wait_version v1.0.0
 api "http://127.0.0.1:$GW/v1/update?refresh=1" | grep -q '"available":true' || fail "the new version is not seen"
-api -X POST "http://127.0.0.1:$GW/v1/update/apply" | grep -q "not signed by the release key" || fail "a bad signature was not refused"
+api -X POST "http://127.0.0.1:$GW/v1/update/apply" | grep -q '"updating_to":"v1.1.0"' || fail "the update was not started"
+failed_with "not signed by the release key" || fail "a bad signature was not refused"
 [ "$(version)" = "v1.0.0" ] || fail "the version changed after a refused update"
 [ ! -e "$work/rel/kitties.prev" ] || fail "a refused update left a .prev"
 
 echo "== a signed release is installed and restarted into, in the same process"
 cp "$work/good.sig" "$work/gh/SHA256SUMS.sig"
 pid="$(pgrep -f "$work/rel/kitties" | head -1)"
-api -X POST "http://127.0.0.1:$GW/v1/update/apply" | grep -q '"restarting":true' || fail "the update was not accepted"
+api -X POST "http://127.0.0.1:$GW/v1/update/apply" | grep -q '"updating_to":"v1.1.0"' || fail "the update was not accepted"
 wait_version v1.1.0
 [ "$(pgrep -f "$work/rel/kitties" | head -1)" = "$pid" ] || fail "the process changed: it did not restart in place"
 "$work/rel/kitties.prev" version | grep -q v1.0.0 || fail "the old version was not kept"

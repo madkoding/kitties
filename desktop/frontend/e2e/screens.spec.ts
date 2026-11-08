@@ -2525,10 +2525,10 @@ test("a kitty's cookies, sessions and passwords are backed up, and a newer deskt
   await expect.poll(() => updated).toContain("/update");
 });
 
-test("the version of Kitties: a newer one is offered, asked about and installed, and the page follows the restart", async ({
+test("the version of Kitties: Settings tells the newer one and opens its window", async ({
   page,
 }) => {
-  let status = {
+  const status = {
     current: "v1.0.0",
     latest: "v1.1.0",
     available: true,
@@ -2536,13 +2536,7 @@ test("the version of Kitties: a newer one is offered, asked about and installed,
     can_apply: true,
     checked_at: new Date().toISOString(),
   };
-  let applied = 0;
-  await page.route("**/v1/update**", (route) =>
-    route.request().method() === "POST"
-      ? ((applied += 1),
-        route.fulfill({ status: 202, json: { updated_to: "v1.1.0", restarting: true } }))
-      : route.fulfill({ json: status }),
-  );
+  await page.route("**/v1/update**", (route) => route.fulfill({ json: status }));
   await open(page, `#chat/${ids.desktop}`);
   await page.locator("aside").getByRole("button", { name: "Settings" }).click();
   await page.getByRole("tab", { name: "Preferences" }).click();
@@ -2553,11 +2547,153 @@ test("the version of Kitties: a newer one is offered, asked about and installed,
   // Without a signing key the update is only checksummed, and the page says so.
   await expect(box.getByTestId("update-unsigned")).toContainText("updates.public_key");
   await shot(page, "54-updates");
-  // It asks first, installs, and says it is restarting.
+  // The button opens the update's window over Settings; Escape closes only that window.
   await box.getByTestId("update-apply").click();
-  await page.getByRole("button", { name: "Update", exact: true }).click();
-  await expect(box.getByTestId("update-restarting")).toContainText("Updated to v1.1.0");
+  const modal = page.getByTestId("update-modal");
+  await expect(modal.getByTestId("update-now")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(modal).toHaveCount(0);
+  await expect(box).toBeVisible();
+});
+
+test("a newer Kitties is told in the sidebar, installed with its progress, and the page reloads on it", async ({
+  page,
+}) => {
+  let status: Record<string, unknown> = {
+    current: "v1.0.0",
+    latest: "v1.1.0",
+    available: true,
+    mode: "notify",
+    can_apply: true,
+    signed: true,
+    checked_at: new Date().toISOString(),
+    url: "https://github.com/madkoding/kitties/releases/tag/v1.1.0",
+    changes: [
+      "feat(chat): fold a task's actions under a count and narrate the plan",
+      "feat(desktop): open a kitty's hand-over threads from the lead's stats",
+      "fix(menu): keep the apps menu open while the pointer crosses it",
+    ],
+  };
+  let applied = 0;
+  // What /v1/health says the gateway runs: the new version once it has restarted.
+  let running = "";
+  await page.route("**/v1/update**", (route) => {
+    if (route.request().method() === "POST") {
+      applied += 1;
+      status = {
+        ...status,
+        progress: {
+          to: "v1.1.0",
+          phase: "download",
+          percent: 45,
+          done: 22_020_096,
+          total: 40_000_000,
+        },
+      };
+      return route.fulfill({ status: 202, json: { updating_to: "v1.1.0" } });
+    }
+    return route.fulfill({ json: status });
+  });
+  await page.route("**/v1/health", async (route) => {
+    const res = await route.fetch();
+    const body = await res.json();
+    await route.fulfill({ json: running ? { ...body, version: running } : body });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  // The sidebar tells the news; a click opens the window with what changed.
+  const notice = page.getByTestId("update-notice");
+  await expect(notice).toContainText("v1.1.0");
+  await shot(page, "74-update-notice");
+  await notice.click();
+  const modal = page.getByTestId("update-modal");
+  await expect(modal).toContainText("Kitties v1.1.0 is available");
+  await expect(modal).toContainText("You have v1.0.0");
+  await expect(modal.getByTestId("update-changes").locator("li")).toHaveCount(3);
+  await expect(modal.getByTestId("update-unsigned")).toHaveCount(0);
+  await shot(page, "75-update-modal");
+  // Updating: the progress bar follows the download, and the window cannot be closed meanwhile.
+  await modal.getByTestId("update-now").click();
+  const bar = modal.getByRole("progressbar");
+  await expect(bar).toHaveAttribute("aria-valuenow", "45");
+  await expect(modal.getByTestId("update-step")).toContainText("Downloading 21.0 MB of 38.1 MB");
+  await shot(page, "76-update-progress");
+  await page.keyboard.press("Escape");
+  await expect(modal).toBeVisible();
+  await expect(modal.getByRole("button", { name: "Close" })).toHaveCount(0);
+  // In place: the gateway restarts, the page waits for the new version and reloads on it.
+  status = { ...status, progress: { to: "v1.1.0", phase: "restart", percent: 100 } };
+  await expect(modal.getByTestId("update-step")).toContainText("Restarting Kitties");
+  const reloaded = page.waitForEvent("load");
+  status = {
+    current: "v1.1.0",
+    latest: "v1.1.0",
+    available: false,
+    mode: "notify",
+    can_apply: true,
+  };
+  running = "v1.1.0";
+  await reloaded;
+  await expect(kittyRow(page, "mimi")).toBeAttached();
+  await expect(page.getByTestId("update-notice")).toHaveCount(0);
   expect(applied).toBe(1);
+});
+
+test("the desktop app updates as a whole, and a version can be skipped", async ({ page }) => {
+  const status = {
+    current: "v1.0.0",
+    latest: "v1.1.0",
+    available: true,
+    mode: "notify",
+    can_apply: true,
+    signed: true,
+    app: true,
+  };
+  await page.route("**/v1/update**", (route) => route.fulfill({ json: status }));
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("update-notice").click();
+  const modal = page.getByTestId("update-modal");
+  await expect(modal).toContainText("The app closes and opens again on the new version");
+  // Skipped: the sidebar does not tell about it again, not even after a reload.
+  await modal.getByTestId("update-skip").click();
+  await expect(modal).toHaveCount(0);
+  await expect(page.getByTestId("update-notice")).toHaveCount(0);
+  await page.reload();
+  await expect(kittyRow(page, "mimi")).toBeAttached();
+  await expect(page.getByTestId("update-notice")).toHaveCount(0);
+});
+
+test("an update that fails says why and can be tried again", async ({ page }) => {
+  let status: Record<string, unknown> = {
+    current: "v1.0.0",
+    latest: "v1.1.0",
+    available: true,
+    mode: "notify",
+    can_apply: true,
+    signed: true,
+  };
+  await page.route("**/v1/update**", (route) => {
+    if (route.request().method() === "POST") {
+      status = {
+        ...status,
+        progress: {
+          to: "v1.1.0",
+          phase: "failed",
+          percent: 88,
+          error: "kitties-linux-amd64 does not match its SHA256SUMS: it was not installed",
+        },
+      };
+      return route.fulfill({ status: 202, json: { updating_to: "v1.1.0" } });
+    }
+    return route.fulfill({ json: status });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.getByTestId("update-notice").click();
+  const modal = page.getByTestId("update-modal");
+  await modal.getByTestId("update-now").click();
+  await expect(modal.getByRole("alert")).toContainText("does not match its SHA256SUMS");
+  await expect(modal.getByTestId("update-now")).toHaveText("Try again");
+  await modal.getByRole("button", { name: "Close", exact: true }).last().click();
+  await expect(modal).toHaveCount(0);
 });
 
 test("a gateway that cannot replace itself says how it is updated, and one that is up to date says so", async ({
@@ -2577,7 +2713,12 @@ test("a gateway that cannot replace itself says how it is updated, and one that 
   await page.getByRole("tab", { name: "Preferences" }).click();
   const box = page.getByTestId("updates");
   await expect(box.getByTestId("update-available")).toContainText("runs in a container");
-  await expect(box.getByTestId("update-apply")).toHaveCount(0);
+  // It cannot update itself: its window says how, and offers no update.
+  await box.getByTestId("update-apply").click();
+  const modal = page.getByTestId("update-modal");
+  await expect(modal.getByTestId("update-why")).toContainText("docker compose pull");
+  await expect(modal.getByTestId("update-now")).toHaveCount(0);
+  await modal.getByRole("button", { name: "Later" }).click();
   await expect(box).toContainText("installs them by itself");
   status = {
     current: "v1.1.0",

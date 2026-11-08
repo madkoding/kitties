@@ -891,12 +891,13 @@ export const api = {
     turn: number,
     a: { text: string; secret: boolean; enter: boolean; save?: string },
   ) => request("POST", `/v1/chats/${chat}/turns/${turn}/help`, a),
-  // updateStatus is the version of Kitties and the news of a newer one (refresh looks now);
-  // applyUpdate installs the newer one, and the gateway restarts into it.
+  // updateStatus is the version of Kitties and the news of a newer one (refresh looks now), with
+  // how far an update in the making has gone; applyUpdate starts installing the newer one (an
+  // older gateway installs it before it answers, with updated_to), and the gateway restarts into it.
   updateStatus: (refresh = false) =>
     request<UpdateStatus>("GET", "/v1/update" + (refresh ? "?refresh=1" : "")),
   applyUpdate: () =>
-    request<{ updated_to: string; restarting: boolean }>("POST", "/v1/update/apply"),
+    request<{ updating_to?: string; updated_to?: string }>("POST", "/v1/update/apply"),
   // exposure is where the gateway can be reached from (local, lan, wan); setExposure keeps the
   // choice and the gateway restarts to listen there (wan needs acceptRisk).
   exposure: () => request<Exposure>("GET", "/v1/exposure"),
@@ -1554,6 +1555,23 @@ export type UpdateStatus = {
   skipped?: string;
   why?: string;
   checked_at?: string;
+  error?: string;
+  // url is the newest release's page; changes are the lines of its "What's Changed".
+  url?: string;
+  changes?: string[];
+  // progress is the update being made (or the last one, when it failed).
+  progress?: UpdateProgress;
+  // app is true for the gateway of the desktop app: the whole app is updated and opened again.
+  app?: boolean;
+};
+
+// UpdateProgress is how far an update has gone: its step, the bytes of the download, the whole.
+export type UpdateProgress = {
+  to: string;
+  phase: "check" | "download" | "verify" | "install" | "restart" | "failed";
+  percent: number;
+  done?: number;
+  total?: number;
   error?: string;
 };
 
