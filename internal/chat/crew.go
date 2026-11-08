@@ -281,7 +281,23 @@ type HandOverStat struct {
 	// Took is how many subtasks others handed it, TookFailed how many of those it could not do.
 	Took       int `json:"took"`
 	TookFailed int `json:"took_failed"`
+	// Threads are the hand-over threads it took part in, the latest first (at most statThreads).
+	Threads []StatThread `json:"threads,omitempty"`
 }
+
+// StatThread is a hand-over thread, to open from the stats.
+type StatThread struct {
+	ID    string    `json:"id"`
+	Title string    `json:"title"`
+	At    time.Time `json:"at"`
+}
+
+// statThreads is how many hand-over threads the stats list per kitty.
+const statThreads = 5
+
+// FailStreakAlert is how many subtasks in a row a kitty may fail before the lead (and the
+// person, when they hear of hand-overs) is told something is wrong with it.
+const FailStreakAlert = 3
 
 // HandOverStats counts the hand-overs of every chat kept, per kitty of the fleet, busiest first;
 // kitties that never handed nor took work are left out.
@@ -295,8 +311,22 @@ func (s *Service) HandOverStats() []HandOverStat {
 		byID[id] = st
 		return st
 	}
+	threads := map[string]map[string]time.Time{} // kitty -> thread -> last hand-over
+	seen := func(kitty, chat string, at time.Time) {
+		if kitty == "" || chat == "" {
+			return
+		}
+		if threads[kitty] == nil {
+			threads[kitty] = map[string]time.Time{}
+		}
+		if at.After(threads[kitty][chat]) {
+			threads[kitty][chat] = at
+		}
+	}
 	s.mu.RLock()
+	titles := map[string]string{}
 	for _, sess := range s.sessions {
+		titles[sess.ID] = sess.Title
 		for i := range sess.Turns {
 			t := &sess.Turns[i]
 			for _, d := range t.Delegations {
@@ -307,6 +337,7 @@ func (s *Service) HandOverStats() []HandOverStat {
 					if failed {
 						st.AskedFailed++
 					}
+					seen(t.Kitty, d.Chat, t.At)
 				}
 				if d.KittyID != "" {
 					st := get(d.KittyID)
@@ -314,11 +345,26 @@ func (s *Service) HandOverStats() []HandOverStat {
 					if failed {
 						st.TookFailed++
 					}
+					seen(d.KittyID, d.Chat, t.At)
 				}
 			}
 		}
 	}
 	s.mu.RUnlock()
+	for id, st := range byID {
+		for chat, at := range threads[id] {
+			st.Threads = append(st.Threads, StatThread{ID: chat, Title: titles[chat], At: at})
+		}
+		sort.Slice(st.Threads, func(i, j int) bool {
+			if !st.Threads[i].At.Equal(st.Threads[j].At) {
+				return st.Threads[i].At.After(st.Threads[j].At)
+			}
+			return st.Threads[i].ID < st.Threads[j].ID
+		})
+		if len(st.Threads) > statThreads {
+			st.Threads = st.Threads[:statThreads]
+		}
+	}
 	out := make([]HandOverStat, 0, len(byID))
 	for _, k := range s.fleet.List() {
 		if st, ok := byID[k.ID]; ok {
@@ -330,4 +376,28 @@ func (s *Service) HandOverStats() []HandOverStat {
 		return out[i].Asked+out[i].Took > out[j].Asked+out[j].Took
 	})
 	return out
+}
+
+// handOverFailed counts a subtask a kitty could not do; every FailStreakAlert in a row, the lead
+// (its Reports thread, even when it asked) and the person hear that something is wrong with it.
+func (s *Service) handOverFailed(k *kitty.Kitty, err error, chatID string) {
+	s.handOverMu.Lock()
+	if s.failStreak == nil {
+		s.failStreak = map[string]int{}
+	}
+	s.failStreak[k.ID]++
+	n := s.failStreak[k.ID]
+	s.handOverMu.Unlock()
+	if n%FailStreakAlert != 0 {
+		return
+	}
+	s.tell(notify.Delegated, k, fmt.Sprintf("failed %d subtasks in a row", n),
+		"The last one: "+Gist(err.Error())+". Check its model, its limits or its desktop.", chatID)
+}
+
+// handOverDone ends a kitty's streak of failed subtasks.
+func (s *Service) handOverDone(k *kitty.Kitty) {
+	s.handOverMu.Lock()
+	delete(s.failStreak, k.ID)
+	s.handOverMu.Unlock()
 }

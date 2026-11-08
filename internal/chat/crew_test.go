@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -294,8 +295,47 @@ func TestRestoreDelegateAndStats(t *testing.T) {
 		t.Fatalf("stats = %+v", stats)
 	}
 	for _, st := range stats {
-		if st != want[st.Kitty] {
+		w := want[st.Kitty]
+		if st.Asked != w.Asked || st.Took != w.Took || st.AskedFailed != 0 || st.TookFailed != 0 {
 			t.Errorf("%s: %+v", st.Kitty, st)
 		}
+		// Each row leads to the hand-over thread between the two.
+		if len(st.Threads) != 1 || st.Threads[0].Title != "ana → bo" {
+			t.Errorf("%s threads: %+v", st.Kitty, st.Threads)
+		}
+	}
+}
+
+// A kitty that fails several subtasks in a row is reported to the lead, even when the lead asked.
+func TestFailStreakAlertsTheLead(t *testing.T) {
+	f, _, _, _ := fleet(t)
+	s := service(t, f)
+	b := &bell{}
+	s.SetNotifier(b)
+	s.HandOverWait = 0
+	f.kitties["b1"].Lead = true
+	lead, _ := f.Get("bo")
+	ana, _ := f.Get("ana")
+	sess, _ := s.Create("", []string{"bo"})
+	for i := 0; i < FailStreakAlert-1; i++ {
+		s.handOverFailed(ana, errors.New("did not finish in time"), sess.ID)
+	}
+	rid, _ := s.ReportsChat(lead)
+	if rep, _ := s.Get(rid); len(rep.Turns) != 0 {
+		t.Fatalf("alerted too soon: %+v", rep.Turns)
+	}
+	s.handOverFailed(ana, errors.New("did not finish in time"), sess.ID)
+	rep, _ := s.Get(rid)
+	if len(rep.Turns) != 1 || !strings.Contains(rep.Turns[0].Text, "failed 3 subtasks in a row") {
+		t.Fatalf("reports = %+v", rep.Turns)
+	}
+	if !strings.Contains(b.events(), "delegated") {
+		t.Errorf("the person was not told: %s", b.events())
+	}
+	// A subtask done ends the streak.
+	s.handOverDone(ana)
+	s.handOverFailed(ana, errors.New("x"), sess.ID)
+	if rep, _ := s.Get(rid); len(rep.Turns) != 1 {
+		t.Errorf("alerted after a reset: %d", len(rep.Turns))
 	}
 }

@@ -228,6 +228,8 @@ type Service struct {
 	handOverMu   sync.Mutex
 	handOvers    map[string][]notify.Notification
 	HandOverWait time.Duration
+	// failStreak counts, per kitty, the subtasks handed to it that failed in a row (crew.go).
+	failStreak map[string]int
 	// vault holds the secrets a kitty may type without reading them, nil when there is none.
 	vault *vault.Store
 	// helps are the kitties waiting for the person's answer, by turn (help.go).
