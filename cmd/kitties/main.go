@@ -339,6 +339,9 @@ func (a *app) open(cmd string) error {
 	chats.SetStandIns(func() int { return fleet.Autonomy().StandInsOr(chat.DefaultStandIns) })
 	chats.SetLeadLimitsAsk(func() bool { return fleet.Autonomy().LeadLimitsAsk() })
 	chats.SetParallel(func() int { return fleet.Autonomy().ParallelOr(chat.DefaultParallel) })
+	chats.SetHandOverKeep(func() time.Duration { return fleet.Autonomy().HandOverKeepOr(chat.DefaultHandOverKeep) })
+	// The threads of goals removed before goals had a section of their own go back to the chats.
+	chats.TidyGoals(func(id string) bool { _, err := ag.Goal(id); return err == nil })
 	a.agenda = ag
 	dataDir := a.cfg.DataDirOr()
 	if a.approvals, err = approvals.Open(filepath.Join(dataDir, "approvals.json")); err != nil {
@@ -391,7 +394,23 @@ func (a *app) open(cmd string) error {
 			return a.notifier.Deliver(ctx, chats.LeadDigest(n))
 		},
 		Plans: chats.Plans,
-		Day:   digest.MyDay(fleet.Connectors()),
+		Link:  a.notifier.Link,
+		// The scheduled tasks whose last run did not end well, with the link to their runs.
+		Attention: func() []digest.Task {
+			var out []digest.Task
+			for _, g := range ag.Goals("") {
+				switch g.LastResult {
+				case "blocked", "escalated", "failed":
+					name := g.Kitty
+					if k, err := fleet.Get(g.Kitty); err == nil {
+						name = k.Name
+					}
+					out = append(out, digest.Task{Title: g.Title, Kitty: name, Result: g.LastResult, Chat: g.Chat})
+				}
+			}
+			return out
+		},
+		Day: digest.MyDay(fleet.Connectors()),
 	}, filepath.Join(dataDir, "digest.json"))
 	a.summaries = &chat.LeadSummaries{
 		Chats: chats,
@@ -780,6 +799,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	go a.agenda.Run(ctx)
 	go a.digest.Run(ctx, logf)
 	go a.summaries.Run(ctx, logf)
+	go a.chats.RunExpiry(ctx, logf)
 	// A kitty that stopped on its day's tokens goes on by itself once they are back.
 	go a.chats.RunResumer(ctx, time.Minute)
 	go janitor.Run(ctx, tidyFirst, tidyEvery, logf)

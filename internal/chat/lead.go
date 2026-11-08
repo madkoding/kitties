@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/approvals"
@@ -117,7 +118,49 @@ func (s *Service) report(lead, k *kitty.Kitty, e notify.Event, title, body, chat
 	if k != nil {
 		from, fromID = k.Name, k.ID
 	}
+	if s.foldReport(id, chatID, from, fromID, text) {
+		return
+	}
 	s.appendTurn(id, Turn{At: s.now(), From: from, Kitty: fromID, Text: text, Report: &Report{Event: string(e), Chat: chatID}})
+}
+
+// FoldReportsWithin is how close together the news of one chat must come to be one report: a
+// hand-over that ends and the goal it was for ending through it read as one message, not two
+// that say the same thing.
+const FoldReportsWithin = 10 * time.Minute
+
+// foldReport adds a piece of news to the last report of the Reports thread when it is about the
+// same chat, within FoldReportsWithin; a line of another kitty than the report's starts with its
+// name, and the same line twice is kept once. It reports whether the news found its place there.
+func (s *Service) foldReport(id, chatID, from, fromID, text string) bool {
+	if chatID == "" {
+		return false
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	if !ok || len(sess.Turns) == 0 {
+		return false
+	}
+	last := &sess.Turns[len(sess.Turns)-1]
+	if last.Report == nil || last.Report.Chat != chatID || s.now().Sub(last.At) > FoldReportsWithin {
+		return false
+	}
+	if last.Kitty != fromID {
+		text = from + ": " + text
+	}
+	for _, line := range strings.Split(last.Text, "\n") {
+		if line == text {
+			return true // said already
+		}
+	}
+	last.Text += "\n" + text
+	last.Report.Folded++
+	last.At = s.now()
+	sess.UpdatedAt = last.At
+	_ = s.save(sess)
+	s.emitLocked(Event{Type: "update", Session: id, Index: len(sess.Turns) - 1, Turn: last})
+	return true
 }
 
 // Report says where a turn of the Reports thread comes from.
@@ -126,6 +169,8 @@ type Report struct {
 	Event string `json:"event"`
 	// Chat is the thread it happened in, empty when it happened in none.
 	Chat string `json:"chat,omitempty"`
+	// Folded is how many more pieces of news of that chat were added to this one (foldReport).
+	Folded int `json:"folded,omitempty"`
 }
 
 // signed is the notification a kitty sends, in the lead's name when there is one.

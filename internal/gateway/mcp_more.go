@@ -208,7 +208,35 @@ func (s *Server) mcpMoreTools() []mcp.Tool {
 				if err := s.agenda.RemoveGoal(a.ID); err != nil {
 					return mcp.Result{}, err
 				}
+				s.tidyGoals()
 				return jsonResult(map[string]any{"removed": a.ID})
+			}},
+		{Name: "goal_runs", Description: "A scheduled task's (a goal's) history of runs, newest first: when each ran, why, how it ended and the kitty's last words. The whole thread is chat_get on the chat returned.",
+			InputSchema: obj([]string{"id"}, map[string]any{"id": str("the goal's id"),
+				"n": map[string]any{"type": "integer", "description": "runs, 1 to 500 (default 30)"}}), Annotations: read,
+			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					ID string `json:"id"`
+					N  int    `json:"n"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				if s.agenda == nil {
+					return mcp.Result{}, errNoAgenda
+				}
+				g, err := s.agenda.Goal(a.ID)
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				if a.N <= 0 || a.N > 500 {
+					a.N = 30
+				}
+				chatID, runs, err := s.goalRuns(g.ID, a.N)
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				return jsonResult(map[string]any{"goal": g.ID, "title": g.Title, "chat": chatID, "runs": runs})
 			}},
 		{Name: "kitty_journal", Description: "A kitty's recent journal: what it did on its goals.",
 			InputSchema: obj([]string{"ref"}, map[string]any{"ref": str("the kitty's id or name"),

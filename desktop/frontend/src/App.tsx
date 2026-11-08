@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
-import type { Kitty, ProviderInfo, Session } from "./api";
-import { ApiError, api, chatKitties, cookieLogin, errText, inWails, watchChat } from "./api";
+import type { Goal, Kitty, ProviderInfo, Session } from "./api";
+import {
+  ApiError,
+  api,
+  chatKitties,
+  cookieLogin,
+  errText,
+  inWails,
+  isListed,
+  watchChat,
+} from "./api";
 import ArtifactReader from "./ArtifactReader";
 import { ConfirmHost, ask } from "./Confirm";
 import Login from "./Login";
@@ -22,6 +31,8 @@ import { ConnectModal, KittyDrawer, NewChatModal, NewKittyModal } from "./Modals
 import SettingsModal from "./Settings";
 import LibraryModal from "./Library";
 import ApprovalsModal from "./Approvals";
+import ScheduledTasksModal from "./ScheduledTasks";
+import ThreadNote from "./ThreadNote";
 import Sidebar, { moodOf } from "./Sidebar";
 import PixelCat from "./PixelCat";
 import { cycleMode } from "./theme";
@@ -46,7 +57,8 @@ type ModalKind =
   | "approvals"
   | "notifications"
   | "machines"
-  | "preferences";
+  | "preferences"
+  | "tasks";
 
 // The route is the hash: #chat/<id> or #kitty/<id>, so a view can be linked and reloaded.
 function routeFromHash(): {
@@ -57,10 +69,10 @@ function routeFromHash(): {
   artifact: string;
 } {
   const m = location.hash.match(
-    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|machines|preferences))?/,
+    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|machines|preferences|tasks))?/,
   );
   const n = location.hash.match(
-    /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|machines|preferences)/,
+    /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|machines|preferences|tasks)/,
   );
   const c = location.hash.match(/^#connector\/([a-z0-9-]+)/);
   // #artifact/<name> opens a file of the library in the reader: a link that can be shared.
@@ -84,6 +96,11 @@ function routeFromHash(): {
 export default function App() {
   const [kitties, setKitties] = useState<Kitty[]>([]);
   const [chats, setChats] = useState<Session[]>([]);
+  // goals are the scheduled tasks of every kitty, null when the gateway has no agenda; taskFocus
+  // is the one to show with its history open.
+  const [goals, setGoals] = useState<Goal[] | null>(null);
+  const [taskFocus, setTaskFocus] = useState<string | undefined>(undefined);
+  const [taskFilter, setTaskFilter] = useState<string | undefined>(undefined);
   const [session, setSession] = useState<Session | null>(null);
   const [current, setCurrent] = useState<string | null>(routeFromHash().chat);
   const [kittyOpen, setKittyOpen] = useState<string | null>(routeFromHash().kitty);
@@ -158,6 +175,10 @@ export default function App() {
       const [k, c, h] = await Promise.all([api.kitties(), api.chats(), api.health()]);
       setKitties(k);
       setChats(c);
+      api
+        .goals()
+        .then(setGoals)
+        .catch(() => setGoals(null));
       setVersion(h.version || "");
       setContainers(h.containers !== false);
       setDockerState(h.containers_state);
@@ -266,7 +287,9 @@ export default function App() {
     ? kitties.find((k) => k.id === kittyOpen || k.name === kittyOpen)
     : undefined;
   const drawerChatId = !current
-    ? chats.find((c) => c.members.length === 1 && c.members[0] === drawerKitty?.id)?.id
+    ? chats.find(
+        (c) => isListed(c) && !c.goal && c.members.length === 1 && c.members[0] === drawerKitty?.id,
+      )?.id
     : undefined;
   useEffect(() => {
     if (!drawerChatId) {
@@ -363,6 +386,9 @@ export default function App() {
     }
     return set;
   }, [working, session]);
+  // The sidebar lists the chats with the person: a scheduled task's thread is in its history, a
+  // hand-over's answer in the chat that asked (unless the person kept the thread).
+  const listedChats = useMemo(() => chats.filter(isListed), [chats]);
   const workingKitties = useMemo(() => {
     const set = new Set<string>();
     session?.turns?.forEach((t) => t.working && t.kitty && set.add(t.kitty));
@@ -618,7 +644,14 @@ export default function App() {
         />
       )}
       <Sidebar
-        chats={chats}
+        chats={listedChats}
+        goals={goals}
+        onOpenTasks={(goal, filter) => {
+          setTaskFocus(goal);
+          setTaskFilter(filter);
+          go("#new-tasks");
+          setSidebar(false);
+        }}
         kitties={kitties}
         current={current}
         workingChats={workingChats}
@@ -858,6 +891,22 @@ export default function App() {
             }}
           />
         )}
+        {session && session.kind && session.kind !== "chat" && (
+          <ThreadNote
+            session={session}
+            kitties={kitties}
+            goals={goals || []}
+            onOpenTask={(goal) => {
+              setTaskFocus(goal);
+              setTaskFilter(undefined);
+              go("#new-tasks");
+            }}
+            onChanged={(s) => {
+              setSession(s);
+              refresh();
+            }}
+          />
+        )}
         {current ? (
           <Conversation
             session={session}
@@ -871,7 +920,7 @@ export default function App() {
           <Welcome
             models={models}
             kitties={kitties}
-            chats={chats}
+            chats={listedChats}
             onAddModel={() => go("#new-models-add")}
             onNewKitty={() => setModal("kitty")}
             onNewChat={() => setModal("chat")}
@@ -931,6 +980,26 @@ export default function App() {
       )}
       {modal === "artifact" && routeFromHash().artifact && (
         <ArtifactReader name={routeFromHash().artifact} onClose={closeModal} />
+      )}
+      {modal === "tasks" && (
+        <ScheduledTasksModal
+          kitties={kitties}
+          goals={goals || []}
+          focus={taskFocus}
+          filter={taskFilter}
+          onClose={() => {
+            setTaskFocus(undefined);
+            setTaskFilter(undefined);
+            closeModal();
+          }}
+          onChanged={refresh}
+          onOpenChat={(id) => {
+            setTaskFocus(undefined);
+            setTaskFilter(undefined);
+            setModal("none");
+            openChat(id);
+          }}
+        />
       )}
       {modal === "approvals" && (
         <ApprovalsModal

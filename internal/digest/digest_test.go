@@ -220,3 +220,22 @@ func TestBuildSaysWhatAKittyDidOnItsDesktop(t *testing.T) {
 		t.Errorf("one plan = %s", b)
 	}
 }
+
+// The summary lists the scheduled tasks to look at, each with the link to its runs.
+func TestBuildListsTheTasksToLookAt(t *testing.T) {
+	g := newRig(t)
+	g.r.src.Waiting = func() []string { return nil }
+	g.r.src.Attention = func() []Task {
+		return []Task{{Title: "Inbox", Kitty: "mimi", Result: "blocked", Chat: "c1"}, {Title: "Prices", Kitty: "mimi", Result: "failed"}}
+	}
+	g.r.src.Link = func(chat string) string { return "https://k.example/#chat/" + chat }
+	b := g.r.Build(g.clock).Body
+	if !strings.HasSuffix(b, "\nScheduled tasks to look at (2):\n- Inbox (mimi): blocked https://k.example/#chat/c1\n- Prices (mimi): failed") {
+		t.Errorf("body = %s", b)
+	}
+	// None to look at: nothing is said.
+	g.r.src.Attention = func() []Task { return nil }
+	if b := g.r.Build(g.clock).Body; strings.Contains(b, "look at") {
+		t.Errorf("body = %s", b)
+	}
+}
