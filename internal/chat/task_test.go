@@ -343,6 +343,40 @@ func TestNoScreenshotAfterActionsThatLeaveTheDisplayAlone(t *testing.T) {
 	}
 }
 
+// Working on a page and on files is text all the way: page_click, page_goto, page_flow, the
+// files and the shell answer with what they read, and no screenshot is taken after them. A file's
+// text reaches the container on the command's input.
+func TestPageAndFileToolsBringNoScreenshot(t *testing.T) {
+	s, d, sa := deskService(t,
+		"@tool page_goto {\"url\": \"https://example.com\"}\n@tool page_click {\"text\": \"More\"}",
+		"@tool page_flow {\"steps\": [{\"type\": \"cats\", \"field\": \"Search\", \"enter\": true}, {\"wait\": \"Results\"}]}",
+		"@tool file_write {\"path\": \"notes.md\", \"content\": \"# found\"}\n@tool file_read {\"path\": \"notes.md\"}\n@tool shell {\"command\": \"ls | wc -l\"}",
+		"@tool done {\"summary\": \"ok\"}")
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "look it up and keep notes"); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, sess.ID)
+	if d.shots != 0 {
+		t.Errorf("screenshots = %d, want none", d.shots)
+	}
+	ran := strings.Join(d.execs, "\n")
+	for _, want := range []string{"kitty-page goto -- https://example.com", "kitty-page click --text=More", "kitty-page flow --steps=",
+		"kitty-file write -- notes.md", "kitty-file read -- notes.md", "bash -c ls | wc -l"} {
+		if !strings.Contains(ran, want) {
+			t.Errorf("%q did not run: %v", want, d.execs)
+		}
+	}
+	if len(d.inputs) != 1 || !strings.HasSuffix(d.inputs[0], ":# found") {
+		t.Errorf("the file's text did not go on the input: %v", d.inputs)
+	}
+	for _, msgs := range sa.seen[1:] {
+		if len(msgs[len(msgs)-1].Images) != 0 {
+			t.Error("a text tool brought a picture")
+		}
+	}
+}
+
 // A kitty whose model calls tools natively has every tool of the text catalogue, ask_help
 // among them: the one it asks for the person's hands with.
 func TestNativeToolsAreTheCataloguesTools(t *testing.T) {

@@ -1510,6 +1510,10 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 			out, err := desktop.Run(ctx, runner, k.ID, da)
 			step := Step{At: s.now(), Action: a.name, Args: a.args, Result: out}
 			o := outcome{action: a, text: out}
+			if reason, ok := desktop.PageNeedsPerson(da.Name, out); ok {
+				// No screenshot follows a page tool: the page's own words say it is for the person.
+				o.text += "\n(This page seems to ask for " + reason + ": that is the person's to pass. Use ask_help now; never try to solve or get around it.)"
+			}
 			if err != nil {
 				step.Error = err.Error()
 				o.err = err.Error()

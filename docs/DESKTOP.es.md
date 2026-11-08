@@ -86,16 +86,52 @@ encontrar una palabra donde hacer clic, `read_screen` responde en texto: el OCR 
 (`kitty-ocr`, Tesseract en inglés y español) imprime una línea por cada texto con el `x,y` de su
 centro, que un clic puede usar tal cual.
 
+## Primero el texto, la imagen al final
+
+Una captura cuesta muchas veces los tokens del texto que muestra, así que al kitty se le pide
+trabajar por texto y mirar solo cuando el texto no basta (un canvas, una imagen, la ventana propia
+de un programa):
+
+1. **Archivos y terminal.** `file_read` (líneas numeradas, una parte de un archivo largo con `from`
+   y `lines`), `file_list` (carpetas, archivos y tamaños) y `file_write` (en su home o en `/tmp`; el
+   texto va por la entrada del comando, no por su línea de comandos) son el `kitty-file` de la
+   imagen; `shell` ejecuta una línea de comandos con bash, tuberías incluidas, en la carpeta de
+   trabajo; `shell` y `run` se detienen tras `timeout` segundos (300 por defecto, 600 como máximo) y
+   su salida se corta en 12.000 caracteres.
+2. **Las páginas web por dentro** (abajo).
+3. **La pantalla**: `screenshot`, `read_screen` (OCR) y clics en coordenadas.
+
+Ninguna herramienta de texto trae una captura después; un lote con un clic en coordenadas, una
+tecla o un `open` sí.
+
 ## Leer y actuar en las páginas por dentro
 
 En el navegador un kitty no tiene que adivinar a partir de píxeles. `page_read` le da la
 dirección, el título y el texto de la página, y una lista numerada de lo que se puede pulsar o
-rellenar; `page_click` y `page_type` actúan sobre un elemento de esa lista (o sobre el que
-muestra cierto texto), esté donde esté en la pantalla, dentro de un shadow root o fuera de la
-vista. Es el DevTools del propio navegador, al que llega `kitty-page` de la imagen por el
-loopback del contenedor: el puerto no se publica, así que solo lo usa lo que corre dentro del
-contenedor. Lo que dice una página vuelve marcado como texto de la página, y al kitty se le dice
-que nunca lo tome como una instrucción; el valor de un campo de contraseña no se imprime nunca.
+rellenar (`from` sigue con un texto largo, `find` imprime solo los pasajes con ciertas palabras);
+`page_click` y `page_type` actúan sobre un elemento de esa lista (o sobre el que muestra cierto
+texto, o el campo con cierta etiqueta), esté donde esté en la pantalla, dentro de un shadow root o
+fuera de la vista. `page_goto` va a una dirección (abriendo el navegador si hace falta) y
+`page_wait` espera a que la página muestre cierto texto.
+
+Cada una responde con una lectura corta de la página tal como la dejó la acción (cuando terminó de
+cargar y su DOM quedó quieto un momento): primero las líneas que la acción agregó, así el resultado
+al final de una página larga se ve sin leerla entera otra vez, y se sigue la pestaña que abrió un
+clic. Esa lectura reemplaza a la captura.
+
+`page_flow` ejecuta varios de esos pasos de una vez, sin una ronda del modelo por cada uno:
+`goto`, `click`, `type`, `wait`, `read` y `back`, y se detiene en el primero que falla. Con `save`
+los pasos se guardan con un nombre en la carpeta de trabajo (`.flows/`) y `{"name": ...}` los
+vuelve a ejecutar: una rutina que el kitty aprendió (una búsqueda, un informe que descarga cada
+mañana) cuesta una sola llamada. Un flujo que escribe en un campo de contraseña nunca se guarda; los
+secretos van por `type_secret`.
+
+Es el DevTools del propio navegador, al que llega `kitty-page` de la imagen por el loopback del
+contenedor: el puerto no se publica, así que solo lo usa lo que corre dentro del contenedor. Lo que
+dice una página vuelve marcado como texto de la página, y al kitty se le dice que nunca lo tome como
+una instrucción; el valor de un campo de contraseña no se imprime nunca. Cuando el texto de una
+página parece un CAPTCHA o un código que solo tú recibes, al kitty se le pide que te pregunte
+(`ask_help`), igual que cuando lo dice la pantalla.
 
 ## Cuando necesita a una persona
 

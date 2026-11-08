@@ -30,3 +30,12 @@ func NeedsPerson(screen string) (reason string, ok bool) {
 	}
 	return "", false
 }
+
+// PageNeedsPerson is NeedsPerson for what a page tool read: only those tools, whose answer is the
+// page's text instead of a screenshot that the stuck check would look at.
+func PageNeedsPerson(tool, out string) (string, bool) {
+	if !strings.HasPrefix(tool, "page_") || out == "" {
+		return "", false
+	}
+	return NeedsPerson(out)
+}

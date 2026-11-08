@@ -164,6 +164,7 @@ COPY --chmod=755 kitty-restore.sh /usr/local/bin/kitty-restore
 # across a restart, which an update of the desktop is.
 COPY chromium-policy.json /etc/chromium/policies/managed/kitties.json
 COPY --chmod=755 kitty-page.py /usr/local/bin/kitty-page
+COPY --chmod=755 kitty-file.py /usr/local/bin/kitty-file
 COPY --chmod=755 chromium-wrapper.sh /usr/local/bin/chromium
 COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch
