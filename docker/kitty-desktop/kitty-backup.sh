@@ -6,15 +6,18 @@
 #   kitty-backup
 set -eu
 cd /home/kitty
-profile="${KITTY_PROFILE:-/home/kitty/work/.browser}"
+profile="$(kitty-profile 2>/dev/null || echo /home/kitty/work/.browser)"
+# A profile outside the home (the kitty's volume) goes into the backup as work/.browser, where
+# kitty-restore puts it and kitty-profile takes it from when the volume is new.
+transform=""
 case "$profile" in
 /home/kitty/*) profile="${profile#/home/kitty/}" ;;
-*) profile="work/.browser" ;;
+*) transform="s|^${profile#/}|work/.browser|" ;;
 esac
 list="$(mktemp /tmp/backup-XXXXXX)"
 trap 'rm -f "$list"' EXIT
 add() { [ -e "$1" ] && printf '%s\n' "$1" >>"$list"; return 0; }
-for f in "Local State" "Default/Preferences" "Default/Cookies" "Default/Cookies-journal" "Default/Login Data" \
+for f in "Local State" "Default/Preferences" "Default/Cookies" "Default/Cookies-journal" "Default/Network" "Default/Login Data" \
     "Default/Login Data-journal" "Default/Login Data For Account" "Default/Web Data" "Default/Local Storage" \
     "Default/Session Storage" "Default/Sessions" "Default/Extension State"; do
     add "$profile/$f"
@@ -25,5 +28,9 @@ done
 if [ ! -s "$list" ]; then
     exit 0
 fi
-tar -czf - -T "$list" 2>/dev/null | base64 -w0
+if [ -n "$transform" ]; then
+    tar -czf - --transform "$transform" -T "$list" 2>/dev/null | base64 -w0
+else
+    tar -czf - -T "$list" 2>/dev/null | base64 -w0
+fi
 echo
