@@ -161,6 +161,8 @@ export default function App() {
   const [online, setOnline] = useState<boolean | null>(null);
   // How many actions wait for a yes; null when this gateway holds none back.
   const [waiting, setWaiting] = useState<number | null>(null);
+  // waitingBy is how many actions wait for a yes, per kitty (by its id and by its name).
+  const [waitingBy, setWaitingBy] = useState<Record<string, number>>({});
   // The models (to guide a first run) and whether the gateway can give kitties a desktop.
   const [models, setModels] = useState<ProviderInfo[]>([]);
   const [containers, setContainers] = useState(true);
@@ -194,8 +196,21 @@ export default function App() {
       connectDismissed.current = false;
       api
         .approvals("pending")
-        .then((l) => setWaiting(l.length))
-        .catch(() => setWaiting(null));
+        .then((l) => {
+          setWaiting(l.length);
+          const by: Record<string, number> = {};
+          for (const a of l) {
+            by[a.kitty] = (by[a.kitty] || 0) + 1;
+            if (a.kitty_name && a.kitty_name !== a.kitty) {
+              by[a.kitty_name] = (by[a.kitty_name] || 0) + 1;
+            }
+          }
+          setWaitingBy(by);
+        })
+        .catch(() => {
+          setWaiting(null);
+          setWaitingBy({});
+        });
     } catch (e) {
       setOnline(false);
       if (e instanceof ApiError && e.status === 401) {
@@ -658,6 +673,7 @@ export default function App() {
           location.hash = "#new-approvals";
         }}
         approvals={waiting}
+        approvalsBy={waitingBy}
         onTheme={cycleMode}
         update={news?.available && news.latest !== skipped ? news.latest || "" : ""}
         onUpdate={() => setUpgrading(true)}

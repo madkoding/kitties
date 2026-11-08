@@ -1,5 +1,5 @@
-import { useEffect, useState } from "preact/hooks";
-import type { HandOverStat, Kitty, ProviderInfo } from "./api";
+import { useEffect, useRef, useState } from "preact/hooks";
+import type { HandOverDay, HandOverStat, Kitty, ProviderInfo } from "./api";
 import {
   ApiError,
   api,
@@ -630,6 +630,79 @@ const SUMMARY_ASK = () =>
 
 // LeadPanel makes a kitty the lead (the principal one, which orchestrates the others and
 // reports for all of them) or takes the lead from it, and opens its Reports thread.
+// dayLabel is a day of the chart, short, in the page's language.
+function dayLabel(day: string): string {
+  const d = new Date(`${day}T12:00:00`);
+  return isNaN(d.getTime())
+    ? day
+    : d.toLocaleDateString(document.documentElement.lang || undefined, {
+        day: "numeric",
+        month: "short",
+      });
+}
+
+// HandOverChart is the team's hand-overs per day, the last two weeks: a bar a day, the ones that
+// failed stacked on the ones done, the tallest day as the scale. Each bar says its numbers on
+// hover, and a table under it says them all for a screen reader.
+export function HandOverChart({ days }: { days: HandOverDay[] }) {
+  const top = Math.max(1, ...days.map((d) => d.count));
+  const total = days.reduce((n, d) => n + d.count, 0);
+  const failed = days.reduce((n, d) => n + d.failed, 0);
+  const tip = (d: HandOverDay) =>
+    t("{day}: {n} handed around, {failed} failed", {
+      day: dayLabel(d.day),
+      n: d.count,
+      failed: d.failed,
+    });
+  return (
+    <figure class="handover-chart" data-testid="handover-chart">
+      <figcaption class="flex items-center gap-3 flex-wrap text-xs text-[var(--t4)] mb-1">
+        <span class="flex-1 min-w-0">
+          {t("Subtasks per day, last {n} days: {total} ({failed} failed)", {
+            n: days.length,
+            total,
+            failed,
+          })}
+        </span>
+        <span class="flex items-center gap-1">
+          <span class="handover-key done" aria-hidden="true" />
+          {t("done")}
+        </span>
+        <span class="flex items-center gap-1">
+          <span class="handover-key failed" aria-hidden="true" />
+          {t("failed")}
+        </span>
+      </figcaption>
+      <div class="handover-bars" aria-hidden="true">
+        {days.map((d) => (
+          <div key={d.day} class="handover-day" title={tip(d)} data-testid="handover-day">
+            <div class="handover-stack" style={`height: ${(d.count / top) * 100}%`}>
+              {d.failed > 0 && <div class="handover-seg failed" style={`flex-grow: ${d.failed}`} />}
+              {d.count - d.failed > 0 && (
+                <div class="handover-seg done" style={`flex-grow: ${d.count - d.failed}`} />
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div class="handover-axis text-[0.625rem] text-[var(--t4)]" aria-hidden="true">
+        <span>{dayLabel(days[0].day)}</span>
+        <span>{dayLabel(days[days.length - 1].day)}</span>
+      </div>
+      <table class="sr-only">
+        <caption>{t("Subtasks per day")}</caption>
+        <tbody>
+          {days.map((d) => (
+            <tr key={d.day}>
+              <td>{tip(d)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </figure>
+  );
+}
+
 export function LeadPanel({
   kitty,
   kitties,
@@ -644,17 +717,26 @@ export function LeadPanel({
   const [err, setErr] = useState("");
   // stats is how the team hands work around (who asks, who takes it on, what fails), for the lead.
   const [stats, setStats] = useState<HandOverStat[]>([]);
+  // days are the team's hand-overs per day, for the chart (an older gateway gives none).
+  const [days, setDays] = useState<HandOverDay[]>([]);
   // open is the row whose hand-over threads are listed.
   const [open, setOpen] = useState("");
   useEffect(() => {
     if (!kitty.lead) {
       setStats([]);
+      setDays([]);
       return;
     }
     api
       .lead()
-      .then((r) => setStats(r.handovers || []))
-      .catch(() => setStats([]));
+      .then((r) => {
+        setStats(r.handovers || []);
+        setDays(r.handover_days || []);
+      })
+      .catch(() => {
+        setStats([]);
+        setDays([]);
+      });
   }, [kitty.id, kitty.lead]);
   const current = kitties.find((k) => k.lead && k.id !== kitty.id);
   const set = async (on: boolean) => {
@@ -742,6 +824,7 @@ export function LeadPanel({
           )}
         </div>
       </div>
+      {kitty.lead && days.length > 0 && <HandOverChart days={days} />}
       {kitty.lead && stats.length > 0 && (
         <table class="handover-stats" data-testid="handover-stats">
           <caption class="text-xs text-[var(--t4)] text-left mb-1">
@@ -927,6 +1010,41 @@ export function KittyDrawer({
     setKittyTab(kitty.id, x);
     onTab(x);
   };
+  // The digits 1 to 6 pick a tab, unless the person is typing, holds the desktop's controls or
+  // has a window open over the drawer.
+  const keys = useRef({ tabs, pickTab });
+  keys.current = { tabs, pickTab };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const n = Number(e.key);
+      if (
+        e.defaultPrevented ||
+        e.altKey ||
+        e.ctrlKey ||
+        e.metaKey ||
+        !Number.isInteger(n) ||
+        n < 1 ||
+        n > keys.current.tabs.length ||
+        document.querySelectorAll('[role="dialog"]').length > 1
+      ) {
+        return;
+      }
+      const el = e.target as HTMLElement | null;
+      if (
+        el?.closest?.(
+          'input, textarea, select, [contenteditable], [data-testid="live-desktop"], iframe',
+        ) ||
+        el?.isContentEditable
+      ) {
+        return;
+      }
+      e.preventDefault();
+      keys.current.pickTab(keys.current.tabs[n - 1].id);
+      document.getElementById(`kitty-tab-${keys.current.tabs[n - 1].id}`)?.focus();
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
   return (
     <Modal title={kitty.name} onClose={onClose} wide>
       <div class="flex items-center gap-4 flex-wrap" data-testid="kitty-header">
@@ -995,6 +1113,7 @@ export function KittyDrawer({
         tab={tab}
         onPick={pickTab}
         prefix="kitty"
+        keys
         label={t("{name}'s sections", { name: kitty.name })}
         panels
       />

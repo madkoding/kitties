@@ -1531,6 +1531,58 @@ test("a long list of goals shows its first few, and the rest on request", async 
   }
 });
 
+test("a kitty's row counts what waits for the person, and the digits pick its drawer's tabs", async ({
+  page,
+}) => {
+  await page.route(/\/v1\/approvals\?status=pending$/, (route) =>
+    route.fulfill({
+      json: {
+        approvals: [
+          {
+            id: "e2e-waiting",
+            kitty: ids.mimi,
+            kitty_name: "mimi",
+            connector: "team-slack",
+            kind: "send",
+            action: "send",
+            args: {},
+            summary: "Post the announcement",
+            risk: "ask",
+            status: "pending",
+          },
+        ],
+      },
+    }),
+  );
+  await open(page, `#chat/${ids.desktop}`);
+  const row = page
+    .getByTestId("sidebar-kitties")
+    .locator(".row")
+    .filter({ has: page.getByRole("button", { name: "mimi", exact: true }) });
+  await expect(row.getByTestId("kitty-pending")).toHaveText("1");
+  await expect(row.getByTestId("kitty-pending")).toHaveAttribute("title", /1 waiting for you/);
+  await expect(
+    page
+      .getByTestId("sidebar-kitties")
+      .locator(".row")
+      .filter({ has: page.getByRole("button", { name: "tom", exact: true }) })
+      .getByTestId("kitty-pending"),
+  ).toHaveCount(0);
+  // In the drawer, 1 to 5 pick its tabs (the tooltip says so), but not while typing.
+  await kittyRow(page, "mimi").click();
+  await expect(page.getByTestId("kitty-tab-desktop")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("kitty-tab-journal")).toHaveAttribute("title", "Journal (key 3)");
+  await page.keyboard.press("3");
+  await expect(page.getByTestId("kitty-tab-journal")).toHaveAttribute("aria-selected", "true");
+  await expect(page).toHaveURL(new RegExp(`#kitty/${ids.mimi}/journal$`));
+  await page.keyboard.press("5");
+  await expect(page.getByTestId("kitty-tab-config")).toHaveAttribute("aria-selected", "true");
+  await page.getByLabel("How does it talk?").focus();
+  await page.keyboard.press("2");
+  await expect(page.getByTestId("kitty-tab-config")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByLabel("How does it talk?")).toHaveValue(/2$/);
+});
+
 test("the kitty's drawer: goals, the journal, limits and the backup", async ({ page }) => {
   await open(page, `#kitty/${ids.mimi}`);
   // The drawer is in tabs and opens on the desktop. Its brain, who it is and what it may use are
@@ -4067,6 +4119,13 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     await expect(page.getByTestId("kitty-tab-goals")).toHaveAttribute("aria-selected", "true");
     await kittyTab(page, "team");
     const panel = page.getByTestId("lead-panel");
+    // A bar a day for the last two weeks: today's has the hand-overs of the seed.
+    const chart = panel.getByTestId("handover-chart");
+    await expect(chart.getByTestId("handover-day")).toHaveCount(14);
+    await expect(chart.getByTestId("handover-day").last()).toHaveAttribute(
+      "title",
+      /[1-9]\d* handed around/,
+    );
     await expect(panel).toContainText("luna is the lead kitty");
     await expect(page.getByTestId("lead-tag")).toBeVisible();
     await expect(page.locator("aside").getByTestId("lead-badge")).toHaveCount(1);

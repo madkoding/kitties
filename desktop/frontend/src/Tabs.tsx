@@ -12,6 +12,7 @@ export default function Tabs<T extends string>({
   prefix,
   label,
   panels,
+  keys,
 }: {
   // count is what waits in a tab (shown when more than none).
   tabs: { id: T; label: string; count?: number }[];
@@ -21,6 +22,8 @@ export default function Tabs<T extends string>({
   label?: string;
   // panels says the dialog draws its sections as tab panels the tabs point at.
   panels?: boolean;
+  // keys says the digits pick the tabs (said in each tab's tooltip).
+  keys?: boolean;
 }) {
   const bar = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -55,7 +58,7 @@ export default function Tabs<T extends string>({
       onKeyDown={onKey}
       data-testid={`${prefix}-tabs`}
     >
-      {tabs.map((x) => (
+      {tabs.map((x, i) => (
         <button
           key={x.id}
           role="tab"
@@ -63,6 +66,7 @@ export default function Tabs<T extends string>({
           aria-selected={tab === x.id}
           aria-controls={panels ? `${prefix}-panel-${x.id}` : undefined}
           tabIndex={tab === x.id ? 0 : -1}
+          title={keys ? t("{label} (key {n})", { label: x.label, n: i + 1 }) : undefined}
           class={`plain settings-tab ${tab === x.id ? "on" : ""}`}
           onClick={() => onPick(x.id)}
           data-testid={`${prefix}-tab-${x.id}`}

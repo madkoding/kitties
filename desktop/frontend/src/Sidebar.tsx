@@ -78,6 +78,8 @@ interface Props {
   onApprovals: () => void;
   // approvals is how many actions wait for a yes; null when this gateway holds none back.
   approvals: number | null;
+  // approvalsBy is how many actions wait for a yes, per kitty id (and name).
+  approvalsBy?: Record<string, number>;
   onTheme: () => void;
   // update is the newer version of Kitties that is out ("" when there is none); onUpdate offers it.
   update: string;
@@ -146,6 +148,14 @@ export default function Sidebar(p: Props) {
   const attention = (p.goals || []).filter((g) =>
     ["blocked", "escalated", "failed"].includes(g.last_result || ""),
   ).length;
+  // pendingOf is what waits for the person in a kitty: its scheduled tasks that need a look and
+  // its actions waiting for a yes.
+  const pendingOf = (k: Kitty) =>
+    (p.goals || []).filter(
+      (g) =>
+        (g.kitty === k.id || g.kitty === k.name) &&
+        ["blocked", "escalated", "failed"].includes(g.last_result || ""),
+    ).length + (p.approvalsBy?.[k.id] || (k.name !== k.id && p.approvalsBy?.[k.name]) || 0);
   const groups = plain.filter((c) => chatKitties(c).length > 1);
   // query finds chats by their title, description or last words.
   const [query, setQuery] = useState("");
@@ -191,6 +201,17 @@ export default function Sidebar(p: Props) {
                 />
                 <span class={`dot ${k.status}`} />
                 <span class="flex-1 min-w-0 truncate text-sm">{k.name}</span>
+                {pendingOf(k) > 0 && (
+                  <span
+                    class="kitty-pending"
+                    data-testid="kitty-pending"
+                    title={t("{n} waiting for you: tasks to look at and actions to approve", {
+                      n: pendingOf(k),
+                    })}
+                  >
+                    {pendingOf(k)}
+                  </span>
+                )}
                 {k.lead && (
                   <span class="text-accent" title={t("Lead kitty")} data-testid="lead-badge">
                     <IconCrown size={12} />
