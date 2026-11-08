@@ -2381,3 +2381,16 @@ html.mac-inset .live-head {
 .tag.tag-delegate {
   border-style: dashed;
 }
+.msg.agent.delegate-reply.working {
+  border-left-color: var(--c-amber);
+}
+.delegate-more {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--color-accent);
+}
+.chat-filter {
+  margin: 0.875rem 0.625rem 0.375rem;
+  cursor: pointer;
+}

@@ -1198,7 +1198,24 @@ test("a chat where a kitty hands a subtask to another reads as a group of both",
   expect(chat.members).toEqual([ids.mimi]);
   expect(chat.kitties).toHaveLength(2);
   expect(chat.delegates).toHaveLength(1);
+  // A long answer shows its start, and all of it on request.
+  const answer = reply.getByTestId("delegate-answer");
+  const short = (await answer.textContent())!.length;
+  await reply.getByTestId("delegate-more").click();
+  await expect(reply.getByTestId("delegate-more")).toHaveAttribute("aria-expanded", "true");
+  expect((await answer.textContent())!.length).toBeGreaterThan(short);
   await shot(page, "20-delegation");
+  // The sidebar can list only the group chats: the hand-over is there, a chat of one is not.
+  const chats = page.getByTestId("sidebar-chats");
+  await chats.getByTestId("chats-groups").click();
+  await expect(chats.getByTestId("chats-groups")).toHaveAttribute("aria-pressed", "true");
+  await expect(chats.getByRole("button", { name: "Plan review", exact: true })).toBeVisible();
+  await expect(chats.getByRole("button", { name: "Launch team", exact: true })).toBeVisible();
+  await expect(chats.getByRole("button", { name: "Announcement", exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(chats.getByTestId("chats-groups")).toHaveAttribute("aria-pressed", "true");
+  await chats.getByTestId("chats-groups").click();
+  await expect(chats.getByRole("button", { name: "Announcement", exact: true })).toBeVisible();
   // The thread between the two is a group of both as well.
   await reply.getByRole("link").click();
   await expect(page.getByText("mimi → luna").first()).toBeVisible();

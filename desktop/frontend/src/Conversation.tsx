@@ -15,7 +15,7 @@ import { RULE_LABEL, ruleTarget } from "./Approvals";
 import HelpModal from "./Help";
 import { Sent } from "./Attachments";
 import LiveDesktop from "./LiveDesktop";
-import Delegations from "./Delegations";
+import Delegations, { Helping } from "./Delegations";
 
 // Text is a message: a kitty's answer is drawn as markdown (lists, tables, code); what the person
 // wrote stays as they typed it.
@@ -1002,6 +1002,9 @@ export default function Conversation({
             <div class="msg user" data-who={user}>
               <Text text={pending} />
             </div>
+          )}
+          {session.helping && session.helping.length > 0 && (
+            <Helping helping={session.helping} kitties={byId} />
           )}
           {(pending || waiting) && (
             <>

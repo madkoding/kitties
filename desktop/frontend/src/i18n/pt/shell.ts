@@ -62,6 +62,14 @@ const dict: Dictionary = {
   // Sidebar
   Chats: "Chats",
   "{count} kitties": "{count} kitties",
+  groups: "grupos",
+  "Show every chat": "Mostrar todos os chats",
+  "Show only the chats with more than one kitty": "Mostrar só os chats com mais de um kitty",
+  "No group chats yet.": "Ainda não há chats em grupo.",
+  "Show the whole answer": "Ver a resposta completa",
+  "{name} is working on it…": "{name} está trabalhando nisso…",
+  "Follow it in the thread between {from} and {name}":
+    "Acompanhe na conversa entre {from} e {name}",
   "{name} helps in this chat: a subtask was handed to it":
     "{name} ajuda neste chat: recebeu uma subtarefa",
   "{from} asked: {task}": "{from} pediu: {task}",

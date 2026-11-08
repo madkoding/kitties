@@ -214,6 +214,8 @@ export interface Delegation {
   chat: string;
   task: string;
   result?: string;
+  // answer is the whole answer when result had to be cut.
+  answer?: string;
   error?: string;
   // limits says what the lead gave the kitty for this task alone, when it did.
   limits?: string;
@@ -294,6 +296,19 @@ export interface Session {
   // that opened it to delegate, and delegates. More than one makes it a group of kitties.
   delegates?: string[];
   kitties?: string[];
+  // helping are the kitties at work right now on a subtask handed over from this chat.
+  helping?: Helper[];
+}
+
+// Helper is a kitty at work on a subtask handed over from a chat.
+export interface Helper {
+  kitty: string;
+  kitty_id: string;
+  // from is the kitty that asked; chat the thread between the two.
+  from: string;
+  task: string;
+  chat: string;
+  since: string;
 }
 
 // chatKitties is every kitty taking part in a chat, members first (a gateway older than the
@@ -401,7 +416,8 @@ export interface ConnectorTest {
 }
 
 export interface ChatEvent {
-  type: "hello" | "turn" | "update" | "done" | "deleted";
+  // helping: a kitty started or ended a subtask for the chat (no turn: the chat is read again).
+  type: "hello" | "turn" | "update" | "done" | "deleted" | "helping";
   session?: string;
   index?: number;
   turn?: Turn;
@@ -1641,7 +1657,7 @@ export function watchChat(id: string, onEvent: (e: ChatEvent) => void): () => vo
       return;
     }
     es = new EventSource(shotURL(`/v1/chats/${id}/events`));
-    for (const type of ["turn", "update", "done", "deleted"]) {
+    for (const type of ["turn", "update", "done", "deleted", "helping"]) {
       es.addEventListener(type, (ev) => {
         try {
           onEvent(JSON.parse((ev as MessageEvent).data) as ChatEvent);

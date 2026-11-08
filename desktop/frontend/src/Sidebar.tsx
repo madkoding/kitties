@@ -1,3 +1,4 @@
+import { useState } from "preact/hooks";
 import { chatKitties, type Kitty, type Session } from "./api";
 import {
   IconBook,
@@ -68,8 +69,32 @@ interface Props {
   onSignOut?: () => void;
 }
 
+// GROUPS is where the sidebar keeps, in this browser, whether it lists only the group chats.
+const GROUPS = "kitties.chats.groups";
+
+function savedGroups(): boolean {
+  try {
+    return localStorage.getItem(GROUPS) === "1";
+  } catch {
+    return false;
+  }
+}
+
 export default function Sidebar(p: Props) {
   const byId = new Map(p.kitties.map((k) => [k.id, k]));
+  // onlyGroups lists only the chats with more than one kitty: groups and hand-overs.
+  const [onlyGroups, setOnlyGroups] = useState(savedGroups);
+  const toggleGroups = () => {
+    const on = !onlyGroups;
+    setOnlyGroups(on);
+    try {
+      localStorage.setItem(GROUPS, on ? "1" : "");
+    } catch {
+      /* kept for this visit only */
+    }
+  };
+  const groups = p.chats.filter((c) => chatKitties(c).length > 1);
+  const chats = onlyGroups ? groups : p.chats;
   return (
     <>
       {p.open && (
@@ -130,13 +155,33 @@ export default function Sidebar(p: Props) {
           </section>
 
           <section aria-labelledby="sidebar-chats" data-testid="sidebar-chats">
-            <h2 id="sidebar-chats" class="section-title">
-              {t("Chats")}
-            </h2>
+            <div class="flex items-center justify-between">
+              <h2 id="sidebar-chats" class="section-title">
+                {t("Chats")}
+              </h2>
+              {(groups.length > 0 || onlyGroups) && (
+                <button
+                  class={`tag chat-filter ${onlyGroups ? "tag-accent" : ""}`}
+                  onClick={toggleGroups}
+                  aria-pressed={onlyGroups}
+                  title={
+                    onlyGroups
+                      ? t("Show every chat")
+                      : t("Show only the chats with more than one kitty")
+                  }
+                  data-testid="chats-groups"
+                >
+                  <IconUsers size={10} /> {t("groups")}
+                </button>
+              )}
+            </div>
             {p.chats.length === 0 && (
               <div class="px-3 text-xs text-[var(--t4)]">{t("No chats yet.")}</div>
             )}
-            {p.chats.map((c, i) => (
+            {onlyGroups && p.chats.length > 0 && chats.length === 0 && (
+              <div class="px-3 text-xs text-[var(--t4)]">{t("No group chats yet.")}</div>
+            )}
+            {chats.map((c, i) => (
               <div
                 key={c.id}
                 class={`row chat-row ${p.current === c.id ? "on" : ""}`}

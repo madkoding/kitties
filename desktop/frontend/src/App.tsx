@@ -279,6 +279,10 @@ export default function App() {
         refresh();
         return;
       }
+      if (ev.type === "helping") {
+        loadSession(current);
+        return;
+      }
       if (ev.turn === undefined || ev.index === undefined) {
         return;
       }
@@ -294,7 +298,7 @@ export default function App() {
         refresh();
       }
     });
-  }, [current, refresh]);
+  }, [current, refresh, loadSession]);
   useEffect(() => {
     const id = setInterval(() => {
       refresh();
