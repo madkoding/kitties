@@ -73,7 +73,7 @@ export default function ThreadNote({
               to,
             })
           : t("A hand-over between two kitties; the answer shows in the chat that asked.")}{" "}
-        <span class="text-[var(--t4)]" data-testid="thread-expiry">
+        <span class="text-[var(--t3)]" data-testid="thread-expiry">
           {session.keep
             ? t("Kept: it stays among your chats.")
             : session.expires_at

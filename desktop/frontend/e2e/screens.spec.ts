@@ -1252,11 +1252,30 @@ test("a chat where a kitty hands a subtask to another reads as a group of both",
   await expect(chats.getByTestId("chats-groups")).toHaveAttribute("aria-pressed", "true");
   await chats.getByTestId("chats-groups").click();
   await expect(chats.getByRole("button", { name: "Announcement", exact: true })).toBeVisible();
-  // The thread between the two is a group of both as well.
+  // The thread between the two is no chat of the person: the sidebar leaves it out (luna's
+  // answer is in the chat that asked), and it says when it goes.
+  await expect(chats.getByRole("button", { name: "mimi → luna" })).toHaveCount(0);
   await reply.getByRole("link").click();
-  await expect(page.getByText("mimi → luna").first()).toBeVisible();
+  await expect(page.locator("h1", { hasText: "mimi → luna" })).toBeVisible();
   await expect(page.getByText("summarise the launch plan").first()).toBeVisible();
   await expect(page.getByTestId("chat-kitty")).toHaveCount(2);
+  const note = page.getByTestId("thread-note");
+  await expect(note).toHaveAttribute("data-kind", "handover");
+  await expect(note).toContainText("mimi handed luna a subtask here");
+  await expect(note.getByTestId("thread-expiry")).toContainText("Deleted after");
+  await shot(page, "77-handover-thread");
+  // Kept, it stays and shows among the chats; let go, it leaves them again.
+  await note.getByTestId("thread-keep").click();
+  await expect(note.getByTestId("thread-expiry")).toContainText("Kept");
+  await expect(chats.getByRole("button", { name: "mimi → luna" })).toBeVisible();
+  await expect(
+    chats.getByRole("button", { name: "mimi → luna" }).locator("xpath=..").locator(".tag", {
+      hasText: "kept",
+    }),
+  ).toBeVisible();
+  await note.getByTestId("thread-keep").click();
+  await expect(note.getByTestId("thread-expiry")).toContainText("Deleted after");
+  await expect(chats.getByRole("button", { name: "mimi → luna" })).toHaveCount(0);
 });
 
 test("a kitty that helped through a hand-over can be made a member of the chat, or taken off it", async ({
@@ -1391,12 +1410,60 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   await expect(limits.getByText("anything on github")).toHaveCount(0);
   await goals.scrollIntoViewIfNeeded();
   await shot(page, "21-goals-journal");
-  // The sidebar marks the goal chats, and a goal's chat shows the scheduler's call.
-  await expect(page.locator("aside .tag", { hasText: "goal" }).first()).toBeVisible();
-  await goals.getByText("open chat").first().click();
+  // A goal's runs are its history, under the task: why it ran, how it ended, what was found.
+  const inbox = goals.getByTestId("goal").filter({ hasText: "Inbox check" });
+  await inbox.getByTestId("goal-history").click();
+  const runs = inbox.getByTestId("goal-runs");
+  await expect(runs.getByTestId("goal-run").first()).toBeVisible();
+  await expect(runs.getByTestId("goal-run").first()).toContainText("done");
+  await expect(runs).toContainText("Checked Inbox check");
+  await shot(page, "21-goals-journal");
+  // Its thread is no chat: the sidebar lists the task, not the thread.
+  await expect(page.locator("aside .tag", { hasText: "goal" })).toHaveCount(0);
+  await expect(
+    page.getByTestId("sidebar-tasks").getByRole("button", { name: "Inbox check" }),
+  ).toBeVisible();
+  // The whole thread is a click away, and says what it is.
+  await runs.getByTestId("goal-thread").click();
   await expect(page.locator(".msg.scheduler").first()).toBeVisible();
   await expect(page.getByText("Checked Inbox check").first()).toBeVisible();
+  await expect(page.getByTestId("thread-note")).toHaveAttribute("data-kind", "goal");
   await shot(page, "22-goal-chat");
+});
+
+test("the scheduled tasks have a section of their own, with each one's history", async ({
+  page,
+}) => {
+  await open(page, "");
+  const section = page.getByTestId("sidebar-tasks");
+  await expect(section.getByTestId("task-row").first()).toBeVisible();
+  // The goals' threads are not among the chats.
+  const chats = page.getByTestId("sidebar-chats");
+  await expect(chats.getByRole("button", { name: "Inbox check" })).toHaveCount(0);
+  await expect(chats.getByRole("button", { name: "Triage new issues" })).toHaveCount(0);
+  // One click opens the task with its runs in view.
+  await section.getByRole("button", { name: "Inbox check" }).click();
+  const box = page.getByTestId("scheduled-tasks");
+  await expect(page.getByRole("dialog")).toContainText("Scheduled tasks");
+  const inbox = box.getByTestId("goal").filter({ hasText: "Inbox check" });
+  await expect(inbox.getByTestId("goal-runs")).toBeVisible();
+  await expect(inbox.getByTestId("goal-run").first()).toContainText("Checked Inbox check");
+  await shot(page, "78-scheduled-tasks");
+  // The API and MCP say the same: the thread is a goal's, out of the chats.
+  const headers = { Authorization: "Bearer e2e-token" };
+  const listed = await (
+    await page.request.get(`${GATEWAY}/v1/chats?kind=chat`, { headers })
+  ).json();
+  expect(listed.chats.some((c: { title: string }) => c.title === "Inbox check")).toBeFalsy();
+  const goal = await (await page.request.get(`${GATEWAY}/v1/chats?kind=goal`, { headers })).json();
+  expect(goal.chats.some((c: { title: string }) => c.title === "Inbox check")).toBeTruthy();
+  // Every kitty: the tabs pick one kitty's tasks.
+  await page.getByTestId("tasks-kitties").getByRole("tab", { name: /tom/ }).click();
+  await expect(box.getByTestId("goal")).toHaveCount(0);
+  await expect(box.getByRole("button", { name: /New scheduled task/ })).toBeVisible();
+  // In Spanish it is "Tareas programadas".
+  await open(page, "", "?theme=dark&motion=off&lang=es");
+  await expect(page.getByTestId("sidebar-tasks")).toContainText("Tareas programadas");
 });
 
 test("in the macOS app the top bars leave room for the window buttons and drag the window", async ({
@@ -2291,7 +2358,7 @@ test("in a kitty's drawer the desktop is there, live, and one click on it takes 
   // The desktop comes right after the header, above the goals and the journal: those grow and
   // must not push it down.
   const deskBox = (await live.boundingBox())!;
-  const goalsBox = (await drawer.getByText("Goals", { exact: true }).first().boundingBox())!;
+  const goalsBox = (await drawer.getByText("Scheduled tasks", { exact: true }).first().boundingBox())!;
   const journalBox = (await drawer.getByText("Journal", { exact: true }).first().boundingBox())!;
   expect(deskBox.y).toBeLessThan(goalsBox.y);
   expect(deskBox.y).toBeLessThan(journalBox.y);

@@ -229,7 +229,7 @@ export default function Sidebar(p: Props) {
                     )}
                     <span class="flex-1 min-w-0 flex flex-col">
                       <span class="truncate text-sm">{g.title}</span>
-                      <span class="chat-gist !line-clamp-1 flex items-center gap-1">
+                      <span class="task-when">
                         <IconClock size={10} />
                         {!g.enabled
                           ? t("paused")
