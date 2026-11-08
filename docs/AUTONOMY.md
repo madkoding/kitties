@@ -50,7 +50,10 @@ A kitty is not only something you talk to. Each one has an agenda:
   the header lists the helper with a dashed edge, and its answer shows under the turn that
   asked, with its own name and cat (a long answer opens whole on request), and a link to the
   thread between the two. While it works, the chat shows it at work with its cat and a link to
-  follow it. The sidebar's *groups* button lists only the chats with more than one kitty. An exposed chat
+  follow it. The sidebar's *groups* button lists only the chats with more than one kitty. The
+  **+** beside a helper in the header makes it a member (it then answers there too). When a
+  hand-over finishes or fails, the lead hears it in its Reports thread (unless the lead asked),
+  and you do too if *Notifications* has "A kitty finished a subtask…" (`delegated`) on. An exposed chat
   (guardrails) never delegates, so it stays a chat of one kitty.
 - **A journal.** Every run, event, retry, hand-over, cry for help and recovery is a line in the
   kitty's journal, in its drawer.
@@ -213,7 +216,7 @@ kitties:
     approvals: ask               # empty (default): acts as far as the account allows | ask
 notify:
   connector: phone               # any messaging connector; ntfy pushes to your phone
-  on: [help, approval, goal_done, goal_blocked, recovered, budget]   # default: help, approval
+  on: [help, approval, goal_done, goal_blocked, recovered, budget, delegated]   # default: help, approval
   digest: "08:30"                # a summary of the last day, every day (gateway's clock); empty: none
   replies: true                  # answer the kitties by writing to the ntfy topic
 connectors:

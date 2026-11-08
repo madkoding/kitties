@@ -269,7 +269,7 @@ yes runs it and counts it. `MemoryView.Spent` shows today's counts in the kitty'
 
 **Notifications** (`internal/notify`). A `Notifier` sends through any connector that can send a
 message (ntfy preferred, with a click link to the page), for the events `help`, `approval`,
-`goal_done`, `goal_blocked`, `recovered` and `budget`. Events of the same kind within ten minutes fold into
+`goal_done`, `goal_blocked`, `recovered`, `budget` and `delegated` (a hand-over finished or failed). Events of the same kind within ten minutes fold into
 one message. The choice is kept in `settings.json` over the YAML's `notify`; deleting the
 connector clears it.
 
