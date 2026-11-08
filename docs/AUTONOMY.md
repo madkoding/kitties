@@ -72,7 +72,7 @@ A kitty is not only something you talk to. Each one has an agenda:
   follow it. The sidebar's *groups* button lists only the chats with more than one kitty. The
   **+** beside a helper in the header makes it a member (it then answers there too), and the
   **×** takes it off the chat (its answers stay; it is back if handed work there again, or when
-  you click its dimmed tag in the header). The lead's panel, in its drawer, counts the subtasks
+  you click its dimmed tag in the header). The lead's panel, in its drawer's *Team* tab, charts the subtasks handed around each day of the last two weeks and counts the subtasks
   each kitty handed out, took on and failed; a row opens the kitty's latest hand-over threads.
   A kitty that fails three subtasks in a row is reported to the lead (and to you, with
   `delegated` notices on), so a broken model, limit or desktop does not go unnoticed. When a
@@ -82,7 +82,7 @@ A kitty is not only something you talk to. Each one has an agenda:
   gateway stops). A kitty you delete leaves every chat it helped in. An exposed chat
   (guardrails) never delegates, so it stays a chat of one kitty.
 - **A journal.** Every run, event, retry, hand-over, cry for help and recovery is a line in the
-  kitty's journal, in its drawer.
+  kitty's journal, in its drawer's *Journal* tab (the goals have their *Goals* tab).
 
 | | |
 | --- | --- |
@@ -191,7 +191,7 @@ organisation: the lead orchestrates and decides, it does not do everyone's work.
 | --- | --- |
 | ![The lead kitty's drawer](screenshots/71-lead-kitty.png) | ![The lead's Reports thread](screenshots/72-lead-reports.png) |
 
-Choose it in the kitty's drawer (*Make luna the lead*, *Open reports*, *Stop leading*), in the YAML,
+Choose it in the kitty's drawer (*Make luna the lead* under *Configuration*; *Team* tab: *Open reports*, *Stop leading*), in the YAML,
 from the terminal or through the API and MCP:
 
 ```yaml

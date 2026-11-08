@@ -379,6 +379,15 @@ export interface HandOverStat {
   threads?: { id: string; title: string; at: string }[];
 }
 
+// HandOverDay is how many subtasks the team handed around on one day, and how many failed.
+export interface HandOverDay {
+  day: string;
+  count: number;
+  failed: number;
+  // by is the same per kitty id (the one that asked and the one that took it on).
+  by?: Record<string, { count: number; failed: number }>;
+}
+
 // Helper is a kitty at work on a subtask handed over from a chat.
 export interface Helper {
   kitty: string;
@@ -922,10 +931,12 @@ export const api = {
   // lead is the fleet's lead kitty and its Reports thread; setLead makes another the lead
   // (an empty kitty leaves the fleet without one).
   lead: () =>
-    request<{ lead: Kitty | null; reports?: string; handovers?: HandOverStat[] }>(
-      "GET",
-      "/v1/lead",
-    ),
+    request<{
+      lead: Kitty | null;
+      reports?: string;
+      handovers?: HandOverStat[];
+      handover_days?: HandOverDay[];
+    }>("GET", "/v1/lead"),
   setLead: (kitty: string) =>
     request<{ lead: Kitty | null; reports?: string }>("PUT", "/v1/lead", { kitty }),
   // power is the state of a kitty's machine; setPower turns it on (it comes up in the background)

@@ -178,8 +178,6 @@ const dict: Dictionary = {
 
   // Kitty: drawer
   Configuration: "Configuración",
-  "looks, brain, personality, connections, limits and memory":
-    "aspecto, cerebro, personalidad, conexiones, límites y memoria",
   done: "listo",
   Desktop: "Escritorio",
   "brain only, no desktop": "solo cerebro, sin escritorio",

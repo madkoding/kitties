@@ -68,3 +68,20 @@ export function setAllSteps(on: boolean): void {
 export function useAllSteps(): boolean {
   return usePref(() => steps);
 }
+
+// The tab a kitty's drawer was last left on, per kitty, so it opens there again.
+const KITTY_TAB = "kitties.kittyTab.";
+
+// kittyTab is the tab the drawer of a kitty was last on ("" when never opened).
+export function kittyTab(kitty: string): string {
+  return read(KITTY_TAB + kitty);
+}
+
+// setKittyTab keeps the tab the drawer of a kitty is on.
+export function setKittyTab(kitty: string, tab: string): void {
+  try {
+    localStorage.setItem(KITTY_TAB + kitty, tab);
+  } catch {
+    /* kept for this visit only */
+  }
+}

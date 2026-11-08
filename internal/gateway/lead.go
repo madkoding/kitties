@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/kitty"
@@ -27,6 +28,14 @@ type Reporter interface {
 type HandOvers interface {
 	HandOverStats() []chat.HandOverStat
 }
+
+// HandOverDaily counts the team's hand-overs per day, for the chart of the lead's panel.
+type HandOverDaily interface {
+	HandOverDays(n int, now time.Time) []chat.HandOverDay
+}
+
+// chartDays is how many days the lead's chart shows.
+const chartDays = 14
 
 // lead is the fleet's lead kitty, nil when none is.
 func (s *Server) lead() *kitty.Kitty {
@@ -54,6 +63,9 @@ func (s *Server) leadView() map[string]any {
 	// How the team hands work around: who asks, who takes it on, and how much fails.
 	if h, ok := s.chats.(HandOvers); ok {
 		out["handovers"] = h.HandOverStats()
+	}
+	if h, ok := s.chats.(HandOverDaily); ok {
+		out["handover_days"] = h.HandOverDays(chartDays, time.Now())
 	}
 	return out
 }

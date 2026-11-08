@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/kitty"
@@ -19,6 +20,13 @@ func (c *fakeChats) ReportsChat(lead *kitty.Kitty) (string, error) {
 	return id, nil
 }
 
+// HandOverDays makes fakeChats count hand-overs per day: one today.
+func (c *fakeChats) HandOverDays(n int, now time.Time) []chat.HandOverDay {
+	out := make([]chat.HandOverDay, n)
+	out[n-1] = chat.HandOverDay{Day: now.Format("2006-01-02"), Count: 1}
+	return out
+}
+
 func TestLeadRoutes(t *testing.T) {
 	srv, f, _ := setup(t)
 	f.kitties["b1"] = &kitty.Kitty{ID: "b1", Name: "bo", Status: kitty.StatusRunning}
@@ -31,6 +39,10 @@ func TestLeadRoutes(t *testing.T) {
 	code, m, _ := call(t, srv, "PUT", "/v1/lead", "tok", map[string]string{"kitty": "ana"})
 	if lead, _ := m["lead"].(map[string]any); code != 200 || lead["name"] != "ana" || m["reports"] != "reports-a1" {
 		t.Fatalf("set = %d %v", code, m)
+	}
+	// The lead's chart: the team's hand-overs of the last two weeks, a day each.
+	if _, m, _ := call(t, srv, "GET", "/v1/lead", "tok", nil); len(m["handover_days"].([]any)) != chartDays {
+		t.Errorf("days = %v", m["handover_days"])
 	}
 	// Another lead takes it from the first.
 	call(t, srv, "PUT", "/v1/lead", "tok", map[string]string{"kitty": "bo"})

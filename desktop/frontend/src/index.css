@@ -447,6 +447,9 @@ select:focus {
 .row > .row-actions {
   pointer-events: auto;
 }
+.row > .kitty-pending {
+  pointer-events: auto;
+}
 /* A chat's ⋯ menu: in the sidebar it shows on hover, on focus, on the open chat and always on
    touch screens; the list is fixed to the window so the scrolling sidebar does not cut it. */
 .chat-menu-btn {
@@ -2459,10 +2462,81 @@ html.mac-inset .live-head {
 }
 
 /* The lead kitty's card in its drawer: who orchestrates the fleet. */
+/* The lead's chart: a bar a day, failed stacked on done, a 2px gap between them. */
+.handover-chart {
+  margin: 0.75rem 0 0.5rem;
+}
+.handover-who {
+  font-size: 0.75rem;
+  padding: 0.125rem 0.375rem;
+  border-radius: var(--radius-cut);
+  background: rgb(var(--ov-rgb) / 0.04);
+  border: 1px solid rgb(var(--ov-rgb) / 0.12);
+  color: var(--t2);
+}
+.handover-bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 4.5rem;
+  border-bottom: 1px solid rgb(var(--ov-rgb) / 0.12);
+}
+.handover-day {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+}
+.handover-day:hover {
+  background: rgb(var(--ov-rgb) / 0.05);
+}
+.handover-stack {
+  width: 100%;
+  max-width: 1.25rem;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.handover-seg {
+  min-height: 2px;
+}
+.handover-seg:first-child {
+  border-radius: 4px 4px 0 0;
+}
+.handover-seg.done,
+.handover-key.done {
+  background: var(--color-accent);
+}
+.handover-seg.failed,
+.handover-key.failed {
+  background: var(--c-red);
+}
+.handover-key {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 2px;
+}
+.handover-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+}
+
 .lead-panel {
   border: 1px solid rgb(var(--neon-rgb) / 0.3);
   border-radius: 0.75rem;
   padding: 0.625rem 0.75rem;
+}
+
+/* A kitty's drawer: the tab already names the section, so its first title needs no room above. */
+.kitty-panel > :first-child > .section-title:first-child,
+.kitty-panel > .section-title:first-child {
+  margin-top: 0;
+}
+.kitty-panel > .lead-panel:first-child {
+  margin-top: 0;
 }
 
 /* ─── Settings: the tabs and the machines ─────────────────────────────────────────────────── */
@@ -2497,6 +2571,28 @@ html.mac-inset .live-head {
   background: rgb(var(--ov-rgb) / 0.07);
 }
 .settings-tab:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+.kitty-pending,
+.settings-tab .tab-count {
+  margin-left: 0.4rem;
+  min-width: 1.15rem;
+  padding: 0 0.3rem;
+  border-radius: 999px;
+  font-size: 0.6875rem;
+  line-height: 1.15rem;
+  text-align: center;
+  color: var(--s1);
+  background: var(--c-amber, var(--color-accent));
+}
+.kitty-pending {
+  margin-left: 0;
+  position: relative;
+  z-index: 1;
+  cursor: pointer;
+}
+.kitty-pending:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }

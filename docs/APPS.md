@@ -10,6 +10,31 @@ app picks it up. **Settings** holds the models (pick a provider, paste its key: 
 connections (with the kitties that may use each one), notifications and the gateway address.
 A first run is a short checklist: a model, a kitty, a chat.
 
+A kitty's drawer (click it in the sidebar) keeps its header (status, model, *Chat*, *Start* or
+*Stop*) and splits the rest in tabs, which slide sideways on a phone:
+
+- **Desktop**: the live viewer first, then the machine's power and idle time, the backup and the
+  files kept on your computer. Only kitties with a desktop have this tab.
+- **Goals**: its goals (scheduled tasks). A count on the tab says how many need a look (blocked,
+  escalated or failed on their last run).
+- **Team**: only the lead's: the lead panel (*Summarize reports*, *Open reports*, *Stop leading*),
+  a chart of the subtasks handed around each day of the last two weeks (done and failed; each
+  bar says its numbers on hover; a menu narrows it to one kitty) and the table of who hands work out and who takes it on.
+- **Journal**: every run, event, retry and hand-over.
+- **Notes**: its memory: level of demand, notes, trust and today's spending. A count on the tab
+  says how many notes proposed for every kitty wait for a yes.
+- **Configuration**: looks, brain, personality, connections, limits, *Remove* and, for a kitty
+  that is not the lead, *Make it the lead*.
+
+The drawer opens on the tab the kitty was last left on (kept in this browser), or on *Desktop*.
+A tab can be linked: `#kitty/<id>/<tab>` (`desktop`, `goals`, `team`, `journal`, `notes`,
+`config`), and the address follows the tab picked. The digits 1 to 6 pick the tabs in order
+(not while typing, holding the desktop's controls or with a window over the drawer).
+
+In the sidebar, a kitty's row counts what waits for you in it: its scheduled tasks that need a
+look and its actions waiting for a yes. A click on the count opens its *Goals* tab when a task
+waits, or the approvals.
+
 ```sh
 make frontend     # builds the page (node 24)
 make desktop      # wails build, with the Wails CLI installed
@@ -20,7 +45,8 @@ cd desktop && wails dev   # live reload while working on it
 | | |
 | --- | --- |
 | ![A chat with one kitty](screenshots/02-chat.png) | ![A group chat](screenshots/03-group.png) |
-| ![A kitty's desktop](screenshots/05-kitty-drawer.png) | ![Settings: the models](screenshots/08-settings-models.png) |
+| ![A kitty's drawer: the Desktop tab, the viewer first](screenshots/05-kitty-drawer.png) | ![Settings: the models](screenshots/08-settings-models.png) |
+| ![A kitty's drawer: the Configuration tab](screenshots/79-kitty-config.png) | ![On a phone the drawer's tabs slide sideways](screenshots/81-kitty-tabs-phone.png) |
 | ![Settings: the connectors](screenshots/09-settings-connectors.png) | ![The catalogue: one button per service](screenshots/17-connector-catalogue.png) |
 | ![Google Workspace: sign in with OAuth](screenshots/18-connector-oauth.png) | ![A kitty's own display](screenshots/13-tom-display.png) |
 | ![The library: skills](screenshots/15-library-skills.png) | ![The library: artifacts](screenshots/16-library-artifacts.png) |

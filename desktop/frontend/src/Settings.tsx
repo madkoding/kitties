@@ -1,12 +1,5 @@
 import type { ComponentChildren } from "preact";
-import {
-  useEffect,
-  useErrorBoundary,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "preact/hooks";
+import { useEffect, useErrorBoundary, useLayoutEffect, useMemo, useState } from "preact/hooks";
 import type {
   Account,
   ConnectorKind,
@@ -26,6 +19,7 @@ import {
   openExternal,
   savedConnection,
 } from "./api";
+import Tabs from "./Tabs";
 import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,
@@ -2103,61 +2097,6 @@ function Preferences() {
 
 type ConnectionEdit = { view: ConnectorView | null; kind: ConnectorKind };
 
-// SettingsTabs are the sections of the dialog: pills that stay at the top while the page scrolls,
-// wrap on a wide screen and slide sideways on a phone, the chosen one kept in view. The arrow
-// keys, Home and End move between them, as in any tab list.
-function SettingsTabs({
-  tabs,
-  tab,
-  onPick,
-}: {
-  tabs: { id: Tab; label: string }[];
-  tab: Tab;
-  onPick: (t: Tab) => void;
-}) {
-  const bar = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const on = bar.current?.querySelector<HTMLElement>('[aria-selected="true"]');
-    on?.scrollIntoView?.({ block: "nearest", inline: "center" });
-  }, [tab]);
-  const onKey = (e: KeyboardEvent) => {
-    const i = tabs.findIndex((x) => x.id === tab);
-    const to =
-      e.key === "ArrowRight"
-        ? (i + 1) % tabs.length
-        : e.key === "ArrowLeft"
-          ? (i - 1 + tabs.length) % tabs.length
-          : e.key === "Home"
-            ? 0
-            : e.key === "End"
-              ? tabs.length - 1
-              : -1;
-    if (to < 0) {
-      return;
-    }
-    e.preventDefault();
-    onPick(tabs[to].id);
-    bar.current?.querySelectorAll<HTMLElement>('[role="tab"]')[to]?.focus();
-  };
-  return (
-    <div class="settings-tabs" role="tablist" ref={bar} onKeyDown={onKey}>
-      {tabs.map((x) => (
-        <button
-          key={x.id}
-          role="tab"
-          id={`settings-tab-${x.id}`}
-          aria-selected={tab === x.id}
-          tabIndex={tab === x.id ? 0 : -1}
-          class={`plain settings-tab ${tab === x.id ? "on" : ""}`}
-          onClick={() => onPick(x.id)}
-        >
-          {x.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
 export default function SettingsModal({
   onClose,
   initial,
@@ -2263,7 +2202,7 @@ export default function SettingsModal({
             <IconX />
           </button>
         </div>
-        <SettingsTabs tabs={tabs} tab={tab} onPick={setTab} />
+        <Tabs tabs={tabs} tab={tab} onPick={setTab} prefix="settings" />
         <Err text={err} />
         {crash && (
           <p class="text-sm text-[var(--c-red)] mb-2" role="alert">
