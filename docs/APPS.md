@@ -11,16 +11,23 @@ connections (with the kitties that may use each one), notifications and the gate
 A first run is a short checklist: a model, a kitty, a chat.
 
 A kitty's drawer (click it in the sidebar) keeps its header (status, model, *Chat*, *Start* or
-*Stop*) and splits the rest in five tabs, which slide sideways on a phone:
+*Stop*) and splits the rest in tabs, which slide sideways on a phone:
 
 - **Desktop**: the live viewer first, then the machine's power and idle time, the backup and the
   files kept on your computer. Only kitties with a desktop have this tab.
-- **Goals**: its goals (scheduled tasks) and the lead panel, with the hand-over table of the lead.
+- **Goals**: its goals (scheduled tasks). A count on the tab says how many need a look (blocked,
+  escalated or failed on their last run).
+- **Team**: only the lead's: the lead panel (*Summarize reports*, *Open reports*, *Stop leading*)
+  and how the team hands work around.
 - **Journal**: every run, event, retry and hand-over.
-- **Notes**: its memory: level of demand, notes, trust and today's spending.
-- **Configuration**: looks, brain, personality, connections, limits and *Remove*.
+- **Notes**: its memory: level of demand, notes, trust and today's spending. A count on the tab
+  says how many notes proposed for every kitty wait for a yes.
+- **Configuration**: looks, brain, personality, connections, limits, *Remove* and, for a kitty
+  that is not the lead, *Make it the lead*.
 
 The drawer opens on the tab the kitty was last left on (kept in this browser), or on *Desktop*.
+A tab can be linked: `#kitty/<id>/<tab>` (`desktop`, `goals`, `team`, `journal`, `notes`,
+`config`), and the address follows the tab picked.
 
 ```sh
 make frontend     # builds the page (node 24)
