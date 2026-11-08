@@ -282,13 +282,24 @@ no está en medio de una tarea y no tienes tú su escritorio. En ambos casos baj
 se escriba a disco), respalda, rehace el contenedor y devuelve el respaldo. La carpeta de trabajo
 está en tu computador y nunca se toca.
 
-Lo que sabe el navegador del kitty ya vive en esa carpeta (cookies, contraseñas guardadas, almacenamiento
-local), y ahora dos cosas evitan perderlo: el navegador se cierra de forma ordenada antes de cualquier
-parada o actualización (solo escribe sus cookies cada medio minuto, y un contenedor que se elimina
-pierde las últimas), y continúa donde se quedó (una política de Chromium), lo que conserva las
-**cookies de sesión** (inicios de sesión sin caducidad) tras un reinicio. Las contraseñas usan
-`--password-store=basic`, cifradas con una clave que comparten todos los contenedores, así que un perfil
-se abre en uno nuevo.
+Lo que sabe el navegador del kitty (cookies, contraseñas guardadas, almacenamiento local) vive en un
+**volumen de Docker propio**, `kitties-browser-<contenedor>`, montado en `/var/lib/kitty-browser`: está
+en el disco Linux del motor de contenedores y sobrevive a reinicios, actualizaciones y a un contenedor
+rehecho. No está en la carpeta de trabajo porque Chromium bloquea su perfil con un enlace simbólico
+(`SingletonLock`), y una carpeta de un computador Windows o macOS montada por Docker Desktop no puede
+tenerlo: ahí Chromium no arrancaba con ese perfil y los inicios de sesión iban a un perfil temporal que
+cada reinicio perdía. `kitty-profile` dice dónde está el perfil; uno guardado antes en `~/work/.browser`
+se copia al volumen la primera vez (no hay que volver a iniciar sesión), y un gateway anterior que no
+monta el volumen igual lo guarda en el contenedor cuando la carpeta de trabajo no puede tenerlo.
+
+Tres cosas más evitan perderlo: el navegador se cierra de forma ordenada antes de cualquier parada o
+actualización, y también cuando el contenedor se detiene desde fuera (`docker stop`/`restart`, al
+apagarse Docker o el computador: el escritorio lo cierra primero, porque solo escribe sus cookies cada
+medio minuto); continúa donde se quedó (una política de Chromium), lo que conserva las **cookies de
+sesión** (inicios de sesión sin caducidad) tras un reinicio; y un arranque lento se deja terminar en vez
+de apartar el perfil. Las contraseñas usan `--password-store=basic`, cifradas con una clave que
+comparten todos los contenedores, así que un perfil se abre en uno nuevo sin llavero. Un escritorio
+detenido de golpe también vuelve a levantar: al arrancar se borra el candado viejo de la pantalla.
 
 El **respaldo** (`kitty-backup`) añade una copia fuera del contenedor: cookies, sesiones, contraseñas
 guardadas, almacenamiento local y preferencias del navegador, y `~/.ssh`, `~/.gitconfig`,
@@ -306,9 +317,10 @@ actualización, ni una detención, ni eliminar al kitty.
 
 | En tu computadora | En el escritorio | Qué guarda |
 | --- | --- | --- |
-| `<data_dir>/work/<nombre>` | `~/work` | sus archivos, el perfil del navegador, su tema y los paquetes de Debian que instaló |
+| `<data_dir>/work/<nombre>` | `~/work` | sus archivos, su tema y los paquetes de Debian que instaló |
 | `<data_dir>/homes/<nombre>` | `/home/kitty` | sus configuraciones (`~/.config`) y los programas que instaló para sí (`~/.local`: pipx, `pip --user`, `npm install -g`; `/opt/kitty-apps`) |
 | `<data_dir>/shared/<nombre>` | `~/Shared` | lo que hizo para ti: la app lo muestra en **Biblioteca > Compartido** |
+| volumen `kitties-browser-<contenedor>` | `/var/lib/kitty-browser` | el perfil del navegador: cookies, sesiones, contraseñas guardadas (ver arriba) |
 
 - **Programas.** Un paquete de Debian vuelve solo en un escritorio rehecho, como sea que se haya
   instalado (`kitty-install`, `sudo apt install`: un hook de dpkg lo recuerda); `kitty-install --remove

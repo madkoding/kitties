@@ -99,7 +99,10 @@ can make user namespaces and otherwise runs without it (`--no-sandbox`), with a 
 the kitty to get the sandbox back. `kitty-open` also retries without the sandbox when the sandboxed
 browser does not come up. Everything it did, and what Chromium said when it failed, is in
 `~/.cache/chromium-launch.log` (`kitty-open` adds the browser's own log there, and as a last resort
-opens a temporary profile in `/tmp` when the workspace cannot hold one). Refresh the profile with
+opens a temporary profile in `/tmp` when no folder can hold one). `kitty-profile` picks the
+profile's folder: the kitty's volume (`KITTY_PROFILE`), else `~/work/.browser` when it can hold
+Chromium's lock (a symbolic link), else `/var/lib/kitty-browser` in the container. A browser still
+starting after 30 s is left to finish; a profile is only put aside when Chromium exits on it twice. Refresh the profile with
 `scripts/update-seccomp.sh`.
 
 Root has no password. The `kitty` user has passwordless `sudo` (`sudoers.d/kitty`), so it can install

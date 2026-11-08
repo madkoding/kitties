@@ -16,7 +16,7 @@ Almacenamiento** muestra cuánto ocupa cada parte, cuánto queda libre en ese di
 | Lo que imprime un escritorio | el log del motor de contenedores | 3 archivos de 10 MB (Docker, `json-file`); uno de 10 MB (Podman). Los escritorios creados antes lo reciben al actualizarse |
 | El diario de un kitty | `journal/<kitty>.jsonl` | 1 MB; al pasarlo se van las entradas más antiguas |
 | Los logs de la app de escritorio | `gateway.log`, `desktop.log` | Rotan a los 5 MB (se guarda un `.1`) |
-| La caché del navegador | `work/<nombre>/.browser` | 256 MB (política de Chromium `DiskCacheSize`) |
+| La caché del navegador | el volumen `kitties-browser-<contenedor>` (escritorios anteriores: `work/<nombre>/.browser`) | 256 MB (política de Chromium `DiskCacheSize`) |
 | Logs y restos dentro de un escritorio | `/tmp/*.log`, `~/.cache/*.log`, `/tmp` | `kitty-tidy` recorta cada 15 minutos un log de más de 5 MB a su último 1 MB; al arrancar borra lo que lleva 7 días en `/tmp` |
 | Paquetes descargados | `/var/cache/apt` en el escritorio | Se limpian tras cada instalación con `kitty-apt` |
 | Actualizaciones del propio Kitties | junto al binario | Una descarga a medias de una actualización cortada se borra en el siguiente arranque; la versión que no se sostuvo (`.failed`) se borra cuando se confirma una nueva. Se conserva un `.prev` para volver atrás a mano |

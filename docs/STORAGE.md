@@ -15,7 +15,7 @@ Storage** shows what each part takes, how much is free on that disk, and has **F
 | What a desktop prints | the container engine's log | 3 files of 10 MB (Docker, `json-file`); one of 10 MB (Podman). Desktops made before this get it when they are updated |
 | A kitty's journal | `journal/<kitty>.jsonl` | 1 MB; past it the oldest entries go |
 | The desktop app's logs | `gateway.log`, `desktop.log` | Rotated at 5 MB (one `.1` kept) |
-| The browser's cache | `work/<name>/.browser` | 256 MB (Chromium policy `DiskCacheSize`) |
+| The browser's cache | the volume `kitties-browser-<container>` (older desktops: `work/<name>/.browser`) | 256 MB (Chromium policy `DiskCacheSize`) |
 | Logs and leftovers inside a desktop | `/tmp/*.log`, `~/.cache/*.log`, `/tmp` | `kitty-tidy` trims a log past 5 MB to its last 1 MB every 15 minutes; at start it deletes what has sat in `/tmp` for 7 days |
 | Downloaded packages | `/var/cache/apt` in the desktop | Cleaned after each `kitty-apt` install |
 | Updates of Kitties itself | beside the binary | A half-written download left by an update that was cut off goes at the next start; the version that did not hold (`.failed`) goes once a newer one is confirmed. One `.prev` is kept, to go back by hand |
