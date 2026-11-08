@@ -46,7 +46,8 @@ a desktop app and an Android app.
   ([details](docs/AUTONOMY.md#the-lead-kitty)).
 - **Hand-overs read as group chats.** When a kitty hands a subtask to another, the chat becomes a group
   of both: the sidebar huddles their cats with the count, the header lists the helper, and its answer
-  shows in the chat with its own name and cat ([details](docs/AUTONOMY.md)).
+  shows in the chat with its own name and cat, working live until it answers; the sidebar can list only
+  the group chats ([details](docs/AUTONOMY.md)).
 - **A sidebar that tells you what is going on.** Your kitties come first, then the chats; each chat
   shows up to two lines of its last words (who said it, in a group), made on the gateway without asking
   any model, with keys, passwords, addresses and long numbers masked.

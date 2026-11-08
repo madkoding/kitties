@@ -48,7 +48,9 @@ A kitty is not only something you talk to. Each one has an agenda:
   group of kitties: the helper joins it as a *delegate* (it does not answer what you write
   there; `@name` still picks among the members), the sidebar huddles their cats with the count,
   the header lists the helper with a dashed edge, and its answer shows under the turn that
-  asked, with its own name and cat, and a link to the thread between the two. An exposed chat
+  asked, with its own name and cat (a long answer opens whole on request), and a link to the
+  thread between the two. While it works, the chat shows it at work with its cat and a link to
+  follow it. The sidebar's *groups* button lists only the chats with more than one kitty. An exposed chat
   (guardrails) never delegates, so it stays a chat of one kitty.
 - **A journal.** Every run, event, retry, hand-over, cry for help and recovery is a line in the
   kitty's journal, in its drawer.

@@ -230,6 +230,9 @@ The kitty handed the work joins the chat it was asked from as a delegate (`Sessi
 delegates), recomputed on every save and load (a chat saved before the field gets its delegates
 from its turns). The page, `GET /v1/chats` and the MCP `chat_list` read it: more than one kitty
 makes the chat a group (`Session.Crew`), while `Session.Group` still says whether several answer.
+While a delegate works, `Session.Helping` lists it (cleared on start-up) and the chat's watchers get a
+`helping` event at the start and the end, so the page reads the chat again. `Delegation.Result` keeps
+the first 300 bytes; `Delegation.Answer` the whole answer (up to 20,000 characters) when it was longer.
 
 The orchestrator's `Watch` is the watchdog: every 30 seconds a running kitty whose container
 stopped or vanished is started again and a kitty in error is tried once more; recoveries are
