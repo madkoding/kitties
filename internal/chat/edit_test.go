@@ -154,3 +154,105 @@ func TestParseSuggestionKeepsTheLimits(t *testing.T) {
 		t.Error("an empty title")
 	}
 }
+
+func TestDescriptionHistory(t *testing.T) {
+	f, _, _, _ := fleet(t)
+	s := service(t, f)
+	sess, _ := s.Create("", []string{"bo"})
+	for i := 1; i <= MaxDescriptions+3; i++ {
+		if _, err := s.Edit(sess.ID, nil, ptr(strings.Repeat("v", i))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c, _ := s.Get(sess.ID)
+	if c.Description != strings.Repeat("v", MaxDescriptions+3) || c.DescriptionBy != "user" || c.DescriptionAt == nil {
+		t.Fatalf("current = %q %q %v", c.Description, c.DescriptionBy, c.DescriptionAt)
+	}
+	if len(c.Descriptions) != MaxDescriptions || c.Descriptions[0].Text != strings.Repeat("v", MaxDescriptions+2) || c.Descriptions[0].By != "user" {
+		t.Errorf("history = %+v", c.Descriptions)
+	}
+	// Taking it off keeps the last one too.
+	c, _ = s.Edit(sess.ID, nil, ptr(""))
+	if c.Description != "" || c.DescriptionBy != "" || c.Descriptions[0].Text != strings.Repeat("v", MaxDescriptions+3) {
+		t.Errorf("taken off = %+v", c)
+	}
+}
+
+func TestKittyProposesADescription(t *testing.T) {
+	f, _, sb, _ := fleet(t)
+	s := service(t, f)
+	sess, _ := s.Create("", []string{"bo"})
+	s.Edit(sess.ID, nil, ptr("Plan the trip."))
+	sb.mu.Lock()
+	sb.replies = []string{"@describe propose Book the ferry and the hotel in Castro for March.", "We moved on to booking; I proposed a new description."}
+	sb.mu.Unlock()
+	if _, err := s.Send(context.Background(), sess.ID, "the plan is done, now let's book"); err != nil {
+		t.Fatal(err)
+	}
+	sb.mu.Lock()
+	first := sb.seen[0][0].Content
+	sb.mu.Unlock()
+	if !strings.Contains(first, "@describe propose") {
+		t.Error("the kitty was not told it may propose a description")
+	}
+	c, _ := s.Get(sess.ID)
+	if c.Proposal == nil || c.Proposal.Description != "Book the ferry and the hotel in Castro for March." || c.Proposal.By != "bo" ||
+		c.Description != "Plan the trip." {
+		t.Fatalf("proposal = %+v, description %q", c.Proposal, c.Description)
+	}
+	// While it waits, the kitty is not asked to propose again.
+	sb.mu.Lock()
+	sb.replies = []string{"ok"}
+	sb.mu.Unlock()
+	s.Send(context.Background(), sess.ID, "go on")
+	sb.mu.Lock()
+	last := sb.seen[len(sb.seen)-1][0].Content
+	sb.mu.Unlock()
+	if strings.Contains(last, "@describe propose") {
+		t.Error("asked to propose while a proposal waits")
+	}
+	// Accepted: it becomes the description, the old one goes to the history, written by bo.
+	c, err := s.AnswerProposal(sess.ID, true)
+	if err != nil || c.Description != "Book the ferry and the hotel in Castro for March." || c.DescriptionBy != "bo" ||
+		c.Proposal != nil || c.Descriptions[0].Text != "Plan the trip." {
+		t.Fatalf("accepted = %+v, %v", c, err)
+	}
+	if _, err := s.AnswerProposal(sess.ID, true); !errors.Is(err, ErrEdit) {
+		t.Errorf("no proposal to answer: %v", err)
+	}
+
+	// Dismissed: nothing changes and the kitties wait ProposeAgainAfter turns.
+	sb.mu.Lock()
+	sb.replies = []string{"@describe propose Something else.", "ok"}
+	sb.mu.Unlock()
+	s.Send(context.Background(), sess.ID, "and now?")
+	if c, err := s.AnswerProposal(sess.ID, false); err != nil || c.Description != "Book the ferry and the hotel in Castro for March." || c.DismissedAt == 0 {
+		t.Fatalf("dismissed = %+v, %v", c, err)
+	}
+	sb.mu.Lock()
+	sb.replies = []string{"@describe propose Again.", "ok"}
+	sb.mu.Unlock()
+	s.Send(context.Background(), sess.ID, "next")
+	if c, _ := s.Get(sess.ID); c.Proposal != nil {
+		t.Error("proposed again right after a no")
+	}
+	// The person writing the description answers a waiting proposal.
+	s.mu.Lock()
+	s.sessions[sess.ID].Proposal = &Proposal{Description: "x", By: "bo"}
+	s.mu.Unlock()
+	if c, _ := s.Edit(sess.ID, nil, ptr("Mine.")); c.Proposal != nil {
+		t.Error("the person's description left the proposal waiting")
+	}
+}
+
+func TestNoProposalsInExposedChats(t *testing.T) {
+	f, _, _, _ := fleet(t)
+	s := service(t, f)
+	sess, _ := s.Create("", []string{"bo"})
+	s.Expose(sess.ID, "a client", true)
+	k, _ := f.Get("bo")
+	o := s.runDescribe(sess.ID, action{kind: "describe", name: "propose", raw: "@describe propose Leak it all."}, k)
+	if o.err == "" {
+		t.Error("a kitty changed the description of a chat with other people")
+	}
+}

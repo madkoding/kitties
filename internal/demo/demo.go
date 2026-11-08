@@ -64,6 +64,11 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 		return provider.Reply{Content: distilled(last), Usage: usage}, nil
 	case strings.Contains(system, "You name a conversation"):
 		return provider.Reply{Content: named(last), Usage: usage}, nil
+	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "proposed: the person"):
+		return provider.Reply{Content: "We changed course, so I proposed a new description for this chat: accept it above if it fits.", Usage: usage}, nil
+	case strings.HasPrefix(lower, "change of plans:"):
+		// The chat changes course: the kitty proposes a new description for it.
+		return provider.Reply{Content: "@describe propose " + strings.TrimSpace(last[len("change of plans:"):]), Usage: usage}, nil
 	case strings.Contains(system, "You keep the running summary"):
 		return provider.Reply{Content: "The person and the kitties have been planning the launch: the plan is drafted, the numbers are being checked and the announcement is pending.", Usage: usage}, nil
 	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "held: the person has to approve"):

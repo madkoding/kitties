@@ -369,6 +369,20 @@ func (c *fakeChats) Suggest(_ context.Context, id string) (chat.Suggestion, erro
 	}
 	return chat.Suggestion{Title: "About " + s.Turns[0].Text, Description: "What the chat is for"}, nil
 }
+func (c *fakeChats) AnswerProposal(id string, accept bool) (*chat.Session, error) {
+	s, ok := c.sessions[id]
+	if !ok {
+		return nil, errors.New("no such chat")
+	}
+	if s.Proposal == nil {
+		return nil, fmt.Errorf("%w: no description waits for an answer", chat.ErrEdit)
+	}
+	if accept {
+		s.Description = s.Proposal.Description
+	}
+	s.Proposal = nil
+	return s, nil
+}
 func (c *fakeChats) AddMembers(id string, members []string) (*chat.Session, error) {
 	s, err := c.Get(id)
 	if err != nil {
@@ -765,6 +779,14 @@ func TestChatRoutes(t *testing.T) {
 	c.sessions["c1"].Turns = nil
 	if code, _, _ := call(t, srv, "POST", "/v1/chats/c1/suggest", "tok", nil); code != 409 {
 		t.Error("suggest with nothing to read")
+	}
+	c.sessions["c1"].Proposal = &chat.Proposal{Description: "Book the ferry", By: "ana"}
+	if code, m, _ := call(t, srv, "POST", "/v1/chats/c1/proposal", "tok", map[string]any{"accept": true}); code != 200 ||
+		m["chat"].(map[string]any)["description"] != "Book the ferry" {
+		t.Errorf("accept proposal = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/chats/c1/proposal", "tok", map[string]any{"accept": false}); code != 409 {
+		t.Error("no proposal to answer")
 	}
 	if code, _, _ := call(t, srv, "DELETE", "/v1/chats/c1", "tok", nil); code != 200 {
 		t.Error("delete")

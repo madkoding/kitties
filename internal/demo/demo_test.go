@@ -255,3 +255,13 @@ func TestNamedChat(t *testing.T) {
 		t.Errorf("named = %s", got)
 	}
 }
+
+func TestProposesADescription(t *testing.T) {
+	b := &Brain{}
+	if got := ask(t, b, "You are mimi, x", "Change of plans: book the ferry to Castro."); got != "@describe propose book the ferry to Castro." {
+		t.Errorf("proposal = %q", got)
+	}
+	if got := ask(t, b, "You are mimi, x", "Results of your actions:\n- @describe propose x: ok\n  proposed: the person sees it"); !strings.Contains(got, "proposed a new description") {
+		t.Errorf("after = %q", got)
+	}
+}

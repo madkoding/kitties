@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/madkoding/kitties/internal/kitty"
@@ -52,7 +53,10 @@ func (s *Service) Edit(id string, title, description *string) (*Session, error) 
 		sess.Title, changed = t, true
 	}
 	if description != nil && sess.Description != d {
-		sess.Description, changed = d, true
+		s.describeLocked(sess, d, "user")
+		changed = true
+		// The person wrote it: a kitty's proposal waiting is answered by it.
+		sess.Proposal = nil
 	}
 	if changed {
 		// UpdatedAt stays: renaming a chat does not move it to the top of the list.
@@ -190,4 +194,140 @@ func clipRunes(s string, n int) string {
 	}
 	r := []rune(s)
 	return strings.TrimSpace(string(r[:n-1])) + "…"
+}
+
+// Description is an earlier description of a chat: its words, who wrote them and when.
+type Description struct {
+	Text string    `json:"text"`
+	By   string    `json:"by,omitempty"`
+	At   time.Time `json:"at"`
+}
+
+// Proposal is a description a kitty proposes for its chat.
+type Proposal struct {
+	Description string    `json:"description"`
+	By          string    `json:"by"`
+	At          time.Time `json:"at"`
+}
+
+// MaxDescriptions is how many earlier descriptions a chat keeps.
+const MaxDescriptions = 10
+
+// ProposeAgainAfter is how many turns a kitty waits, after the person dismissed a proposal,
+// before it may propose another.
+const ProposeAgainAfter = 10
+
+// describeHelp is what the describe_chat tool says about itself.
+const describeHelp = "Propose a new description for this chat when its course clearly changed: the goal moved on, " +
+	"or it has none and its purpose is now clear. The person accepts or dismisses it; until then nothing changes. " +
+	"Rarely: never for a detail, never twice in a row."
+
+// proposePrompt tells a kitty it may propose the chat's description; nothing while a proposal waits
+// or soon after the person dismissed one.
+func proposePrompt(sess *Session) string {
+	if sess.Proposal != nil || sess.Exposed || !mayPropose(sess) {
+		return ""
+	}
+	return "\nIf this chat's course clearly changed from its description (or it has none and its goal is now clear after " +
+		"a few messages), propose one, rarely, with the line `@describe propose <what the chat is for now, 1 to 3 sentences>` " +
+		"(or the describe_chat tool) and mention it in one short sentence: the person accepts or dismisses it.\n"
+}
+
+// mayPropose is whether enough turns went by since the person dismissed a proposal.
+func mayPropose(sess *Session) bool {
+	return sess.DismissedAt == 0 || len(sess.Turns)-sess.DismissedAt >= ProposeAgainAfter
+}
+
+// runDescribe keeps a kitty's proposal for the chat's description, for the person to answer.
+func (s *Service) runDescribe(id string, a action, k *kitty.Kitty) outcome {
+	text := argText(a.args, "description", "text")
+	if a.callID == "" && strings.HasPrefix(a.raw, "@describe ") {
+		// A text line: what follows "@describe" (and "propose"), as written.
+		text = strings.TrimSpace(strings.TrimPrefix(a.raw, "@describe "))
+		if rest, ok := strings.CutPrefix(text, "propose "); ok {
+			text = rest
+		}
+		var j struct {
+			Description string `json:"description"`
+		}
+		if json.Unmarshal([]byte(text), &j) == nil && j.Description != "" {
+			text = j.Description
+		}
+	}
+	text = Redact(strings.TrimSpace(text))
+	if text == "" {
+		return outcome{action: a, err: "say the description to propose"}
+	}
+	text = clipRunes(text, MaxDescription)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	switch {
+	case !ok:
+		return outcome{action: a, err: "no such chat"}
+	case sess.Exposed:
+		return outcome{action: a, err: "the description of a chat with other people is the person's to change"}
+	case sess.Proposal != nil:
+		return outcome{action: a, err: "a proposal already waits for the person's answer"}
+	case !mayPropose(sess):
+		return outcome{action: a, err: "the person dismissed a proposal a moment ago: keep working from the current description"}
+	case text == sess.Description:
+		return outcome{action: a, text: "that is already the description"}
+	}
+	sess.Proposal = &Proposal{Description: text, By: k.Name, At: s.now()}
+	if err := s.save(sess); err != nil {
+		return outcome{action: a, err: err.Error()}
+	}
+	s.emitLocked(Event{Type: "edited", Session: id})
+	return outcome{action: a, text: "proposed: the person sees it above the chat and accepts or dismisses it; keep working from the current description meanwhile"}
+}
+
+// AnswerProposal takes the description a kitty proposed (accept) or drops it. The answer to a
+// chat with no proposal is an error.
+func (s *Service) AnswerProposal(id string, accept bool) (*Session, error) {
+	s.mu.Lock()
+	sess, ok := s.sessions[id]
+	if !ok {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("no such chat %q", id)
+	}
+	p := sess.Proposal
+	if p == nil {
+		s.mu.Unlock()
+		return nil, fmt.Errorf("%w: no description waits for an answer", ErrEdit)
+	}
+	sess.Proposal = nil
+	if accept {
+		s.describeLocked(sess, p.Description, p.By)
+	} else {
+		sess.DismissedAt = len(sess.Turns)
+	}
+	if err := s.save(sess); err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	s.emitLocked(Event{Type: "edited", Session: id})
+	s.mu.Unlock()
+	return s.Get(id)
+}
+
+// describeLocked sets a new description, keeping the one it replaces among the earlier ones.
+func (s *Service) describeLocked(sess *Session, text, by string) {
+	if sess.Description != "" {
+		old := Description{Text: sess.Description, By: sess.DescriptionBy}
+		if sess.DescriptionAt != nil {
+			old.At = *sess.DescriptionAt
+		}
+		sess.Descriptions = append([]Description{old}, sess.Descriptions...)
+		if len(sess.Descriptions) > MaxDescriptions {
+			sess.Descriptions = sess.Descriptions[:MaxDescriptions]
+		}
+	}
+	sess.Description = text
+	if text == "" {
+		sess.DescriptionBy, sess.DescriptionAt = "", nil
+		return
+	}
+	now := s.now()
+	sess.DescriptionBy, sess.DescriptionAt = by, &now
 }

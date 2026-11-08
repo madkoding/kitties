@@ -249,6 +249,7 @@ func (s *Server) routes() {
 	s.mux.Handle("DELETE /v1/chats/{id}", api(s.handleDeleteChat))
 	s.mux.Handle("PATCH /v1/chats/{id}", api(s.handleEditChat))
 	s.mux.Handle("POST /v1/chats/{id}/suggest", api(s.handleSuggestChat))
+	s.mux.Handle("POST /v1/chats/{id}/proposal", api(s.handleProposal))
 	s.mux.Handle("POST /v1/chats/{id}/members", api(s.handleAddMembers))
 	s.mux.Handle("DELETE /v1/chats/{id}/members/{ref}", api(s.handleRemoveMember))
 	s.mux.Handle("POST /v1/chats/{id}/delegates/{ref}", api(s.handleRestoreDelegate))
@@ -979,6 +980,37 @@ func (s *Server) suggestChat(ctx context.Context, id string, apply bool) (chat.S
 }
 
 var errNoSuggest = errors.New("this gateway cannot suggest a title")
+
+// Proposals answers the description a kitty proposed for its chat (chat.Service.AnswerProposal).
+type Proposals interface {
+	AnswerProposal(id string, accept bool) (*chat.Session, error)
+}
+
+// handleProposal accepts the description a kitty proposed ({"accept": true}) or dismisses it.
+func (s *Server) handleProposal(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.chats.(Proposals)
+	if !ok {
+		fail(w, http.StatusNotImplemented, errors.New("this gateway keeps no proposals"))
+		return
+	}
+	var body struct {
+		Accept bool `json:"accept"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	sess, err := p.AnswerProposal(r.PathValue("id"), body.Accept)
+	if errors.Is(err, chat.ErrEdit) {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"chat": sess})
+}
 
 // handleSuggestChat is the "write it from the chat" button: {"apply": false} only proposes (the
 // person reviews it), {"apply": true} saves it too. Answers {suggestion, chat}.

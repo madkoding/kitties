@@ -425,6 +425,27 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 				out := map[string]any{"suggestion": got, "applied": sess != nil}
 				return jsonResult(out)
 			}},
+		{Name: "chat_proposal", Description: "Accept or dismiss the new description a kitty proposed for a thread (chat_get shows it as proposal).",
+			InputSchema: obj([]string{"id", "accept"}, map[string]any{"id": str("the thread's id"),
+				"accept": map[string]any{"type": "boolean", "description": "true takes it as the description, false dismisses it"}}), Annotations: write,
+			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					ID     string `json:"id"`
+					Accept bool   `json:"accept"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				p, ok := s.chats.(Proposals)
+				if !ok {
+					return mcp.Result{}, errors.New("this gateway keeps no proposals")
+				}
+				c, err := p.AnswerProposal(a.ID, a.Accept)
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				return jsonResult(map[string]any{"description": c.Description, "accepted": a.Accept})
+			}},
 		{Name: "chat_delete", Description: "Delete a thread with its turns, screenshots and files, for good. Pass confirm: true.",
 			InputSchema: obj([]string{"id", "confirm"}, map[string]any{"id": str("the thread's id"),
 				"confirm": map[string]any{"type": "boolean", "description": "must be true"}}), Annotations: danger,
