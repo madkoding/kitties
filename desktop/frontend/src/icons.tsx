@@ -199,3 +199,16 @@ export const IconCrown = (p: P) =>
   svg(p, [<path d="M2 18h20" />, <path d="M3 18 2 7l5.5 4L12 4l4.5 7L22 7l-1 11" />]);
 export const IconChat = (p: P) =>
   svg(p, [<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />]);
+export const IconDots = (p: P) =>
+  svg(p, [
+    <circle cx="5" cy="12" r="1" />,
+    <circle cx="12" cy="12" r="1" />,
+    <circle cx="19" cy="12" r="1" />,
+  ]);
+export const IconText = (p: P) =>
+  svg(p, [<path d="M4 6h16" />, <path d="M4 12h16" />, <path d="M4 18h10" />]);
+export const IconSparkles = (p: P) =>
+  svg(p, [
+    <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" />,
+    <path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z" />,
+  ]);

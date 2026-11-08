@@ -278,6 +278,8 @@ export interface Turn {
 export interface Session {
   id: string;
   title: string;
+  // description is what the chat is for, in the person's words: the kitties read it every turn.
+  description?: string;
   members: string[];
   turns?: Turn[];
   created_at: string;
@@ -439,7 +441,8 @@ export interface ConnectorTest {
 
 export interface ChatEvent {
   // helping: a kitty started or ended a subtask for the chat (no turn: the chat is read again).
-  type: "hello" | "turn" | "update" | "done" | "deleted" | "helping";
+  // edited: the chat was renamed or its description changed (no turn: the chat is read again).
+  type: "hello" | "turn" | "update" | "done" | "deleted" | "helping" | "edited";
   session?: string;
   index?: number;
   turn?: Turn;
@@ -988,6 +991,17 @@ export const api = {
   createChat: (title: string, members: string[]) =>
     request<{ chat: Session }>("POST", "/v1/chats", { title, members }).then((r) => r.chat),
   deleteChat: (id: string) => request("DELETE", `/v1/chats/${id}`),
+  // editChat renames a chat or changes its description; a field left out stays as it is.
+  editChat: (id: string, change: { title?: string; description?: string }) =>
+    request<{ chat: Session }>("PATCH", `/v1/chats/${id}`, change).then((r) => r.chat),
+  // suggestChat has one of the chat's kitties read it all and propose a title and a description;
+  // with apply it saves them too.
+  suggestChat: (id: string, apply = false) =>
+    request<{ suggestion: { title: string; description: string }; chat?: Session }>(
+      "POST",
+      `/v1/chats/${id}/suggest`,
+      { apply },
+    ),
   // removeMember takes a member out of a chat, or a delegate off it (until it is handed work there
   // again).
   removeMember: (id: string, ref: string) =>

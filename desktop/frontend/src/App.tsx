@@ -7,7 +7,8 @@ import Login from "./Login";
 import Welcome from "./Welcome";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
-import { IconMenu, IconMonitor, IconPlus, IconShield, IconTrash, IconUsers, IconX } from "./icons";
+import { IconMenu, IconMonitor, IconPlus, IconShield, IconUsers, IconX } from "./icons";
+import { ChatEditModal, ChatMenu, type ChatField } from "./ChatMenu";
 import LiveDesktop from "./LiveDesktop";
 import { ConnectModal, KittyDrawer, NewChatModal, NewKittyModal } from "./Modals";
 import SettingsModal from "./Settings";
@@ -79,6 +80,8 @@ export default function App() {
   const [current, setCurrent] = useState<string | null>(routeFromHash().chat);
   const [kittyOpen, setKittyOpen] = useState<string | null>(routeFromHash().kitty);
   const [modal, setModal] = useState<ModalKind>(routeFromHash().modal);
+  // editing is the chat whose title or description is being changed, from its ⋯ menu.
+  const [editing, setEditing] = useState<{ chat: Session; field: ChatField } | null>(null);
   // live is the kitty whose desktop is open live, over the chat.
   const [live, setLive] = useState<Kitty | null>(null);
   // #chat/<id>/live (the link of a notification about a task at work) opens the chat with its
@@ -314,6 +317,11 @@ export default function App() {
         loadSession(current);
         return;
       }
+      if (ev.type === "edited") {
+        loadSession(current);
+        refresh();
+        return;
+      }
       if (ev.turn === undefined || ev.index === undefined) {
         return;
       }
@@ -436,16 +444,40 @@ export default function App() {
     }
   };
 
-  const deleteChat = async () => {
+  // removeChat deletes a chat, the open one or any in the sidebar, after a yes.
+  const removeChat = async (c: Session) => {
     if (
-      session &&
-      (await ask(t('Delete the chat "{title}"?', { title: session.title }), t("Delete")))
+      !(await ask(
+        t('Delete the chat "{title}"? Its messages, screenshots and files go for good.', {
+          title: c.title,
+        }),
+        t("Delete"),
+      ))
     ) {
-      await api.deleteChat(session.id).catch((e) => setError(e.message));
+      return;
+    }
+    try {
+      await api.deleteChat(c.id);
+    } catch (e) {
+      setError(errText(e));
+      return;
+    }
+    if (c.id === current) {
       lastChat.current = null;
       location.hash = "";
-      refresh();
     }
+    refresh();
+  };
+
+  // A renamed chat, or one with a new description, is shown as the gateway keeps it.
+  const edited = (c: Session) => {
+    setEditing(null);
+    if (c.id === current) {
+      setSession((prev) =>
+        prev && prev.id === c.id ? { ...prev, ...c, turns: prev.turns } : prev,
+      );
+    }
+    refresh();
   };
 
   // toggleExposed marks the chat as one with people who are not the person (the guardrails apply)
@@ -547,6 +579,14 @@ export default function App() {
   return (
     <div class="app-bg h-full flex overflow-hidden">
       <ConfirmHost />
+      {editing && (
+        <ChatEditModal
+          chat={editing.chat}
+          focus={editing.field}
+          onClose={() => setEditing(null)}
+          onSaved={edited}
+        />
+      )}
       {upgrading && news && (
         <UpdateModal
           status={news}
@@ -567,6 +607,8 @@ export default function App() {
         open={sidebar}
         onClose={() => setSidebar(false)}
         onOpenChat={openChat}
+        onEditChat={(c, field) => setEditing({ chat: c, field })}
+        onDeleteChat={removeChat}
         onOpenKitty={openKitty}
         onNewChat={() => setModal("chat")}
         onNewKitty={() => setModal("kitty")}
@@ -590,9 +632,24 @@ export default function App() {
           >
             <IconMenu />
           </button>
-          <h1 class="text-sm sm:text-base font-semibold tracking-wide truncate min-w-0 flex-1">
-            {session ? session.title : "Kitties"}
-          </h1>
+          <div class="min-w-0 flex-1 flex flex-col">
+            <h1
+              class="text-sm sm:text-base font-semibold tracking-wide truncate"
+              data-testid="chat-title"
+            >
+              {session ? session.title : "Kitties"}
+            </h1>
+            {session?.description && (
+              <button
+                class="plain chat-description truncate text-left"
+                onClick={() => setEditing({ chat: session, field: "description" })}
+                title={session.description}
+                data-testid="chat-description"
+              >
+                {session.description}
+              </button>
+            )}
+          </div>
           {session && members.length > 1 && (
             <span
               class="tag tag-accent"
@@ -701,9 +758,12 @@ export default function App() {
             {working ? t("working") : online === false ? t("offline") : t("connected")}
           </span>
           {session && (
-            <button class="btn-ghost p-2" onClick={deleteChat} aria-label={t("Delete chat")}>
-              <IconTrash size={14} />
-            </button>
+            <ChatMenu
+              chat={session}
+              where="header"
+              onEdit={(c, field) => setEditing({ chat: c, field })}
+              onDelete={removeChat}
+            />
           )}
         </header>
         {error && (

@@ -16,6 +16,7 @@ import {
 } from "./icons";
 import PixelCat, { type Mood } from "./PixelCat";
 import { t } from "./i18n";
+import { ChatMenu, type ChatField } from "./ChatMenu";
 
 // moodOf is how a kitty looks in a list, from its state.
 export function moodOf(k: Kitty, working?: boolean): Mood {
@@ -57,6 +58,9 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onOpenChat: (id: string) => void;
+  // onEditChat and onDeleteChat are the chat row's ⋯ menu.
+  onEditChat: (c: Session, field: ChatField) => void;
+  onDeleteChat: (c: Session) => void;
   onOpenKitty: (id: string) => void;
   onNewChat: () => void;
   onNewKitty: () => void;
@@ -197,6 +201,7 @@ export default function Sidebar(p: Props) {
                   aria-label={c.title}
                   aria-current={p.current === c.id ? "page" : undefined}
                   aria-describedby={c.gist ? `gist-${c.id}` : undefined}
+                  title={c.description || undefined}
                 />
                 <span
                   class={`chat-cats n${Math.min(chatKitties(c).length, 3)}`}
@@ -252,6 +257,14 @@ export default function Sidebar(p: Props) {
                       {gistLine(c)}
                     </span>
                   )}
+                </span>
+                <span class="row-actions chat-row-menu">
+                  <ChatMenu
+                    chat={c}
+                    where="sidebar"
+                    onEdit={p.onEditChat}
+                    onDelete={p.onDeleteChat}
+                  />
                 </span>
               </div>
             ))}
