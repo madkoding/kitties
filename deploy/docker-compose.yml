@@ -8,10 +8,18 @@
 # mounted and the container joins its group (DOCKER_GID). That socket is root on the host: keep
 # the gateway behind its token, and read docs/DEPLOY.md before exposing it.
 
+# What the services print is kept in at most 3 files of 10 MB each: Docker's default keeps it all.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   kitties:
     image: ghcr.io/madkoding/kitties:latest
     restart: unless-stopped
+    logging: *logging
     # Watched by the optional "autoupdate" service below (and only this one).
     labels:
       com.centurylinklabs.watchtower.enable: "true"
@@ -52,6 +60,7 @@ services:
     image: containrrr/watchtower:1.7.1
     profiles: ["autoupdate"]
     restart: unless-stopped
+    logging: *logging
     environment:
       WATCHTOWER_LABEL_ENABLE: "true"
       WATCHTOWER_CLEANUP: "true"
@@ -65,6 +74,7 @@ services:
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
+    logging: *logging
     depends_on:
       - kitties
     ports:
