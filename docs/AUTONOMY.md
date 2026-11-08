@@ -72,7 +72,7 @@ A kitty is not only something you talk to. Each one has an agenda:
   follow it. The sidebar's *groups* button lists only the chats with more than one kitty. The
   **+** beside a helper in the header makes it a member (it then answers there too), and the
   **×** takes it off the chat (its answers stay; it is back if handed work there again, or when
-  you click its dimmed tag in the header). The lead's panel, in its drawer's *Team* tab, counts the subtasks
+  you click its dimmed tag in the header). The lead's panel, in its drawer's *Team* tab, charts the subtasks handed around each day of the last two weeks and counts the subtasks
   each kitty handed out, took on and failed; a row opens the kitty's latest hand-over threads.
   A kitty that fails three subtasks in a row is reported to the lead (and to you, with
   `delegated` notices on), so a broken model, limit or desktop does not go unnoticed. When a
