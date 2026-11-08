@@ -106,7 +106,7 @@ motita:
 # an ntfy topic pushes to your phone.
 notify:
   connector: phone
-  on: [help, approval]           # help | approval | goal_done | goal_blocked | recovered | budget | updated | progress
+  on: [help, approval]           # help | approval | goal_done | goal_blocked | recovered | budget | updated | delegated | progress
   digest: "08:30"                # a summary of the last day, every day at this time (empty: none)
   replies: false                 # true: what you write to the ntfy topic reaches the kitties
                                  # (needs a topic of 20+ characters or an access token)

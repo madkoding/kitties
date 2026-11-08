@@ -797,7 +797,11 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	}
 	window, _ := config.ParseWindow(a.cfg.Updates.Window)
 	go a.updater.Watch(ctx, updateFirstCheck, time.Duration(a.cfg.Updates.CheckHours)*time.Hour, updateHooks(a.notifier, func() bool { return window.Contains(time.Now()) }, logf))
-	return srv.Listen(ctx, g.Listen, logf)
+	err := srv.Listen(ctx, g.Listen, logf)
+	// Stopping: the hand-over notices still waiting to be folded go out now, not lost.
+	a.chats.FlushHandOvers()
+	a.notifier.Wait()
+	return err
 }
 
 // openSecretStores opens the vault of saved secrets and the store of session backups, which share

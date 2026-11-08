@@ -44,7 +44,24 @@ A kitty is not only something you talk to. Each one has an agenda:
   with the spare instead of waiting ([Configuration](CONFIGURATION.md#a-spare-brain)).
 - **Delegation.** A kitty can hand a subtask to another (`@delegate luna {"task": "..."}`,
   or the native `delegate` tool), waits for the answer and goes on. Hand-overs are bounded in
-  depth so two kitties cannot bounce a task back and forth.
+  depth so two kitties cannot bounce a task back and forth. The chat it happens in becomes a
+  group of kitties: the helper joins it as a *delegate* (it does not answer what you write
+  there; `@name` still picks among the members), the sidebar huddles their cats with the count,
+  the header lists the helper with a dashed edge, and its answer shows under the turn that
+  asked, with its own name and cat (a long answer opens whole on request), and a link to the
+  thread between the two. While it works, the chat shows it at work with its cat and a link to
+  follow it. The sidebar's *groups* button lists only the chats with more than one kitty. The
+  **+** beside a helper in the header makes it a member (it then answers there too), and the
+  **×** takes it off the chat (its answers stay; it is back if handed work there again, or when
+  you click its dimmed tag in the header). The lead's panel, in its drawer, counts the subtasks
+  each kitty handed out, took on and failed; a row opens the kitty's latest hand-over threads.
+  A kitty that fails three subtasks in a row is reported to the lead (and to you, with
+  `delegated` notices on), so a broken model, limit or desktop does not go unnoticed. When a
+  hand-over finishes or fails, the lead hears it in its Reports thread (unless the lead asked),
+  and you do too if *Notifications* has "A kitty finished a subtask…" (`delegated`) on; the
+  hand-overs of a chat that end within a minute arrive as one message (sent at once if the
+  gateway stops). A kitty you delete leaves every chat it helped in. An exposed chat
+  (guardrails) never delegates, so it stays a chat of one kitty.
 - **A journal.** Every run, event, retry, hand-over, cry for help and recovery is a line in the
   kitty's journal, in its drawer.
 
@@ -206,7 +223,7 @@ kitties:
     approvals: ask               # empty (default): acts as far as the account allows | ask
 notify:
   connector: phone               # any messaging connector; ntfy pushes to your phone
-  on: [help, approval, goal_done, goal_blocked, recovered, budget, progress]   # default: help, approval; progress: a long task's plan lines, one every 10 minutes at most
+  on: [help, approval, goal_done, goal_blocked, recovered, budget, delegated, progress]   # default: help, approval; progress: a long task's plan lines, one every 10 minutes at most
   digest: "08:30"                # a summary of the last day, every day (gateway's clock); empty: none
   replies: true                  # answer the kitties by writing to the ntfy topic
 connectors:

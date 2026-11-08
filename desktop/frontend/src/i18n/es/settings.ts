@@ -184,6 +184,8 @@ const dict: Dictionary = {
   "A kitty gave up and needs my help": "Un kitty se rindió y necesita mi ayuda",
   "An action is waiting for my yes": "Una acción espera mi aprobación",
   "A goal finished": "Se terminó un objetivo",
+  "A kitty finished a subtask another handed it, or could not":
+    "Un kitty terminó una subtarea que otro le encargó, o no pudo",
   "A goal could not finish": "Un objetivo no se pudo terminar",
   "A kitty's container was brought back": "Se recuperó el contenedor de un kitty",
   "A kitty spent its day's tokens": "Un kitty gastó los tokens de su día",

@@ -214,6 +214,8 @@ export interface Delegation {
   chat: string;
   task: string;
   result?: string;
+  // answer is the whole answer when result had to be cut.
+  answer?: string;
   error?: string;
   // limits says what the lead gave the kitty for this task alone, when it did.
   limits?: string;
@@ -289,6 +291,45 @@ export interface Session {
   // public chat): the guardrails apply; audience says who writes there.
   exposed?: boolean;
   audience?: string;
+  // delegates are the kitties that took part through a hand-over without being members (they do
+  // not answer what the person writes); kitties is every kitty of the chat: members, the kitty
+  // that opened it to delegate, and delegates. More than one makes it a group of kitties.
+  delegates?: string[];
+  kitties?: string[];
+  // helping are the kitties at work right now on a subtask handed over from this chat.
+  helping?: Helper[];
+  // dismissed are delegates the person took off the chat.
+  dismissed?: string[];
+}
+
+// HandOverStat is how one kitty has handed work out (asked) and taken it on (took), and how much
+// of each failed, over every chat kept.
+export interface HandOverStat {
+  kitty_id: string;
+  kitty: string;
+  asked: number;
+  asked_failed: number;
+  took: number;
+  took_failed: number;
+  // threads are the hand-over threads it took part in, the latest first.
+  threads?: { id: string; title: string; at: string }[];
+}
+
+// Helper is a kitty at work on a subtask handed over from a chat.
+export interface Helper {
+  kitty: string;
+  kitty_id: string;
+  // from is the kitty that asked; chat the thread between the two.
+  from: string;
+  task: string;
+  chat: string;
+  since: string;
+}
+
+// chatKitties is every kitty taking part in a chat, members first (a gateway older than the
+// field gives only the members).
+export function chatKitties(c: Session): string[] {
+  return c.kitties && c.kitties.length ? c.kitties : c.members;
 }
 
 export interface ProviderKind {
@@ -390,7 +431,8 @@ export interface ConnectorTest {
 }
 
 export interface ChatEvent {
-  type: "hello" | "turn" | "update" | "done" | "deleted";
+  // helping: a kitty started or ended a subtask for the chat (no turn: the chat is read again).
+  type: "hello" | "turn" | "update" | "done" | "deleted" | "helping";
   session?: string;
   index?: number;
   turn?: Turn;
@@ -804,7 +846,11 @@ export const api = {
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
   // lead is the fleet's lead kitty and its Reports thread; setLead makes another the lead
   // (an empty kitty leaves the fleet without one).
-  lead: () => request<{ lead: Kitty | null; reports?: string }>("GET", "/v1/lead"),
+  lead: () =>
+    request<{ lead: Kitty | null; reports?: string; handovers?: HandOverStat[] }>(
+      "GET",
+      "/v1/lead",
+    ),
   setLead: (kitty: string) =>
     request<{ lead: Kitty | null; reports?: string }>("PUT", "/v1/lead", { kitty }),
   // power is the state of a kitty's machine; setPower turns it on (it comes up in the background)
@@ -927,6 +973,17 @@ export const api = {
   createChat: (title: string, members: string[]) =>
     request<{ chat: Session }>("POST", "/v1/chats", { title, members }).then((r) => r.chat),
   deleteChat: (id: string) => request("DELETE", `/v1/chats/${id}`),
+  // removeMember takes a member out of a chat, or a delegate off it (until it is handed work there
+  // again).
+  removeMember: (id: string, ref: string) =>
+    request<{ chat: Session }>("DELETE", `/v1/chats/${id}/members/${encodeURIComponent(ref)}`).then(
+      (r) => r.chat,
+    ),
+  // restoreDelegate brings back a delegate the person took off a chat.
+  restoreDelegate: (id: string, ref: string) =>
+    request<{ chat: Session }>("POST", `/v1/chats/${id}/delegates/${encodeURIComponent(ref)}`).then(
+      (r) => r.chat,
+    ),
   addMembers: (id: string, members: string[]) =>
     request<{ chat: Session }>("POST", `/v1/chats/${id}/members`, { members }).then((r) => r.chat),
   send: async (id: string, text: string, files: File[] = []) => {
@@ -1630,7 +1687,7 @@ export function watchChat(id: string, onEvent: (e: ChatEvent) => void): () => vo
       return;
     }
     es = new EventSource(shotURL(`/v1/chats/${id}/events`));
-    for (const type of ["turn", "update", "done", "deleted"]) {
+    for (const type of ["turn", "update", "done", "deleted", "helping"]) {
       es.addEventListener(type, (ev) => {
         try {
           onEvent(JSON.parse((ev as MessageEvent).data) as ChatEvent);
