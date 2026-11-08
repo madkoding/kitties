@@ -52,6 +52,9 @@ type Status struct {
 	Error     string    `json:"error,omitempty"`
 	// Skipped is a newer version that was tried here and did not hold, and is not offered again.
 	Skipped string `json:"skipped,omitempty"`
+	// App is true when this is the gateway of the desktop app: the update is the whole app's, and
+	// the app closes and opens again on the new version.
+	App bool `json:"app,omitempty"`
 	// URL is the page of the newest release; Changes are the lines of its "What's Changed".
 	URL     string   `json:"url,omitempty"`
 	Changes []string `json:"changes,omitempty"`
@@ -111,6 +114,10 @@ type Updater struct {
 	Restart func(exe string, args, env []string) error
 	// Now is the clock.
 	Now func() time.Time
+	// Run runs a command and answers its output; Detach starts one that outlives this process
+	// (the app's restart). Tests replace them.
+	Run    func(ctx context.Context, name string, args ...string) ([]byte, error)
+	Detach func(name string, args []string, env ...string) error
 
 	mu       sync.Mutex
 	status   Status
@@ -118,6 +125,8 @@ type Updater struct {
 	told     string
 	progress *Progress
 	running  bool
+	// installer is the Windows installer of the app, downloaded and waiting to run.
+	installer string
 }
 
 type release struct {
@@ -137,7 +146,7 @@ func New(cfg config.Updates, current string) *Updater {
 	u := &Updater{
 		cfg: cfg, Current: current, Exe: exe, OS: runtime.GOOS, Arch: runtime.GOARCH,
 		InDocker: docker == nil || os.Getenv("KITTIES_IN_DOCKER") != "",
-		Restart:  restart, Now: time.Now,
+		Restart:  restart, Now: time.Now, Run: runCommand, Detach: detach,
 		HTTP: &http.Client{Timeout: 10 * time.Minute},
 	}
 	u.HTTP.CheckRedirect = func(req *http.Request, _ []*http.Request) error {
@@ -207,8 +216,8 @@ func (u *Updater) canApply() (bool, string) {
 		return false, "this is a development build: it does not update itself"
 	case u.InDocker:
 		return false, "this gateway runs in a container: update it with `docker compose pull && docker compose up -d`"
-	case strings.Contains(filepath.ToSlash(u.Exe), ".app/Contents/") || strings.HasPrefix(filepath.Base(u.Exe), "kitties-gateway"):
-		return false, "this gateway belongs to the Kitties app: update the app"
+	case u.inApp():
+		return u.canApplyApp()
 	case u.OS == "windows":
 		return false, "a running program cannot be replaced on Windows: download the new version and replace it by hand"
 	case u.cfg.Gateway == config.UpdateAuto && u.publicKey() == "":
@@ -259,7 +268,7 @@ func (u *Updater) fail(err error) {
 // Check asks GitHub for the newest release.
 func (u *Updater) Check(ctx context.Context) (Status, error) {
 	can, why := u.canApply()
-	st := Status{Current: u.Current, Mode: u.cfg.Gateway, CanApply: can, Why: why, CheckedAt: u.Now(), Signed: u.publicKey() != ""}
+	st := Status{Current: u.Current, Mode: u.cfg.Gateway, CanApply: can, Why: why, CheckedAt: u.Now(), Signed: u.publicKey() != "", App: u.inApp()}
 	if !isRelease(u.Current) {
 		// A development build has nothing to compare with: there is no use in asking.
 		u.set(st, release{})
@@ -492,6 +501,9 @@ func (u *Updater) unclaim() {
 // install downloads the release's binary for this system, checks it, and puts it in place.
 func (u *Updater) install(ctx context.Context, rel release) (string, error) {
 	name := u.assetName()
+	if u.inApp() {
+		name = u.appAsset()
+	}
 	binURL, sumsURL := rel.Assets[name], rel.Assets["SHA256SUMS"]
 	if binURL == "" || sumsURL == "" {
 		return "", fmt.Errorf("the release %s has no %s with its SHA256SUMS", rel.Tag, name)
@@ -535,6 +547,13 @@ func (u *Updater) install(ctx context.Context, rel release) (string, error) {
 		return "", fmt.Errorf("%s does not match its SHA256SUMS: it was not installed", name)
 	}
 	u.step(PhaseInstall, 92, 0, 0)
+	if u.inApp() {
+		// The app is not gone back from by itself: its .prev is kept for doing it by hand.
+		if err := u.installApp(ctx, bin, rel.Tag); err != nil {
+			return "", err
+		}
+		return rel.Tag, nil
+	}
 	if err := u.swap(ctx, bin, rel.Tag); err != nil {
 		return "", err
 	}
@@ -595,7 +614,12 @@ func (u *Updater) swap(ctx context.Context, bin []byte, tag string) error {
 // Relaunch restarts into the binary now in place, with the same arguments and environment. If it
 // cannot, the program goes on running the old version and the status says so.
 func (u *Updater) Relaunch() error {
-	err := u.Restart(u.Exe, os.Args, os.Environ())
+	var err error
+	if u.inApp() {
+		err = u.relaunchApp()
+	} else {
+		err = u.Restart(u.Exe, os.Args, os.Environ())
+	}
 	if err != nil {
 		u.mu.Lock()
 		u.status.Error = "the new version is in place but Kitties could not restart into it: restart it by hand"
@@ -657,7 +681,8 @@ func (u *Updater) round(ctx context.Context, h Hooks) {
 			h.Available(st)
 		}
 	}
-	if u.cfg.Gateway != config.UpdateAuto || !st.CanApply {
+	// The app is not closed under the person's hands: it is told, and updated when they say so.
+	if u.cfg.Gateway != config.UpdateAuto || !st.CanApply || st.App {
 		tell()
 		return
 	}
