@@ -92,6 +92,7 @@ func (a *App) startGateway() string {
 	hideWindow(cmd)
 	logPath := filepath.Join(filepath.Dir(configPath()), "gateway.log")
 	if err := os.MkdirAll(filepath.Dir(logPath), 0o700); err == nil {
+		rotateLog(logPath, maxLogBytes)
 		if f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600); err == nil {
 			cmd.Stdout, cmd.Stderr = f, f
 			defer f.Close()
@@ -122,6 +123,19 @@ func (a *App) startGateway() string {
 		time.Sleep(100 * time.Millisecond)
 	}
 	return "the bundled gateway did not answer in time: see " + logPath
+}
+
+// maxLogBytes is how big a log of the app (gateway.log, desktop.log) grows before it is rotated.
+var maxLogBytes int64 = 5 << 20
+
+// rotateLog moves a log that grew past max to <path>.1 (replacing the one before), so the app's
+// logs take at most twice max: the bundled gateway writes to its log for as long as it runs, and
+// every start of the app appends to it.
+func rotateLog(path string, max int64) {
+	if st, err := os.Stat(path); err == nil && st.Size() > max {
+		_ = os.Remove(path + ".1")
+		_ = os.Rename(path, path+".1")
+	}
 }
 
 // gatewayStartTimeout is how long the app waits for the gateway it started.
