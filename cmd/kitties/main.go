@@ -393,6 +393,22 @@ func (a *app) open(cmd string) error {
 			return a.notifier.Deliver(ctx, chats.LeadDigest(n))
 		},
 		Plans: chats.Plans,
+		Link: a.notifier.Link,
+		// The scheduled tasks whose last run did not end well, with the link to their runs.
+		Attention: func() []digest.Task {
+			var out []digest.Task
+			for _, g := range ag.Goals("") {
+				switch g.LastResult {
+				case "blocked", "escalated", "failed":
+					name := g.Kitty
+					if k, err := fleet.Get(g.Kitty); err == nil {
+						name = k.Name
+					}
+					out = append(out, digest.Task{Title: g.Title, Kitty: name, Result: g.LastResult, Chat: g.Chat})
+				}
+			}
+			return out
+		},
 		Day:   digest.MyDay(fleet.Connectors()),
 	}, filepath.Join(dataDir, "digest.json"))
 	a.summaries = &chat.LeadSummaries{
