@@ -30,6 +30,15 @@ Commits and pull request titles follow [Conventional Commits](https://www.conven
   public one is the repository variable `KITTIES_UPDATE_PUBKEY`. Without the secret a release is
   published unsigned and CI warns. `kitties release-key` makes a pair, `release-sign` and
   `release-verify` sign and check a file.
+- **Turning signing on** (once):
+  1. `go run ./cmd/kitties release-key` prints a public key (44 characters) and a private key (88).
+  2. GitHub › Settings › Secrets and variables › Actions: the secret `KITTIES_SIGNING_KEY` = the
+     private key, the variable `KITTIES_UPDATE_PUBKEY` = the public key. Keep a copy of the private
+     key somewhere safe: a lost key means installs built with the old public key refuse the next
+     updates.
+  3. The next release is signed and its binaries (and the desktop apps' gateways) carry the key, so
+     the page stops warning about checksum-only updates and `updates.gateway: auto` works. Installs
+     from before keep accepting checksum-only updates until they run a version with the key.
 - **Android.** The APK is signed with the `KITTIES_KEYSTORE_BASE64`, `KITTIES_KEYSTORE_PASSWORD` and
   `KITTIES_KEY_ALIAS` secrets. Without them each release gets a debug key, and an installed app has
   to be uninstalled before updating.
