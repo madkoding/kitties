@@ -290,6 +290,10 @@ func (n *Notifier) call(ctx context.Context, name string, note Notification) err
 		return fmt.Errorf("no such connector %q", name)
 	}
 	link := n.Link(note.Chat)
+	if note.Event == Progress && note.Chat != "" && link != "" {
+		// News of a task at work opens it where it is seen: the chat with the desktop live.
+		link += "/live"
+	}
 	title := note.Title
 	if note.Kitty != "" {
 		title = note.Kitty + ": " + title

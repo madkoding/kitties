@@ -257,3 +257,16 @@ func TestOnSentHearsWhatWentOut(t *testing.T) {
 		t.Errorf("heard %+v (a failed send is not heard)", heard)
 	}
 }
+
+func TestProgressOpensTheDesktopLive(t *testing.T) {
+	n, sk := setup(Config{Connector: "push", On: []string{"progress"}}, "ntfy")
+	n.Notify(Notification{Event: Progress, Kitty: "tom", Title: "is working on it", Body: "I fill in the form.", Chat: "c4"})
+	n.Notify(Notification{Event: Progress, Kitty: "tom", Title: "is working on it", Body: "I pay.", Chat: "c4"})
+	n.Wait()
+	if sk.count() != 1 {
+		t.Fatalf("a second line of the same chat waits its quiet time: %d calls", sk.count())
+	}
+	if c := sk.calls[0]; c["click"] != "https://kitties.example.com/#chat/c4/live" || c["priority"] != nil || c["text"] != "I fill in the form." {
+		t.Errorf("progress = %v", c)
+	}
+}
