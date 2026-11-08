@@ -77,6 +77,7 @@ func (m *Manager) CheckUpdates(ctx context.Context, updated func(k *kitty.Kitty)
 	if w, err := config.ParseWindow(m.cfg.Updates.Window); err != nil || !w.Contains(m.now()) {
 		return
 	}
+	renewed := 0
 	for _, k := range m.List() {
 		if !k.Desktop || k.Status != kitty.StatusRunning {
 			continue
@@ -86,12 +87,34 @@ func (m *Manager) CheckUpdates(ctx context.Context, updated func(k *kitty.Kitty)
 		}
 		switch err := m.renew(ctx, k, true); {
 		case err == nil:
+			renewed++
 			updated(k)
 		case errors.Is(err, errBusy):
 		default:
 			warn("update: %s: %v", k.Name, err)
 		}
 	}
+	// The image the desktops left behind is 2 to 3 GB that nothing uses any more.
+	if renewed > 0 {
+		if _, err := m.PruneImages(ctx); err != nil {
+			warn("update: %v", err)
+		}
+	}
+}
+
+// imagePruner is a runtime that can delete the desktop images nothing uses any more.
+type imagePruner interface {
+	PruneImages(ctx context.Context) (string, error)
+}
+
+// PruneImages deletes the desktop images left behind by updates (no container uses them), and
+// says what that freed; nothing when the runtime cannot.
+func (m *Manager) PruneImages(ctx context.Context) (string, error) {
+	p, ok := m.ctr().(imagePruner)
+	if !ok {
+		return "", nil
+	}
+	return p.PruneImages(ctx)
 }
 
 // SetKeeper gives the manager the place the backups are kept.
@@ -244,7 +267,11 @@ func (m *Manager) update(ctx context.Context, id string) error {
 	}
 	// A reference that is only built here has nothing to pull: what is on this machine is the news.
 	_ = m.ctr().Pull(ctx, m.cfg.Containers.Image)
-	return m.renew(ctx, k, false)
+	if err := m.renew(ctx, k, false); err != nil {
+		return err
+	}
+	_, _ = m.PruneImages(ctx)
+	return nil
 }
 
 // renew makes a kitty's container anew from the newest image when it is of an older one. In auto

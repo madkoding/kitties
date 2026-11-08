@@ -196,6 +196,9 @@ type Spec struct {
 	Env    map[string]string
 	// Seccomp is the path of the seccomp profile to run with (see seccomp.go); empty keeps the runtime's default.
 	Seccomp string
+	// Logs are the options that bound what the runtime keeps of the container's output (logArgs);
+	// empty keeps the runtime's own, which may grow without end.
+	Logs []string
 }
 
 // Validate refuses a spec that would build a wrong or dangerous command line.
@@ -237,6 +240,7 @@ func (s Spec) Args() []string {
 	if s.Seccomp != "" {
 		args = append(args, "--security-opt", "seccomp="+s.Seccomp)
 	}
+	args = append(args, s.Logs...)
 	// The home first: the workspace and the shared folder are mounted inside it.
 	if s.Home != "" {
 		args = append(args, "-v", s.Home+":"+HomeDir)
@@ -530,11 +534,54 @@ func (m *Manager) Up(ctx context.Context, s Spec) (string, error) {
 	if p, err := writeSeccomp(); err == nil {
 		s.Seccomp = p
 	}
+	if s.Logs == nil {
+		s.Logs = logArgs(m.rt.Bin)
+	}
 	out, err := runCmd(ctx, m.rt.Bin, s.Args()...)
 	if err != nil {
 		return "", fmt.Errorf("start %s: %s", s.Name, tail(string(out), 6))
 	}
 	return strings.TrimSpace(string(out)), nil
+}
+
+// LogMaxMB and LogFiles bound what the runtime keeps of a desktop's output: at most LogFiles
+// files of LogMaxMB each (Docker's json-file); Podman keeps one file of LogMaxMB.
+const (
+	LogMaxMB = 10
+	LogFiles = 3
+)
+
+// logArgs are the options of `run` that keep a desktop's output from filling the disk: without
+// them Docker's json-file log grows as long as the container lives. Docker gets its json-file
+// driver named, so a daemon set to another one (journald, which has no max-size) still takes them.
+func logArgs(bin string) []string {
+	size := "max-size=" + strconv.Itoa(LogMaxMB) + "m"
+	if strings.Contains(strings.ToLower(filepath.Base(bin)), "podman") {
+		return []string{"--log-opt", size}
+	}
+	return []string{"--log-driver", "json-file", "--log-opt", size, "--log-opt", "max-file=" + strconv.Itoa(LogFiles)}
+}
+
+// PruneImages deletes the desktop images nothing uses any more: those left without a tag when a
+// newer one was pulled under the same name (an update), 2 to 3 GB each. Only images with the
+// desktop's own label (HomeLabel) are touched, and never one a container (even a stopped one) is
+// made from. It returns what the runtime said it freed.
+func (m *Manager) PruneImages(ctx context.Context) (string, error) {
+	out, err := runCmd(ctx, m.rt.Bin, "image", "prune", "-f", "--filter", "label="+HomeLabel)
+	if err != nil {
+		return "", fmt.Errorf("prune the old desktop images: %s", tail(string(out), 4))
+	}
+	return reclaimed(string(out)), nil
+}
+
+// reclaimed is the "Total reclaimed space: …" of a prune, empty when it says none.
+func reclaimed(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if v, ok := strings.CutPrefix(strings.TrimSpace(line), "Total reclaimed space:"); ok {
+			return strings.TrimSpace(v)
+		}
+	}
+	return ""
 }
 
 // Stop stops the container, keeping it for a later Start.
