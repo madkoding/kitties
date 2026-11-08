@@ -1168,15 +1168,42 @@ test("a first run is a checklist, and nothing can be made out of order", async (
   await expect(page.getByTestId("provider-picker")).toBeVisible();
 });
 
-test("a kitty hands a subtask to another and the chip leads to their thread", async ({ page }) => {
+test("a chat where a kitty hands a subtask to another reads as a group of both", async ({
+  page,
+}) => {
   await open(page, `#chat/${ids.delegated}`);
   await expect(page.getByText("luna took care of it").first()).toBeVisible();
-  const chip = page.locator(".tag", { hasText: "→ luna" }).first();
-  await expect(chip).toBeVisible();
+  // luna's answer shows in the chat with its own name and cat, under mimi's turn that asked.
+  const reply = page.getByTestId("delegate-reply").first();
+  await expect(reply).toHaveAttribute("data-who", "luna");
+  await expect(reply.locator(".msg-cat > *").first()).toBeVisible();
+  await expect(reply).toContainText("mimi asked: summarise the launch plan");
+  // The header lists both kitties, luna marked as a helper, and says it is a group.
+  await expect(page.getByTestId("chat-group")).toBeVisible();
+  await expect(page.getByTestId("chat-kitty")).toHaveText(["mimi", "luna"]);
+  await expect(page.locator(".tag-delegate", { hasText: "luna" })).toBeVisible();
+  // In the sidebar the chat huddles both cats, with the count among its tags.
+  const row = page
+    .getByTestId("sidebar-chats")
+    .getByRole("button", { name: "Plan review", exact: true })
+    .locator("xpath=..");
+  await expect(row.getByTestId("chat-cats").locator("> *")).toHaveCount(2);
+  await expect(row.getByTestId("chat-count")).toHaveText("2");
+  await expect(row.getByTestId("chat-count")).toHaveAttribute("title", "mimi, luna");
+  // The API says the same: mimi is the member, luna a delegate, both kitties of the chat.
+  const res = await page.request.get(`${GATEWAY}/v1/chats/${ids.delegated}`, {
+    headers: { Authorization: "Bearer e2e-token" },
+  });
+  const chat = (await res.json()).chat;
+  expect(chat.members).toEqual([ids.mimi]);
+  expect(chat.kitties).toHaveLength(2);
+  expect(chat.delegates).toHaveLength(1);
   await shot(page, "20-delegation");
-  await chip.click();
+  // The thread between the two is a group of both as well.
+  await reply.getByRole("link").click();
   await expect(page.getByText("mimi → luna").first()).toBeVisible();
   await expect(page.getByText("summarise the launch plan").first()).toBeVisible();
+  await expect(page.getByTestId("chat-kitty")).toHaveCount(2);
 });
 
 test("a long list of goals shows its first few, and the rest on request", async ({ page }) => {

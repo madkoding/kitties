@@ -62,6 +62,11 @@ const dict: Dictionary = {
   // Sidebar
   Chats: "Chats",
   "{count} kitties": "{count} kitties",
+  "{name} helps in this chat: a subtask was handed to it":
+    "{name} ayuda en este chat: se le encargó una subtarea",
+  "{from} asked: {task}": "{from} pidió: {task}",
+  "Could not do it: {error}": "No pudo hacerlo: {error}",
+  "Open the thread between {from} and {name}": "Abrir el hilo entre {from} y {name}",
   "You: {text}": "Tú: {text}",
   "No chats yet.": "Todavía no hay chats.",
   help: "ayuda",

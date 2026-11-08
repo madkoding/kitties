@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import type { Kitty, ProviderInfo, Session } from "./api";
-import { ApiError, api, cookieLogin, errText, inWails, watchChat } from "./api";
+import { ApiError, api, chatKitties, cookieLogin, errText, inWails, watchChat } from "./api";
 import ArtifactReader from "./ArtifactReader";
 import { ConfirmHost, ask } from "./Confirm";
 import Login from "./Login";
@@ -437,8 +437,11 @@ export default function App() {
     }
   };
 
+  // Every kitty of the chat: its members and the ones handed a subtask in it.
   const members = session
-    ? session.members.map((id) => kitties.find((k) => k.id === id)).filter(Boolean)
+    ? chatKitties(session)
+        .map((id) => kitties.find((k) => k.id === id))
+        .filter(Boolean)
     : [];
   const kitty = kittyOpen
     ? kitties.find((k) => k.id === kittyOpen || k.name === kittyOpen)
@@ -481,8 +484,12 @@ export default function App() {
           <h1 class="text-sm sm:text-base font-semibold tracking-wide truncate min-w-0 flex-1">
             {session ? session.title : "Kitties"}
           </h1>
-          {session && session.members.length > 1 && (
-            <span class="tag tag-accent">
+          {session && members.length > 1 && (
+            <span
+              class="tag tag-accent"
+              data-testid="chat-group"
+              title={t("{count} kitties", { count: members.length })}
+            >
               <IconUsers size={10} /> {t("group")}
             </span>
           )}
@@ -509,7 +516,16 @@ export default function App() {
             </button>
           )}
           {members.map((k) => (
-            <span key={k!.id} class="hidden sm:inline-flex tag items-center">
+            <span
+              key={k!.id}
+              class={`hidden sm:inline-flex tag items-center ${session?.members.includes(k!.id) ? "" : "tag-delegate"}`}
+              title={
+                session?.members.includes(k!.id)
+                  ? undefined
+                  : t("{name} helps in this chat: a subtask was handed to it", { name: k!.name })
+              }
+              data-testid="chat-kitty"
+            >
               <PixelCat
                 breed={k!.avatar?.breed}
                 color={k!.avatar?.color}
@@ -571,7 +587,7 @@ export default function App() {
             kitty={live}
             onClose={() => setLive(null)}
             chat={
-              session && session.members.includes(live.id)
+              session && chatKitties(session).includes(live.id)
                 ? {
                     session,
                     kitties,

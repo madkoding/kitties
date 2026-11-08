@@ -1,4 +1,4 @@
-import type { Kitty, Session } from "./api";
+import { chatKitties, type Kitty, type Session } from "./api";
 import {
   IconBook,
   IconBrain,
@@ -39,7 +39,7 @@ export function gistLine(c: Session): string {
   if (c.gist_by === "user") {
     return t("You: {text}", { text: c.gist });
   }
-  if (c.gist_by && c.members.length > 1) {
+  if (c.gist_by && chatKitties(c).length > 1) {
     return `${c.gist_by}: ${c.gist}`;
   }
   return c.gist;
@@ -149,19 +149,24 @@ export default function Sidebar(p: Props) {
                   aria-current={p.current === c.id ? "page" : undefined}
                   aria-describedby={c.gist ? `gist-${c.id}` : undefined}
                 />
-                <span class={`chat-cats n${Math.min(c.members.length, 3)}`} data-testid="chat-cats">
-                  {c.members.slice(0, 3).map((id) => {
-                    const k = byId.get(id);
-                    return k ? (
-                      <PixelCat
-                        key={id}
-                        breed={k.avatar?.breed}
-                        color={k.avatar?.color}
-                        mood={p.workingChats.has(c.id) ? "working" : moodOf(k)}
-                        size={c.members.length > 1 ? 24 : 36}
-                      />
-                    ) : null;
-                  })}
+                <span
+                  class={`chat-cats n${Math.min(chatKitties(c).length, 3)}`}
+                  data-testid="chat-cats"
+                >
+                  {chatKitties(c)
+                    .slice(0, 3)
+                    .map((id) => {
+                      const k = byId.get(id);
+                      return k ? (
+                        <PixelCat
+                          key={id}
+                          breed={k.avatar?.breed}
+                          color={k.avatar?.color}
+                          mood={p.workingChats.has(c.id) ? "working" : moodOf(k)}
+                          size={chatKitties(c).length > 1 ? 24 : 36}
+                        />
+                      ) : null;
+                    })}
                 </span>
                 <span class="flex-1 min-w-0 flex flex-col">
                   <span class="flex items-center gap-1.5 min-w-0">
@@ -171,10 +176,18 @@ export default function Sidebar(p: Props) {
                       {c.reports && !c.needs_help && (
                         <span class="tag tag-accent">{t("reports")}</span>
                       )}
-                      {c.members.length > 1 && (
-                        <span class="tag" title={t("{count} kitties", { count: c.members.length })}>
+                      {chatKitties(c).length > 1 && (
+                        <span
+                          class="tag"
+                          data-testid="chat-count"
+                          title={chatKitties(c)
+                            .map((id) => byId.get(id)?.name)
+                            .filter(Boolean)
+                            .join(", ")}
+                          aria-label={t("{count} kitties", { count: chatKitties(c).length })}
+                        >
                           <IconUsers size={10} />
-                          {c.members.length}
+                          {chatKitties(c).length}
                         </span>
                       )}
                     </span>

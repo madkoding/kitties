@@ -289,6 +289,17 @@ export interface Session {
   // public chat): the guardrails apply; audience says who writes there.
   exposed?: boolean;
   audience?: string;
+  // delegates are the kitties that took part through a hand-over without being members (they do
+  // not answer what the person writes); kitties is every kitty of the chat: members, the kitty
+  // that opened it to delegate, and delegates. More than one makes it a group of kitties.
+  delegates?: string[];
+  kitties?: string[];
+}
+
+// chatKitties is every kitty taking part in a chat, members first (a gateway older than the
+// field gives only the members).
+export function chatKitties(c: Session): string[] {
+  return c.kitties && c.kitties.length ? c.kitties : c.members;
 }
 
 export interface ProviderKind {
