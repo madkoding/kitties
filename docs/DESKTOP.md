@@ -140,7 +140,9 @@ kept twice. A task reads as the short lines the kitty writes when it moves on to
 each with its actions folded under how many they were; a tap opens them one by one. The chat
 follows the latest line while you are at its end; scroll up to read and it waits, with a button to
 go back to the latest. The picture has no hint over it: a click on it, or the Take control button,
-takes the controls.
+takes the controls. A call for help never folds away, and **Settings › Preferences › Show every action
+of a task** has every task open action by action in this browser. Away from the page, a long task's
+lines reach WhatsApp as they come and, when chosen, the notifications (`progress`).
 The sidebar folds to a thin bar (remembered in the browser), starts folded on a phone, where it
 stacks under the picture, and never takes the keys or the sound from the desktop: typing in it is
 typing in the chat, and the controls of the picture stay where they were.

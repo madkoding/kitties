@@ -259,8 +259,9 @@ yes runs it and counts it. `MemoryView.Spent` shows today's counts in the kitty'
 
 **Notifications** (`internal/notify`). A `Notifier` sends through any connector that can send a
 message (ntfy preferred, with a click link to the page), for the events `help`, `approval`,
-`goal_done`, `goal_blocked`, `recovered` and `budget`. Events of the same kind within ten minutes fold into
-one message. The choice is kept in `settings.json` over the YAML's `notify`; deleting the
+`goal_done`, `goal_blocked`, `recovered`, `budget`, `updated` and `progress` (what a kitty says it goes
+on to do in a long desktop task: its plan lines after the first, off unless chosen). Events of the
+same kind within ten minutes fold into one message. The choice is kept in `settings.json` over the YAML's `notify`; deleting the
 connector clears it.
 
 **Replies** (`internal/reply`). With `notify.replies` on an ntfy connector, `reply.Service.Listen`

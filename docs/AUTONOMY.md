@@ -206,7 +206,7 @@ kitties:
     approvals: ask               # empty (default): acts as far as the account allows | ask
 notify:
   connector: phone               # any messaging connector; ntfy pushes to your phone
-  on: [help, approval, goal_done, goal_blocked, recovered, budget]   # default: help, approval
+  on: [help, approval, goal_done, goal_blocked, recovered, budget, progress]   # default: help, approval; progress: a long task's plan lines, one every 10 minutes at most
   digest: "08:30"                # a summary of the last day, every day (gateway's clock); empty: none
   replies: true                  # answer the kitties by writing to the ntfy topic
 connectors:
