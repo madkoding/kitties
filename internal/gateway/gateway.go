@@ -213,7 +213,7 @@ func (s *Server) appRequest(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodOptions {
 		return false
 	}
-	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
 	h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 	h.Set("Access-Control-Max-Age", "600")
 	w.WriteHeader(http.StatusNoContent)
@@ -247,6 +247,9 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/chats", api(s.handleCreateChat))
 	s.mux.Handle("GET /v1/chats/{id}", api(s.handleGetChat))
 	s.mux.Handle("DELETE /v1/chats/{id}", api(s.handleDeleteChat))
+	s.mux.Handle("PATCH /v1/chats/{id}", api(s.handleEditChat))
+	s.mux.Handle("POST /v1/chats/{id}/suggest", api(s.handleSuggestChat))
+	s.mux.Handle("POST /v1/chats/{id}/proposal", api(s.handleProposal))
 	s.mux.Handle("POST /v1/chats/{id}/members", api(s.handleAddMembers))
 	s.mux.Handle("DELETE /v1/chats/{id}/members/{ref}", api(s.handleRemoveMember))
 	s.mux.Handle("POST /v1/chats/{id}/delegates/{ref}", api(s.handleRestoreDelegate))
@@ -595,6 +598,8 @@ func codeFor(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, chat.ErrNoFile):
 		return http.StatusNotFound
+	case errors.Is(err, chat.ErrEdit):
+		return http.StatusBadRequest
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
 	case errors.Is(err, guard.ErrRate):
@@ -916,6 +921,128 @@ func (s *Server) handleDeleteChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// Editor renames a chat or changes its description (chat.Service.Edit); a nil field stays.
+type Editor interface {
+	Edit(id string, title, description *string) (*chat.Session, error)
+}
+
+// handleEditChat renames a chat or changes its description: {"title": "…", "description": "…"},
+// either one or both; a description of "" takes it off.
+func (s *Server) handleEditChat(w http.ResponseWriter, r *http.Request) {
+	e, ok := s.chats.(Editor)
+	if !ok {
+		fail(w, http.StatusNotImplemented, errors.New("this gateway cannot edit a chat"))
+		return
+	}
+	var body struct {
+		Title       *string `json:"title"`
+		Description *string `json:"description"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if body.Title == nil && body.Description == nil {
+		fail(w, http.StatusBadRequest, errors.New("say the title or the description to change"))
+		return
+	}
+	sess, err := e.Edit(r.PathValue("id"), body.Title, body.Description)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"chat": sess})
+}
+
+// Suggester has a chat's kitty read it all and propose its title and description
+// (chat.Service.Suggest).
+type Suggester interface {
+	Suggest(ctx context.Context, id string) (chat.Suggestion, error)
+}
+
+// suggestChat proposes a title and a description for a chat and, with apply, saves them.
+func (s *Server) suggestChat(ctx context.Context, id string, apply bool) (chat.Suggestion, *chat.Session, error) {
+	sg, ok := s.chats.(Suggester)
+	if !ok {
+		return chat.Suggestion{}, nil, errNoSuggest
+	}
+	got, err := sg.Suggest(ctx, id)
+	if err != nil || !apply {
+		return got, nil, err
+	}
+	e, ok := s.chats.(Editor)
+	if !ok {
+		return got, nil, errNoSuggest
+	}
+	sess, err := e.Edit(id, &got.Title, &got.Description)
+	return got, sess, err
+}
+
+var errNoSuggest = errors.New("this gateway cannot suggest a title")
+
+// Proposals answers the description a kitty proposed for its chat (chat.Service.AnswerProposal).
+type Proposals interface {
+	AnswerProposal(id string, accept bool) (*chat.Session, error)
+}
+
+// handleProposal accepts the description a kitty proposed ({"accept": true}) or dismisses it.
+func (s *Server) handleProposal(w http.ResponseWriter, r *http.Request) {
+	p, ok := s.chats.(Proposals)
+	if !ok {
+		fail(w, http.StatusNotImplemented, errors.New("this gateway keeps no proposals"))
+		return
+	}
+	var body struct {
+		Accept bool `json:"accept"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	sess, err := p.AnswerProposal(r.PathValue("id"), body.Accept)
+	if errors.Is(err, chat.ErrEdit) {
+		fail(w, http.StatusConflict, err)
+		return
+	}
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"chat": sess})
+}
+
+// handleSuggestChat is the "write it from the chat" button: {"apply": false} only proposes (the
+// person reviews it), {"apply": true} saves it too. Answers {suggestion, chat}.
+func (s *Server) handleSuggestChat(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Apply bool `json:"apply"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	got, sess, err := s.suggestChat(r.Context(), r.PathValue("id"), body.Apply)
+	switch {
+	case errors.Is(err, errNoSuggest):
+		fail(w, http.StatusNotImplemented, err)
+		return
+	case errors.Is(err, chat.ErrNothingToRead):
+		fail(w, http.StatusConflict, err)
+		return
+	case err != nil && strings.Contains(err.Error(), "did not answer"):
+		fail(w, http.StatusBadGateway, err)
+		return
+	case err != nil:
+		fail(w, codeFor(err), err)
+		return
+	}
+	out := map[string]any{"suggestion": got}
+	if sess != nil {
+		out["chat"] = sess
+	}
+	reply(w, http.StatusOK, out)
 }
 
 func (s *Server) handleAddMembers(w http.ResponseWriter, r *http.Request) {

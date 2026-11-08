@@ -7,6 +7,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -61,6 +62,14 @@ func (b *Brain) Complete(_ context.Context, messages []provider.Message) (provid
 	case strings.Contains(system, "You keep the memory of a kitty"):
 		// The kitty consolidates what it learned: the corrections and likes it was given, as notes.
 		return provider.Reply{Content: distilled(last), Usage: usage}, nil
+	case strings.Contains(system, "You name a conversation"):
+		return provider.Reply{Content: named(last), Usage: usage}, nil
+	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "proposed: the person"):
+		return provider.Reply{Content: "We changed course, so I proposed a new description for this chat: accept it above if it fits.", Usage: usage}, nil
+	case strings.Contains(lower, "change of plans:"):
+		// The chat changes course: the kitty proposes a new description for it.
+		i := strings.Index(lower, "change of plans:") + len("change of plans:")
+		return provider.Reply{Content: "@describe propose " + strings.TrimSpace(last[i:]), Usage: usage}, nil
 	case strings.Contains(system, "You keep the running summary"):
 		return provider.Reply{Content: "The person and the kitties have been planning the launch: the plan is drafted, the numbers are being checked and the announcement is pending.", Usage: usage}, nil
 	case strings.HasPrefix(last, "Results of your actions") && strings.Contains(last, "held: the person has to approve"):
@@ -485,4 +494,30 @@ func encode(img image.Image) []byte {
 	var buf bytes.Buffer
 	_ = png.Encode(&buf, img)
 	return buf.Bytes()
+}
+
+// named is the title and description the demo kitty gives a chat: its first message, cut to a
+// few words, and a sentence on what it is for.
+func named(chat string) string {
+	first := ""
+	if i := strings.Index(chat, "The conversation:\n"); i >= 0 {
+		for _, line := range strings.Split(chat[i:], "\n")[1:] {
+			if j := strings.Index(line, "]: "); strings.HasPrefix(line, "[") && j > 0 {
+				first = line[j+3:]
+				break
+			}
+		}
+	}
+	words := strings.Fields(strings.Trim(first, ".!?"))
+	if len(words) > 7 {
+		words = words[:7]
+	}
+	title := strings.Join(words, " ")
+	if title == "" {
+		title = "A chat with the kitties"
+	}
+	title = strings.ToUpper(title[:1]) + title[1:]
+	out, _ := json.Marshal(map[string]string{"title": title,
+		"description": "Work through " + strings.ToLower(title[:1]) + title[1:] + " with the kitties: what is decided stays, and the next step is pending."})
+	return string(out)
 }

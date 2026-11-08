@@ -289,7 +289,7 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 				}
 				return mcp.Result{Content: []mcp.Content{mcp.Image("image/png", base64.StdEncoding.EncodeToString(png))}}, nil
 			}},
-		{Name: "chat_list", Description: "The threads (id, title, kind, members, every kitty taking part including the ones handed a subtask, last update, and a one-line gist of their last words with secrets masked), without their turns. By default the chats the person sees in the sidebar; a scheduled task's runs are goal_runs, and the threads between two kitties of a hand-over are kind handover (they go a while after the work ended, unless kept with chat_keep).",
+		{Name: "chat_list", Description: "The threads (id, title, description, kind, members, every kitty taking part including the ones handed a subtask, last update, and a one-line gist of their last words with secrets masked), without their turns. By default the chats the person sees in the sidebar; a scheduled task's runs are goal_runs, and the threads between two kitties of a hand-over are kind handover (they go a while after the work ended, unless kept with chat_keep).",
 			InputSchema: obj(nil, map[string]any{"kind": map[string]any{"type": "string", "enum": []string{"chat", "goal", "handover", "all"}, "description": "chat (default): the person's chats; goal: the threads of scheduled tasks; handover: the threads between two kitties; all"}}), Annotations: read,
 			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
 				var a struct {
@@ -304,6 +304,7 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 				type row struct {
 					ID        string    `json:"id"`
 					Title     string    `json:"title"`
+					Desc      string    `json:"description,omitempty"`
 					Kind      string    `json:"kind"`
 					Members   []string  `json:"members"`
 					Kitties   []string  `json:"kitties,omitempty"`
@@ -314,7 +315,7 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 				}
 				rows := []row{}
 				for _, c := range chatsOfKind(s.chats.List(), a.Kind) {
-					rows = append(rows, row{c.ID, c.Title, chat.KindOf(c), c.Members, c.Kitties, len(c.Turns), c.UpdatedAt, c.Gist, c.ExpiresAt})
+					rows = append(rows, row{c.ID, c.Title, c.Description, chat.KindOf(c), c.Members, c.Kitties, len(c.Turns), c.UpdatedAt, c.Gist, c.ExpiresAt})
 				}
 				return jsonResult(map[string]any{"chats": rows})
 			}},
@@ -409,6 +410,93 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 					return mcp.Result{}, err
 				}
 				return jsonResult(map[string]any{"turns": turns})
+			}},
+		{Name: "chat_update", Description: "Rename a thread or change its description. The description is the base of what the thread's kitties work on: they read it on every turn, so changing it changes their context from the next turn on. Leave a field out to keep it; an empty description takes it off.",
+			InputSchema: obj([]string{"id"}, map[string]any{"id": str("the thread's id"), "title": str("the new title"),
+				"description": str("what the thread is for; empty to take it off")}), Annotations: write,
+			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					ID          string  `json:"id"`
+					Title       *string `json:"title"`
+					Description *string `json:"description"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				e, ok := s.chats.(Editor)
+				if !ok {
+					return mcp.Result{}, errors.New("this gateway cannot edit a chat")
+				}
+				if a.Title == nil && a.Description == nil {
+					return mcp.Result{}, &mcp.ArgError{Msg: "title or description is required"}
+				}
+				c, err := e.Edit(a.ID, a.Title, a.Description)
+				if err != nil {
+					if errors.Is(err, chat.ErrEdit) {
+						return mcp.Result{}, &mcp.ArgError{Msg: err.Error()}
+					}
+					return mcp.Result{}, err
+				}
+				c.Turns = nil
+				return jsonResult(map[string]any{"chat": c})
+			}},
+		{Name: "chat_suggest", Description: "Have one of a thread's kitties read the whole thread and propose a new title and description (what the thread is for now, the base its kitties work from). With apply: true it saves them too.",
+			InputSchema: obj([]string{"id"}, map[string]any{"id": str("the thread's id"),
+				"apply": map[string]any{"type": "boolean", "description": "save the title and description it proposes"}}), Annotations: write,
+			Call: func(ctx context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					ID    string `json:"id"`
+					Apply bool   `json:"apply"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				got, sess, err := s.suggestChat(ctx, a.ID, a.Apply)
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				out := map[string]any{"suggestion": got, "applied": sess != nil}
+				return jsonResult(out)
+			}},
+		{Name: "chat_proposal", Description: "Accept or dismiss the new description a kitty proposed for a thread (chat_get shows it as proposal).",
+			InputSchema: obj([]string{"id", "accept"}, map[string]any{"id": str("the thread's id"),
+				"accept": map[string]any{"type": "boolean", "description": "true takes it as the description, false dismisses it"}}), Annotations: write,
+			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					ID     string `json:"id"`
+					Accept bool   `json:"accept"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				p, ok := s.chats.(Proposals)
+				if !ok {
+					return mcp.Result{}, errors.New("this gateway keeps no proposals")
+				}
+				c, err := p.AnswerProposal(a.ID, a.Accept)
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				return jsonResult(map[string]any{"description": c.Description, "accepted": a.Accept})
+			}},
+		{Name: "chat_delete", Description: "Delete a thread with its turns, screenshots and files, for good. Pass confirm: true.",
+			InputSchema: obj([]string{"id", "confirm"}, map[string]any{"id": str("the thread's id"),
+				"confirm": map[string]any{"type": "boolean", "description": "must be true"}}), Annotations: danger,
+			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					ID      string `json:"id"`
+					Confirm bool   `json:"confirm"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				if !a.Confirm {
+					return mcp.Result{}, &mcp.ArgError{Msg: "deleting a thread cannot be undone: pass confirm: true"}
+				}
+				if err := s.chats.Delete(a.ID); err != nil {
+					return mcp.Result{}, err
+				}
+				return jsonResult(map[string]any{"deleted": a.ID})
 			}},
 		{Name: "chat_cancel", Description: "Stop the task a thread is working on.",
 			InputSchema: obj([]string{"id"}, map[string]any{"id": str("the thread's id")}), Annotations: write,

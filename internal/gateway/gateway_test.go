@@ -343,6 +343,46 @@ func (c *fakeChats) Delete(id string) error {
 	delete(c.sessions, id)
 	return nil
 }
+func (c *fakeChats) Edit(id string, title, description *string) (*chat.Session, error) {
+	s, ok := c.sessions[id]
+	if !ok {
+		return nil, errors.New("no such chat")
+	}
+	if title != nil {
+		if strings.TrimSpace(*title) == "" {
+			return nil, fmt.Errorf("%w: the title is empty", chat.ErrEdit)
+		}
+		s.Title = *title
+	}
+	if description != nil {
+		s.Description = *description
+	}
+	return s, nil
+}
+func (c *fakeChats) Suggest(_ context.Context, id string) (chat.Suggestion, error) {
+	s, ok := c.sessions[id]
+	if !ok {
+		return chat.Suggestion{}, errors.New("no such chat")
+	}
+	if len(s.Turns) == 0 {
+		return chat.Suggestion{}, chat.ErrNothingToRead
+	}
+	return chat.Suggestion{Title: "About " + s.Turns[0].Text, Description: "What the chat is for"}, nil
+}
+func (c *fakeChats) AnswerProposal(id string, accept bool) (*chat.Session, error) {
+	s, ok := c.sessions[id]
+	if !ok {
+		return nil, errors.New("no such chat")
+	}
+	if s.Proposal == nil {
+		return nil, fmt.Errorf("%w: no description waits for an answer", chat.ErrEdit)
+	}
+	if accept {
+		s.Description = s.Proposal.Description
+	}
+	s.Proposal = nil
+	return s, nil
+}
 func (c *fakeChats) AddMembers(id string, members []string) (*chat.Session, error) {
 	s, err := c.Get(id)
 	if err != nil {
@@ -696,6 +736,57 @@ func TestChatRoutes(t *testing.T) {
 		if code, _, _ := call(t, srv, "GET", path, "tok", nil); code != want {
 			t.Errorf("GET %s = %d, want %d", path, code, want)
 		}
+	}
+	edit := func(path string, body any) (int, map[string]any) {
+		code, m, _ := call(t, srv, "PATCH", path, "tok", body)
+		return code, m
+	}
+	if code, m := edit("/v1/chats/c1", map[string]any{"title": "Trip", "description": "Plan the trip"}); code != 200 ||
+		m["chat"].(map[string]any)["title"] != "Trip" || m["chat"].(map[string]any)["description"] != "Plan the trip" {
+		t.Errorf("edit = %d %v", code, m)
+	}
+	if code, m := edit("/v1/chats/c1", map[string]any{"description": ""}); code != 200 ||
+		m["chat"].(map[string]any)["title"] != "Trip" || m["chat"].(map[string]any)["description"] != nil {
+		t.Errorf("a description taken off keeps the title = %d %v", code, m)
+	}
+	for name, tc := range map[string]struct {
+		path string
+		body any
+		want int
+	}{
+		"empty title": {"/v1/chats/c1", map[string]any{"title": " "}, 400},
+		"nothing":     {"/v1/chats/c1", map[string]any{}, 400},
+		"bad json":    {"/v1/chats/c1", "{", 400},
+		"unknown":     {"/v1/chats/zz", map[string]any{"title": "x"}, 404},
+	} {
+		if code, _ := edit(tc.path, tc.body); code != tc.want {
+			t.Errorf("edit %s = %d, want %d", name, code, tc.want)
+		}
+	}
+	// suggest proposes; with apply it saves too.
+	c.sessions["c1"].Turns = []chat.Turn{{From: "user", Text: "the trip"}}
+	if code, m, _ := call(t, srv, "POST", "/v1/chats/c1/suggest", "tok", nil); code != 200 ||
+		m["suggestion"].(map[string]any)["title"] == nil || m["chat"] != nil || c.sessions["c1"].Title != "Trip" {
+		t.Errorf("suggest = %d %v", code, m)
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/chats/c1/suggest", "tok", map[string]any{"apply": true}); code != 200 ||
+		m["chat"].(map[string]any)["description"] != "What the chat is for" {
+		t.Errorf("suggest and apply = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/chats/zz/suggest", "tok", nil); code != 404 {
+		t.Error("suggest unknown")
+	}
+	c.sessions["c1"].Turns = nil
+	if code, _, _ := call(t, srv, "POST", "/v1/chats/c1/suggest", "tok", nil); code != 409 {
+		t.Error("suggest with nothing to read")
+	}
+	c.sessions["c1"].Proposal = &chat.Proposal{Description: "Book the ferry", By: "ana"}
+	if code, m, _ := call(t, srv, "POST", "/v1/chats/c1/proposal", "tok", map[string]any{"accept": true}); code != 200 ||
+		m["chat"].(map[string]any)["description"] != "Book the ferry" {
+		t.Errorf("accept proposal = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/chats/c1/proposal", "tok", map[string]any{"accept": false}); code != 409 {
+		t.Error("no proposal to answer")
 	}
 	if code, _, _ := call(t, srv, "DELETE", "/v1/chats/c1", "tok", nil); code != 200 {
 		t.Error("delete")

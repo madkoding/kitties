@@ -16,9 +16,11 @@ import {
   IconLogOut,
   IconCrown,
   IconClock,
+  IconSearch,
 } from "./icons";
 import PixelCat, { type Mood } from "./PixelCat";
 import { t } from "./i18n";
+import { ChatMenu, type ChatField } from "./ChatMenu";
 
 // moodOf is how a kitty looks in a list, from its state.
 export function moodOf(k: Kitty, working?: boolean): Mood {
@@ -65,6 +67,9 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onOpenChat: (id: string) => void;
+  // onEditChat and onDeleteChat are the chat row's ⋯ menu.
+  onEditChat: (c: Session, field: ChatField) => void;
+  onDeleteChat: (c: Session) => void;
   onOpenKitty: (id: string) => void;
   onNewChat: () => void;
   onNewKitty: () => void;
@@ -101,6 +106,17 @@ function taskTag(g: Goal): string {
   }
 }
 
+// fold makes a text easy to search: lower case, without accents.
+export function fold(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+// SEARCH_FROM is how many chats the sidebar holds before it offers to search them.
+const SEARCH_FROM = 4;
+
 // GROUPS is where the sidebar keeps, in this browser, whether it lists only the group chats.
 const GROUPS = "kitties.chats.groups";
 
@@ -126,7 +142,14 @@ export default function Sidebar(p: Props) {
     }
   };
   const groups = p.chats.filter((c) => chatKitties(c).length > 1);
-  const chats = onlyGroups ? groups : p.chats;
+  // query finds chats by their title, description or last words.
+  const [query, setQuery] = useState("");
+  const words = fold(query).split(/\s+/).filter(Boolean);
+  const chats = (onlyGroups ? groups : p.chats).filter(
+    (c) =>
+      words.length === 0 ||
+      words.every((w) => fold(`${c.title} ${c.description || ""} ${c.gist || ""}`).includes(w)),
+  );
   return (
     <>
       {p.open && (
@@ -276,10 +299,31 @@ export default function Sidebar(p: Props) {
                 </button>
               )}
             </div>
+            {(p.chats.length >= SEARCH_FROM || query) && (
+              <label class="chat-search">
+                <IconSearch size={12} class="text-[var(--t4)] flex-none" />
+                <input
+                  type="search"
+                  value={query}
+                  onInput={(e) => setQuery((e.target as HTMLInputElement).value)}
+                  onKeyDown={(e) =>
+                    e.key === "Escape" && query && (e.stopPropagation(), setQuery(""))
+                  }
+                  placeholder={t("Search chats")}
+                  aria-label={t("Search chats by title, description or last words")}
+                  data-testid="chat-search"
+                />
+              </label>
+            )}
             {p.chats.length === 0 && (
               <div class="px-3 text-xs text-[var(--t4)]">{t("No chats yet.")}</div>
             )}
-            {onlyGroups && p.chats.length > 0 && chats.length === 0 && (
+            {words.length > 0 && chats.length === 0 && (
+              <div class="px-3 text-xs text-[var(--t4)]" data-testid="chat-search-none">
+                {t("No chat matches “{query}”.", { query: query.trim() })}
+              </div>
+            )}
+            {onlyGroups && words.length === 0 && p.chats.length > 0 && chats.length === 0 && (
               <div class="px-3 text-xs text-[var(--t4)]">{t("No group chats yet.")}</div>
             )}
             {chats.map((c, i) => (
@@ -294,6 +338,7 @@ export default function Sidebar(p: Props) {
                   aria-label={c.title}
                   aria-current={p.current === c.id ? "page" : undefined}
                   aria-describedby={c.gist ? `gist-${c.id}` : undefined}
+                  title={c.description || undefined}
                 />
                 <span
                   class={`chat-cats n${Math.min(chatKitties(c).length, 3)}`}
@@ -354,6 +399,14 @@ export default function Sidebar(p: Props) {
                       {gistLine(c)}
                     </span>
                   )}
+                </span>
+                <span class="row-actions chat-row-menu">
+                  <ChatMenu
+                    chat={c}
+                    where="sidebar"
+                    onEdit={p.onEditChat}
+                    onDelete={p.onDeleteChat}
+                  />
                 </span>
               </div>
             ))}

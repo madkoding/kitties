@@ -108,7 +108,6 @@ const dict: Dictionary = {
   You: "Você",
   "Something broke in the page: {message}": "Algo quebrou na página: {message}",
   "Something failed: {message}": "Algo deu errado: {message}",
-  'Delete the chat "{title}"?': "Excluir o chat “{title}”?",
   Menu: "Menu",
   group: "grupo",
   working: "trabalhando",

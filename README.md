@@ -62,6 +62,16 @@ a desktop app and an Android app.
 - **A sidebar that tells you what is going on.** Your kitties come first, then the chats; each chat
   shows up to two lines of its last words (who said it, in a group), made on the gateway without asking
   any model, with keys, passwords, addresses and long numbers masked.
+- **Chats with a purpose.** Each chat's **⋯** menu (in the sidebar and the header) renames it, gives
+  it a description or deletes it after asking. The description is the base of the chat: its kitties
+  read it before every answer, so changing it changes what they work on from the next message.
+  **Write them from the chat** has one of its kitties read the whole chat and propose a new title and
+  description, which you check before saving. When a chat changes course, its kitty **proposes** a new
+  description that you accept or dismiss; the last ten descriptions are kept to go back to, and the
+  sidebar **searches** chats by title, description or last words.
+
+<img src="docs/screenshots/77-chat-menu.png" alt="A chat's ⋯ menu open in the sidebar: Rename, Edit description, Write them from the chat and Delete chat, with the description under the title in the header" width="100%">
+
 - **Trust and memory.** Notes that persist, thumbs that teach it your standards, action limits and
   approvals that loosen as it earns trust, and notifications to your phone when it needs you.
 - **Guardrails for kitties that answer other people.** In WhatsApp chats and chats you mark public, a
