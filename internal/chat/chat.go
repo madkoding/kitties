@@ -714,6 +714,13 @@ func (s *Service) Prune(exists func(id string) bool) error {
 				kept = append(kept, m)
 			}
 		}
+		// A kitty that is gone is no delegate, nor owner, of any chat either (crew.go).
+		if pruneHelpers(sess, exists) && len(kept) == len(sess.Members) {
+			if err := s.save(sess); err != nil && firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
 		if len(kept) == len(sess.Members) {
 			continue
 		}

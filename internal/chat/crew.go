@@ -210,3 +210,34 @@ func without(list []string, id string) []string {
 	}
 	return out
 }
+
+// FlushHandOvers sends every hand-over notice still waiting, at once: the gateway calls it when
+// it stops, so the last minute's are not lost.
+func (s *Service) FlushHandOvers() {
+	s.handOverMu.Lock()
+	chats := make([]string, 0, len(s.handOvers))
+	for chat := range s.handOvers {
+		chats = append(chats, chat)
+	}
+	s.handOverMu.Unlock()
+	for _, chat := range chats {
+		s.flushHandOvers(chat)
+	}
+}
+
+// pruneHelpers takes the kitties that no longer exist off a chat's delegates (for good: its old
+// hand-overs no longer bring them back) and its owner; it reports whether anything changed.
+func pruneHelpers(sess *Session, exists func(id string) bool) bool {
+	changed := false
+	for _, id := range append([]string(nil), sess.Delegates...) {
+		if !exists(id) {
+			dismissDelegate(sess, id)
+			changed = true
+		}
+	}
+	if sess.Owner != "" && !exists(sess.Owner) {
+		sess.Owner = ""
+		changed = true
+	}
+	return changed
+}

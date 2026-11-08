@@ -236,3 +236,38 @@ func TestDismissADelegate(t *testing.T) {
 		t.Error("the last member was removed")
 	}
 }
+
+// Stopping sends the notices still waiting; a kitty that is removed leaves every chat's helpers.
+func TestFlushHandOversAndPruneHelpers(t *testing.T) {
+	f, sa, sb, _ := fleet(t)
+	s := service(t, f)
+	b := &bell{}
+	s.SetNotifier(b)
+	s.HandOverWait = time.Hour
+	sess, _ := s.Create("", []string{"ana"})
+	sa.replies = []string{"@delegate bo {\"task\": \"count\"}", "ok"}
+	sb.replies = []string{"three"}
+	if _, err := s.Send(context.Background(), sess.ID, "go"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(b.events(), "delegated") {
+		t.Fatal("sent before the wait")
+	}
+	s.FlushHandOvers()
+	if !strings.Contains(b.events(), "delegated") {
+		t.Errorf("not sent on stop: %s", b.events())
+	}
+	// bo is removed from the fleet: it is no delegate of ana's chat any more, nor owner of a thread.
+	if err := s.LeaveChats("b1"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Get(sess.ID)
+	if got.Crew() || len(got.Delegates) != 0 {
+		t.Errorf("bo still helps: %v", got.Kitties)
+	}
+	for _, c := range s.List() {
+		if contains(c.Kitties, "b1") {
+			t.Errorf("chat %q still lists bo: %v", c.Title, c.Kitties)
+		}
+	}
+}
