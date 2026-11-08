@@ -18,8 +18,11 @@ func TestPlain(t *testing.T) {
 		"context canceled":                                 "it was stopped",
 		"Post \"https://x\": context deadline exceeded":    "took too long",
 		"dial tcp: lookup api.x.com: no such host":         "could not be reached",
-		"something nobody planned for":                     "something nobody planned for",
-		"HTTP 302: a redirect nobody expected":             "HTTP 302",
+		`anthropic/x: HTTP 400: {"error":{"message":"failed to read request body (ref: d96b)","type":"invalid_request_error"}}`: "too big or got cut off",
+		"HTTP 413: Request Entity Too Large":        "too big or got cut off",
+		"HTTP 400: {\"error\":\"bad tool schema\"}": "HTTP 400",
+		"something nobody planned for":              "something nobody planned for",
+		"HTTP 302: a redirect nobody expected":      "HTTP 302",
 	} {
 		if got := Plain(msg); !strings.Contains(got, want) {
 			t.Errorf("Plain(%q) = %q, want %q", msg, got, want)

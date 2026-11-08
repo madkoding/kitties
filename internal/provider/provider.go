@@ -375,7 +375,7 @@ func Transient(err error) bool {
 	}
 	var he *HTTPError
 	if errors.As(err, &he) {
-		return he.Retryable()
+		return he.Retryable() || bodyUnread(err)
 	}
 	var ne net.Error
 	return errors.As(err, &ne) || errors.Is(err, io.ErrUnexpectedEOF) || errors.Is(err, context.DeadlineExceeded)
@@ -467,14 +467,19 @@ func (c *HTTPClient) Complete(ctx context.Context, messages []Message) (Reply, e
 func (c *HTTPClient) CompleteTools(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
 	var last error
 	wait := c.opts.Backoff
+	keep, budget := KeepImages, BodyBudget
 	for attempt := 1; attempt <= c.opts.MaxAttempts; attempt++ {
-		reply, err := c.once(ctx, messages, tools)
+		reply, err := c.once(ctx, lighten(messages, keep, budget), tools)
 		if err == nil {
 			return reply, nil
 		}
 		last = err
 		var he *HTTPError
-		if errors.As(err, &he) && !he.Retryable() {
+		switch {
+		case bodyUnread(err):
+			// Too big, or cut off on the way: the next try carries fewer pictures.
+			keep, budget = lightKeep, lightBudget
+		case errors.As(err, &he) && !he.Retryable():
 			return Reply{}, err
 		}
 		if ctx.Err() != nil || attempt == c.opts.MaxAttempts {

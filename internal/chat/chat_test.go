@@ -62,13 +62,15 @@ type scripted struct {
 	replies []string
 	seen    [][]provider.Message
 	err     error
+	// errAfter is how many calls answer before err does.
+	errAfter int
 }
 
 func (s *scripted) Complete(_ context.Context, m []provider.Message) (provider.Reply, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.seen = append(s.seen, m)
-	if s.err != nil {
+	if s.err != nil && len(s.seen) > s.errAfter {
 		return provider.Reply{}, s.err
 	}
 	r := s.replies[0]

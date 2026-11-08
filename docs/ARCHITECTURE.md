@@ -133,7 +133,7 @@ cmd/kitties ─▶ gateway ─▶ chat ─▶ orchestrator ─▶ { provider, so
 | Part       | Package              | What it is                                                         |
 | ---------- | -------------------- | ------------------------------------------------------------------ |
 | Identity   | `internal/soul`      | The soul: persona, tone, traits, skills, language, instructions. Rendered to the system prompt with the context of the conversation (desktop or not, group members, connectors). |
-| Brain      | `internal/provider`  | A client for one AI profile. Four API families cover every provider: chat completions, responses, Anthropic messages, Gemini. Retries on 429/5xx with backoff. |
+| Brain      | `internal/provider`  | A client for one AI profile. Four API families cover every provider: chat completions, responses, Anthropic messages, Gemini. Retries on 429/5xx with backoff, and lighter (fewer pictures) on a body the provider could not read. |
 | Body       | `internal/container` | One container from `docker/kitty-desktop`: Xvfb on `:99`, Chromium, xdotool, scrot. The only published port is the live view's (voxl) on the host's loopback; Chromium's DevTools stays on the container's loopback and the orchestrator uses `exec`. `kitty-shot` prints a PNG of the display, `kitty-open <url>` opens the browser, `kitty-grab` streams the display as JPEGs through XShm, `kitty-ocr` reads its text and `kitty-page` reads and acts on the open page. |
 | Hands      | `internal/connector` | External services from a catalogue (`catalog.go`): messaging, social media, git, productivity, office, drawing and generic kinds, each with its fields and actions. Most are tables of HTTP actions over one generic client; email is `net/smtp`; `shell` runs a fixed program; `motita` opens a session on a motita gateway, posts the task and reads the event stream to its `done`. A connector may answer with a file (`Filer`), which the chat keeps as an artifact. |
 | Looks      | `internal/kitty`     | The avatar: a breed and a coat, picked from the name when none is chosen; the page draws and animates it (`desktop/frontend/src/PixelCat.tsx`). |
@@ -330,7 +330,16 @@ with `@tool <name> <json>` lines. When a reply carries such lines:
 3. After the batch a screenshot is taken, saved under the chat's folder, attached to the turn's
    last step and shown to the model as an image together with the results. Every provider
    family carries images (data URLs for chat completions and responses, base64 blocks for
-   Anthropic and Gemini).
+   Anthropic and Gemini). The model gets the screenshot as JPEG (quality 85, same size, so its
+   coordinates are the screen's) when that is clearly lighter than the PNG, which the chat keeps;
+   `fitContext` weighs each picture by its pixels (about 750 per token, 85 to 1,600 tokens).
+   Only the last screenshots go as pictures: the client
+   (`internal/provider/lighten.go`) sends the last 6 to 11 (the cut moves in steps of 6, so the
+   prompt cache keeps the start of the conversation) and at most 12 MB of pictures and documents;
+   the older ones go as a line "(N earlier picture(s) left out to keep the request light)".
+   A provider that answers it could not read the body (`400 failed to read request body`, or
+   `413`) gets the request again with only the last 2 pictures, and the person reads "the
+   message to the model was too big or got cut off on the way" instead of the raw JSON.
 4. The model continues, up to `MaxSteps` rounds, until it writes `@tool done` or stops asking
    for tools. The final words are appended to the same turn.
 
