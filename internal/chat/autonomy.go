@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -73,8 +74,11 @@ func (s *Service) RunGoal(ctx context.Context, g agenda.Goal, t agenda.Trigger) 
 		if ok {
 			return id, nil
 		}
-		text += "\n\nYour saved page flow \"" + g.Flow + "\" ran first and did not get through:\n" + clip(out, maxFlowOut) +
-			"\nFinish the goal yourself; once you know the right steps, save them again with page_flow and \"save\": \"" + g.Flow + "\"."
+		// The name is quoted as JSON: whatever it holds stays inside its quotes.
+		name, _ := json.Marshal(g.Flow)
+		text += fmt.Sprintf("\n\nYour saved page flow %s ran first and did not get through:\n%s\n"+
+			"Finish the goal yourself; once you know the right steps, save them again with page_flow and {\"save\": %s}.",
+			name, clip(out, maxFlowOut), name)
 	}
 	if t.Kind == "follow_up" {
 		text += s.todoNote(ctx, k)
