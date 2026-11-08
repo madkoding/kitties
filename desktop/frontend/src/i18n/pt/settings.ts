@@ -499,6 +499,34 @@ const dict: Dictionary = {
   "A change reaches a machine at once when the engine can; otherwise the next time it is turned on. A machine in the cloud has the size of its provider.":
     "Uma mudança chega à máquina na hora quando o motor consegue; senão, na próxima vez que ela for ligada. Uma máquina na nuvem tem o tamanho do seu provedor.",
   "Each kitty": "Cada kitty",
+
+  // Storage: what the data takes and what is kept
+  Storage: "Armazenamento",
+  "Kitties takes {total} in {dir}.": "O Kitties ocupa {total} em {dir}.",
+  "Kitties takes {total} in {dir}; {free} free on that disk.":
+    "O Kitties ocupa {total} em {dir}; restam {free} livres nesse disco.",
+  "Screenshots of the tasks": "Capturas das tarefas",
+  "Files attached to chats": "Arquivos anexados aos chats",
+  "Chat history": "Histórico de chats",
+  "Kitties' homes (settings and programs)": "Homes dos kitties (configurações e programas)",
+  "Kitties' workspaces (files and browser)":
+    "Espaços de trabalho dos kitties (arquivos e navegador)",
+  "Shared folders": "Pastas compartilhadas",
+  "Backups of the sessions": "Cópias das sessões",
+  Journals: "Diários",
+  Logs: "Registros",
+  "Keep screenshots for": "Guardar capturas por",
+  "At most, all together": "No máximo, no total",
+  Forever: "Para sempre",
+  "{n} days": "{n} dias",
+  "No limit": "Sem limite",
+  "Older screenshots go by themselves every few hours; their steps stay in the chat. Chats, attached files and the kitties' folders are yours and are never deleted.":
+    "As capturas mais antigas são apagadas sozinhas a cada poucas horas; os passos ficam no chat. Chats, anexos e as pastas dos kitties são seus e nunca são apagados.",
+  "Free up space now": "Liberar espaço agora",
+  "Freeing up…": "Liberando…",
+  "Freed {size} ({n} screenshots).": "Foram liberados {size} ({n} capturas).",
+  "No screenshot was old enough to go.": "Nenhuma captura era antiga o bastante para ser apagada.",
+  "Old desktop images: {size}.": "Imagens antigas da área de trabalho: {size}.",
 };
 
 export default dict;

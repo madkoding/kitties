@@ -83,6 +83,27 @@ export interface Machines {
   engine_mb?: number;
 }
 
+// STORAGE is what the gateway's data takes on disk, by area, and how long the screenshots of the
+// tasks are kept (0: the default, -1: forever or no cap).
+export interface StorageArea {
+  key: string;
+  bytes: number;
+  count?: number;
+}
+export interface Retention {
+  shot_days: number;
+  shots_mb: number;
+}
+export interface DiskUsage {
+  dir: string;
+  areas: StorageArea[];
+  total: number;
+  free?: number;
+  retention: Retention;
+  defaults: Retention;
+  last?: { at: string; shots: number; freed: number; images?: string; error?: string };
+}
+
 // THEMES are the looks a kitty's desktop can wear, as the gateway knows them.
 export const THEMES: [string, string][] = [
   ["", "Numix"],
@@ -878,6 +899,11 @@ export const api = {
   machines: () => request<Machines>("GET", "/v1/settings/machines"),
   setMachines: (m: { memory_mb: number; swap_mb: number }) =>
     request<Machines>("PUT", "/v1/settings/machines", m),
+  // storage is what the data takes on disk; setRetention changes what is kept of the screenshots
+  // (and sweeps at once); cleanStorage sweeps now, old desktop images too.
+  storage: () => request<DiskUsage>("GET", "/v1/settings/storage"),
+  setRetention: (r: Retention) => request<DiskUsage>("PUT", "/v1/settings/storage", r),
+  cleanStorage: () => request<DiskUsage>("POST", "/v1/settings/storage/clean"),
   setPower: (ref: string, on: boolean, force = false) =>
     request<{ power: Power }>("POST", `/v1/kitties/${ref}/power`, { on, force }).then(
       (r) => r.power,
