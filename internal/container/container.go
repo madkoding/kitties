@@ -39,6 +39,11 @@ const (
 	// HomeLabel marks an image that seeds a home mounted from the host (see entrypoint.sh): an
 	// older one expects its own /home/kitty, and gets no home mount.
 	HomeLabel = "kitties.home"
+	// BrowserLabel marks an image whose browser keeps its profile at BrowserDir (kitty-profile):
+	// the kitty's own volume is mounted there, so its logins survive restarts and updates.
+	BrowserLabel = "kitties.browser"
+	// BrowserDir is where the browser's profile volume is mounted inside the container.
+	BrowserDir = "/var/lib/kitty-browser"
 	// Display is the Xvfb display the image starts.
 	Display = ":99"
 )
@@ -46,6 +51,7 @@ const (
 var (
 	imageRef = regexp.MustCompile(`^[a-z0-9][a-zA-Z0-9._/:@-]{0,254}$`)
 	nameRe   = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,62}$`)
+	volumeRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{0,127}$`)
 	envKey   = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 )
 
@@ -193,7 +199,11 @@ type Spec struct {
 	Home string
 	// Shared is the host folder mounted at SharedDir.
 	Shared string
-	Env    map[string]string
+	// BrowserVolume is the runtime volume mounted at BrowserDir (the browser's profile): it lives on
+	// the runtime's Linux disk, where Chromium can lock its profile (a folder of a Windows or macOS
+	// host cannot hold its SingletonLock link), and outlives the container. Empty mounts none.
+	BrowserVolume string
+	Env           map[string]string
 	// Seccomp is the path of the seccomp profile to run with (see seccomp.go); empty keeps the runtime's default.
 	Seccomp string
 	// Logs are the options that bound what the runtime keeps of the container's output (logArgs);
@@ -214,6 +224,9 @@ func (s Spec) Validate() error {
 	}
 	if s.Network != "" && !nameRe.MatchString(s.Network) {
 		return fmt.Errorf("network %q is not a valid name", s.Network)
+	}
+	if s.BrowserVolume != "" && !volumeRe.MatchString(s.BrowserVolume) {
+		return fmt.Errorf("volume %q is not a valid name", s.BrowserVolume)
 	}
 	for k := range s.Env {
 		if !envKey.MatchString(k) {
@@ -250,6 +263,9 @@ func (s Spec) Args() []string {
 	}
 	if s.Shared != "" {
 		args = append(args, "-v", s.Shared+":"+SharedDir)
+	}
+	if s.BrowserVolume != "" {
+		args = append(args, "-v", s.BrowserVolume+":"+BrowserDir)
 	}
 	keys := make([]string, 0, len(s.Env))
 	for k := range s.Env {

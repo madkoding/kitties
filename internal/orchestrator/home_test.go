@@ -21,6 +21,7 @@ import (
 type homeFake struct {
 	*fakeContainers
 	label    bool            // the image seeds a home of the host
+	browser  bool            // the image keeps its browser profile at container.BrowserDir
 	mounted  map[string]bool // containers with their home mounted
 	hasErr   error
 	outErr   error
@@ -48,6 +49,9 @@ func (h *homeFake) Remove(ctx context.Context, n string) error {
 	return h.fakeContainers.Remove(ctx, n)
 }
 func (h *homeFake) ImageHasHome(context.Context, string) (bool, error) { return h.label, nil }
+func (h *homeFake) ImageHasBrowserVolume(context.Context, string) (bool, error) {
+	return h.browser, nil
+}
 func (h *homeFake) HasHome(_ context.Context, n string) (bool, error) {
 	return h.mounted[n], h.hasErr
 }
@@ -427,4 +431,32 @@ func TestDesktopSpecFailsWhenItsFoldersCannotBeMade(t *testing.T) {
 		t.Error(err)
 	}
 	_ = h
+}
+
+func TestTheBrowserProfileGetsAVolumeOfItsOwn(t *testing.T) {
+	ctx := context.Background()
+	m, h := homeManager(t)
+	h.browser = true
+	k, _ := m.Create(ctx, Spec{Name: "mimi"})
+	if err := m.Start(ctx, "mimi"); err != nil {
+		t.Fatal(err)
+	}
+	s := h.specs[0]
+	if s.BrowserVolume != "kitties-browser-"+k.Container || s.Env["KITTY_PROFILE"] != container.BrowserDir {
+		t.Errorf("spec = %+v", s)
+	}
+	if err := s.Validate(); err != nil {
+		t.Error(err)
+	}
+	// An older image keeps the profile where it did, with no volume.
+	h.browser = false
+	_ = m.Stop(ctx, k.ID)
+	h.stale = true
+	m.cfg.Containers.AutoUpdate = true
+	if err := m.Start(ctx, k.ID); err != nil {
+		t.Fatal(err)
+	}
+	if s := h.specs[len(h.specs)-1]; s.BrowserVolume != "" || s.Env["KITTY_PROFILE"] != "" {
+		t.Errorf("old image: %+v", s)
+	}
 }

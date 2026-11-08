@@ -323,6 +323,33 @@ jobs:
         run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/home.sh
       - name: the desktop's scratch space stays small (kitty-tidy)
         run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/tidy.sh
+      - name: where the browser keeps its profile (kitty-profile)
+        run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/profile.sh
+      - name: the browser keeps a login across a hard restart, in the kitty's own volume
+        run: |
+          # As the gateway runs it: the profile in a volume of the kitty's own. `docker restart` is
+          # what the host or Docker shutting down does; the desktop must come up again (no stale
+          # display lock) and the cookies set a moment before must still be there.
+          up() { docker run -d --name kitty-login -e KITTY_PROFILE=/var/lib/kitty-browser -v kitty-login-browser:/var/lib/kitty-browser kitty-desktop:ci >/dev/null; }
+          ready() { for _ in $(seq 1 60); do docker exec kitty-login test -f /dev/shm/kitty-desktop.ready 2>/dev/null && return 0; sleep 1; done; return 1; }
+          serve() { docker exec -d kitty-login python3 -c 'import http.server as h
+          class H(h.BaseHTTPRequestHandler):
+              def do_GET(s):
+                  s.send_response(200)
+                  if s.path == "/login": s.send_header("Set-Cookie", "sess=1; Path=/"); s.send_header("Set-Cookie", "kept=1; Path=/; Max-Age=86400")
+                  s.end_headers(); s.wfile.write(b"<title>t</title>" + (s.headers.get("Cookie") or "none").encode())
+          h.HTTPServer(("127.0.0.1", 8765), H).serve_forever()'; sleep 1; }
+          up && ready && serve
+          docker exec kitty-login kitty-open http://127.0.0.1:8765/login && sleep 3
+          docker restart -t 10 kitty-login && ready && serve
+          docker exec kitty-login kitty-open http://127.0.0.1:8765/check && sleep 3
+          docker exec kitty-login kitty-page read | tee page.txt
+          grep -q "sess=1; kept=1" page.txt
+          # A container made anew keeps them too: they are in the volume.
+          docker rm -f kitty-login && up && ready && serve
+          docker exec kitty-login kitty-open http://127.0.0.1:8765/again && sleep 3
+          docker exec kitty-login kitty-page read | grep -q "sess=1; kept=1"
+          docker rm -f kitty-login && docker volume rm kitty-login-browser
       - name: a desktop on an empty home of the host comes up seeded
         run: |
           mkdir -p "$RUNNER_TEMP/home" "$RUNNER_TEMP/shared" && chmod 777 "$RUNNER_TEMP/home" "$RUNNER_TEMP/shared"

@@ -337,9 +337,12 @@ the earlier turns are summarised by the kitty's brain into `Session.Summary` (co
 `SummaryUpTo` turns) and only the last `CompactKeep` (16) go verbatim into the prompt; the
 transcript the person reads is never cut.
 
-**Persistent browser profile.** `kitty-open` starts Chromium with `--user-data-dir` in the
-kitty's workspace (`/home/kitty/work/.browser`, `KITTY_PROFILE` overrides it) and removes a stale
-profile lock, so sessions survive container restarts.
+**Persistent browser profile.** `kitty-open` starts Chromium with `--user-data-dir` where
+`kitty-profile` says: the kitty's own volume `kitties-browser-<container>` at `/var/lib/kitty-browser`
+(the gateway mounts it and sets `KITTY_PROFILE` for images labelled `kitties.browser`), else the
+workspace when it can hold Chromium's `SingletonLock` link (a Windows or macOS folder cannot). The
+entrypoint removes stale display and profile locks at the start and closes the browser in an orderly
+way on SIGTERM, so sessions survive restarts and a container made anew.
 
 ## Desktop tasks (`internal/desktop`)
 

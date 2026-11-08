@@ -32,10 +32,21 @@ var runStream = func(ctx context.Context, r io.Reader, w io.Writer, bin string, 
 // this machine (not pulled yet) answers false: its container is made with the image's own home,
 // and gets a host home when it is made anew.
 func (m *Manager) ImageHasHome(ctx context.Context, image string) (bool, error) {
+	return m.imageLabelOn(ctx, image, HomeLabel)
+}
+
+// ImageHasBrowserVolume tells whether the image keeps the browser's profile at BrowserDir
+// (BrowserLabel), where the kitty's own volume can be mounted.
+func (m *Manager) ImageHasBrowserVolume(ctx context.Context, image string) (bool, error) {
+	return m.imageLabelOn(ctx, image, BrowserLabel)
+}
+
+// imageLabelOn tells whether the image carries label="1"; an image that is not there has none.
+func (m *Manager) imageLabelOn(ctx context.Context, image, label string) (bool, error) {
 	if !imageRef.MatchString(image) {
 		return false, fmt.Errorf("image %q is not a valid reference", image)
 	}
-	out, err := runCmd(ctx, m.rt.Bin, "image", "inspect", "-f", `{{index .Config.Labels "`+HomeLabel+`"}}`, image)
+	out, err := runCmd(ctx, m.rt.Bin, "image", "inspect", "-f", `{{index .Config.Labels "`+label+`"}}`, image)
 	if err != nil {
 		return false, nil
 	}

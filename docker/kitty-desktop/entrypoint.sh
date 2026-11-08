@@ -14,6 +14,33 @@ kitty-tidy --boot
 ) &
 : "${DISPLAY:=:99}"
 : "${SCREEN:=1280x800x24}"
+# A container stopped hard (the host or Docker shut down, `docker restart`) keeps its /tmp, and
+# with it the display's lock: Xvfb reads the PID in it, finds a process of this start with that
+# number and refuses ("Server is already active for display 99"), so the desktop never came up
+# again. Nothing runs yet at this point, so the display's lock and socket are stale: they go.
+display_n="${DISPLAY#:}"
+display_n="${display_n%%.*}"
+rm -f "/tmp/.X$display_n-lock" "/tmp/.X11-unix/X$display_n" 2>/dev/null || true
+# The browser's profile lock of the start before, too (kitty-open does it again before a launch);
+# kitty-profile also moves a profile kept in the workspace to where it now lives.
+profile="$(kitty-profile 2>/dev/null || echo "$HOME/work/.browser")"
+rm -f "$profile/SingletonLock" "$profile/SingletonSocket" "$profile/SingletonCookie" 2>/dev/null || true
+# On a stop (SIGTERM from `docker stop`/`restart`, the host shutting down) the browser is closed in
+# an orderly way first, so it writes its cookies, sessions and saved passwords (it only flushes
+# them every 30 s): without this the whole container was killed at once and a login made just
+# before was lost. Docker waits 10 s before it kills; the browser gets up to 8 of them.
+stop_desktop() {
+    trap - TERM INT
+    if pgrep -x chromium >/dev/null 2>&1; then
+        kitty-page quit >/dev/null 2>&1 || pkill -TERM -x chromium 2>/dev/null || true
+        for _ in $(seq 1 80); do
+            pgrep -x chromium >/dev/null 2>&1 || break
+            sleep 0.1
+        done
+    fi
+    kill "$XVFB" 2>/dev/null || true
+    exit 0
+}
 # The mark of a desktop that has come up (see kitty-ready): /dev/shm is new on every start, and it
 # is removed anyway, so a mark of the start before is never taken for this one's.
 READY=/dev/shm/kitty-desktop.ready
@@ -21,6 +48,7 @@ rm -f "$READY" 2>/dev/null || true
 # -noreset: without it the display forgets the resources (xrdb) when its last client leaves.
 Xvfb "$DISPLAY" -screen 0 "$SCREEN" -nolisten tcp -ac -noreset -shmem +extension RANDR >>/tmp/xvfb.log 2>&1 &
 XVFB=$!
+trap stop_desktop TERM INT
 # Wait until the display answers, then hand the process over so signals stop the container.
 for _ in $(seq 1 50); do
     if xdpyinfo -display "$DISPLAY" >/dev/null 2>&1; then
@@ -114,4 +142,5 @@ echo "kitty ${KITTY_NAME:-?} ready on display $DISPLAY ($SCREEN)"
 if [ "$#" -gt 0 ]; then
     exec "$@"
 fi
+# `wait` returns early when a signal comes (the trap runs then); it is the display's end otherwise.
 wait "$XVFB"

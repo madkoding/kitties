@@ -43,6 +43,14 @@ type homeKeeper interface {
 	Restart(ctx context.Context, name string) error
 }
 
+// browserVolumer is a runtime that can keep a kitty's browser profile in a volume of its own.
+type browserVolumer interface {
+	ImageHasBrowserVolume(ctx context.Context, image string) (bool, error)
+}
+
+// BrowserVolume is the name of the runtime volume that holds a kitty's browser profile.
+func BrowserVolume(k *kitty.Kitty) string { return "kitties-browser-" + k.Container }
+
 // DefaultSharedQuotaMB is how much a kitty's Shared folder may hold when the configuration does
 // not say (containers.shared_quota_mb; a negative value is no limit).
 const DefaultSharedQuotaMB = 5120
@@ -110,6 +118,14 @@ func (m *Manager) desktopSpec(ctx context.Context, k *kitty.Kitty) (container.Sp
 	}
 	if err := makeOpenDir(spec.Shared); err != nil {
 		return spec, fmt.Errorf("create the Shared folder: %w", err)
+	}
+	// The browser's profile in a volume of the kitty's own (cookies, sessions, saved passwords):
+	// on a Windows or macOS host the workspace cannot hold it (see kitty-profile).
+	if bv, ok := m.ctr().(browserVolumer); ok {
+		if yes, _ := bv.ImageHasBrowserVolume(ctx, c.Image); yes {
+			spec.BrowserVolume = BrowserVolume(k)
+			env["KITTY_PROFILE"] = container.BrowserDir
+		}
 	}
 	if hk, ok := m.homeKeeperFor(); ok {
 		if yes, _ := hk.ImageHasHome(ctx, c.Image); yes {

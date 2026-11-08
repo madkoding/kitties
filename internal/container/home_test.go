@@ -130,3 +130,33 @@ func TestRunStreamRunsTheCommand(t *testing.T) {
 		t.Errorf("stderr: %q %v", stderr, err)
 	}
 }
+
+func TestArgsMountTheBrowserVolume(t *testing.T) {
+	s := Spec{Name: "kitty-a", Image: "img", Home: "/d/homes/a", BrowserVolume: "kitties-browser-kitty-a"}
+	if got := strings.Join(s.Args(), " "); !strings.Contains(got, "-v kitties-browser-kitty-a:/var/lib/kitty-browser ") {
+		t.Errorf("the browser's volume: %s", got)
+	}
+	if strings.Contains(strings.Join(Spec{Name: "kitty-a", Image: "img"}.Args(), " "), BrowserDir) {
+		t.Error("no volume: none mounted")
+	}
+	if err := (Spec{Name: "kitty-a", Image: "img", BrowserVolume: "/etc:/x"}).Validate(); err == nil {
+		t.Error("a volume name that is a path")
+	}
+}
+
+func TestImageHasBrowserVolume(t *testing.T) {
+	f := &fake{answer: func(args []string) ([]byte, error) {
+		if strings.Contains(strings.Join(args, " "), BrowserLabel) && args[len(args)-1] == "new" {
+			return []byte("1\n"), nil
+		}
+		return []byte("\n"), nil
+	}}
+	f.install(t, "docker")
+	m := New(Runtime{Bin: "docker"})
+	if yes, err := m.ImageHasBrowserVolume(context.Background(), "new"); !yes || err != nil {
+		t.Errorf("labelled image: %v %v", yes, err)
+	}
+	if yes, _ := m.ImageHasBrowserVolume(context.Background(), "old"); yes {
+		t.Error("an image without the label")
+	}
+}

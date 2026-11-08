@@ -168,6 +168,7 @@ COPY --chmod=755 kitty-page.py /usr/local/bin/kitty-page
 COPY --chmod=755 kitty-file.py /usr/local/bin/kitty-file
 COPY --chmod=755 chromium-wrapper.sh /usr/local/bin/chromium
 COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open
+COPY --chmod=755 kitty-profile.sh /usr/local/bin/kitty-profile
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch
 COPY --chmod=755 kitty-install.sh /usr/local/bin/kitty-install
 COPY --chmod=755 kitty-apt.sh /usr/local/sbin/kitty-apt
@@ -212,6 +213,10 @@ RUN apt-mark showmanual | sort -u >/usr/share/kitties-base-packages \
     && (cd /usr/share/kitties/skel && find . -type f -exec sha256sum {} + | sort | sha256sum | cut -c1-16) \
         >/usr/share/kitties/skel.id
 LABEL kitties.home="1"
+# The browser's profile, on a Linux disk (kitty-profile): the gateway mounts the kitty's own volume
+# here (label kitties.browser), and without it this is used when the workspace cannot hold one.
+RUN mkdir -p /var/lib/kitty-browser && chown kitty:kitty /var/lib/kitty-browser && chmod 700 /var/lib/kitty-browser
+LABEL kitties.browser="1"
 
 # The lumen-wm commit inside (empty on a local build that did not pass it: see the file).
 ARG LUMEN_COMMIT=
