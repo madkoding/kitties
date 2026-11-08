@@ -359,6 +359,16 @@ func (c *fakeChats) Edit(id string, title, description *string) (*chat.Session, 
 	}
 	return s, nil
 }
+func (c *fakeChats) Suggest(_ context.Context, id string) (chat.Suggestion, error) {
+	s, ok := c.sessions[id]
+	if !ok {
+		return chat.Suggestion{}, errors.New("no such chat")
+	}
+	if len(s.Turns) == 0 {
+		return chat.Suggestion{}, chat.ErrNothingToRead
+	}
+	return chat.Suggestion{Title: "About " + s.Turns[0].Text, Description: "What the chat is for"}, nil
+}
 func (c *fakeChats) AddMembers(id string, members []string) (*chat.Session, error) {
 	s, err := c.Get(id)
 	if err != nil {
@@ -738,6 +748,23 @@ func TestChatRoutes(t *testing.T) {
 		if code, _ := edit(tc.path, tc.body); code != tc.want {
 			t.Errorf("edit %s = %d, want %d", name, code, tc.want)
 		}
+	}
+	// suggest proposes; with apply it saves too.
+	c.sessions["c1"].Turns = []chat.Turn{{From: "user", Text: "the trip"}}
+	if code, m, _ := call(t, srv, "POST", "/v1/chats/c1/suggest", "tok", nil); code != 200 ||
+		m["suggestion"].(map[string]any)["title"] == nil || m["chat"] != nil || c.sessions["c1"].Title != "Trip" {
+		t.Errorf("suggest = %d %v", code, m)
+	}
+	if code, m, _ := call(t, srv, "POST", "/v1/chats/c1/suggest", "tok", map[string]any{"apply": true}); code != 200 ||
+		m["chat"].(map[string]any)["description"] != "What the chat is for" {
+		t.Errorf("suggest and apply = %d %v", code, m)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/chats/zz/suggest", "tok", nil); code != 404 {
+		t.Error("suggest unknown")
+	}
+	c.sessions["c1"].Turns = nil
+	if code, _, _ := call(t, srv, "POST", "/v1/chats/c1/suggest", "tok", nil); code != 409 {
+		t.Error("suggest with nothing to read")
 	}
 	if code, _, _ := call(t, srv, "DELETE", "/v1/chats/c1", "tok", nil); code != 200 {
 		t.Error("delete")

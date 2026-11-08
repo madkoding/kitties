@@ -247,3 +247,11 @@ func TestDemoMachineMemory(t *testing.T) {
 		t.Error("engine")
 	}
 }
+
+func TestNamedChat(t *testing.T) {
+	b := &Brain{}
+	got := ask(t, b, "You name a conversation between a person and AI assistants", "Current title: x\n\nThe conversation:\n[You]: plan the launch of the new app on friday please\n[mimi]: sure")
+	if !strings.Contains(got, `"title":"Plan the launch of the new app"`) || !strings.Contains(got, `"description":"Work through plan the launch`) {
+		t.Errorf("named = %s", got)
+	}
+}

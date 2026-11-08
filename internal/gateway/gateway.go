@@ -248,6 +248,7 @@ func (s *Server) routes() {
 	s.mux.Handle("GET /v1/chats/{id}", api(s.handleGetChat))
 	s.mux.Handle("DELETE /v1/chats/{id}", api(s.handleDeleteChat))
 	s.mux.Handle("PATCH /v1/chats/{id}", api(s.handleEditChat))
+	s.mux.Handle("POST /v1/chats/{id}/suggest", api(s.handleSuggestChat))
 	s.mux.Handle("POST /v1/chats/{id}/members", api(s.handleAddMembers))
 	s.mux.Handle("DELETE /v1/chats/{id}/members/{ref}", api(s.handleRemoveMember))
 	s.mux.Handle("POST /v1/chats/{id}/delegates/{ref}", api(s.handleRestoreDelegate))
@@ -951,6 +952,64 @@ func (s *Server) handleEditChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusOK, map[string]any{"chat": sess})
+}
+
+// Suggester has a chat's kitty read it all and propose its title and description
+// (chat.Service.Suggest).
+type Suggester interface {
+	Suggest(ctx context.Context, id string) (chat.Suggestion, error)
+}
+
+// suggestChat proposes a title and a description for a chat and, with apply, saves them.
+func (s *Server) suggestChat(ctx context.Context, id string, apply bool) (chat.Suggestion, *chat.Session, error) {
+	sg, ok := s.chats.(Suggester)
+	if !ok {
+		return chat.Suggestion{}, nil, errNoSuggest
+	}
+	got, err := sg.Suggest(ctx, id)
+	if err != nil || !apply {
+		return got, nil, err
+	}
+	e, ok := s.chats.(Editor)
+	if !ok {
+		return got, nil, errNoSuggest
+	}
+	sess, err := e.Edit(id, &got.Title, &got.Description)
+	return got, sess, err
+}
+
+var errNoSuggest = errors.New("this gateway cannot suggest a title")
+
+// handleSuggestChat is the "write it from the chat" button: {"apply": false} only proposes (the
+// person reviews it), {"apply": true} saves it too. Answers {suggestion, chat}.
+func (s *Server) handleSuggestChat(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Apply bool `json:"apply"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	got, sess, err := s.suggestChat(r.Context(), r.PathValue("id"), body.Apply)
+	switch {
+	case errors.Is(err, errNoSuggest):
+		fail(w, http.StatusNotImplemented, err)
+		return
+	case errors.Is(err, chat.ErrNothingToRead):
+		fail(w, http.StatusConflict, err)
+		return
+	case err != nil && strings.Contains(err.Error(), "did not answer"):
+		fail(w, http.StatusBadGateway, err)
+		return
+	case err != nil:
+		fail(w, codeFor(err), err)
+		return
+	}
+	out := map[string]any{"suggestion": got}
+	if sess != nil {
+		out["chat"] = sess
+	}
+	reply(w, http.StatusOK, out)
 }
 
 func (s *Server) handleAddMembers(w http.ResponseWriter, r *http.Request) {

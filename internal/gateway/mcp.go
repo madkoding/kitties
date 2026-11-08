@@ -407,6 +407,24 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 				c.Turns = nil
 				return jsonResult(map[string]any{"chat": c})
 			}},
+		{Name: "chat_suggest", Description: "Have one of a thread's kitties read the whole thread and propose a new title and description (what the thread is for now, the base its kitties work from). With apply: true it saves them too.",
+			InputSchema: obj([]string{"id"}, map[string]any{"id": str("the thread's id"),
+				"apply": map[string]any{"type": "boolean", "description": "save the title and description it proposes"}}), Annotations: write,
+			Call: func(ctx context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					ID    string `json:"id"`
+					Apply bool   `json:"apply"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				got, sess, err := s.suggestChat(ctx, a.ID, a.Apply)
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				out := map[string]any{"suggestion": got, "applied": sess != nil}
+				return jsonResult(out)
+			}},
 		{Name: "chat_delete", Description: "Delete a thread with its turns, screenshots and files, for good. Pass confirm: true.",
 			InputSchema: obj([]string{"id", "confirm"}, map[string]any{"id": str("the thread's id"),
 				"confirm": map[string]any{"type": "boolean", "description": "must be true"}}), Annotations: danger,

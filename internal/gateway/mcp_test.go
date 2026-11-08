@@ -263,6 +263,10 @@ func TestMCPChatTools(t *testing.T) {
 	if text, _, _ := tool(t, s, "chat_list", map[string]any{}); !strings.Contains(text, `"description": "plan the trip"`) {
 		t.Errorf("chat_list shows the description: %q", text)
 	}
+	c.sessions["c1"].Turns = []chat.Turn{{From: "user", Text: "the trip"}}
+	if text, isErr, _ := tool(t, s, "chat_suggest", map[string]any{"id": "c1", "apply": true}); isErr || !strings.Contains(text, `"applied": true`) || c.sessions["c1"].Description != "What the chat is for" {
+		t.Errorf("chat_suggest: %q", text)
+	}
 	if _, _, resp := tool(t, s, "chat_delete", map[string]any{"id": "c1"}); resp["error"] == nil {
 		t.Error("chat_delete without confirm")
 	}
