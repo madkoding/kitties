@@ -73,7 +73,7 @@ Commands:
   lead [<name> | none]      show the lead kitty (the one that orchestrates the others and reports for
                             all of them), make another the lead, or leave the fleet without one
   scale <name> <n>          run n replicas of a configured kitty (name-1 ... name-n)
-  chat <name>[,<name>...]   talk to one kitty, or to a group of them, from the terminal
+  chat [<name>[,<name>...]] talk to one kitty, or to a group of them, from the terminal (no name: the lead)
   exec <name> <cmd...>      run a command inside the kitty's container
   shot <name> <file.png>    save a screenshot of the kitty's display
   providers                 list the configured AI profiles and the supported kinds
@@ -110,13 +110,15 @@ type app struct {
 	keep      *keep.Store
 	updater   *selfupdate.Updater
 	// booted is what the start found out about the last update (rolled back, confirmed).
-	booted   selfupdate.BootResult
-	budget   *budget.Store
-	digest   *digest.Reporter
-	memory   *memory.Store
-	notifier *notify.Notifier
-	skills   *skills.Library
-	arts     *artifacts.Store
+	booted selfupdate.BootResult
+	budget *budget.Store
+	digest *digest.Reporter
+	// summaries asks the lead to sum its reports up every day (autonomy.lead_summary).
+	summaries *chat.LeadSummaries
+	memory    *memory.Store
+	notifier  *notify.Notifier
+	skills    *skills.Library
+	arts      *artifacts.Store
 	// guard keeps the exposed kitties from giving the person away; tokens are the gateway's own
 	// secrets it takes out too.
 	guard    *guard.Guard
@@ -335,6 +337,7 @@ func (a *app) open(cmd string) error {
 	chats.SetBrainWait(func() time.Duration { return fleet.Autonomy().BrainWaitOr(chat.DefaultBrainWait) })
 	chats.SetStandIns(func() int { return fleet.Autonomy().StandInsOr(chat.DefaultStandIns) })
 	chats.SetLeadLimitsAsk(func() bool { return fleet.Autonomy().LeadLimitsAsk() })
+	chats.SetParallel(func() int { return fleet.Autonomy().ParallelOr(chat.DefaultParallel) })
 	a.agenda = ag
 	dataDir := a.cfg.DataDirOr()
 	if a.approvals, err = approvals.Open(filepath.Join(dataDir, "approvals.json")); err != nil {
@@ -389,6 +392,17 @@ func (a *app) open(cmd string) error {
 		Plans: chats.Plans,
 		Day:   digest.MyDay(fleet.Connectors()),
 	}, filepath.Join(dataDir, "digest.json"))
+	a.summaries = &chat.LeadSummaries{
+		Chats: chats,
+		At:    func() (int, int, bool) { return fleet.Autonomy().LeadSummaryAt() },
+		Deliver: func(ctx context.Context, n notify.Notification) error {
+			if fleet.Notify().Connector == "" {
+				return nil // the summary stays in the Reports thread
+			}
+			return a.notifier.Deliver(ctx, n)
+		},
+		Path: filepath.Join(dataDir, "lead-summary.json"),
+	}
 	// A removed kitty takes its held actions and its memory along.
 	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget, chats.LeaveChats)
 	if a.vault != nil {
@@ -760,6 +774,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	a.notifier.SetLog(logf)
 	go a.agenda.Run(ctx)
 	go a.digest.Run(ctx, logf)
+	go a.summaries.Run(ctx, logf)
 	// A kitty that stopped on its day's tokens goes on by itself once they are back.
 	go a.chats.RunResumer(ctx, time.Minute)
 	// With notify.replies on, what the person writes to the ntfy topic reaches the kitties.
@@ -1038,8 +1053,14 @@ func (a *app) cmdShot(ctx context.Context, args []string) error {
 
 // cmdChat is the terminal chat: one kitty, or a group of them.
 func (a *app) cmdChat(ctx context.Context, args []string) error {
+	if len(args) == 0 {
+		// No kitty named: the lead, which hands the work to the others.
+		if lead := a.fleet.Lead(); lead != nil {
+			args = []string{lead.Name}
+		}
+	}
 	if len(args) != 1 {
-		return errors.New("usage: kitties chat <name>[,<name>...]")
+		return errors.New("usage: kitties chat <name>[,<name>...] (or no name, for the lead kitty)")
 	}
 	members := strings.Split(args[0], ",")
 	sess, err := a.chats.Create("", members)

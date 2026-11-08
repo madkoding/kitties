@@ -25,4 +25,8 @@ a request comes from the model, not from Kitties.
 - **Answer size.** The most one answer can write; Anthropic requires the value. Raise `max_tokens`
   if the model allows more, lower it if it allows less (it would refuse the request).
 - **Pictures (5 MB) and PDFs (32 MB).** The providers' own size limits.
+- **Request size.** Screenshots go to the model as JPEG when that is lighter (same size). A request goes with the last 6 to 11 screenshots as pictures and at most
+  12 MB of pictures and documents; older ones are named in a line. When a provider still answers
+  "failed to read request body" (too big, or cut off by a proxy), the request goes again with
+  only the last 2, and the chat says it in plain words.
 - **Your provider's quota.** Rate limits and the plan's usage are the provider's.

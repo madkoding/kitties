@@ -135,7 +135,8 @@ Caddy: `flush_interval -1`). `deploy/nginx.conf` is a complete example.
   label); the kitties' desktops are updated by the gateway itself (below).
 - Update by itself, as a binary: Kitties looks at its own releases on GitHub (`updates:` in the
   configuration). `gateway: notify` (the default) tells you, through your notifications and from
-  Settings, Preferences, where **Update and restart** installs it; `gateway: auto` installs it by
+  the sidebar's **New version** and Settings, Preferences, whose update window installs it with a
+  progress bar, restarts the gateway and refreshes the page; `gateway: auto` installs it by
   itself. It downloads the file for this system, checks it against the release's `SHA256SUMS`, runs
   it once to see it is the version it claims to be, keeps the old one as `<name>.prev` and restarts
   into it (same process id, so a supervisor follows it), only when no kitty is working and no
@@ -146,9 +147,9 @@ Caddy: `flush_interval -1`). `deploy/nginx.conf` is a complete example.
   that version again (a newer one is offered); a supervisor that restarts a crashed program
   (systemd `Restart=always`, a container's restart policy) is what brings the failed start back for
   this to see it. It does not replace a development
-  build, a program in a container (that is the image's update), the one inside the Kitties app (its
-  bundle is signed), one it cannot write next to, or anything on Windows: it says so and how to
-  update instead. `updates.gateway: off` stops it looking.
+  build, a program in a container (that is the image's update), one it cannot write next to, or a
+  bare binary on Windows: it says so and how to update instead. The gateway inside the Kitties app
+  updates the whole app and opens it again ([INSTALL.md](INSTALL.md#keeping-kitties-up-to-date)). `updates.gateway: off` stops it looking.
 - Who made a release: a checksum shows a file arrived whole, not who made it, so releases are
   **signed**. `kitties release-key` makes an Ed25519 key pair: keep the private key as the repository
   secret `KITTIES_SIGNING_KEY` and the public key as the repository variable `KITTIES_UPDATE_PUBKEY`

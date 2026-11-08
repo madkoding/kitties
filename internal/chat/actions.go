@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/desktop"
@@ -245,10 +246,11 @@ func (o outcome) result() string {
 // background task's business) and records them on the turn.
 func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action, k *kitty.Kitty, allowed map[string]string, turn *Turn) []outcome {
 	var out []outcome
-	for _, a := range actions {
+	handed := s.delegateAll(ctx, id, actions, k, turn)
+	for i, a := range actions {
 		switch a.kind {
 		case "delegate":
-			out = append(out, s.delegate(ctx, id, a, k, turn))
+			out = append(out, handed[i])
 		case "memory":
 			out = append(out, s.runMemory(id, a, k))
 		case "limit":
@@ -320,4 +322,111 @@ func hasDesktopAction(actions []action) bool {
 		}
 	}
 	return false
+}
+
+// DefaultParallel is how many hand-overs of one reply run at the same time unless set.
+const DefaultParallel = 4
+
+// SetParallel sets how many hand-overs of one reply run at the same time
+// (autonomy.parallel_handovers); fn is asked each time, so a change applies at once.
+func (s *Service) SetParallel(fn func() int) { s.parallel = fn }
+
+// parallelOr is that number, at least one.
+func (s *Service) parallelOr() int {
+	n := DefaultParallel
+	if s.parallel != nil {
+		n = s.parallel()
+	}
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+// delegateAll runs the batch's hand-overs, by their index in actions. Hand-overs to different
+// kitties run at the same time, up to parallelOr at once, so a lead that splits a task among
+// several waits for the slowest instead of for all of them in a row; two to the same kitty go
+// one after the other. The ones waiting their turn show in the chat as queued until they start.
+func (s *Service) delegateAll(ctx context.Context, id string, actions []action, k *kitty.Kitty, turn *Turn) map[int]outcome {
+	byKitty := map[string][]int{}
+	var order []string
+	for i, a := range actions {
+		if a.kind != "delegate" {
+			continue
+		}
+		key := strings.ToLower(strings.TrimSpace(a.name))
+		if _, seen := byKitty[key]; !seen {
+			order = append(order, key)
+		}
+		byKitty[key] = append(byKitty[key], i)
+	}
+	out := map[int]outcome{}
+	if len(order) == 0 {
+		return out
+	}
+	// More than one piece: each shows as queued until it starts.
+	started := make([]func(), len(actions))
+	if len(byKitty) > 1 || len(byKitty[order[0]]) > 1 {
+		for _, key := range order {
+			for _, i := range byKitty[key] {
+				started[i] = s.queued(id, actions[i], k)
+			}
+		}
+	}
+	turns := make([]Turn, len(actions))
+	slots := make(chan struct{}, s.parallelOr())
+	var mu sync.Mutex
+	var wg sync.WaitGroup
+	for _, key := range order {
+		wg.Add(1)
+		go func(idx []int) {
+			defer wg.Done()
+			for _, i := range idx {
+				slots <- struct{}{}
+				if started[i] != nil {
+					started[i]()
+				}
+				o := s.delegate(ctx, id, actions[i], k, &turns[i])
+				<-slots
+				mu.Lock()
+				out[i] = o
+				mu.Unlock()
+			}
+		}(byKitty[key])
+	}
+	wg.Wait()
+	// The hand-overs are shown in the order they were asked for.
+	for i := range actions {
+		turn.Delegations = append(turn.Delegations, turns[i].Delegations...)
+	}
+	return out
+}
+
+// queued shows a hand-over waiting its turn in the chat, and returns what takes it off; a
+// piece the fleet cannot hand over (no such kitty, no task) shows nothing and fails on its own.
+func (s *Service) queued(id string, a action, k *kitty.Kitty) func() {
+	task := strings.TrimSpace(argText(a.args, "task", "text"))
+	target, err := s.fleet.Get(a.name)
+	if err != nil || task == "" || target.ID == k.ID {
+		return nil
+	}
+	h := Helper{Kitty: target.Name, KittyID: target.ID, From: k.Name, Task: clip(task, 300), Since: s.now(), Queued: true}
+	s.setHelping(id, func(list []Helper) []Helper { return append(list, h) })
+	return func() {
+		s.setHelping(id, func(list []Helper) []Helper {
+			kept := list[:0]
+			gone := false
+			for _, x := range list {
+				if !gone && x.Queued && x.KittyID == h.KittyID && x.Task == h.Task && x.Since.Equal(h.Since) {
+					gone = true
+					continue
+				}
+				kept = append(kept, x)
+			}
+			if len(kept) == 0 {
+				return nil
+			}
+			return kept
+		})
+	}
 }

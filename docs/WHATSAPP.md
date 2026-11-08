@@ -26,7 +26,8 @@ connector.
 ## Turning it on
 
 1. Settings, **Connections**, the **WhatsApp (linked device)** section at the end.
-2. Choose **the kitty that answers**, and add the **numbers that may write** with their country
+2. Choose **the kitty that answers** (with none chosen, the [lead kitty](AUTONOMY.md#the-lead-kitty)
+   answers), and add the **numbers that may write** with their country
    code (`+56 9 1234 5678`). The list starts empty: until you add someone, every message is
    ignored. Tick **Answer in groups when someone mentions the kitty** to let it talk in groups too,
    and pick the groups: the ones that wrote lately show up there (WhatsApp gives a linked device no

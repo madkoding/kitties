@@ -4,6 +4,7 @@
 ; -DOUT=<installer> [-DICON=<file.ico>] installer.nsi).
 ; The installer asks where the gateway may be reached from (local, lan or wan); silently, pass
 ; /EXPOSE=local|lan|wan. The choice is kept in %USERPROFILE%\.kitties\exposure, which the gateway reads.
+; The app's own update runs it as /S /RELAUNCH: silently, and the app is opened again at the end.
 
 Unicode true
 !include "MUI2.nsh"
@@ -202,6 +203,13 @@ Section "Kitties" SecApp
     ${If} $0 == ""
       MessageBox MB_ICONEXCLAMATION|MB_OK "${APP} needs the Microsoft Edge WebView2 runtime and it could not be installed.$\r$\nInstall it from https://developer.microsoft.com/microsoft-edge/webview2/ and open ${APP} again."
     ${EndIf}
+  ${EndIf}
+  ; An update made from the app (/S /RELAUNCH) opens the app again once it is installed.
+  ${GetParameters} $0
+  ClearErrors
+  ${GetOptions} $0 "/RELAUNCH" $1
+  ${IfNot} ${Errors}
+    Exec '"$INSTDIR\kitties-desktop.exe"'
   ${EndIf}
 SectionEnd
 

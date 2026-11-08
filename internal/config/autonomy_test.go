@@ -65,3 +65,32 @@ func TestLeadLimitsSetting(t *testing.T) {
 		t.Error("maybe is not a setting")
 	}
 }
+
+func TestParallelAndSummarySettings(t *testing.T) {
+	for v, want := range map[string]int{"": 4, "off": 1, "0": 1, "1": 1, " 8 ": 8, "16": 16} {
+		a := Autonomy{ParallelHandOvers: v}
+		if err := a.Validate(); err != nil || a.ParallelOr(4) != want {
+			t.Errorf("%q: %v %d", v, err, a.ParallelOr(4))
+		}
+	}
+	for _, bad := range []string{"17", "-2", "many"} {
+		if err := (Autonomy{ParallelHandOvers: bad}).Validate(); err == nil {
+			t.Errorf("parallel %q was accepted", bad)
+		}
+	}
+	if h, m, ok := (Autonomy{LeadSummary: "18:30"}).LeadSummaryAt(); !ok || h != 18 || m != 30 {
+		t.Errorf("summary at %d:%d %v", h, m, ok)
+	}
+	for _, none := range []string{"", "off"} {
+		a := Autonomy{LeadSummary: none}
+		if _, _, ok := a.LeadSummaryAt(); ok || a.Validate() != nil {
+			t.Errorf("%q: a summary", none)
+		}
+	}
+	if err := (Autonomy{LeadSummary: "6pm"}).Validate(); err == nil {
+		t.Error("6pm was accepted")
+	}
+	if _, _, ok := (Autonomy{LeadSummary: "6pm"}).LeadSummaryAt(); ok {
+		t.Error("6pm is a time")
+	}
+}

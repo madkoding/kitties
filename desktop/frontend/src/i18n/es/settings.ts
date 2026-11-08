@@ -229,13 +229,33 @@ const dict: Dictionary = {
     "Lo que una kitty va a hacer en una tarea larga (uno cada 10 minutos como mucho)",
   "Kitties did not come back in a minute: restart it by hand.":
     "Kitties no volvió en un minuto: reinícialo a mano.",
-  "Update Kitties to {version}? It restarts in a moment; the kitties' desktops keep running.":
-    "¿Actualizar Kitties a {version}? Se reinicia en un momento; los escritorios de los kitties siguen funcionando.",
   "Kitties {version}": "Kitties {version}",
   "it is the newest version": "es la versión más nueva",
   "Kitties {version} is available.": "Kitties {version} está disponible.",
   "Update and restart": "Actualizar y reiniciar",
-  "Updated to {version}: restarting…": "Actualizado a {version}: reiniciando…",
+  "Update Kitties": "Actualizar Kitties",
+  "You have {version}.": "Tienes {version}.",
+  "What's new": "Novedades",
+  "See the release notes": "Ver las notas de la versión",
+  "See what's new": "Ver qué hay de nuevo",
+  "New version": "Nueva versión",
+  Later: "Más tarde",
+  "Update now": "Actualizar ahora",
+  "Try again": "Reintentar",
+  "Getting ready…": "Preparando…",
+  "Downloading…": "Descargando…",
+  "Downloading {done} of {total}…": "Descargando {done} de {total}…",
+  "Checking the download…": "Verificando la descarga…",
+  "Putting the new version in place…": "Instalando la versión nueva…",
+  "The update did not finish.": "La actualización no terminó.",
+  "Kitties {version} is running: refreshing the window…":
+    "Kitties {version} está funcionando: refrescando la ventana…",
+  "Kitties restarts when it is done; the kitties' desktops keep running and this window refreshes by itself.":
+    "Kitties se reinicia al terminar; los escritorios de los kitties siguen funcionando y esta ventana se refresca sola.",
+  "Skip this version": "Omitir esta versión",
+  "Opening the app again on the new version…": "Abriendo la app de nuevo en la versión nueva…",
+  "The app closes and opens again on the new version when it is done; the kitties' desktops keep running.":
+    "La app se cierra y se vuelve a abrir en la versión nueva al terminar; los escritorios de los kitties siguen funcionando.",
   "Look for a new version": "Buscar una versión nueva",
   "Looked {when}.": "Buscada {when}.",
   "Kitties does not look for new versions: turn it on with updates.gateway in the configuration.":

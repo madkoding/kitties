@@ -85,10 +85,37 @@ function Answer({ d, onOpen }: { d: Delegation; onOpen?: (name: string) => void 
 // Helping shows the kitties at work right now on a subtask handed over from the chat, with
 // their cat working, until they answer.
 export function Helping({ helping, kitties }: { helping: Helper[]; kitties: Map<string, Kitty> }) {
+  const waiting = helping.filter((h) => h.queued).length;
   return (
     <>
+      {helping.length > 1 && (
+        <div class="working-line text-xs opacity-70" data-testid="delegate-progress">
+          {t("{working} working, {waiting} waiting their turn", {
+            working: helping.length - waiting,
+            waiting,
+          })}
+        </div>
+      )}
       {helping.map((h) => {
         const k = kitties.get(h.kitty_id);
+        if (h.queued) {
+          return (
+            <div
+              key={h.kitty_id + h.since + h.task}
+              class="msg agent delegate-reply working opacity-60"
+              data-who={h.kitty}
+              data-testid="delegate-queued"
+            >
+              <span class="msg-cat">
+                <PixelCat breed={k?.avatar?.breed} color={k?.avatar?.color} size={32} />
+              </span>
+              <div class="delegate-task" title={h.task}>
+                {t("{from} asked: {task}", { from: h.from, task: h.task })}
+              </div>
+              <div class="working-line !mt-0">{t("{name} waits its turn…", { name: h.kitty })}</div>
+            </div>
+          );
+        }
         return (
           <div
             key={h.kitty_id + h.chat}

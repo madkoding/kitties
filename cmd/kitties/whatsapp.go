@@ -23,7 +23,7 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 	dataDir := a.cfg.DataDirOr()
 	w := a.cfg.WhatsApp
 	opt := whatsapp.Options{
-		Dir: filepath.Join(dataDir, "whatsapp"), Chats: a.chats, Kitty: a.fleet.Get, Registry: a.fleet.Connectors(),
+		Dir: filepath.Join(dataDir, "whatsapp"), Chats: a.chats, Kitty: a.fleet.Get, Lead: a.fleet.Lead, Registry: a.fleet.Connectors(),
 		QRImage: wameow.QRImage, Log: logf,
 	}
 	if a.guard != nil {

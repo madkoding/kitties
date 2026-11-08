@@ -65,7 +65,10 @@ export function NewChatModal({
   onCreated: (id: string) => void;
   onNeedKitty?: () => void;
 }) {
-  const [picked, setPicked] = useState<Set<string>>(new Set());
+  // A new chat starts with the lead kitty picked, when there is one: it orchestrates the rest.
+  const [picked, setPicked] = useState<Set<string>>(
+    () => new Set(kitties.filter((k) => k.lead).map((k) => k.id)),
+  );
   const [title, setTitle] = useState("");
   const [err, setErr] = useState("");
   const toggle = (id: string) => {
@@ -616,6 +619,13 @@ function KittyBasics({
   );
 }
 
+// SUMMARY_ASK is what the person asks the lead with "Summarize reports", in the page's language
+// (the lead answers in the language it is written to).
+const SUMMARY_ASK = () =>
+  t(
+    "Summarize the reports in this thread since your last summary: what each kitty did, what is stuck or failed, what waits for me, and what you suggest next. Short, in bullets.",
+  );
+
 // LeadPanel makes a kitty the lead (the principal one, which orchestrates the others and
 // reports for all of them) or takes the lead from it, and opens its Reports thread.
 export function LeadPanel({
@@ -663,6 +673,19 @@ export function LeadPanel({
       setErr((e as Error).message);
     }
   };
+  // summarize opens the Reports thread and asks the lead for a summary there: the answer
+  // arrives in the thread while the person watches.
+  const summarize = async () => {
+    setErr("");
+    try {
+      const r = await api.lead();
+      if (!r.reports) return;
+      onOpenChat(r.reports);
+      api.send(r.reports, SUMMARY_ASK()).catch((e) => setErr((e as Error).message));
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  };
   return (
     <div class="lead-panel mt-4" data-testid="lead-panel">
       <div class="flex items-center gap-2 flex-wrap">
@@ -693,6 +716,13 @@ export function LeadPanel({
         <div class="flex gap-2 flex-wrap">
           {kitty.lead ? (
             <>
+              <button
+                class="btn-accent px-3 py-1.5 text-xs"
+                onClick={summarize}
+                data-testid="lead-summary"
+              >
+                {t("Summarize reports")}
+              </button>
               <button class="btn-outline px-3 py-1.5 text-xs" onClick={reports}>
                 {t("Open reports")}
               </button>

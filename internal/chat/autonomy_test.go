@@ -467,3 +467,24 @@ func TestRunGoalPlaysItsSavedFlowFirst(t *testing.T) {
 		t.Errorf("the kitty was not told the flow failed: %q", last)
 	}
 }
+
+// A provider that could not read the request says so in JSON; the person reads plain words in
+// every line of the turn, and the error as it came stays in the detail.
+func TestBodyUnreadReadsPlain(t *testing.T) {
+	s, _, sa := deskService(t, "@tool click {\"x\": 1, \"y\": 1}")
+	raw := `openai/x: HTTP 400: {"error":{"message":"failed to read request body (ref: f4ae)","type":"invalid_request_error","param":null,"code":null}}`
+	sa.err, sa.errAfter = errors.New(raw), 1
+	ana, _ := s.fleet.Get("ana")
+	ana.Limits = kitty.Limits{Attended: true, Retries: 1}
+	sess, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), sess.ID, "go"); err != nil {
+		t.Fatal(err)
+	}
+	turn := waitDone(t, s, sess.ID).Turns[1]
+	if strings.Contains(turn.Text, "invalid_request_error") || strings.Count(turn.Text, BodyUnread) != 3 {
+		t.Errorf("text = %q", turn.Text)
+	}
+	if turn.Detail != raw {
+		t.Errorf("detail = %q", turn.Detail)
+	}
+}

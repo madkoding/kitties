@@ -237,6 +237,9 @@ const dict: Dictionary = {
   "the kitty's name": "o nome do kitty",
   "Checking the model…": "Testando o modelo…",
   "Creating {name}…": "Criando {name}…",
+  "{working} working, {waiting} waiting their turn":
+    "{working} trabalhando, {waiting} esperando a vez",
+  "{name} waits its turn…": "{name} espera a vez…",
 };
 
 export default dict;

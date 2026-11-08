@@ -1894,6 +1894,8 @@ function AutonomyForm({
   const [brainWait, setBrainWait] = useState(view.autonomy?.brain_wait || "");
   const [standIns, setStandIns] = useState(view.autonomy?.stand_ins || "");
   const [leadAsk, setLeadAsk] = useState(view.autonomy?.lead_limits === "ask");
+  const [parallel, setParallel] = useState(view.autonomy?.parallel_handovers || "");
+  const [summaryAt, setSummaryAt] = useState(view.autonomy?.lead_summary || "");
   const [msg, flash] = useFlash();
   const [err, setErr] = useState("");
   const save = async () => {
@@ -1905,6 +1907,8 @@ function AutonomyForm({
           brain_wait: brainWait.trim(),
           stand_ins: standIns.trim(),
           lead_limits: leadAsk ? "ask" : "",
+          parallel_handovers: parallel.trim(),
+          lead_summary: summaryAt.trim(),
         }),
       );
       flash(t("Saved."));
@@ -1972,6 +1976,37 @@ function AutonomyForm({
       <p class={HELP}>
         {t(
           "The lead may give a kitty more rounds, tokens or seconds per task (up to 500 rounds, 2M tokens, 2 hours). On: each lasting change waits in Approvals. What it gives for one task alone ends with the task.",
+        )}
+      </p>
+      <label class={LABEL} for="auto-parallel">
+        {t("Hand-overs at the same time")}
+      </label>
+      <input
+        id="auto-parallel"
+        class={`${INPUT} !w-56 font-mono`}
+        value={parallel}
+        onInput={(e) => setParallel((e.target as HTMLInputElement).value)}
+        placeholder="4"
+      />
+      <p class={HELP}>
+        {t(
+          "When a kitty hands several pieces of a task to others in one reply, this many work at once (1 to 16); the rest wait their turn. Write off for one at a time.",
+        )}
+      </p>
+      <label class={LABEL} for="auto-lead-summary">
+        {t("The lead sums up the reports every day at")}
+      </label>
+      <input
+        id="auto-lead-summary"
+        type="time"
+        class={`${INPUT} !w-56 font-mono`}
+        value={summaryAt}
+        onInput={(e) => setSummaryAt((e.target as HTMLInputElement).value)}
+        data-testid="auto-lead-summary"
+      />
+      <p class={HELP}>
+        {t(
+          "At this time the lead kitty writes a short summary in its Reports thread (what each kitty did, what is stuck, what waits for you, what next) and sends it to your notification channel. Empty: never.",
         )}
       </p>
       <div class="flex items-center gap-2 mt-4 flex-wrap">

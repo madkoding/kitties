@@ -6,6 +6,7 @@ import {
   IconMonitor,
   IconPlus,
   IconSettings,
+  IconUpgrade,
   IconSun,
   IconUsers,
   IconX,
@@ -67,6 +68,9 @@ interface Props {
   onTheme: () => void;
   // onSignOut ends the browser session; absent when there is none to end.
   onSignOut?: () => void;
+  // update is the newer version of Kitties that is out ("" when there is none); onUpdate offers it.
+  update: string;
+  onUpdate: () => void;
 }
 
 // GROUPS is where the sidebar keeps, in this browser, whether it lists only the group chats.
@@ -260,6 +264,18 @@ export default function Sidebar(p: Props) {
           </section>
         </div>
 
+        {p.update && (
+          <div class="px-3 pt-2 flex-none">
+            <button
+              class="btn-outline w-full flex items-center gap-2 px-3 py-2 text-xs"
+              onClick={p.onUpdate}
+              data-testid="update-notice"
+            >
+              <IconUpgrade size={14} /> {t("New version")}
+              <span class="tag tag-accent ml-auto">{p.update}</span>
+            </button>
+          </div>
+        )}
         {p.approvals !== null && (
           <div class="px-3 pt-2 flex-none">
             <button

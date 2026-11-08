@@ -3,18 +3,22 @@ import { t } from "./i18n";
 import { IconX } from "./icons";
 
 // Modal is the window over the page: a title, a close button, Escape and a click outside close it.
+// A window that must not be closed now (an update being made) says so with closable={false}.
 export function Modal({
   title,
   onClose,
   children,
   wide,
+  closable = true,
 }: {
   title: string;
   onClose: () => void;
   children: preact.ComponentChildren;
   wide?: boolean;
+  closable?: boolean;
 }) {
   const dialog = useRef<HTMLDivElement>(null);
+  const close = () => closable && onClose();
   // The focus lives in the window while it is open, and goes back to where it was when it closes.
   useLayoutEffect(() => {
     const before = document.activeElement as HTMLElement | null;
@@ -54,14 +58,15 @@ export function Modal({
   };
   useLayoutEffect(() => {
     // A window inside this one that used the key (the live desktop) keeps this one open.
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && !e.defaultPrevented && onClose();
+    const onKey = (e: KeyboardEvent) =>
+      e.key === "Escape" && !e.defaultPrevented && closable && onClose();
     addEventListener("keydown", onKey);
     return () => removeEventListener("keydown", onKey);
-  }, [onClose]);
+  }, [onClose, closable]);
   return (
     <div
       class="fixed inset-0 z-40 bg-black/60 flex items-center justify-center p-4 backdrop"
-      onClick={onClose}
+      onClick={close}
       data-modal
     >
       <div
@@ -75,13 +80,15 @@ export function Modal({
       >
         <div class="flex items-center justify-between mb-4">
           <h2 class="font-mono text-base tracking-wide">{title}</h2>
-          <button
-            class="plain p-1 text-[var(--t3)] hover:text-[var(--t1)]"
-            onClick={onClose}
-            aria-label={t("Close")}
-          >
-            <IconX />
-          </button>
+          {closable && (
+            <button
+              class="plain p-1 text-[var(--t3)] hover:text-[var(--t1)]"
+              onClick={onClose}
+              aria-label={t("Close")}
+            >
+              <IconX />
+            </button>
+          )}
         </div>
         {children}
       </div>
