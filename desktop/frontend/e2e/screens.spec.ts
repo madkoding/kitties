@@ -1282,6 +1282,10 @@ test("a kitty that helped through a hand-over can be made a member of the chat, 
   await expect(page.getByTestId("chat-group")).toHaveCount(0);
   // Its answer stays in the chat.
   await expect(page.getByTestId("delegate-reply")).toHaveCount(1);
+  // And it can be brought back from the header.
+  await page.getByTestId("restore-delegate").click();
+  await expect(page.getByTestId("chat-kitty")).toHaveText(["mimi", "luna"]);
+  await expect(page.getByTestId("restore-delegate")).toHaveCount(0);
 });
 
 test("a long list of goals shows its first few, and the rest on request", async ({ page }) => {
@@ -3593,6 +3597,10 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     await expect(panel).toContainText("luna is the lead kitty");
     await expect(page.getByTestId("lead-tag")).toBeVisible();
     await expect(page.locator("aside").getByTestId("lead-badge")).toHaveCount(1);
+    // The lead sees how the team hands work around: mimi asked luna (and tom) earlier.
+    const stats = panel.getByTestId("handover-stats");
+    await expect(stats).toBeVisible();
+    await expect(stats.getByTestId("handover-row").filter({ hasText: "mimi" })).toBeVisible();
     await shot(page, "71-lead-kitty");
 
     // Another kitty's drawer offers to take the lead.

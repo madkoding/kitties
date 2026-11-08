@@ -2461,3 +2461,32 @@ html.mac-inset .live-head {
 .tag-promote:hover {
   color: var(--color-accent);
 }
+/* A helper taken off the chat: dim, a click brings it back. */
+.tag.tag-dismissed {
+  opacity: 0.55;
+  border-style: dashed;
+  cursor: pointer;
+}
+.tag.tag-dismissed:hover {
+  opacity: 1;
+}
+.handover-stats {
+  width: 100%;
+  margin-top: 0.75rem;
+  font-size: 0.75rem;
+  border-collapse: collapse;
+}
+.handover-stats th,
+.handover-stats td {
+  padding: 0.25rem 0.5rem;
+  text-align: right;
+  border-bottom: 1px solid rgb(var(--ov-rgb) / 0.08);
+}
+.handover-stats th:first-child,
+.handover-stats td:first-child {
+  text-align: left;
+}
+.handover-stats th {
+  color: var(--t4);
+  font-weight: 500;
+}

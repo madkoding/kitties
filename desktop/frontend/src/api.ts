@@ -302,6 +302,17 @@ export interface Session {
   dismissed?: string[];
 }
 
+// HandOverStat is how one kitty has handed work out (asked) and taken it on (took), and how much
+// of each failed, over every chat kept.
+export interface HandOverStat {
+  kitty_id: string;
+  kitty: string;
+  asked: number;
+  asked_failed: number;
+  took: number;
+  took_failed: number;
+}
+
 // Helper is a kitty at work on a subtask handed over from a chat.
 export interface Helper {
   kitty: string;
@@ -833,7 +844,11 @@ export const api = {
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
   // lead is the fleet's lead kitty and its Reports thread; setLead makes another the lead
   // (an empty kitty leaves the fleet without one).
-  lead: () => request<{ lead: Kitty | null; reports?: string }>("GET", "/v1/lead"),
+  lead: () =>
+    request<{ lead: Kitty | null; reports?: string; handovers?: HandOverStat[] }>(
+      "GET",
+      "/v1/lead",
+    ),
   setLead: (kitty: string) =>
     request<{ lead: Kitty | null; reports?: string }>("PUT", "/v1/lead", { kitty }),
   // power is the state of a kitty's machine; setPower turns it on (it comes up in the background)
@@ -960,6 +975,11 @@ export const api = {
   // again).
   removeMember: (id: string, ref: string) =>
     request<{ chat: Session }>("DELETE", `/v1/chats/${id}/members/${encodeURIComponent(ref)}`).then(
+      (r) => r.chat,
+    ),
+  // restoreDelegate brings back a delegate the person took off a chat.
+  restoreDelegate: (id: string, ref: string) =>
+    request<{ chat: Session }>("POST", `/v1/chats/${id}/delegates/${encodeURIComponent(ref)}`).then(
       (r) => r.chat,
     ),
   addMembers: (id: string, members: string[]) =>

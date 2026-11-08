@@ -490,6 +490,19 @@ export default function App() {
     }
   };
 
+  // restore brings back a kitty the person took off the chat.
+  const restore = async (k: Kitty) => {
+    if (!session) {
+      return;
+    }
+    try {
+      setSession(await api.restoreDelegate(session.id, k.id));
+      refresh();
+    } catch (e) {
+      setError(errText(e));
+    }
+  };
+
   // Every kitty of the chat: its members and the ones handed a subtask in it.
   const members = session
     ? chatKitties(session)
@@ -610,6 +623,20 @@ export default function App() {
               )}
             </span>
           ))}
+          {session?.dismissed
+            ?.map((id) => kitties.find((k) => k.id === id))
+            .filter(Boolean)
+            .map((k) => (
+              <button
+                key={"off-" + k!.id}
+                class="hidden sm:inline-flex tag tag-dismissed items-center gap-1"
+                onClick={() => restore(k!)}
+                title={t("Bring {name} back to this chat", { name: k!.name })}
+                data-testid="restore-delegate"
+              >
+                <IconPlus size={10} /> {k!.name}
+              </button>
+            ))}
           {members
             .filter((k) => k!.desktop && k!.status === "running")
             .map((k) => (

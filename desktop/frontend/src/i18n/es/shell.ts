@@ -62,6 +62,12 @@ const dict: Dictionary = {
   // Sidebar
   Chats: "Chats",
   "{count} kitties": "{count} kitties",
+  "Bring {name} back to this chat": "Traer de vuelta a {name} a este chat",
+  "Subtasks handed around the team": "Subtareas que se pasan en el equipo",
+  "Handed out": "Encargadas",
+  "Taken on": "Recibidas",
+  Failed: "Fallidas",
+  Kitty: "Kitty",
   "Take {name} off this chat": "Quitar a {name} de este chat",
   "Take {name} off this chat? Its answers stay; it shows again if it is handed work here.":
     "¿Quitar a {name} de este chat? Sus respuestas se quedan; vuelve a aparecer si le encargan algo aquí.",

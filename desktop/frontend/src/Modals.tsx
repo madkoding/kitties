@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import type { Kitty, ProviderInfo } from "./api";
+import type { HandOverStat, Kitty, ProviderInfo } from "./api";
 import {
   ApiError,
   api,
@@ -630,6 +630,18 @@ export function LeadPanel({
   onOpenChat: (id: string) => void;
 }) {
   const [err, setErr] = useState("");
+  // stats is how the team hands work around (who asks, who takes it on, what fails), for the lead.
+  const [stats, setStats] = useState<HandOverStat[]>([]);
+  useEffect(() => {
+    if (!kitty.lead) {
+      setStats([]);
+      return;
+    }
+    api
+      .lead()
+      .then((r) => setStats(r.handovers || []))
+      .catch(() => setStats([]));
+  }, [kitty.id, kitty.lead]);
   const current = kitties.find((k) => k.lead && k.id !== kitty.id);
   const set = async (on: boolean) => {
     setErr("");
@@ -696,6 +708,31 @@ export function LeadPanel({
           )}
         </div>
       </div>
+      {kitty.lead && stats.length > 0 && (
+        <table class="handover-stats" data-testid="handover-stats">
+          <caption class="text-xs text-[var(--t4)] text-left mb-1">
+            {t("Subtasks handed around the team")}
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">{t("Kitty")}</th>
+              <th scope="col">{t("Handed out")}</th>
+              <th scope="col">{t("Taken on")}</th>
+              <th scope="col">{t("Failed")}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {stats.map((s) => (
+              <tr key={s.kitty_id} data-testid="handover-row">
+                <td>{s.kitty}</td>
+                <td>{s.asked}</td>
+                <td>{s.took}</td>
+                <td class={s.took_failed ? "text-[var(--c-red)]" : ""}>{s.took_failed}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
     </div>
   );
