@@ -1897,6 +1897,7 @@ function AutonomyForm({
   const [leadAsk, setLeadAsk] = useState(view.autonomy?.lead_limits === "ask");
   const [parallel, setParallel] = useState(view.autonomy?.parallel_handovers || "");
   const [summaryAt, setSummaryAt] = useState(view.autonomy?.lead_summary || "");
+  const [handOverKeep, setHandOverKeep] = useState(view.autonomy?.handover_keep || "");
   const [msg, flash] = useFlash();
   const [err, setErr] = useState("");
   const save = async () => {
@@ -1910,6 +1911,7 @@ function AutonomyForm({
           lead_limits: leadAsk ? "ask" : "",
           parallel_handovers: parallel.trim(),
           lead_summary: summaryAt.trim(),
+          handover_keep: handOverKeep.trim(),
         }),
       );
       flash(t("Saved."));
@@ -1992,6 +1994,22 @@ function AutonomyForm({
       <p class={HELP}>
         {t(
           "When a kitty hands several pieces of a task to others in one reply, this many work at once (1 to 16); the rest wait their turn. Write off for one at a time.",
+        )}
+      </p>
+      <label class={LABEL} for="auto-handover-keep">
+        {t("Keep the threads between two kitties for")}
+      </label>
+      <input
+        id="auto-handover-keep"
+        class={`${INPUT} !w-56 font-mono`}
+        value={handOverKeep}
+        onInput={(e) => setHandOverKeep((e.target as HTMLInputElement).value)}
+        placeholder="72h"
+        data-testid="auto-handover-keep"
+      />
+      <p class={HELP}>
+        {t(
+          "When a kitty hands a subtask to another, the answer shows in the chat that asked; the thread between the two is deleted this long after the work ends (1h to 2160h), unless you keep it. Write off to keep them all.",
         )}
       </p>
       <label class={LABEL} for="auto-lead-summary">

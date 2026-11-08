@@ -479,3 +479,31 @@ func TestLeadSummaries(t *testing.T) {
 		t.Fatal("asked while off")
 	}
 }
+
+// The news of one chat that come close together are one report: a hand-over that ended and the
+// goal that ended through it do not read as two messages saying the same thing.
+func TestReportsFoldTheNewsOfOneChat(t *testing.T) {
+	f, _, _, _ := fleet(t)
+	s := service(t, f)
+	now := time.Date(2026, 11, 8, 10, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+	f.kitties["b1"].Lead = true
+	lead, _ := f.Get("bo")
+	ana, _ := f.Get("ana")
+	s.report(lead, ana, notify.Delegated, "finished a subtask", "counted", "c1")
+	s.report(lead, ana, notify.Delegated, "finished a subtask", "counted", "c1") // the same again
+	now = now.Add(time.Minute)
+	s.report(lead, lead, notify.GoalDone, "finished a goal", "through ana", "c1")
+	id, _ := s.ReportsChat(lead)
+	rep, _ := s.Get(id)
+	if len(rep.Turns) != 1 || rep.Turns[0].Text != "finished a subtask: counted\nbo: finished a goal: through ana" || rep.Turns[0].Report.Folded != 1 {
+		t.Fatalf("one report = %+v", rep.Turns)
+	}
+	// Another chat, or the same one later, is a report of its own.
+	s.report(lead, ana, notify.GoalDone, "finished a goal", "x", "c2")
+	now = now.Add(FoldReportsWithin + time.Second)
+	s.report(lead, ana, notify.GoalDone, "finished a goal", "y", "c2")
+	if rep, _ = s.Get(id); len(rep.Turns) != 3 {
+		t.Errorf("reports = %d", len(rep.Turns))
+	}
+}

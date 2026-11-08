@@ -94,3 +94,17 @@ func TestParallelAndSummarySettings(t *testing.T) {
 		t.Error("6pm is a time")
 	}
 }
+
+func TestHandOverKeepSetting(t *testing.T) {
+	for v, want := range map[string]time.Duration{"": 72 * time.Hour, "off": 0, "none": 0, "24h": 24 * time.Hour, " 2160h ": 2160 * time.Hour} {
+		a := Autonomy{HandOverKeep: v}
+		if err := a.Validate(); err != nil || a.HandOverKeepOr(72*time.Hour) != want {
+			t.Errorf("%q: %v %v", v, err, a.HandOverKeepOr(72*time.Hour))
+		}
+	}
+	for _, bad := range []string{"30m", "2161h", "a week"} {
+		if err := (Autonomy{HandOverKeep: bad}).Validate(); err == nil {
+			t.Errorf("keep %q was accepted", bad)
+		}
+	}
+}

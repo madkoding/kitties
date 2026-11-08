@@ -191,6 +191,8 @@ func (s *Server) handleRemoveGoal(w http.ResponseWriter, r *http.Request) {
 		fail(w, codeFor(err), err)
 		return
 	}
+	// Its thread, history of its runs, goes back to the chats.
+	s.tidyGoals()
 	reply(w, http.StatusOK, map[string]any{"ok": true})
 }
 

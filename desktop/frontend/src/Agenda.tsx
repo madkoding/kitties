@@ -1,9 +1,11 @@
 import { useEffect, useState } from "preact/hooks";
-import type { ConnectorView, Goal, JournalEntry, Kitty, Limits } from "./api";
+import type { ConnectorView, Goal, JournalEntry, Kitty, Limits, Run } from "./api";
 import { api } from "./api";
 import { when } from "./format";
 import { t } from "./i18n";
 import { IconClock, IconPlay, IconTarget, IconTrash } from "./icons";
+import { Markdown } from "./ArtifactReader";
+import { gatewayText } from "./gatewayText";
 import ActionLimits from "./ActionLimits";
 import { Missing, Required } from "./Required";
 
@@ -11,7 +13,8 @@ import { Missing, Required } from "./Required";
 //
 // Goals run on a schedule, on a connector's events, or by hand; the journal is the record of
 // what happened; the limits and the backup are the safety net. All of it lives in the kitty's
-// drawer.
+// drawer, and the scheduled tasks of every kitty in their own window (ScheduledTasks.tsx), each
+// with its history of runs: they are no chats, so the sidebar does not list their threads.
 
 const LABEL = "block text-xs text-[var(--t3)] mb-1 mt-3 uppercase tracking-wider font-mono";
 const INPUT = "w-full px-3 py-2 text-sm";
@@ -92,15 +95,130 @@ function MoreLess({
   );
 }
 
+// RUN_TAG is the colour of how a run ended.
+function runTag(r: string): string {
+  return r === "failed" ? "tag-red" : resultTag(r);
+}
+
+// GoalRuns is a scheduled task's history: each run, newest first, with why it ran, how it
+// ended and the kitty's last words; the whole thread is a click away.
+// TASK_FILTERS sort the scheduled tasks by how their last run ended.
+export const TASK_FILTERS: { id: string; label: string; keep: (g: Goal) => boolean }[] = [
+  { id: "all", label: "all", keep: () => true },
+  {
+    id: "attention",
+    label: "need a look",
+    keep: (g) => ["blocked", "escalated", "failed"].includes(g.last_result || ""),
+  },
+  { id: "running", label: "running", keep: (g) => g.last_result === "running" },
+  {
+    id: "done",
+    label: "done",
+    keep: (g) => g.last_result === "done" || g.last_result === "delegated",
+  },
+  { id: "paused", label: "paused", keep: (g) => !g.enabled },
+];
+
+export function GoalRuns({ goal, onOpenChat }: { goal: Goal; onOpenChat: (id: string) => void }) {
+  const [runs, setRuns] = useState<Run[] | null>(null);
+  const [chat, setChat] = useState("");
+  const [all, setAll] = useState(false);
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    api
+      .goalRuns(goal.id)
+      .then((r) => {
+        if (!alive) {
+          return;
+        }
+        setRuns(r.runs);
+        setChat(r.chat);
+        // A run at work (or one just asked for, not started yet) is looked at again shortly.
+        if (r.runs.some((x) => x.result === "running") || (tick < 3 && r.runs.length < goal.runs)) {
+          timer = setTimeout(() => setTick((n) => n + 1), 3000);
+        }
+      })
+      .catch(() => alive && setRuns([]));
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [goal.id, goal.runs, goal.last_result, tick]);
+  if (runs === null) {
+    return <div class="text-xs text-[var(--t4)] mt-2">{t("Loading…")}</div>;
+  }
+  return (
+    <div class="goal-runs" data-testid="goal-runs">
+      {runs.length === 0 && <p class="text-xs text-[var(--t4)]">{t("It has not run yet.")}</p>}
+      {(all ? runs : runs.slice(0, FEW_LINES)).map((r) => (
+        <div key={r.turn} class="goal-run" data-testid="goal-run">
+          <div class="flex items-center gap-2 text-xs">
+            <span class="font-mono text-[0.625rem] text-[var(--t4)] whitespace-nowrap">
+              {when(r.at)}
+            </span>
+            <span class={`tag ${runTag(r.result)}`}>{t(r.result)}</span>
+            {r.why && (
+              <span class="truncate text-[var(--t3)]" title={r.why}>
+                {r.why}
+              </span>
+            )}
+            {!!r.actions && (
+              <span class="ml-auto text-[var(--t4)] whitespace-nowrap">
+                {t(r.actions === 1 ? "{n} action" : "{n} actions", { n: r.actions })}
+              </span>
+            )}
+          </div>
+          {r.answer && (
+            <div class="goal-run-answer text-sm">
+              <Markdown text={gatewayText(r.answer)} chat />
+            </div>
+          )}
+        </div>
+      ))}
+      <MoreLess
+        total={runs.length}
+        few={FEW_LINES}
+        open={all}
+        onToggle={() => setAll(!all)}
+        id="goal-runs-more"
+      />
+      {chat && (
+        <button
+          class="plain text-[var(--color-accent)] text-xs mt-1"
+          onClick={() => onOpenChat(chat)}
+          data-testid="goal-thread"
+        >
+          {t("Open every run in full")}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function GoalsPanel({
   kitty,
   onOpenChat,
+  focus,
+  heading,
+  onChanged,
+  only,
 }: {
   kitty: Kitty;
   onOpenChat: (id: string) => void;
+  // focus is a goal to show with its history open.
+  focus?: string;
+  // heading replaces the section's title (the window of every scheduled task names the kitty).
+  heading?: preact.ComponentChildren;
+  onChanged?: () => void;
+  // only keeps the tasks it says yes to (the window's filter by how they ended).
+  only?: (g: Goal) => boolean;
 }) {
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [allGoals, setAllGoals] = useState(false);
+  const [every, setGoals] = useState<Goal[]>([]);
+  const goals = only ? every.filter(only) : every;
+  const [allGoals, setAllGoals] = useState(!!focus);
+  const [history, setHistory] = useState<string | null>(focus || null);
   const [connectors, setConnectors] = useState<ConnectorView[]>([]);
   const [adding, setAdding] = useState(false);
   const [err, setErr] = useState("");
@@ -133,6 +251,7 @@ export function GoalsPanel({
     try {
       await fn();
       load();
+      onChanged?.();
     } catch (e) {
       setErr((e as Error).message);
     }
@@ -157,16 +276,25 @@ export function GoalsPanel({
   return (
     <div>
       <div class="section-title !mx-0 mt-5 flex items-center gap-2">
-        <IconTarget size={12} /> {t("Goals")}
+        {heading || (
+          <>
+            <IconTarget size={12} /> {t("Scheduled tasks")}
+          </>
+        )}
       </div>
-      {goals.length === 0 && !adding && (
+      {every.length === 0 && !adding && (
         <p class="text-xs text-[var(--t4)]">
-          {t("No goals yet: {name} only works when asked.", { name: kitty.name })}
+          {t("No scheduled tasks yet: {name} only works when asked.", { name: kitty.name })}
         </p>
       )}
       <div class="flex flex-col gap-2" data-testid="goals">
         {(allGoals ? goals : goals.slice(0, FEW_GOALS)).map((g) => (
-          <div key={g.id} class={`goal ${g.enabled ? "" : "off"}`}>
+          <div
+            key={g.id}
+            class={`goal ${g.enabled ? "" : "off"}`}
+            data-testid="goal"
+            data-goal={g.id}
+          >
             <div class="flex items-center gap-2 min-w-0">
               <span class="font-semibold truncate">{g.title}</span>
               {g.from_file && <span class="tag">{t("file")}</span>}
@@ -202,13 +330,23 @@ export function GoalsPanel({
             <div class="flex gap-1 mt-1.5 flex-wrap">
               <button
                 class="btn-outline px-2 py-1 text-xs flex items-center gap-1"
-                onClick={() => act(() => api.runGoal(g.id).then((c) => c && onOpenChat(c)))}
+                onClick={() =>
+                  act(async () => {
+                    await api.runGoal(g.id);
+                    setHistory(g.id);
+                  })
+                }
               >
                 <IconPlay size={10} /> {t("run now")}
               </button>
-              {g.chat && (
-                <button class="btn-ghost px-2 py-1 text-xs" onClick={() => onOpenChat(g.chat!)}>
-                  {t("open chat")}
+              {(g.chat || g.runs > 0) && (
+                <button
+                  class={`${history === g.id ? "btn-outline" : "btn-ghost"} px-2 py-1 text-xs`}
+                  onClick={() => setHistory(history === g.id ? null : g.id)}
+                  aria-expanded={history === g.id}
+                  data-testid="goal-history"
+                >
+                  {t("history")}
                 </button>
               )}
               {!g.from_file && (
@@ -240,6 +378,7 @@ export function GoalsPanel({
                 </button>
               )}
             </div>
+            {history === g.id && <GoalRuns goal={g} onOpenChat={onOpenChat} />}
           </div>
         ))}
       </div>
@@ -335,14 +474,14 @@ export function GoalsPanel({
               {t("Cancel")}
             </button>
             <button class="btn-accent px-3 py-1.5 text-xs" disabled={!title.trim()} onClick={add}>
-              {t("Add goal")}
+              {t("Add scheduled task")}
             </button>
           </div>
           <Missing items={[!title.trim() && t("the title")]} />
         </div>
       ) : (
         <button class="btn-outline px-3 py-1.5 text-xs mt-2" onClick={() => setAdding(true)}>
-          + {t("New goal")}
+          + {t("New scheduled task")}
         </button>
       )}
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}

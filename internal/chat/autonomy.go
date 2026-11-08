@@ -67,10 +67,10 @@ func (s *Service) RunGoal(ctx context.Context, g agenda.Goal, t agenda.Trigger) 
 	if err != nil {
 		return "", err
 	}
-	text := "Goal: " + g.Title + "\n" + g.Text + "\n\nWhy now: " + t.Text() +
-		"\n\nWork on it now. When you are done, say what you did and what is left. If you are stuck, say what you need."
+	call := goalPrefix + g.Title + "\n" + g.Text + "\n\nWhy now: " + t.Text()
+	text := call + "\n\nWork on it now. When you are done, say what you did and what is left. If you are stuck, say what you need."
 	if g.Flow != "" && k.Desktop {
-		out, ok := s.playFlow(ctx, id, g, k)
+		out, ok := s.playFlow(ctx, id, g, k, call)
 		if ok {
 			return id, nil
 		}
@@ -96,7 +96,7 @@ const maxFlowOut = 6000
 // routine the kitty already knows costs no tokens. The thread gets a turn with what it did; a
 // flow that went through reports the goal done. It returns the flow's output and whether it went
 // through; one that did not (or a thread at work) leaves the goal to the kitty.
-func (s *Service) playFlow(ctx context.Context, id string, g agenda.Goal, k *kitty.Kitty) (string, bool) {
+func (s *Service) playFlow(ctx context.Context, id string, g agenda.Goal, k *kitty.Kitty, call string) (string, bool) {
 	runner := s.runner()
 	if runner == nil {
 		return "this gateway has no desktops", false
@@ -122,6 +122,9 @@ func (s *Service) playFlow(ctx context.Context, id string, g agenda.Goal, k *kit
 		return out, false
 	}
 	text := fmt.Sprintf("I played my saved steps \u201c%s\u201d for this goal, without thinking them over again.\n\n%s", g.Flow, lastRead(out))
+	// The scheduler's call opens the run, as when the kitty works the goal itself: the task's
+	// history counts its runs by it (kinds.go).
+	s.appendTurn(id, Turn{At: s.now(), From: "scheduler", Text: call})
 	s.appendTurn(id, Turn{At: s.now(), From: k.Name, Kitty: k.ID, Text: text, Steps: []Step{{At: s.now(), Action: "page_flow", Args: a.Args, Result: clip(out, maxFlowOut)}}, Looks: &Looks{Reads: 1, ReadTokens: (len(out) + 3) / 4}})
 	s.reportGoal(k, g.ID, id, "done", text)
 	return out, true
@@ -262,7 +265,11 @@ func (s *Service) delegate(ctx context.Context, id string, a action, k *kitty.Ki
 		s.note(target, agenda.KindLimit, "", did, k.Name+" gave "+line)
 	}
 	done := s.helping(id, Helper{Kitty: target.Name, KittyID: target.ID, From: k.Name, Task: d.Task, Chat: did, Since: s.now()})
+	s.handOverStarted(did)
 	answer, err := s.askKitty(ctx, did, k, target, task)
+	// The thread between the two is done with: it goes after a while (kinds.go), the answer
+	// stays in this chat.
+	s.handOverEnded(did)
 	done()
 	if err != nil {
 		d.Error = err.Error()
@@ -278,7 +285,14 @@ func (s *Service) delegate(ctx context.Context, id string, a action, k *kitty.Ki
 	turn.Delegations = append(turn.Delegations, d)
 	s.tellDelegation(k, target, "finished "+k.Name+"'s subtask", Gist(task)+" — "+Gist(answer), id)
 	s.handOverDone(target)
-	return outcome{action: a, text: target.Name + " answered:\n" + answer}
+	return outcome{action: a, text: answeredBy(target.Name) + answer}
+}
+
+// answeredBy starts what a kitty is told another answered. The person sees that answer already,
+// under the turn that asked, so the kitty is asked to build on it instead of saying it again:
+// the same words twice in a row is what made hand-overs read as duplicated chats.
+func answeredBy(name string) string {
+	return name + " answered (the person already sees this answer under your message: do not repeat it, say only what it means for the task):\n"
 }
 
 // delegationChat is the thread between a kitty and the one it delegates to, at that depth.
@@ -365,7 +379,7 @@ func (s *Service) giveUp(id string, index int, k *kitty.Kitty, fail string) (res
 			o := s.delegate(context.Background(), id, action{kind: "delegate", name: target.Name, args: map[string]any{"task": task}, raw: "@delegate " + target.Name}, k, &turn)
 			s.edit(id, index, func(t *Turn) { t.Delegations = append(t.Delegations, turn.Delegations...) })
 			if o.err == "" {
-				return "delegated", false, "Handed over to " + target.Name + ", who answered:\n" + strings.TrimPrefix(o.text, target.Name+" answered:\n")
+				return "delegated", false, "Handed over to " + target.Name + ", who answered:\n" + strings.TrimPrefix(o.text, answeredBy(target.Name))
 			}
 			fail += "; " + target.Name + " could not take over: " + o.err
 		}

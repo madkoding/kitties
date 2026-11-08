@@ -50,7 +50,7 @@ async function api(method,path,body){
   if(!r.ok)throw new Error(j.error||r.statusText);return j;}
 const $=s=>document.querySelector(s);
 async function refresh(){
-  const [k,c]=await Promise.all([api('GET','/v1/kitties'),api('GET','/v1/chats')]);
+  const [k,c]=await Promise.all([api('GET','/v1/kitties'),api('GET','/v1/chats?kind=chat')]);
   $('#kitties').innerHTML=(k.kitties||[]).map(x=>'<div class="item"><span>'+x.name+'</span><span class="status">'+x.status+(x.desktop?' · <a href="/v1/kitties/'+x.id+'/screenshot?token='+encodeURIComponent(token)+'" target="_blank">shot</a>':'')+'</span></div>').join('')||'<div class="status">none yet</div>';
   $('#chats').innerHTML=(c.chats||[]).map(x=>'<div class="item'+(chat===x.id?' on':'')+'" data-id="'+x.id+'"><span>'+x.title+'</span><span class="status">'+x.members.length+'</span></div>').join('')||'<div class="status">none yet</div>';
   document.querySelectorAll('#chats .item').forEach(e=>e.onclick=()=>open(e.dataset.id));

@@ -47,7 +47,20 @@ type Source struct {
 	// Day is the person's day (calendar, reminders, weather), when Config.Day asks for it;
 	// empty when there is nothing to say.
 	Day func(ctx context.Context) string
+	// Attention are the scheduled tasks whose last run did not end well (blocked, escalated,
+	// failed), to look at; Link is the address of a thread on the page. Either nil leaves them out.
+	Attention func() []Task
+	Link      func(chat string) string
 }
+
+// Task is a scheduled task for the summary: its title, its kitty's name, how its last run ended
+// and the thread it runs in.
+type Task struct {
+	Title, Kitty, Result, Chat string
+}
+
+// attentionShown is how many tasks to look at a summary lists.
+const attentionShown = 5
 
 // Reporter builds and sends the summaries.
 type Reporter struct {
@@ -132,6 +145,7 @@ func (r *Reporter) Build(now time.Time) notify.Notification {
 		lines = append(lines, "No kitties yet.")
 	}
 	body := strings.Join(lines, "\n")
+	body += attention(r.src.Attention, r.src.Link)
 	if w := r.src.Waiting(); len(w) > 0 {
 		body += fmt.Sprintf("\nWaiting for your yes (%d):", len(w))
 		for i, l := range w {
@@ -143,6 +157,30 @@ func (r *Reporter) Build(now time.Time) notify.Notification {
 		}
 	}
 	return notify.Notification{Event: notify.Digest, Title: "Your kitties, last 24 hours", Body: body}
+}
+
+// attention lists the scheduled tasks to look at, each with the link to its runs.
+func attention(tasks func() []Task, link func(string) string) string {
+	if tasks == nil {
+		return ""
+	}
+	list := tasks()
+	if len(list) == 0 {
+		return ""
+	}
+	sort.Slice(list, func(i, j int) bool { return list[i].Kitty+list[i].Title < list[j].Kitty+list[j].Title })
+	out := fmt.Sprintf("\nScheduled tasks to look at (%d):", len(list))
+	for i, t := range list {
+		if i == attentionShown {
+			out += fmt.Sprintf("\n- and %d more", len(list)-attentionShown)
+			break
+		}
+		out += fmt.Sprintf("\n- %s (%s): %s", t.Title, t.Kitty, t.Result)
+		if link != nil && t.Chat != "" {
+			out += " " + link(t.Chat)
+		}
+	}
+	return out
 }
 
 // plansShown is how many of a kitty's plan lines a summary repeats.
