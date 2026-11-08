@@ -101,7 +101,7 @@ come from a demo gateway.</sub>
 <table>
 <tr>
 <td><img src="docs/screenshots/02-chat.png" alt="A chat with one kitty"></td>
-<td><img src="docs/screenshots/05-kitty-drawer.png" alt="A kitty's drawer: its live desktop, goals and journal"></td>
+<td><img src="docs/screenshots/05-kitty-drawer.png" alt="A kitty's drawer in tabs: Desktop (the live viewer first), Goals, Journal, Notes and Configuration"></td>
 </tr>
 <tr>
 <td><img src="docs/screenshots/03-group.png" alt="A group chat"></td>

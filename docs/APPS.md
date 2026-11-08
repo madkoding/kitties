@@ -10,6 +10,18 @@ app picks it up. **Settings** holds the models (pick a provider, paste its key: 
 connections (with the kitties that may use each one), notifications and the gateway address.
 A first run is a short checklist: a model, a kitty, a chat.
 
+A kitty's drawer (click it in the sidebar) keeps its header (status, model, *Chat*, *Start* or
+*Stop*) and splits the rest in five tabs, which slide sideways on a phone:
+
+- **Desktop**: the live viewer first, then the machine's power and idle time, the backup and the
+  files kept on your computer. Only kitties with a desktop have this tab.
+- **Goals**: its goals (scheduled tasks) and the lead panel, with the hand-over table of the lead.
+- **Journal**: every run, event, retry and hand-over.
+- **Notes**: its memory: level of demand, notes, trust and today's spending.
+- **Configuration**: looks, brain, personality, connections, limits and *Remove*.
+
+The drawer opens on the tab the kitty was last left on (kept in this browser), or on *Desktop*.
+
 ```sh
 make frontend     # builds the page (node 24)
 make desktop      # wails build, with the Wails CLI installed
@@ -20,7 +32,8 @@ cd desktop && wails dev   # live reload while working on it
 | | |
 | --- | --- |
 | ![A chat with one kitty](screenshots/02-chat.png) | ![A group chat](screenshots/03-group.png) |
-| ![A kitty's desktop](screenshots/05-kitty-drawer.png) | ![Settings: the models](screenshots/08-settings-models.png) |
+| ![A kitty's drawer: the Desktop tab, the viewer first](screenshots/05-kitty-drawer.png) | ![Settings: the models](screenshots/08-settings-models.png) |
+| ![A kitty's drawer: the Configuration tab](screenshots/79-kitty-config.png) | ![On a phone the drawer's tabs slide sideways](screenshots/81-kitty-tabs-phone.png) |
 | ![Settings: the connectors](screenshots/09-settings-connectors.png) | ![The catalogue: one button per service](screenshots/17-connector-catalogue.png) |
 | ![Google Workspace: sign in with OAuth](screenshots/18-connector-oauth.png) | ![A kitty's own display](screenshots/13-tom-display.png) |
 | ![The library: skills](screenshots/15-library-skills.png) | ![The library: artifacts](screenshots/16-library-artifacts.png) |
