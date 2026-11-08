@@ -10,7 +10,7 @@ A kitty is not only something you talk to. Each one has an agenda:
   the chats: a task opens the window of every kitty's tasks, where *history* lists its runs,
   newest first (when and why it ran, how it ended, the kitty's last words); the filter keeps the
   tasks by how their last run ended (*need a look*: blocked, escalated or failed; running; done;
-  paused), and *Open every run
+  paused; the sidebar's amber *N to look at* opens it on the first), and *Open every run
   in full* opens its thread, so you can read along and chime in. That thread is not a chat: the
   sidebar does not list it, and a line over it says whose task it is. The same tasks are in the
   kitty's drawer. API: `GET /v1/goals/{id}/runs`; MCP: `goal_runs`. A task you remove gives its
@@ -220,7 +220,8 @@ Autonomy needs a memory, a leash that loosens with trust, and a way to reach you
   a container recovers or a kitty spends its day's tokens. Bursts are folded into one message every
   ten minutes. Optionally a **daily summary** arrives at the hour you choose: what each kitty did
   in the last day (with its latest lines about what it did on its desktop, in its own words), what
-  it spent, which goals ran again on their own and how they ended, and what waits for your yes.
+  it spent, which goals ran again on their own and how they ended, the scheduled tasks to look at
+  (last run blocked, escalated or failed, each with the link to its runs) and what waits for your yes.
 - **Answer from the notification.** With an ntfy channel and *Let me answer from ntfy* ticked
   (`notify.replies: true`), the gateway listens to the same topic: what you write there goes to
   the kitty that notified you last (in the last day), or to the one you name (`luna: …`,

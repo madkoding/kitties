@@ -57,8 +57,9 @@ interface Props {
   chats: Session[];
   // goals are the scheduled tasks of every kitty; null when the gateway has no agenda.
   goals: Goal[] | null;
-  // onOpenTasks opens the scheduled tasks, with one of them in view when it is given.
-  onOpenTasks: (goal?: string) => void;
+  // onOpenTasks opens the scheduled tasks, with one of them in view when it is given, or with a
+  // filter by how their last run ended.
+  onOpenTasks: (goal?: string, filter?: string) => void;
   kitties: Kitty[];
   current: string | null;
   workingChats: Set<string>;
@@ -144,6 +145,10 @@ export default function Sidebar(p: Props) {
   // The lead's Reports thread has a section of its own, after the chats.
   const reports = p.chats.filter((c) => c.reports);
   const plain = p.chats.filter((c) => !c.reports);
+  // attention is how many scheduled tasks ended their last run badly: a look is due.
+  const attention = (p.goals || []).filter((g) =>
+    ["blocked", "escalated", "failed"].includes(g.last_result || ""),
+  ).length;
   const groups = plain.filter((c) => chatKitties(c).length > 1);
   // query finds chats by their title, description or last words.
   const [query, setQuery] = useState("");
@@ -399,6 +404,17 @@ export default function Sidebar(p: Props) {
                 <h2 id="sidebar-tasks" class="section-title">
                   {t("Scheduled tasks")}
                 </h2>
+                <span class="flex-1" />
+                {attention > 0 && (
+                  <button
+                    class="tag tag-amber chat-filter mr-1"
+                    onClick={() => p.onOpenTasks(undefined, "attention")}
+                    title={t("Scheduled tasks whose last run was blocked, escalated or failed")}
+                    data-testid="tasks-attention"
+                  >
+                    {t("{count} to look at", { count: attention })}
+                  </button>
+                )}
                 {p.goals.length > FEW_TASKS && (
                   <button
                     class="tag chat-filter"

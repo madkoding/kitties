@@ -42,6 +42,9 @@ const dict: Dictionary = {
   Reports: "Relatórios",
   all: "todas",
   "need a look": "a revisar",
+  "{count} to look at": "{count} a revisar",
+  "Scheduled tasks whose last run was blocked, escalated or failed":
+    "Tarefas agendadas cuja última execução ficou bloqueada, escalada ou falhou",
 };
 
 export default dict;

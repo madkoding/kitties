@@ -14,6 +14,7 @@ export default function ScheduledTasksModal({
   kitties,
   goals,
   focus,
+  filter: initial,
   onClose,
   onChanged,
   onOpenChat,
@@ -22,6 +23,8 @@ export default function ScheduledTasksModal({
   goals: Goal[];
   // focus is the task to show with its history open (the one picked in the sidebar).
   focus?: string;
+  // filter is the filter to open with (attention: the tasks to look at).
+  filter?: string;
   onClose: () => void;
   onChanged: () => void;
   onOpenChat: (id: string) => void;
@@ -30,7 +33,7 @@ export default function ScheduledTasksModal({
   // pick is the kitty whose tasks show; "" shows every kitty that has some.
   const [pick, setPick] = useState(focused?.kitty || "");
   // filter keeps the tasks by how their last run ended.
-  const [filter, setFilter] = useState("all");
+  const [filter, setFilter] = useState(initial || "all");
   const keep = TASK_FILTERS.find((f) => f.id === filter)?.keep || (() => true);
   const matching = goals.filter(keep);
   const shown = pick

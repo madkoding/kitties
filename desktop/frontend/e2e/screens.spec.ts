@@ -1593,6 +1593,8 @@ test("the scheduled tasks have a section of their own, with each one's history",
   await open(page, "");
   const section = page.getByTestId("sidebar-tasks");
   await expect(section.getByTestId("task-row").first()).toBeVisible();
+  // Every task ended well: no count of tasks to look at.
+  await expect(section.getByTestId("tasks-attention")).toHaveCount(0);
   // The goals' threads are not among the chats.
   const chats = page.getByTestId("sidebar-chats");
   await expect(chats.getByRole("button", { name: "Inbox check", exact: true })).toHaveCount(0);

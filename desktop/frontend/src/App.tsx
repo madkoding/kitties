@@ -100,6 +100,7 @@ export default function App() {
   // is the one to show with its history open.
   const [goals, setGoals] = useState<Goal[] | null>(null);
   const [taskFocus, setTaskFocus] = useState<string | undefined>(undefined);
+  const [taskFilter, setTaskFilter] = useState<string | undefined>(undefined);
   const [session, setSession] = useState<Session | null>(null);
   const [current, setCurrent] = useState<string | null>(routeFromHash().chat);
   const [kittyOpen, setKittyOpen] = useState<string | null>(routeFromHash().kitty);
@@ -645,8 +646,9 @@ export default function App() {
       <Sidebar
         chats={listedChats}
         goals={goals}
-        onOpenTasks={(goal) => {
+        onOpenTasks={(goal, filter) => {
           setTaskFocus(goal);
+          setTaskFilter(filter);
           go("#new-tasks");
           setSidebar(false);
         }}
@@ -896,6 +898,7 @@ export default function App() {
             goals={goals || []}
             onOpenTask={(goal) => {
               setTaskFocus(goal);
+              setTaskFilter(undefined);
               go("#new-tasks");
             }}
             onChanged={(s) => {
@@ -983,13 +986,16 @@ export default function App() {
           kitties={kitties}
           goals={goals || []}
           focus={taskFocus}
+          filter={taskFilter}
           onClose={() => {
             setTaskFocus(undefined);
+            setTaskFilter(undefined);
             closeModal();
           }}
           onChanged={refresh}
           onOpenChat={(id) => {
             setTaskFocus(undefined);
+            setTaskFilter(undefined);
             setModal("none");
             openChat(id);
           }}
