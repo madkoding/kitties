@@ -19,7 +19,7 @@ A kitty's drawer (click it in the sidebar) keeps its header (status, model, *Cha
   escalated or failed on their last run).
 - **Team**: only the lead's: the lead panel (*Summarize reports*, *Open reports*, *Stop leading*),
   a chart of the subtasks handed around each day of the last two weeks (done and failed; each
-  bar says its numbers on hover) and the table of who hands work out and who takes it on.
+  bar says its numbers on hover; a menu narrows it to one kitty) and the table of who hands work out and who takes it on.
 - **Journal**: every run, event, retry and hand-over.
 - **Notes**: its memory: level of demand, notes, trust and today's spending. A count on the tab
   says how many notes proposed for every kitty wait for a yes.
@@ -32,7 +32,8 @@ A tab can be linked: `#kitty/<id>/<tab>` (`desktop`, `goals`, `team`, `journal`,
 (not while typing, holding the desktop's controls or with a window over the drawer).
 
 In the sidebar, a kitty's row counts what waits for you in it: its scheduled tasks that need a
-look and its actions waiting for a yes.
+look and its actions waiting for a yes. A click on the count opens its *Goals* tab when a task
+waits, or the approvals.
 
 ```sh
 make frontend     # builds the page (node 24)
