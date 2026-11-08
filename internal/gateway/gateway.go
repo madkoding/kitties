@@ -213,7 +213,7 @@ func (s *Server) appRequest(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodOptions {
 		return false
 	}
-	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+	h.Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE")
 	h.Set("Access-Control-Allow-Headers", "Authorization, Content-Type")
 	h.Set("Access-Control-Max-Age", "600")
 	w.WriteHeader(http.StatusNoContent)
@@ -247,6 +247,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/chats", api(s.handleCreateChat))
 	s.mux.Handle("GET /v1/chats/{id}", api(s.handleGetChat))
 	s.mux.Handle("DELETE /v1/chats/{id}", api(s.handleDeleteChat))
+	s.mux.Handle("PATCH /v1/chats/{id}", api(s.handleEditChat))
 	s.mux.Handle("POST /v1/chats/{id}/members", api(s.handleAddMembers))
 	s.mux.Handle("DELETE /v1/chats/{id}/members/{ref}", api(s.handleRemoveMember))
 	s.mux.Handle("POST /v1/chats/{id}/delegates/{ref}", api(s.handleRestoreDelegate))
@@ -594,6 +595,8 @@ func codeFor(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, chat.ErrNoFile):
 		return http.StatusNotFound
+	case errors.Is(err, chat.ErrEdit):
+		return http.StatusBadRequest
 	case errors.Is(err, orchestrator.ErrNotFound), strings.HasPrefix(msg, "no such "):
 		return http.StatusNotFound
 	case errors.Is(err, guard.ErrRate):
@@ -915,6 +918,39 @@ func (s *Server) handleDeleteChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// Editor renames a chat or changes its description (chat.Service.Edit); a nil field stays.
+type Editor interface {
+	Edit(id string, title, description *string) (*chat.Session, error)
+}
+
+// handleEditChat renames a chat or changes its description: {"title": "…", "description": "…"},
+// either one or both; a description of "" takes it off.
+func (s *Server) handleEditChat(w http.ResponseWriter, r *http.Request) {
+	e, ok := s.chats.(Editor)
+	if !ok {
+		fail(w, http.StatusNotImplemented, errors.New("this gateway cannot edit a chat"))
+		return
+	}
+	var body struct {
+		Title       *string `json:"title"`
+		Description *string `json:"description"`
+	}
+	if err := decode(r, &body); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if body.Title == nil && body.Description == nil {
+		fail(w, http.StatusBadRequest, errors.New("say the title or the description to change"))
+		return
+	}
+	sess, err := e.Edit(r.PathValue("id"), body.Title, body.Description)
+	if err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"chat": sess})
 }
 
 func (s *Server) handleAddMembers(w http.ResponseWriter, r *http.Request) {

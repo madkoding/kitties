@@ -163,12 +163,15 @@ func planStep(at time.Time, text string, actions []action) (Step, bool) {
 
 // Session is one thread.
 type Session struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Members   []string  `json:"members"` // kitty ids
-	Turns     []Turn    `json:"turns"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// Description is what the person says the chat is about (Edit): the sidebar's tooltip, the
+	// header's second line and a line of the kitties' prompt.
+	Description string    `json:"description,omitempty"`
+	Members     []string  `json:"members"` // kitty ids
+	Turns       []Turn    `json:"turns"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 	// Goal is the goal this thread works on, when the scheduler opened it.
 	Goal string `json:"goal,omitempty"`
 	// Owner is the kitty that opened this thread to delegate, and Depth how many hand-overs
@@ -343,7 +346,7 @@ type task struct {
 
 // Event is what a watcher of a session is told.
 type Event struct {
-	Type    string `json:"type"` // turn | update | done | deleted | helping
+	Type    string `json:"type"` // turn | update | done | deleted | helping | edited
 	Session string `json:"session"`
 	Index   int    `json:"index"`
 	Turn    *Turn  `json:"turn,omitempty"`
@@ -1136,6 +1139,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	}
 	system += s.memoryPrompt(k, sess)
 	system += s.limitPrompt(allowed)
+	system += descriptionPrompt(sess)
 	if sess.Summary != "" {
 		system += fmt.Sprintf("\nEarlier in this conversation (a summary of its first %d messages, which you no longer see one by one):\n%s\n", sess.SummaryUpTo, sess.Summary)
 	}

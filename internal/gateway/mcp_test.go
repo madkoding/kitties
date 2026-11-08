@@ -250,6 +250,28 @@ func TestMCPChatTools(t *testing.T) {
 	if text, _, _ := tool(t, s, "chat_cancel", map[string]any{"id": "c1"}); !strings.Contains(text, "cancelled") {
 		t.Errorf("chat_cancel: %q", text)
 	}
+	// chat_update renames and describes; chat_delete needs confirm.
+	if text, _, _ := tool(t, s, "chat_update", map[string]any{"id": "c1", "title": "trip", "description": "plan the trip"}); !strings.Contains(text, `"description": "plan the trip"`) || strings.Contains(text, `"turns": [`) {
+		t.Errorf("chat_update: %q", text)
+	}
+	if _, _, resp := tool(t, s, "chat_update", map[string]any{"id": "c1"}); resp["error"] == nil {
+		t.Error("chat_update with nothing to change is a protocol error")
+	}
+	if _, _, resp := tool(t, s, "chat_update", map[string]any{"id": "c1", "title": " "}); resp["error"] == nil {
+		t.Error("an empty title is a protocol error")
+	}
+	if text, _, _ := tool(t, s, "chat_list", map[string]any{}); !strings.Contains(text, `"description": "plan the trip"`) {
+		t.Errorf("chat_list shows the description: %q", text)
+	}
+	if _, _, resp := tool(t, s, "chat_delete", map[string]any{"id": "c1"}); resp["error"] == nil {
+		t.Error("chat_delete without confirm")
+	}
+	if text, _, _ := tool(t, s, "chat_delete", map[string]any{"id": "c1", "confirm": true}); !strings.Contains(text, `"deleted": "c1"`) || c.sessions["c1"] != nil {
+		t.Errorf("chat_delete: %q", text)
+	}
+	if _, isErr, _ := tool(t, s, "chat_delete", map[string]any{"id": "c1", "confirm": true}); !isErr {
+		t.Error("deleting a missing chat fails")
+	}
 	// Wrong argument shapes are protocol errors.
 	if _, _, resp := tool(t, s, "kitty_get", "not an object"); resp["error"] == nil {
 		t.Error("bad arguments")
