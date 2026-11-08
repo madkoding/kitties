@@ -1647,6 +1647,36 @@ func (s *Service) edit(id string, index int, fn func(*Turn)) {
 	s.emitLocked(Event{Type: kind, Session: id, Index: index, Turn: &sess.Turns[index]})
 }
 
+// Plans are what a kitty said it went on to do on its desktop since a time (its plan lines in
+// every chat), newest first, at most n; the daily summary repeats them.
+func (s *Service) Plans(kittyID string, since time.Time, n int) []string {
+	type said struct {
+		at   time.Time
+		text string
+	}
+	var all []said
+	s.mu.RLock()
+	for _, sess := range s.sessions {
+		for _, t := range sess.Turns {
+			if t.Kitty != kittyID {
+				continue
+			}
+			for _, st := range t.Steps {
+				if st.Action == StepPlan && !st.At.Before(since) {
+					all = append(all, said{st.At, st.Result})
+				}
+			}
+		}
+	}
+	s.mu.RUnlock()
+	sort.Slice(all, func(i, j int) bool { return all[i].at.After(all[j].at) })
+	var out []string
+	for i := 0; i < len(all) && i < n; i++ {
+		out = append(out, all[i].text)
+	}
+	return out
+}
+
 // progress tells the person, away from the page, what a kitty goes on to do in a long task. It
 // goes straight to the notifier (the lead's Reports thread would only repeat the chat), which sends
 // it when the person chose progress and holds back the next of the same chat for a while.

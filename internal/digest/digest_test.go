@@ -200,3 +200,23 @@ func TestFollowUpsInTheSummary(t *testing.T) {
 		t.Errorf("body = %s", body)
 	}
 }
+
+func TestBuildSaysWhatAKittyDidOnItsDesktop(t *testing.T) {
+	g := newRig(t)
+	var since time.Time
+	g.r.src.Plans = func(id string, from time.Time, n int) []string {
+		since = from
+		if id != "a1" {
+			return nil
+		}
+		return []string{"I pay.", "I fill in the form.", "I open the shop.", "I look for tickets."}[:n]
+	}
+	b := g.r.Build(g.clock).Body
+	if !strings.Contains(b, "\n  on its desktop: I open the shop; I fill in the form; I pay; and more\n") || !since.Equal(g.clock.Add(-24*time.Hour)) {
+		t.Errorf("body = %s (since %v)", b, since)
+	}
+	g.r.src.Plans = func(string, time.Time, int) []string { return []string{"I open the shop."} }
+	if b := g.r.Build(g.clock).Body; !strings.Contains(b, "on its desktop: I open the shop\n") || strings.Contains(b, "and more") {
+		t.Errorf("one plan = %s", b)
+	}
+}

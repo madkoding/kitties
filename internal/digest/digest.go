@@ -41,6 +41,9 @@ type Source struct {
 	Config func() notify.Config
 	// Deliver sends the summary.
 	Deliver func(ctx context.Context, n notify.Notification) error
+	// Plans are what a kitty said it went on to do in its desktop tasks since a time (their plan
+	// lines), newest first; nil leaves them out.
+	Plans func(kittyID string, since time.Time, n int) []string
 	// Day is the person's day (calendar, reminders, weather), when Config.Day asks for it;
 	// empty when there is nothing to say.
 	Day func(ctx context.Context) string
@@ -118,6 +121,9 @@ func (r *Reporter) Build(now time.Time) notify.Notification {
 			line += fmt.Sprintf(" (%s tokens, %d actions today)", short(d.Tokens), d.Actions)
 		}
 		lines = append(lines, line)
+		if p := planLine(r.src.Plans, k.ID, since); p != "" {
+			lines = append(lines, "  on its desktop: "+p)
+		}
 		if f := followUps(r.src.Journal(k.ID, 500), since); f != "" {
 			lines = append(lines, "  follow-ups: "+f)
 		}
@@ -137,6 +143,34 @@ func (r *Reporter) Build(now time.Time) notify.Notification {
 		}
 	}
 	return notify.Notification{Event: notify.Digest, Title: "Your kitties, last 24 hours", Body: body}
+}
+
+// plansShown is how many of a kitty's plan lines a summary repeats.
+const plansShown = 3
+
+// planLine says what a kitty did on its desktop, in its own words: its latest plan lines, oldest
+// of them first, and how many more there were.
+func planLine(plans func(string, time.Time, int) []string, id string, since time.Time) string {
+	if plans == nil {
+		return ""
+	}
+	got := plans(id, since, plansShown+1)
+	if len(got) == 0 {
+		return ""
+	}
+	more := len(got) > plansShown
+	if more {
+		got = got[:plansShown]
+	}
+	var said []string
+	for i := len(got) - 1; i >= 0; i-- {
+		said = append(said, strings.TrimSuffix(strings.TrimSpace(got[i]), "."))
+	}
+	out := strings.Join(said, "; ")
+	if more {
+		out += "; and more"
+	}
+	return out
 }
 
 // followUps says, for each goal that ran again on its own since then, how its last follow-up

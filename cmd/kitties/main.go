@@ -386,7 +386,8 @@ func (a *app) open(cmd string) error {
 		Deliver: func(ctx context.Context, n notify.Notification) error {
 			return a.notifier.Deliver(ctx, chats.LeadDigest(n))
 		},
-		Day: digest.MyDay(fleet.Connectors()),
+		Plans: chats.Plans,
+		Day:   digest.MyDay(fleet.Connectors()),
 	}, filepath.Join(dataDir, "digest.json"))
 	// A removed kitty takes its held actions and its memory along.
 	ag.OnForget = append(ag.OnForget, a.approvals.Forget, a.memory.ForgetKitty, a.budget.Forget, chats.LeaveChats)

@@ -596,3 +596,21 @@ func TestPlansGoOutAsProgress(t *testing.T) {
 		t.Errorf("progress = %+v", b.seen)
 	}
 }
+
+func TestPlansOfAKitty(t *testing.T) {
+	s, _, _ := deskService(t, "@tool done {\"summary\": \"x\"}")
+	sess, _ := s.Create("", []string{"ana"})
+	day := time.Date(2026, 3, 2, 9, 0, 0, 0, time.UTC)
+	s.mu.Lock()
+	s.sessions[sess.ID].Turns = append(s.sessions[sess.ID].Turns,
+		Turn{Kitty: "a1", Steps: []Step{{At: day.Add(-48 * time.Hour), Action: StepPlan, Result: "old"}, {At: day.Add(time.Hour), Action: StepPlan, Result: "first"}, {At: day.Add(2 * time.Hour), Action: "click"}}},
+		Turn{Kitty: "b2", Steps: []Step{{At: day.Add(3 * time.Hour), Action: StepPlan, Result: "not hers"}}},
+		Turn{Kitty: "a1", Steps: []Step{{At: day.Add(4 * time.Hour), Action: StepPlan, Result: "second"}}})
+	s.mu.Unlock()
+	if got := strings.Join(s.Plans("a1", day, 5), ","); got != "second,first" {
+		t.Errorf("plans = %s", got)
+	}
+	if got := s.Plans("a1", day, 1); len(got) != 1 || got[0] != "second" {
+		t.Errorf("one plan = %v", got)
+	}
+}
