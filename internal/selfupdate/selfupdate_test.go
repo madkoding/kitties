@@ -977,3 +977,129 @@ func TestTheAppUpdatesItsBundleOnMacOS(t *testing.T) {
 		t.Errorf("the image was not closed: %q", ran)
 	}
 }
+
+func TestTheAppsUpdateSaysWhyNot(t *testing.T) {
+	r := &release_{tag: "v1.1.0", binary: script("v1.1.0"), app: map[string]string{
+		"kitties-desktop-linux-amd64.zip": "", "kitties-desktop-macos-amd64.dmg": "dmg",
+	}}
+	r.app["kitties-desktop-linux-amd64.zip"] = zipOf(t, map[string]string{"kitties-desktop": "new", "kitties-gateway": script("v9.9.9")})
+	u, dir := appUpdater(t, r)
+	ctx := context.Background()
+	// A gateway that is not the version the release says is not installed; neither is a non-zip.
+	if _, err := u.Apply(ctx); err == nil || !strings.Contains(err.Error(), "did not run as v1.1.0") {
+		t.Errorf("a wrong gateway = %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "kitties-desktop")); string(got) != "old app" {
+		t.Errorf("the app was replaced: %q", got)
+	}
+	if err := u.installZip(ctx, []byte("not a zip"), "v1.1.0"); err == nil {
+		t.Error("a non-zip was installed")
+	}
+	// Folders it cannot write, and a Mac gateway out of a bundle.
+	u.Exe = "/nonexistent/kitties-gateway"
+	if ok, why := u.canApplyApp(); ok || !strings.Contains(why, "cannot be written") {
+		t.Errorf("linux, read-only = %v %q", ok, why)
+	}
+	u.OS = "darwin"
+	if ok, why := u.canApplyApp(); ok || !strings.Contains(why, "not inside Kitties.app") {
+		t.Errorf("mac, no bundle = %v %q", ok, why)
+	}
+	u.Exe = "/nonexistent/Kitties.app/Contents/MacOS/kitties-gateway"
+	if ok, _ := u.canApplyApp(); ok || u.bundle() != "/nonexistent/Kitties.app" {
+		t.Errorf("mac, read-only = %v, bundle %q", ok, u.bundle())
+	}
+	// The disk image: one that does not open, one without an app, one whose app is not the version.
+	apps := t.TempDir()
+	macos := filepath.Join(apps, "Kitties.app", "Contents", "MacOS")
+	_ = os.MkdirAll(macos, 0o755)
+	u.Exe = filepath.Join(macos, "kitties-gateway")
+	for name, c := range map[string]struct {
+		attach func(mnt string) error
+		want   string
+	}{
+		"no image": {func(string) error { return errors.New("no") }, "opening the disk image"},
+		"no app":   {func(mnt string) error { return os.MkdirAll(mnt, 0o755) }, "holds no app"},
+		"wrong version": {func(mnt string) error {
+			gw := filepath.Join(mnt, "Kitties.app", "Contents", "MacOS")
+			_ = os.MkdirAll(gw, 0o755)
+			return os.WriteFile(filepath.Join(gw, "kitties-gateway"), []byte(script("v0.0.1")), 0o755)
+		}, "did not run as"},
+	} {
+		u.Run = func(ctx context.Context, cmd string, args ...string) ([]byte, error) {
+			switch {
+			case cmd == "hdiutil" && args[0] == "attach":
+				return nil, c.attach(args[len(args)-2])
+			case cmd == "ditto":
+				return runCommand(ctx, "cp", "-R", args[0], args[1])
+			case cmd == "hdiutil":
+				return nil, nil
+			}
+			return runCommand(ctx, cmd, args...)
+		}
+		if err := u.installBundle(ctx, []byte("dmg"), "v1.1.0"); err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("%s = %v", name, err)
+		}
+	}
+	if entries, _ := os.ReadDir(apps); len(entries) != 1 {
+		t.Errorf("something was left beside the app: %v", entries)
+	}
+}
+
+func TestTheAppIsOpenedAgain(t *testing.T) {
+	u, _ := appUpdater(t, &release_{tag: "v1.1.0"})
+	var got []string
+	u.Detach = func(name string, args []string, env ...string) error {
+		got = append(append([]string{name}, args...), env...)
+		return nil
+	}
+	// On Windows, nothing to run without a downloaded installer.
+	u.OS = "windows"
+	if err := u.relaunchApp(); err == nil {
+		t.Error("windows without an installer restarted")
+	}
+	// On a Mac the bundle is opened again; the parent is the app only when it runs from the bundle.
+	u.OS, u.Exe = "darwin", "/Applications/Kitties.app/Contents/MacOS/kitties-gateway"
+	u.Run = func(context.Context, string, ...string) ([]byte, error) {
+		return []byte("/Applications/Kitties.app/Contents/MacOS/kitties-desktop\n"), nil
+	}
+	if !u.appParent() {
+		t.Error("the app is not seen as the parent")
+	}
+	if err := u.relaunchApp(); err != nil || !strings.Contains(strings.Join(got, " "), `open -n "$BUNDLE"`) || !strings.Contains(strings.Join(got, " "), "BUNDLE=/Applications/Kitties.app") {
+		t.Errorf("mac = %v %q", err, got)
+	}
+	u.Run = func(context.Context, string, ...string) ([]byte, error) { return []byte("/usr/bin/zsh"), nil }
+	if u.appParent() {
+		t.Error("a shell is seen as the app")
+	}
+	// On Linux the parent of the tests is not the app.
+	u.OS, u.Exe = "linux", filepath.Join(t.TempDir(), "kitties-gateway")
+	if u.appParent() {
+		t.Error("the test runner is seen as the app")
+	}
+	// A failed restart is told in the status.
+	u.Detach = func(string, []string, ...string) error { return errors.New("no shell") }
+	if err := u.Relaunch(); err == nil || u.Status().Error == "" {
+		t.Errorf("a failed restart = %v %+v", err, u.Status())
+	}
+}
+
+func TestDetachOutlivesTheCaller(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("sh")
+	}
+	if err := detach("/nonexistent/program", nil); err == nil {
+		t.Error("a missing program started")
+	}
+	out := filepath.Join(t.TempDir(), "ran")
+	if err := detach("/bin/sh", []string{"-c", `echo "$WHAT" > "$OUT"`}, "WHAT=yes", "OUT="+out); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 100; i++ {
+		if got, _ := os.ReadFile(out); strings.TrimSpace(string(got)) == "yes" {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Error("the detached program did not run")
+}
