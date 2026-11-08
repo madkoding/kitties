@@ -3442,7 +3442,8 @@ test("files attach by button, paste and drop, and the kitty reads them", async (
 
   await textarea.fill("Here is the photo and the numbers");
   await page.getByRole("button", { name: "Send" }).click();
-  await expect(page.getByText("Got it, I have")).toBeVisible();
+  // The answer in the chat (the sidebar's gist of the chat may say it too).
+  await expect(page.getByRole("log").getByText("Got it, I have")).toBeVisible();
   await expect(page.getByText("**numbers.csv**")).toHaveCount(0);
 
   // The message shows its files: thumbnails that load, and a chip that downloads.
