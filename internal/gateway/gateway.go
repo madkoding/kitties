@@ -267,6 +267,7 @@ func (s *Server) routes() {
 	s.mux.Handle("POST /v1/settings/connectors/{name}/test", api(s.handleTestConnector))
 	s.mux.HandleFunc("GET /v1/local-token", s.handleLocalToken)
 	s.agendaRoutes()
+	s.threadRoutes()
 	s.liveRoutes()
 	s.voxlRoutes()
 	s.accountRoutes()
@@ -879,8 +880,8 @@ func (s *Server) handleScale(w http.ResponseWriter, r *http.Request) {
 	reply(w, http.StatusOK, map[string]any{"kitties": s.fleet.List()})
 }
 
-func (s *Server) handleListChats(w http.ResponseWriter, _ *http.Request) {
-	reply(w, http.StatusOK, map[string]any{"chats": s.chats.List()})
+func (s *Server) handleListChats(w http.ResponseWriter, r *http.Request) {
+	reply(w, http.StatusOK, map[string]any{"chats": chatsOfKind(s.chats.List(), r.URL.Query().Get("kind"))})
 }
 
 func (s *Server) handleCreateChat(w http.ResponseWriter, r *http.Request) {

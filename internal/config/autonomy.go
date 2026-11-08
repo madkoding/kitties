@@ -16,6 +16,7 @@ import (
 //	  lead_limits: ask         # the lead's changes of the others' limits wait for a yes; auto (default): they don't
 //	  parallel_handovers: 4    # hand-overs of one reply that run at the same time (1 to 16); "off": one at a time
 //	  lead_summary: "18:00"    # the lead sums its Reports thread up every day at this time; empty: never
+//	  handover_keep: 72h       # how long a thread between two kitties stays after its hand-over ended; "off": always
 //
 // Empty takes the defaults.
 type Autonomy struct {
@@ -31,6 +32,34 @@ type Autonomy struct {
 	// LeadSummary is the time of day (HH:MM) the lead kitty sums its Reports thread up for the
 	// person; empty never.
 	LeadSummary string `yaml:"lead_summary" json:"lead_summary,omitempty"`
+	// HandOverKeep is how long the thread between two kitties stays after its hand-over ended
+	// (the answer stays in the chat that asked); empty: the default; off: they all stay.
+	HandOverKeep string `yaml:"handover_keep" json:"handover_keep,omitempty"`
+}
+
+// maxKeep is the longest a hand-over thread may be set to stay: 90 days.
+const maxKeep = 90 * 24 * time.Hour
+
+// HandOverKeepOr is how long a hand-over thread stays after it ended: def when unset, zero
+// (always) when off.
+func (a Autonomy) HandOverKeepOr(def time.Duration) time.Duration {
+	d, _ := a.handOverKeep(def)
+	return d
+}
+
+func (a Autonomy) handOverKeep(def time.Duration) (time.Duration, error) {
+	switch s := strings.TrimSpace(a.HandOverKeep); {
+	case s == "":
+		return def, nil
+	case off(s):
+		return 0, nil
+	default:
+		d, err := time.ParseDuration(s)
+		if err != nil || d < time.Hour || d > maxKeep {
+			return def, fmt.Errorf("autonomy.handover_keep: %q is not a time between 1h and 2160h (say e.g. 72h, or off to keep them)", s)
+		}
+		return d, nil
+	}
 }
 
 // MaxParallel is the most hand-overs of one reply that run at the same time.
@@ -96,6 +125,9 @@ func (a Autonomy) Validate() error {
 		return err
 	}
 	if _, err := a.parallel(0); err != nil {
+		return err
+	}
+	if _, err := a.handOverKeep(0); err != nil {
 		return err
 	}
 	if s := strings.TrimSpace(a.LeadSummary); s != "" && !off(s) {

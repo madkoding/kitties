@@ -338,6 +338,9 @@ func (a *app) open(cmd string) error {
 	chats.SetStandIns(func() int { return fleet.Autonomy().StandInsOr(chat.DefaultStandIns) })
 	chats.SetLeadLimitsAsk(func() bool { return fleet.Autonomy().LeadLimitsAsk() })
 	chats.SetParallel(func() int { return fleet.Autonomy().ParallelOr(chat.DefaultParallel) })
+	chats.SetHandOverKeep(func() time.Duration { return fleet.Autonomy().HandOverKeepOr(chat.DefaultHandOverKeep) })
+	// The threads of goals removed before goals had a section of their own go back to the chats.
+	chats.TidyGoals(func(id string) bool { _, err := ag.Goal(id); return err == nil })
 	a.agenda = ag
 	dataDir := a.cfg.DataDirOr()
 	if a.approvals, err = approvals.Open(filepath.Join(dataDir, "approvals.json")); err != nil {
@@ -775,6 +778,7 @@ func (a *app) cmdGateway(ctx context.Context, args []string) error {
 	go a.agenda.Run(ctx)
 	go a.digest.Run(ctx, logf)
 	go a.summaries.Run(ctx, logf)
+	go a.chats.RunExpiry(ctx, logf)
 	// A kitty that stopped on its day's tokens goes on by itself once they are back.
 	go a.chats.RunResumer(ctx, time.Minute)
 	// With notify.replies on, what the person writes to the ntfy topic reaches the kitties.

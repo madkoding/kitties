@@ -209,7 +209,7 @@ func TestDelegateAction(t *testing.T) {
 	}
 	// ana saw bo's answer; bo saw ana's request labelled by name, and knows ana as a peer too.
 	fed := sa.seen[1][len(sa.seen[1])-1].Content
-	if !strings.Contains(fed, "bo answered:") || !strings.Contains(fed, "one, two, three") {
+	if !strings.Contains(fed, "bo answered (") || !strings.Contains(fed, "one, two, three") {
 		t.Errorf("feedback = %q", fed)
 	}
 	if !strings.Contains(sb.seen[0][len(sb.seen[0])-1].Content, "[ana]: count to three") || !strings.Contains(sb.seen[0][0].Content, "hand a subtask to: ana") {
@@ -446,7 +446,8 @@ func TestRunGoalPlaysItsSavedFlowFirst(t *testing.T) {
 		t.Errorf("the model was asked %d times for a flow that went through", len(sa.seen))
 	}
 	sess, _ := s.Get(id)
-	if len(sess.Turns) != 1 || sess.Turns[0].Kitty != ana.ID || !strings.Contains(sess.Turns[0].Text, "prices") || sess.Turns[0].Looks == nil {
+	// The scheduler's call opens the run, as when the kitty works it: the task's history counts it.
+	if len(sess.Turns) != 2 || sess.Turns[0].From != "scheduler" || sess.Turns[1].Kitty != ana.ID || !strings.Contains(sess.Turns[1].Text, "prices") || sess.Turns[1].Looks == nil {
 		t.Errorf("turns = %+v", sess.Turns)
 	}
 	if got := r.all(); len(got) != 1 || got[0] != "g9=done" {

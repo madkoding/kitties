@@ -201,6 +201,18 @@ type Session struct {
 	// Helping are the kitties at work on a subtask handed over from this chat right now: the page
 	// shows them working until they answer. Cleared when the gateway starts.
 	Helping []Helper `json:"helping,omitempty"`
+	// Kind is what the thread is: a chat, a goal's (a scheduled task's) or a hand-over between
+	// two kitties (kinds.go); worked out from the fields above on every save and load.
+	Kind string `json:"kind"`
+	// Keep marks a hand-over thread the person kept: it stays, and shows among the chats.
+	// EndedAt is when its last hand-over ended, and ExpiresAt when it goes (zero: it stays);
+	// ExpiresAt is set on the copies Get and List hand out.
+	Keep      bool      `json:"keep,omitempty"`
+	EndedAt   time.Time `json:"ended_at,omitzero"`
+	ExpiresAt time.Time `json:"expires_at,omitzero"`
+	// Shown says the chat goes in the list of chats (Listed), set on the copies Get and List
+	// hand out: a goal's thread and a hand-over not kept do not.
+	Shown bool `json:"listed"`
 }
 
 // NeedsHelp reports whether the last turn is a kitty asking the person for help.
@@ -327,6 +339,8 @@ type Service struct {
 	leadLimitsAsk func() bool
 	// parallel is how many hand-overs of one reply run at the same time (actions.go).
 	parallel func() int
+	// handOverKeep says how long a hand-over thread stays after it ended (kinds.go).
+	handOverKeep func() time.Duration
 	// guard keeps the exposed chats from giving the person away, nil when there is none.
 	guard Guard
 }
@@ -607,6 +621,8 @@ func (s *Service) load() error {
 		// Recomputed rather than trusted: a chat saved before gists, or under older masking rules.
 		refreshGist(&sess)
 		refreshKitties(&sess)
+		refreshKind(&sess)
+		sess.ExpiresAt, sess.Shown = time.Time{}, false
 		sess.Helping = nil // nobody is still at work after a restart
 		s.sessions[sess.ID] = &sess
 	}
@@ -616,6 +632,7 @@ func (s *Service) load() error {
 func (s *Service) save(sess *Session) error {
 	refreshGist(sess)
 	refreshKitties(sess)
+	refreshKind(sess)
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return fmt.Errorf("create the chats folder: %w", err)
 	}
@@ -780,6 +797,8 @@ func (s *Service) Get(id string) (*Session, error) {
 	c.Helping = append([]Helper(nil), sess.Helping...)
 	c.Turns = append([]Turn(nil), sess.Turns...)
 	c.Help = sess.NeedsHelp()
+	c.ExpiresAt = s.expiresAt(sess)
+	c.Shown = sess.Listed()
 	return &c, nil
 }
 
@@ -792,6 +811,8 @@ func (s *Service) List() []*Session {
 		c := *sess
 		c.Turns = nil
 		c.Help = sess.NeedsHelp()
+		c.ExpiresAt = s.expiresAt(sess)
+		c.Shown = sess.Listed()
 		out = append(out, &c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].UpdatedAt.After(out[j].UpdatedAt) })

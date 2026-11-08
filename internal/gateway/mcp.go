@@ -289,23 +289,56 @@ func (s *Server) mcpTools(exec bool) []mcp.Tool {
 				}
 				return mcp.Result{Content: []mcp.Content{mcp.Image("image/png", base64.StdEncoding.EncodeToString(png))}}, nil
 			}},
-		{Name: "chat_list", Description: "The threads (id, title, members, every kitty taking part including the ones handed a subtask, last update, and a one-line gist of their last words with secrets masked), without their turns.",
-			InputSchema: obj(nil, map[string]any{}), Annotations: read,
-			Call: func(context.Context, json.RawMessage) (mcp.Result, error) {
+		{Name: "chat_list", Description: "The threads (id, title, kind, members, every kitty taking part including the ones handed a subtask, last update, and a one-line gist of their last words with secrets masked), without their turns. By default the chats the person sees in the sidebar; a scheduled task's runs are goal_runs, and the threads between two kitties of a hand-over are kind handover (they go a while after the work ended, unless kept with chat_keep).",
+			InputSchema: obj(nil, map[string]any{"kind": map[string]any{"type": "string", "enum": []string{"chat", "goal", "handover", "all"}, "description": "chat (default): the person's chats; goal: the threads of scheduled tasks; handover: the threads between two kitties; all"}}), Annotations: read,
+			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+				var a struct {
+					Kind string `json:"kind"`
+				}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				if a.Kind == "" {
+					a.Kind = chat.KindChat
+				}
 				type row struct {
 					ID        string    `json:"id"`
 					Title     string    `json:"title"`
+					Kind      string    `json:"kind"`
 					Members   []string  `json:"members"`
 					Kitties   []string  `json:"kitties,omitempty"`
 					Turns     int       `json:"turns"`
 					UpdatedAt time.Time `json:"updated_at"`
 					Gist      string    `json:"gist,omitempty"`
+					ExpiresAt time.Time `json:"expires_at,omitzero"`
 				}
 				rows := []row{}
-				for _, c := range s.chats.List() {
-					rows = append(rows, row{c.ID, c.Title, c.Members, c.Kitties, len(c.Turns), c.UpdatedAt, c.Gist})
+				for _, c := range chatsOfKind(s.chats.List(), a.Kind) {
+					rows = append(rows, row{c.ID, c.Title, chat.KindOf(c), c.Members, c.Kitties, len(c.Turns), c.UpdatedAt, c.Gist, c.ExpiresAt})
 				}
 				return jsonResult(map[string]any{"chats": rows})
+			}},
+		{Name: "chat_keep", Description: "Keep the thread between two kitties of a hand-over (it stays, and shows among the chats), or let it go again (it goes a while after its work ended).",
+			InputSchema: obj([]string{"id"}, map[string]any{"id": str("the hand-over thread's id"), "keep": map[string]any{"type": "boolean", "description": "true keeps it (default), false lets it go"}}),
+			Annotations: write,
+			Call: func(_ context.Context, raw json.RawMessage) (mcp.Result, error) {
+				a := struct {
+					ID   string `json:"id"`
+					Keep *bool  `json:"keep"`
+				}{}
+				if err := args(raw, &a); err != nil {
+					return mcp.Result{}, err
+				}
+				t, ok := s.chats.(Threads)
+				if !ok {
+					return mcp.Result{}, errNoThreads
+				}
+				keep := a.Keep == nil || *a.Keep
+				sess, err := t.KeepChat(a.ID, keep)
+				if err != nil {
+					return mcp.Result{}, err
+				}
+				return jsonResult(map[string]any{"chat": sess.ID, "keep": sess.Keep, "expires_at": sess.ExpiresAt})
 			}},
 		{Name: "chat_create", Description: "Open a thread with some kitties (by name or id); with no members, with the lead kitty.",
 			InputSchema: obj(nil, map[string]any{"title": str("optional title"),
