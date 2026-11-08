@@ -55,6 +55,8 @@ type Config struct {
 	WhatsApp WhatsApp `yaml:"whatsapp"`
 	// Autonomy tunes how long a kitty keeps at a task on its own (autonomy.go).
 	Autonomy Autonomy `yaml:"autonomy"`
+	// Retention is how much of what grows by itself (the screenshots of the tasks) is kept (retention.go).
+	Retention Retention `yaml:"retention"`
 }
 
 // WhatsApp is the WhatsApp link as the file sets it. Turning it on here is accepting its risk: it
@@ -618,6 +620,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if err := c.Autonomy.Validate(); err != nil {
+		return err
+	}
+	if err := c.Retention.Validate(); err != nil {
 		return err
 	}
 	if c.Notify.Connector != "" {
