@@ -311,6 +311,8 @@ export interface HandOverStat {
   asked_failed: number;
   took: number;
   took_failed: number;
+  // threads are the hand-over threads it took part in, the latest first.
+  threads?: { id: string; title: string; at: string }[];
 }
 
 // Helper is a kitty at work on a subtask handed over from a chat.

@@ -2490,3 +2490,16 @@ html.mac-inset .live-head {
   color: var(--t4);
   font-weight: 500;
 }
+.handover-kitty {
+  color: var(--color-accent);
+}
+.handover-threads {
+  margin: 0;
+  padding-left: 1rem;
+  text-align: left;
+  list-style: disc;
+}
+.handover-threads button {
+  color: var(--t2);
+  text-decoration: underline;
+}

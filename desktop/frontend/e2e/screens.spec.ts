@@ -3602,6 +3602,12 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     await expect(stats).toBeVisible();
     await expect(stats.getByTestId("handover-row").filter({ hasText: "mimi" })).toBeVisible();
     await shot(page, "71-lead-kitty");
+    // Each row lists the kitty's hand-over threads, one click from opening them.
+    await stats.getByTestId("handover-row").filter({ hasText: "mimi" }).getByRole("button").click();
+    const threads = stats.getByTestId("handover-threads");
+    await expect(threads.getByRole("button", { name: "mimi → luna" })).toBeVisible();
+    await threads.getByRole("button", { name: "mimi → luna" }).click();
+    await expect(page.locator("h1", { hasText: "mimi → luna" })).toBeVisible();
 
     // Another kitty's drawer offers to take the lead.
     await open(page, `#kitty/${ids.mimi}`);

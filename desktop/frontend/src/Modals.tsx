@@ -632,6 +632,8 @@ export function LeadPanel({
   const [err, setErr] = useState("");
   // stats is how the team hands work around (who asks, who takes it on, what fails), for the lead.
   const [stats, setStats] = useState<HandOverStat[]>([]);
+  // open is the row whose hand-over threads are listed.
+  const [open, setOpen] = useState("");
   useEffect(() => {
     if (!kitty.lead) {
       setStats([]);
@@ -722,14 +724,42 @@ export function LeadPanel({
             </tr>
           </thead>
           <tbody>
-            {stats.map((s) => (
+            {stats.map((s) => [
               <tr key={s.kitty_id} data-testid="handover-row">
-                <td>{s.kitty}</td>
+                <td>
+                  {s.threads && s.threads.length > 0 ? (
+                    <button
+                      class="plain handover-kitty"
+                      onClick={() => setOpen(open === s.kitty_id ? "" : s.kitty_id)}
+                      aria-expanded={open === s.kitty_id}
+                      title={t("See {name}'s hand-over threads", { name: s.kitty })}
+                    >
+                      {open === s.kitty_id ? "▾" : "▸"} {s.kitty}
+                    </button>
+                  ) : (
+                    s.kitty
+                  )}
+                </td>
                 <td>{s.asked}</td>
                 <td>{s.took}</td>
                 <td class={s.took_failed ? "text-[var(--c-red)]" : ""}>{s.took_failed}</td>
-              </tr>
-            ))}
+              </tr>,
+              open === s.kitty_id && (
+                <tr key={s.kitty_id + "-threads"} data-testid="handover-threads">
+                  <td colSpan={4}>
+                    <ul class="handover-threads">
+                      {s.threads!.map((th) => (
+                        <li key={th.id}>
+                          <button class="plain" onClick={() => onOpenChat(th.id)}>
+                            {th.title || th.id}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  </td>
+                </tr>
+              ),
+            ])}
           </tbody>
         </table>
       )}
