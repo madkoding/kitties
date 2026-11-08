@@ -61,6 +61,8 @@ const INPUT = "w-full px-3 py-2 text-sm";
 const digits = (n: string) => n.replace(/\D/g, "").replace(/^00/, "");
 
 export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
+  // With no kitty chosen, the lead answers.
+  const lead = kitties.find((k) => k.lead);
   const [cur, setCur] = useState<WhatsAppStatus | null>(null);
   const [want, setWant] = useState<WhatsAppSettings | null>(null);
   const [number, setNumber] = useState("");
@@ -222,7 +224,9 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
             onChange={(e) => setWant({ ...want, kitty: (e.target as HTMLSelectElement).value })}
             data-testid="whatsapp-kitty"
           >
-            <option value="">{t("Choose a kitty")}</option>
+            <option value="">
+              {lead ? t("The lead kitty ({name})", { name: lead.name }) : t("Choose a kitty")}
+            </option>
             {kitties.map((k) => (
               <option key={k.id} value={k.id}>
                 {k.name}

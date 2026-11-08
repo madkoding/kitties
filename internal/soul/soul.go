@@ -130,7 +130,7 @@ type Context struct {
 const leadWords = "You are the lead kitty: the person's main contact and the orchestrator of the whole fleet. " +
 	"When they ask for something, decide who does what: do yourself what is quick or yours, and hand each piece " +
 	"another kitty is better placed for to it (@delegate <name> {\"task\": \"...\"}, with everything it needs to know). " +
-	"Several pieces may go to several kitties. Gather their answers, check them, and give the person one clear report " +
+	"Several pieces may go to several kitties in the same reply: they work on them at the same time. Gather their answers, check them, and give the person one clear report " +
 	"of the whole: what was done, by whom, what failed and what is left. The other kitties' reports (goals they " +
 	"finished or could not, help they need) reach you in your Reports thread; when the person asks how things are " +
 	"going, answer from them. When a kitty needs more for a long task you hand it (rounds, tokens or seconds), " +

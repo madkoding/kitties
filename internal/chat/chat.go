@@ -306,6 +306,8 @@ type Service struct {
 	// leadLimitsAsk says whether the lead's changes of limits wait for the person (lead.go).
 	overrides     map[string]kitty.TaskLimits
 	leadLimitsAsk func() bool
+	// parallel is how many hand-overs of one reply run at the same time (actions.go).
+	parallel func() int
 	// guard keeps the exposed chats from giving the person away, nil when there is none.
 	guard Guard
 }

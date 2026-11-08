@@ -2609,6 +2609,12 @@ test("how long the kitties keep at a task on their own: checked, saved and kept"
   await box.locator("#auto-follow-ups").fill("15m 1h 4h");
   await box.locator("#auto-brain-wait").fill("45m");
   await box.locator("#auto-stand-ins").fill("2");
+  // Too many hand-overs at once is refused too.
+  await box.locator("#auto-parallel").fill("40");
+  await box.getByTestId("autonomy-save").click();
+  await expect(box).toContainText("autonomy.parallel_handovers");
+  await box.locator("#auto-parallel").fill("3");
+  await box.locator("#auto-lead-summary").fill("18:00");
   await box.getByTestId("autonomy-save").click();
   await expect(box.getByText("Saved.")).toBeVisible();
   await box.scrollIntoViewIfNeeded();
@@ -2619,6 +2625,10 @@ test("how long the kitties keep at a task on their own: checked, saved and kept"
   await page.getByRole("tab", { name: "Preferences" }).click();
   await expect(box.locator("#auto-follow-ups")).toHaveValue("15m 1h 4h");
   await expect(box.locator("#auto-stand-ins")).toHaveValue("2");
+  await expect(box.locator("#auto-parallel")).toHaveValue("3");
+  await expect(box.locator("#auto-lead-summary")).toHaveValue("18:00");
+  await box.locator("#auto-parallel").fill("");
+  await box.locator("#auto-lead-summary").fill("");
   await box.locator("#auto-follow-ups").fill("");
   await box.locator("#auto-brain-wait").fill("");
   await box.locator("#auto-stand-ins").fill("");
@@ -3652,6 +3662,13 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     await page.getByRole("button", { name: "Open reports" }).click();
     await expect(page.getByText("finished a goal", { exact: false }).first()).toBeVisible();
     await shot(page, "72-lead-reports");
+
+    // One click asks the lead to sum the reports up, in that same thread.
+    await open(page, `#kitty/${luna.id}`);
+    await page.getByTestId("lead-summary").click();
+    await expect(
+      page.getByText("Summarize the reports in this thread", { exact: false }).first(),
+    ).toBeVisible();
   } finally {
     await page.request.put(`${GATEWAY}/v1/lead`, { headers: H, data: { kitty: "" } });
   }

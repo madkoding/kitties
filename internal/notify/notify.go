@@ -36,6 +36,9 @@ const (
 	// Digest is the daily summary. It is not one of Events: the person turns it on by giving
 	// Config.Digest a time of day.
 	Digest Event = "digest"
+	// Summary is the lead kitty summing its Reports thread up, every day at the time the person
+	// gave (autonomy.lead_summary). It is not one of Events either.
+	Summary Event = "summary"
 )
 
 // Events lists them in order, for the page.

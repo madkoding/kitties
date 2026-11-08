@@ -39,7 +39,7 @@
 | `GET/POST /v1/memory/shared` · `PUT/DELETE /v1/memory/shared/{id}` | the notes every kitty knows |
 | `POST /v1/chats/{id}/turns/{index}/feedback` `{rating, note}` | a thumb under an answer |
 | `PUT /v1/settings/notify` · `POST /v1/settings/notify/test` · `POST …/notify/digest` | where and when kitties tell you; a test; the daily summary now |
-| `PUT /v1/settings/autonomy` | `{"follow_ups": "10m 30m 2h", "brain_wait": "30m", "stand_ins": "3"}`: how long the kitties keep at a task on their own (empty: defaults, `off`: none) |
+| `PUT /v1/settings/autonomy` | `{"follow_ups": "10m 30m 2h", "brain_wait": "30m", "stand_ins": "3", "lead_limits": "ask", "parallel_handovers": "4", "lead_summary": "18:00"}`: how long the kitties keep at a task on their own (empty: defaults, `off`: none) |
 | `GET /v1/chats/{id}/turns/{n}/replay.gif` · `POST …/turns/{n}/help` `{text, secret, enter, save}` | a task as an animated GIF; the person's answer to a kitty that asked for help (a secret is typed on its desktop, not told) |
 | `GET /v1/vault` · `PUT/DELETE /v1/vault/{name}` `{value, kitties}` | the secrets a kitty may type: names and who may use them, never values |
 | `GET /v1/kitties/{ref}/desktop` · `POST …/backup` · `POST …/update` | its desktop's image and whether a newer one waits, the backup of its cookies, sessions and passwords, and moving it to the newest image |

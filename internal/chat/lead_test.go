@@ -2,15 +2,19 @@ package chat
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/agenda"
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/notify"
 	"github.com/madkoding/kitties/internal/provider"
+	"github.com/madkoding/kitties/internal/soul"
 )
 
 func TestLeadReportsForTheOthers(t *testing.T) {
@@ -318,3 +322,160 @@ func (p probe) Complete(context.Context, []provider.Message) (provider.Reply, er
 	return provider.Reply{Content: "done"}, nil
 }
 func (p probe) Describe() string { return "probe" }
+
+func TestHandOversToSeveralKittiesRunAtOnce(t *testing.T) {
+	f, sa, _, _ := fleet(t)
+	var mu sync.Mutex
+	in := 0
+	both := make(chan struct{})
+	together := 0
+	// Each helper waits for the other: in a row, the first would wait in vain.
+	meet := func() {
+		mu.Lock()
+		in++
+		if in == 2 {
+			close(both)
+		}
+		mu.Unlock()
+		select {
+		case <-both:
+			mu.Lock()
+			together++
+			mu.Unlock()
+		case <-time.After(2 * time.Second):
+		}
+	}
+	for _, name := range []string{"cy", "di"} {
+		k := &kitty.Kitty{ID: name + "1", Name: name, Soul: soul.Default(name)}
+		f.kitties[k.ID] = k
+		f.brains[k.ID] = probe(meet)
+	}
+	s := service(t, f)
+	sa.replies = []string{"@delegate cy {\"task\": \"one\"}\n@delegate di {\"task\": \"two\"}", "both done"}
+	sess, _ := s.Create("", []string{"ana"})
+	turns, err := s.Send(context.Background(), sess.ID, "split it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d := turns[0].Delegations
+	if together != 2 || len(d) != 2 || d[0].Kitty != "cy" || d[1].Kitty != "di" {
+		t.Fatalf("together = %d, delegations = %+v", together, d)
+	}
+}
+
+func TestHandOversWaitTheirTurn(t *testing.T) {
+	f, sa, _, _ := fleet(t)
+	var mu sync.Mutex
+	running, most := 0, 0
+	var queuedSeen int
+	work := func() {
+		mu.Lock()
+		running++
+		if running > most {
+			most = running
+		}
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		running--
+		mu.Unlock()
+	}
+	for _, name := range []string{"cy", "di", "ed"} {
+		k := &kitty.Kitty{ID: name + "1", Name: name, Soul: soul.Default(name)}
+		f.kitties[k.ID] = k
+		f.brains[k.ID] = probe(work)
+	}
+	s := service(t, f)
+	s.SetParallel(func() int { return 1 })
+	sess, _ := s.Create("", []string{"ana"})
+	events, stop := s.Subscribe(sess.ID)
+	defer stop()
+	go func() {
+		for range events {
+			if c, err := s.Get(sess.ID); err == nil {
+				for _, h := range c.Helping {
+					if h.Queued {
+						mu.Lock()
+						queuedSeen++
+						mu.Unlock()
+					}
+				}
+			}
+		}
+	}()
+	sa.replies = []string{"@delegate cy {\"task\": \"one\"}\n@delegate di {\"task\": \"two\"}\n@delegate ed {\"task\": \"three\"}", "all done"}
+	turns, err := s.Send(context.Background(), sess.ID, "split it")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	if most != 1 || len(turns[0].Delegations) != 3 || queuedSeen == 0 {
+		t.Fatalf("at most %d at once, %d delegations, queued seen %d", most, len(turns[0].Delegations), queuedSeen)
+	}
+	if c, _ := s.Get(sess.ID); len(c.Helping) != 0 {
+		t.Fatalf("still helping: %+v", c.Helping)
+	}
+	// Unset, a few run at once; zero or less is one.
+	s.SetParallel(nil)
+	if s.parallelOr() != DefaultParallel {
+		t.Error("default")
+	}
+	s.SetParallel(func() int { return 0 })
+	if s.parallelOr() != 1 {
+		t.Error("at least one")
+	}
+}
+
+func TestLeadSummaries(t *testing.T) {
+	f, _, sb, _ := fleet(t)
+	s := service(t, f)
+	ctx := context.Background()
+	if _, err := s.LeadSummary(ctx); !errors.Is(err, ErrNoLead) {
+		t.Fatalf("no lead: %v", err)
+	}
+	now := time.Date(2026, 11, 8, 17, 59, 0, 0, time.UTC)
+	var sent []notify.Notification
+	l := &LeadSummaries{Chats: s, At: func() (int, int, bool) { return 18, 0, true }, Path: filepath.Join(t.TempDir(), "s.json"),
+		Now:     func() time.Time { return now },
+		Deliver: func(_ context.Context, n notify.Notification) error { sent = append(sent, n); return nil }}
+	// No lead: nothing to ask.
+	now = now.Add(2 * time.Minute)
+	if ok, err := l.Tick(ctx); ok || err != nil {
+		t.Fatalf("no lead: %v %v", ok, err)
+	}
+	f.kitties["b1"].Lead = true
+	now = time.Date(2026, 11, 8, 17, 59, 0, 0, time.UTC)
+	if ok, _ := l.Tick(ctx); ok {
+		t.Fatal("asked before its time")
+	}
+	now = now.Add(2 * time.Minute)
+	sb.replies = []string{"- ana: inbox done\n- nothing waits for you"}
+	if ok, err := l.Tick(ctx); !ok || err != nil {
+		t.Fatalf("at its time: %v %v", ok, err)
+	}
+	if len(sent) != 1 || sent[0].Kitty != "bo" || sent[0].Event != notify.Summary || !strings.Contains(sent[0].Body, "inbox done") {
+		t.Fatalf("sent = %+v", sent)
+	}
+	c, _ := s.Get(sent[0].Chat)
+	if !c.Reports || c.Turns[0].Text != SummaryAsk {
+		t.Fatalf("thread = %+v", c)
+	}
+	// Once a day, even after a restart.
+	if ok, _ := l.Tick(ctx); ok {
+		t.Fatal("asked twice")
+	}
+	l2 := &LeadSummaries{Chats: s, At: l.At, Path: l.Path, Now: l.Now}
+	if ok, _ := l2.Tick(ctx); ok {
+		t.Fatal("asked again after a restart")
+	}
+	// Too late in the day, or turned off: not asked.
+	now = now.Add(24*time.Hour + SummaryWindow + time.Minute)
+	if ok, _ := l.Tick(ctx); ok {
+		t.Fatal("asked too late")
+	}
+	l.At = func() (int, int, bool) { return 0, 0, false }
+	if ok, _ := l.Tick(ctx); ok {
+		t.Fatal("asked while off")
+	}
+}

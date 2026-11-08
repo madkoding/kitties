@@ -278,6 +278,8 @@ type Options struct {
 	Chats     Chats
 	// Kitty finds the kitty that answers.
 	Kitty func(ref string) (*kitty.Kitty, error)
+	// Lead is the fleet's lead kitty, nil when none is: it answers when no kitty is chosen.
+	Lead func() *kitty.Kitty
 	// Registry offers the connector while the link is on.
 	Registry Registry
 	// QRImage draws a code as a PNG data URL (optional).
@@ -489,8 +491,8 @@ func (b *Bridge) Status() Status {
 	if b.opt.Box == nil {
 		st.Why = ErrNoVault.Error()
 	}
-	if b.set.Kitty != "" && b.opt.Kitty != nil {
-		if k, err := b.opt.Kitty(b.set.Kitty); err == nil {
+	if ref := b.kittyRefLocked(""); ref != "" && b.opt.Kitty != nil {
+		if k, err := b.opt.Kitty(ref); err == nil {
 			st.KittyName = k.Name
 		}
 	}
@@ -568,8 +570,8 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 			out.Allow = append(out.Allow, d)
 		}
 	}
-	if out.Enabled && out.Kitty == "" {
-		return Settings{}, errors.New("choose the kitty that answers on WhatsApp")
+	if out.Enabled && out.Kitty == "" && b.leadID() == "" {
+		return Settings{}, errors.New("choose the kitty that answers on WhatsApp (or make one the lead)")
 	}
 	if out.Kitty != "" && b.opt.Kitty != nil {
 		k, err := b.opt.Kitty(out.Kitty)
@@ -1344,7 +1346,21 @@ func (b *Bridge) kittyRefLocked(who string) string {
 	if ref := b.set.Kitties[who]; ref != "" {
 		return ref
 	}
-	return b.set.Kitty
+	if b.set.Kitty != "" {
+		return b.set.Kitty
+	}
+	return b.leadID()
+}
+
+// leadID is the lead kitty's id, the one that answers when no kitty is chosen; empty when none.
+func (b *Bridge) leadID() string {
+	if b.opt.Lead == nil {
+		return ""
+	}
+	if k := b.opt.Lead(); k != nil {
+		return k.ID
+	}
+	return ""
 }
 
 // kittyLocked is that kitty, when it is there.

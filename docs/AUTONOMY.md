@@ -78,6 +78,8 @@ autonomy:                        # Settings → Preferences → Working on their
   brain_wait: 30m                # how long a task waits for a model that is down; off: not at all
   stand_ins: 3                   # tasks a day a kitty without a backup hands to a free one; off: none
   lead_limits: ask               # the lead's lasting changes of the others' limits wait for a yes; auto (default)
+  parallel_handovers: 4          # hand-overs of one reply that run at the same time (1 to 16); off: one at a time
+  lead_summary: "18:00"          # the lead sums its Reports thread up every day at this time; empty: never
 kitties:
   - name: mimi
     backup: luna                 # takes over what mimi gives up on
@@ -99,7 +101,9 @@ one before.
 - **It hands the work out.** Its prompt names the team (what each kitty is good at, whether it has
   a computer, the services it may use, whether it is busy) and tells it to split what you ask:
   it does what is quick or its own, delegates each piece to the kitty best placed for it (several
-  pieces to several kitties if need be), checks their answers and gives you **one report** of the
+  pieces to several kitties if need be; pieces for different kitties run **at the same time**, up
+  to `parallel_handovers` at once (4 by default), so it waits for the slowest instead of for each
+  in a row; the chat shows who is working and who waits its turn), checks their answers and gives you **one report** of the
   whole: what was done, by whom, what failed and what is left. The other kitties know who leads,
   and treat a task it hands them as coming from you.
 - **The reports come back through it.** What another kitty has to tell you (a goal done or
@@ -121,7 +125,13 @@ one before.
     kitty changes another's limits* (`autonomy.lead_limits: ask`) holds each lasting change in
     Approvals until you approve it.
 - **Ask it how things are going.** Write in the Reports thread: the lead reads the reports
-  there and answers from them, or hands out the next round of work.
+  there and answers from them, or hands out the next round of work. *Summarize reports* in its
+  drawer asks it for that in one click: what each kitty did, what is stuck or failed, what waits
+  for you and what it suggests next. With *The lead sums up the reports every day at*
+  (`autonomy.lead_summary: "18:00"`) it does so by itself each day, and the summary reaches your
+  notification channel in its name.
+- **It is who you talk to by default.** A new chat starts with the lead ticked, `kitties chat`
+  with no name talks to it, and WhatsApp (and ntfy replies) go to it when you choose no kitty.
 
 | | |
 | --- | --- |
@@ -138,6 +148,7 @@ kitties:
 
 ```sh
 kitties lead luna      # or: kitties lead (who leads), kitties lead none
+kitties chat           # no name: talk to the lead
 curl -X PUT -H "Authorization: Bearer $(kitties token)" -d '{"kitty":"luna"}' http://127.0.0.1:7488/v1/lead
 ```
 
