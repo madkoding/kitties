@@ -17,12 +17,24 @@ type heldFleet struct {
 	*deskFleet
 	mu   sync.Mutex
 	held bool
+	// seen counts the looks that found the display held.
+	seen int
 }
 
 func (h *heldFleet) Held(string) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if h.held {
+		h.seen++
+	}
 	return h.held
+}
+
+// seenHeld reports whether the kitty has looked while the display was held.
+func (h *heldFleet) seenHeld() bool {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.seen > 0
 }
 
 func (h *heldFleet) give() {
@@ -110,7 +122,12 @@ func TestAskHelp(t *testing.T) {
 			h.mu.Lock()
 			h.held = true
 			h.mu.Unlock()
-			time.Sleep(20 * time.Millisecond)
+			// Give it back only once the kitty saw it taken (a busy machine may look late).
+			for deadline := time.Now().Add(5 * time.Second); !h.seenHeld(); time.Sleep(time.Millisecond) {
+				if time.Now().After(deadline) {
+					t.Fatal("the kitty never saw its desktop taken")
+				}
+			}
 			h.give()
 		}
 		waitDone(t, s, sess.ID)
