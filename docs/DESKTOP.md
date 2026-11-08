@@ -135,7 +135,12 @@ picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.
 The window of a kitty's live desktop carries the kitty's chat as a sidebar, so you can write to it
 and follow what it does on the display without leaving the picture. It is the same chat as the
 page's (`Conversation` and `Composer`, with the same turns, attachments and ratings), so nothing is
-kept twice; each task shows its steps folded under the message, and a task at work stays open.
+kept twice. A task reads as the short lines the kitty writes when it moves on to something new
+("I open the browser and look up flights to Lima": what it does and what for, never the clicks),
+each with its actions folded under how many they were; a tap opens them one by one. The chat
+follows the latest line while you are at its end; scroll up to read and it waits, with a button to
+go back to the latest. The picture has no hint over it: a click on it, or the Take control button,
+takes the controls.
 The sidebar folds to a thin bar (remembered in the browser), starts folded on a phone, where it
 stacks under the picture, and never takes the keys or the sound from the desktop: typing in it is
 typing in the chat, and the controls of the picture stay where they were.
