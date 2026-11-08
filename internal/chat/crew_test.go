@@ -324,6 +324,10 @@ func TestHandOverDays(t *testing.T) {
 	if len(days) != 7 || days[6].Day != now.Format("2006-01-02") || days[6].Count != 1 || days[6].Failed != 0 {
 		t.Fatalf("days = %+v", days)
 	}
+	// Per kitty: ana asked it, bo took it on.
+	if by := days[6].By; by["a1"].Count != 1 || by["b1"].Count != 1 || len(by) != 2 {
+		t.Errorf("by kitty = %+v", by)
+	}
 	for _, d := range days[:6] {
 		if d.Count != 0 {
 			t.Errorf("a day before has hand-overs: %+v", d)
@@ -345,7 +349,7 @@ func TestHandOverDays(t *testing.T) {
 		}
 	}
 	s.mu.Unlock()
-	if d := s.HandOverDays(1, now)[0]; d.Failed != 1 {
+	if d := s.HandOverDays(1, now)[0]; d.Failed != 1 || d.By["b1"].Failed != 1 {
 		t.Errorf("failed = %+v", d)
 	}
 }

@@ -396,6 +396,31 @@ type HandOverDay struct {
 	Day    string `json:"day"`
 	Count  int    `json:"count"`
 	Failed int    `json:"failed"`
+	// By is the same per kitty id, counting each hand-over for the kitty that asked and for the
+	// one that took it on, so the chart can show one kitty's.
+	By map[string]HandOverCount `json:"by,omitempty"`
+}
+
+// HandOverCount is how many subtasks, and how many of them failed.
+type HandOverCount struct {
+	Count  int `json:"count"`
+	Failed int `json:"failed"`
+}
+
+// add counts one hand-over for a kitty of the day.
+func (d *HandOverDay) add(kitty string, failed bool) {
+	if kitty == "" {
+		return
+	}
+	if d.By == nil {
+		d.By = map[string]HandOverCount{}
+	}
+	c := d.By[kitty]
+	c.Count++
+	if failed {
+		c.Failed++
+	}
+	d.By[kitty] = c
 }
 
 // HandOverDays counts the hand-overs of every chat kept over the n days up to now, oldest first;
@@ -425,9 +450,14 @@ func (s *Service) HandOverDays(n int, now time.Time) []HandOverDay {
 				continue
 			}
 			for _, d := range t.Delegations {
+				failed := d.Error != ""
 				out[j].Count++
-				if d.Error != "" {
+				if failed {
 					out[j].Failed++
+				}
+				out[j].add(t.Kitty, failed)
+				if d.KittyID != t.Kitty {
+					out[j].add(d.KittyID, failed)
 				}
 			}
 		}
