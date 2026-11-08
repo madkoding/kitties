@@ -389,6 +389,52 @@ func (s *Service) HandOverStats() []HandOverStat {
 	return out
 }
 
+// HandOverDay is how many subtasks the team handed around on one day, and how many of them
+// failed, for the lead's chart.
+type HandOverDay struct {
+	// Day is the date, YYYY-MM-DD, in the gateway's time zone.
+	Day    string `json:"day"`
+	Count  int    `json:"count"`
+	Failed int    `json:"failed"`
+}
+
+// HandOverDays counts the hand-overs of every chat kept over the n days up to now, oldest first;
+// a day without any is there with zeros, so the chart keeps its days apart.
+func (s *Service) HandOverDays(n int, now time.Time) []HandOverDay {
+	if n < 1 {
+		return nil
+	}
+	out := make([]HandOverDay, n)
+	index := map[string]int{}
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	for i := 0; i < n; i++ {
+		day := today.AddDate(0, 0, i-n+1).Format("2006-01-02")
+		out[i].Day = day
+		index[day] = i
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	for _, sess := range s.sessions {
+		for i := range sess.Turns {
+			t := &sess.Turns[i]
+			if len(t.Delegations) == 0 {
+				continue
+			}
+			j, ok := index[t.At.In(now.Location()).Format("2006-01-02")]
+			if !ok {
+				continue
+			}
+			for _, d := range t.Delegations {
+				out[j].Count++
+				if d.Error != "" {
+					out[j].Failed++
+				}
+			}
+		}
+	}
+	return out
+}
+
 // handOverFailed counts a subtask a kitty could not do; every FailStreakAlert in a row, the lead
 // (its Reports thread, even when it asked) and the person hear that something is wrong with it.
 func (s *Service) handOverFailed(k *kitty.Kitty, err error, chatID string) {

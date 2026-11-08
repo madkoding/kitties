@@ -308,6 +308,48 @@ func TestRestoreDelegateAndStats(t *testing.T) {
 	}
 }
 
+// The hand-overs are counted per day for the lead's chart: today's here, the days before empty.
+func TestHandOverDays(t *testing.T) {
+	f, sa, sb, _ := fleet(t)
+	s := service(t, f)
+	if s.HandOverDays(0, time.Now()) != nil {
+		t.Error("days for no days")
+	}
+	sa.replies = []string{"@delegate bo {\"task\": \"count\"}", "ok"}
+	sb.replies = []string{"three"}
+	sess, _ := s.Create("", []string{"ana"})
+	_, _ = s.Send(context.Background(), sess.ID, "go")
+	now := time.Now()
+	days := s.HandOverDays(7, now)
+	if len(days) != 7 || days[6].Day != now.Format("2006-01-02") || days[6].Count != 1 || days[6].Failed != 0 {
+		t.Fatalf("days = %+v", days)
+	}
+	for _, d := range days[:6] {
+		if d.Count != 0 {
+			t.Errorf("a day before has hand-overs: %+v", d)
+		}
+	}
+	// A week later, today's hand-over is out of the chart.
+	for _, d := range s.HandOverDays(3, now.AddDate(0, 0, 7)) {
+		if d.Count != 0 {
+			t.Errorf("old hand-over still counted: %+v", d)
+		}
+	}
+	// One that failed counts as failed.
+	s.mu.Lock()
+	for _, c := range s.sessions {
+		for i := range c.Turns {
+			for j := range c.Turns[i].Delegations {
+				c.Turns[i].Delegations[j].Error = "boom"
+			}
+		}
+	}
+	s.mu.Unlock()
+	if d := s.HandOverDays(1, now)[0]; d.Failed != 1 {
+		t.Errorf("failed = %+v", d)
+	}
+}
+
 // A kitty that fails several subtasks in a row is reported to the lead, even when the lead asked.
 func TestFailStreakAlertsTheLead(t *testing.T) {
 	f, _, _, _ := fleet(t)
