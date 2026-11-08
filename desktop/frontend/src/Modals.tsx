@@ -26,6 +26,8 @@ import { MemoryPanel } from "./Memory";
 import PixelCat, { BREEDS, CatPicker, COLORS, type Mood } from "./PixelCat";
 import { Missing, Required } from "./Required";
 import { t } from "./i18n";
+import { kittyTab, setKittyTab } from "./prefs";
+import Tabs from "./Tabs";
 
 // VOICES are the speech voices a kitty's WhatsApp voice notes can take (OpenAI's).
 const VOICES = [
@@ -798,6 +800,18 @@ export function LeadPanel({
   );
 }
 
+// KittyTab is a section of a kitty's drawer.
+export type KittyTab = "desktop" | "goals" | "journal" | "notes" | "config";
+
+// KITTY_TABS are the drawer's sections, in order, in the page's language.
+const KITTY_TABS = (): { id: KittyTab; label: string }[] => [
+  { id: "desktop", label: t("Desktop") },
+  { id: "goals", label: t("Goals") },
+  { id: "journal", label: t("Journal") },
+  { id: "notes", label: t("Notes") },
+  { id: "config", label: t("Configuration") },
+];
+
 export function KittyDrawer({
   kitty,
   kitties,
@@ -861,6 +875,16 @@ export function KittyDrawer({
   const soul = kitty.soul || {};
   const running = kitty.status === "running";
   const model = models.find((m) => m.name === kitty.provider);
+  // The drawer is split in tabs; the desktop's only shows for a kitty that has one. The tab the
+  // person left a kitty on is where its drawer opens next time.
+  const tabs = KITTY_TABS().filter((x) => x.id !== "desktop" || kitty.desktop);
+  const [chosen, setChosen] = useState<KittyTab>(() => kittyTab(kitty.id) as KittyTab);
+  useEffect(() => setChosen(kittyTab(kitty.id) as KittyTab), [kitty.id]);
+  const tab = tabs.some((x) => x.id === chosen) ? chosen : tabs[0].id;
+  const pickTab = (x: KittyTab) => {
+    setChosen(x);
+    setKittyTab(kitty.id, x);
+  };
   return (
     <Modal title={kitty.name} onClose={onClose} wide>
       <div class="flex items-center gap-4 flex-wrap" data-testid="kitty-header">
@@ -923,78 +947,91 @@ export function KittyDrawer({
         </div>
       </div>
       {err && <p class="text-sm text-[var(--c-red)] mt-2">{err}</p>}
-      <LeadPanel kitty={kitty} kitties={kitties} onChanged={onChanged} onOpenChat={onOpenChat} />
-      {/* The desktop comes first: the goals and the journal grow, and must not push it down. */}
-      {kitty.desktop && (
-        <div class="min-w-0">
-          <div class="section-title !mx-0 mt-5">{t("Desktop")}</div>
-          <MachinePower kitty={kitty} onChanged={onChanged} />
-          {running ? (
-            <LiveDesktop
-              kitty={kitty}
-              inline
-              onClose={() => undefined}
-              chat={chat}
-              onStartChat={onChat}
-            />
-          ) : (
-            <p class="text-sm text-[var(--t3)]" data-testid="desktop-off">
-              {t("Start {name} to see its desktop live and take control of it.", {
-                name: kitty.name,
-              })}
-            </p>
-          )}
-        </div>
-      )}
-      <div class="grid md:grid-cols-2 gap-x-6">
-        <div class="min-w-0">
-          <GoalsPanel kitty={kitty} onOpenChat={onOpenChat} />
-        </div>
-        <div class="min-w-0">
-          <JournalPanel kitty={kitty} onOpenChat={onOpenChat} />
-        </div>
-      </div>
-      {kitty.desktop && (
-        <div class="min-w-0 mt-5">
-          <DesktopCare kitty={kitty} onChanged={onChanged} />
-        </div>
-      )}
-      <details class="config mt-5" data-testid="kitty-config">
-        <summary>
-          <span>{t("Configuration")}</span>
-          <span class="text-[var(--t4)] normal-case tracking-normal">
-            {t("looks, brain, personality, connections, limits and memory")}
-          </span>
-        </summary>
-        <div class="grid md:grid-cols-2 gap-x-6 gap-y-2 p-3 text-sm">
-          <div class="min-w-0">
-            <div class="section-title !mx-0">{t("Looks")}</div>
-            <CatPicker
-              breed={kitty.avatar?.breed || "tabby"}
-              color={kitty.avatar?.color || "orange"}
-              onChange={pick}
-            />
+      <div class="h-4" />
+      <Tabs
+        tabs={tabs}
+        tab={tab}
+        onPick={pickTab}
+        prefix="kitty"
+        label={t("{name}'s sections", { name: kitty.name })}
+        panels
+      />
+      <div
+        role="tabpanel"
+        id={`kitty-panel-${tab}`}
+        aria-labelledby={`kitty-tab-${tab}`}
+        class="kitty-panel min-w-0"
+        data-testid={`kitty-panel-${tab}`}
+      >
+        {tab === "desktop" && kitty.desktop && (
+          <>
+            {/* The viewer always comes first; the machine's options follow it. */}
+            {running ? (
+              <LiveDesktop
+                kitty={kitty}
+                inline
+                onClose={() => undefined}
+                chat={chat}
+                onStartChat={onChat}
+              />
+            ) : (
+              <p class="text-sm text-[var(--t3)]" data-testid="desktop-off">
+                {t("Start {name} to see its desktop live and take control of it.", {
+                  name: kitty.name,
+                })}
+              </p>
+            )}
             <div class="mt-4">
-              <KittyBasics kitty={kitty} models={models} onChanged={onChanged} />
+              <MachinePower kitty={kitty} onChanged={onChanged} />
+            </div>
+            <div class="mt-5">
+              <DesktopCare kitty={kitty} onChanged={onChanged} />
+            </div>
+          </>
+        )}
+        {tab === "goals" && (
+          <>
+            <GoalsPanel kitty={kitty} onOpenChat={onOpenChat} />
+            <LeadPanel
+              kitty={kitty}
+              kitties={kitties}
+              onChanged={onChanged}
+              onOpenChat={onOpenChat}
+            />
+          </>
+        )}
+        {tab === "journal" && <JournalPanel kitty={kitty} onOpenChat={onOpenChat} />}
+        {tab === "notes" && <MemoryPanel kitty={kitty} />}
+        {tab === "config" && (
+          <div class="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm" data-testid="kitty-config">
+            <div class="min-w-0">
+              <div class="section-title !mx-0">{t("Looks")}</div>
+              <CatPicker
+                breed={kitty.avatar?.breed || "tabby"}
+                color={kitty.avatar?.color || "orange"}
+                onChange={pick}
+              />
+              <div class="mt-4">
+                <KittyBasics kitty={kitty} models={models} onChanged={onChanged} />
+              </div>
+            </div>
+            <div class="min-w-0">
+              <LimitsForm kitty={kitty} kitties={kitties} onChanged={onChanged} />
+              <div class="mt-6">
+                <button
+                  class="btn-danger px-3 py-2 text-sm flex items-center gap-2"
+                  onClick={async () =>
+                    (await ask(t("Remove {name} and its container?", { name: kitty.name }))) &&
+                    act(() => api.removeKitty(kitty.id).then(onClose))
+                  }
+                >
+                  <IconTrash size={14} /> {t("Remove")}
+                </button>
+              </div>
             </div>
           </div>
-          <div class="min-w-0">
-            <LimitsForm kitty={kitty} kitties={kitties} onChanged={onChanged} />
-            <MemoryPanel kitty={kitty} />
-            <div class="mt-6">
-              <button
-                class="btn-danger px-3 py-2 text-sm flex items-center gap-2"
-                onClick={async () =>
-                  (await ask(t("Remove {name} and its container?", { name: kitty.name }))) &&
-                  act(() => api.removeKitty(kitty.id).then(onClose))
-                }
-              >
-                <IconTrash size={14} /> {t("Remove")}
-              </button>
-            </div>
-          </div>
-        </div>
-      </details>
+        )}
+      </div>
     </Modal>
   );
 }

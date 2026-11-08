@@ -2465,6 +2465,15 @@ html.mac-inset .live-head {
   padding: 0.625rem 0.75rem;
 }
 
+/* A kitty's drawer: the tab already names the section, so its first title needs no room above. */
+.kitty-panel > :first-child > .section-title:first-child,
+.kitty-panel > .section-title:first-child {
+  margin-top: 0;
+}
+.kitty-panel > .lead-panel:first-child {
+  margin-top: 0;
+}
+
 /* ─── Settings: the tabs and the machines ─────────────────────────────────────────────────── */
 /* Pills that stay at the top of the dialog while it scrolls: they wrap on a wide screen and
  * slide sideways on a phone (a fade at the edge says there is more). */
