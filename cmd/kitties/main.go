@@ -1132,7 +1132,9 @@ func (a *app) followTask(ctx context.Context, id string) {
 			}
 			for _, st := range t.Steps[shown[i]:upto] {
 				line := "  · " + st.Action
-				if st.Error != "" {
+				if st.Action == chat.StepPlan {
+					line = "  » " + st.Result
+				} else if st.Error != "" {
 					line += " failed: " + st.Error
 				} else if st.Result != "" && st.Action != "done" {
 					line += ": " + firstLine(st.Result)

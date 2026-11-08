@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/notify"
 )
@@ -136,6 +137,7 @@ func TestDelegationIsReported(t *testing.T) {
 	s := service(t, f)
 	b := &bell{}
 	s.SetNotifier(b)
+	s.HandOverWait = 0
 	chat, _ := s.Create("", []string{"bo"})
 	delegated := func() *notify.Notification {
 		for i := range b.seen {
@@ -166,5 +168,71 @@ func TestDelegationIsReported(t *testing.T) {
 	rid, _ := s.ReportsChat(lead)
 	if rep, _ := s.Get(rid); delegated() == nil || len(rep.Turns) != 0 {
 		t.Errorf("lead's own hand-over: notified %v, reports %d", delegated() != nil, len(rep.Turns))
+	}
+}
+
+// Hand-overs of a chat that end close together reach the person as one message.
+func TestHandOversFoldIntoOneNotice(t *testing.T) {
+	f, sa, sb, _ := fleet(t)
+	s := service(t, f)
+	b := &bell{}
+	s.SetNotifier(b)
+	s.HandOverWait = 50 * time.Millisecond
+	chat, _ := s.Create("", []string{"bo"})
+	sb.replies = []string{"@delegate ana {\"task\": \"count\"}\n@delegate ana {\"task\": \"spell\"}", "ok"}
+	sa.replies = []string{"three", "c-a-t"}
+	if _, err := s.Send(context.Background(), chat.ID, "go"); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(200 * time.Millisecond)
+	var got []notify.Notification
+	b.mu.Lock()
+	seen := append([]notify.Notification(nil), b.seen...)
+	b.mu.Unlock()
+	for _, n := range seen {
+		if n.Event == notify.Delegated {
+			got = append(got, n)
+		}
+	}
+	if len(got) != 1 || got[0].Title != "2 hand-overs ended" || strings.Count(got[0].Body, "• ") != 2 || got[0].Chat != chat.ID {
+		t.Fatalf("notices = %+v", got)
+	}
+	if one := combineHandOvers(got[:1]); one.Title != got[0].Title {
+		t.Error("one notice is sent as it is")
+	}
+}
+
+// A delegate the person takes off the chat stays off, until it is handed work there again.
+func TestDismissADelegate(t *testing.T) {
+	f, sa, sb, _ := fleet(t)
+	s := service(t, f)
+	sa.replies = []string{"@delegate bo {\"task\": \"count\"}", "ok"}
+	sb.replies = []string{"three"}
+	sess, _ := s.Create("", []string{"ana"})
+	_, _ = s.Send(context.Background(), sess.ID, "go")
+	got, err := s.RemoveMember(sess.ID, "bo")
+	if err != nil || got.Crew() || len(got.Delegates) != 0 || !slices.Equal(got.Dismissed, []string{"b1"}) {
+		t.Fatalf("dismissed: %+v %v", got, err)
+	}
+	// Saving again (old turns still name bo) does not bring it back, nor does a reload.
+	s.mu.Lock()
+	_ = s.save(s.sessions[sess.ID])
+	s.mu.Unlock()
+	if err := s.load(); err != nil {
+		t.Fatal(err)
+	}
+	if again, _ := s.Get(sess.ID); again.Crew() {
+		t.Errorf("came back: %v", again.Kitties)
+	}
+	// Handed work again, it is back.
+	sa.replies = []string{"@delegate bo {\"task\": \"count again\"}", "ok"}
+	sb.replies = []string{"four"}
+	_, _ = s.Send(context.Background(), sess.ID, "more")
+	if back, _ := s.Get(sess.ID); !back.Crew() || len(back.Dismissed) != 0 {
+		t.Errorf("not back: %v dismissed %v", back.Kitties, back.Dismissed)
+	}
+	// ana, the only member, still cannot be taken out.
+	if _, err := s.RemoveMember(sess.ID, "ana"); err == nil {
+		t.Error("the last member was removed")
 	}
 }

@@ -233,6 +233,9 @@ makes the chat a group (`Session.Crew`), while `Session.Group` still says whethe
 While a delegate works, `Session.Helping` lists it (cleared on start-up) and the chat's watchers get a
 `helping` event at the start and the end, so the page reads the chat again. `Delegation.Result` keeps
 the first 300 bytes; `Delegation.Answer` the whole answer (up to 20,000 characters) when it was longer.
+`DELETE /v1/chats/{id}/members/{kitty}` on a delegate dismisses it (`Session.Dismissed`: its old
+hand-overs no longer count) until a new hand-over brings it back. The `delegated` notices of a chat
+wait `HandOverWait` (a minute) and go out as one message listing them.
 
 The orchestrator's `Watch` is the watchdog: every 30 seconds a running kitty whose container
 stopped or vanished is started again and a kitty in error is tried once more; recoveries are

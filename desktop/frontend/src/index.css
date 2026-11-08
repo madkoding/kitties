@@ -650,6 +650,71 @@ select:focus {
   background: rgb(var(--ov-rgb) / 0.05);
   border-radius: var(--radius-cut);
 }
+/* A part of a task: what the kitty said it does, then its actions folded under their count. */
+.step-part {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+.step-plan {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.8438rem;
+  color: var(--t1);
+  overflow-wrap: anywhere;
+  animation: motion-enter-left var(--motion-base) var(--ease-out) backwards;
+}
+.step-plan .what {
+  flex: none;
+  width: 0.4375rem;
+  height: 0.4375rem;
+  margin-top: 0.375rem;
+  border-radius: 50%;
+  background: rgb(var(--neon-rgb) / 0.55);
+}
+.step-plan .spinner {
+  flex: none;
+  margin-top: 0.1875rem;
+}
+.step-count {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.375rem;
+  min-width: 0;
+  max-width: 100%;
+  align-self: flex-start;
+  padding: 0.0625rem 0;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--t3);
+}
+.step-count:hover,
+.step-count[aria-expanded="true"] {
+  color: var(--t1);
+}
+.step-count .steps-last {
+  margin: 0;
+  font-family: var(--font-sans, inherit);
+}
+/* The way back to the end of a list the person scrolled up in. */
+.follow-jump {
+  position: sticky;
+  bottom: 0.5rem;
+  z-index: 2;
+  align-self: center;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.3125rem 0.75rem;
+  font-size: 0.75rem;
+  color: var(--t1);
+  background: rgb(var(--bg-rgb) / 0.92);
+  border: 1px solid rgb(var(--neon-rgb) / 0.45);
+  border-radius: 999px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 0.3);
+}
 /* Each step is a sentence after a dot: sky while it goes, green when done, red if it failed. */
 .step .what {
   width: 0.4375rem;
@@ -1660,13 +1725,6 @@ html.mac-inset aside .titlebar {
 .desk-task.on {
   color: var(--t1);
   border-color: var(--color-accent);
-}
-.trail-more {
-  font-size: 0.7rem;
-  color: var(--t3);
-  text-decoration: underline dotted;
-  text-align: left;
-  padding: 0.125rem 0;
 }
 .desk-hero {
   position: sticky;

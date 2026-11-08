@@ -127,6 +127,21 @@ type Step struct {
 	Shot string `json:"shot,omitempty"`
 }
 
+// StepPlan is the action of a step that is no action: what the kitty said it was about to do
+// (its words next to a batch of desktop actions), kept in the steps as the line the person
+// follows the task by, instead of in the message, which keeps the answer only.
+const StepPlan = "plan"
+
+// planStep is the kitty's words next to a batch of actions, as a step; ok is false when it said
+// nothing or the batch ends the task (then the words belong to the answer).
+func planStep(at time.Time, text string, actions []action) (Step, bool) {
+	text = strings.TrimSpace(text)
+	if text == "" || len(actions) == 0 || endsTask(actions) {
+		return Step{}, false
+	}
+	return Step{At: at, Action: StepPlan, Result: text}, true
+}
+
 // Session is one thread.
 type Session struct {
 	ID        string    `json:"id"`
@@ -162,6 +177,8 @@ type Session struct {
 	// owner and delegates (crew.go). More than one makes the chat a group of kitties.
 	Delegates []string `json:"delegates,omitempty"`
 	Kitties   []string `json:"kitties,omitempty"`
+	// Dismissed are delegates the person took off the chat: its old hand-overs no longer count.
+	Dismissed []string `json:"dismissed,omitempty"`
 	// Helping are the kitties at work on a subtask handed over from this chat right now: the page
 	// shows them working until they answer. Cleared when the gateway starts.
 	Helping []Helper `json:"helping,omitempty"`
@@ -206,6 +223,11 @@ type Service struct {
 	sessions map[string]*Session
 	// running serialises the turns of one session.
 	running map[string]*sync.Mutex
+	// handOvers holds the notices of hand-overs that ended, per chat, for HandOverWait so the
+	// ones that end close together go out as one message (crew.go).
+	handOverMu   sync.Mutex
+	handOvers    map[string][]notify.Notification
+	HandOverWait time.Duration
 	// vault holds the secrets a kitty may type without reading them, nil when there is none.
 	vault *vault.Store
 	// helps are the kitties waiting for the person's answer, by turn (help.go).
@@ -342,6 +364,7 @@ func (s *Service) SetNativeTools(on bool) { s.nativeTools = on }
 // New creates the service, loading the sessions kept in dir.
 func New(fleet Fleet, dir string) (*Service, error) {
 	s := &Service{fleet: fleet, dir: dir, sessions: map[string]*Session{}, running: map[string]*sync.Mutex{},
+		HandOverWait: time.Minute,
 		now: time.Now, newID: randomID, MaxRounds: 4, MaxSteps: 25, tasks: map[string]*task{}, nativeTools: true,
 		DefaultLimits: kitty.Limits{MaxTokens: 0, Retries: 1}, MaxDepth: 2, pollEvery: 200 * time.Millisecond,
 		BrainWait: DefaultBrainWait, brainEvery: 15 * time.Second,
@@ -640,7 +663,8 @@ func (s *Service) AddMembers(id string, members []string) (*Session, error) {
 	return sess, s.save(sess)
 }
 
-// RemoveMember takes a kitty out of a session.
+// RemoveMember takes a kitty out of a session: a member, or a delegate, which then stays out of
+// the chat's kitties until it is handed work there again (crew.go).
 func (s *Service) RemoveMember(id, ref string) (*Session, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -651,6 +675,11 @@ func (s *Service) RemoveMember(id, ref string) (*Session, error) {
 	k, err := s.fleet.Get(ref)
 	if err != nil {
 		return nil, err
+	}
+	if !contains(sess.Members, k.ID) && contains(sess.Delegates, k.ID) {
+		dismissDelegate(sess, k.ID)
+		sess.UpdatedAt = s.now()
+		return sess, s.save(sess)
 	}
 	if len(sess.Members) == 1 && sess.Members[0] == k.ID {
 		return nil, errors.New("a chat needs at least one kitty: delete the chat instead")
@@ -1531,7 +1560,10 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		} else {
 			st.actions, text = fromText(answer.Content)
 		}
-		if text = strings.TrimSpace(text); text != "" {
+		if plan, ok := planStep(s.now(), text, st.actions); ok {
+			// The kitty says what it goes on to do: a line the person follows, not the answer.
+			s.appendStep(id, index, plan)
+		} else if text = strings.TrimSpace(text); text != "" {
 			st.parts = append(st.parts, text)
 		}
 		if len(st.actions) == 0 {
@@ -1649,7 +1681,7 @@ func (s *Service) appendStep(id string, index int, step Step) {
 
 func (s *Service) markShot(id string, index int, name string) {
 	s.edit(id, index, func(t *Turn) {
-		if len(t.Steps) > 0 {
+		if len(t.Steps) > 0 && t.Steps[len(t.Steps)-1].Action != StepPlan {
 			// A copy: whoever holds the turn's steps (a reader of the session, a subscriber)
 			// never sees an element change under it.
 			steps := append([]Step(nil), t.Steps...)

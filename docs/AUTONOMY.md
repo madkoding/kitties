@@ -51,9 +51,11 @@ A kitty is not only something you talk to. Each one has an agenda:
   asked, with its own name and cat (a long answer opens whole on request), and a link to the
   thread between the two. While it works, the chat shows it at work with its cat and a link to
   follow it. The sidebar's *groups* button lists only the chats with more than one kitty. The
-  **+** beside a helper in the header makes it a member (it then answers there too). When a
+  **+** beside a helper in the header makes it a member (it then answers there too), and the
+  **×** takes it off the chat (its answers stay; it is back if handed work there again). When a
   hand-over finishes or fails, the lead hears it in its Reports thread (unless the lead asked),
-  and you do too if *Notifications* has "A kitty finished a subtask…" (`delegated`) on. An exposed chat
+  and you do too if *Notifications* has "A kitty finished a subtask…" (`delegated`) on; the
+  hand-overs of a chat that end within a minute arrive as one message. An exposed chat
   (guardrails) never delegates, so it stays a chat of one kitty.
 - **A journal.** Every run, event, retry, hand-over, cry for help and recovery is a line in the
   kitty's journal, in its drawer.

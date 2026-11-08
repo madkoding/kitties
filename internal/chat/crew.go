@@ -1,6 +1,8 @@
 package chat
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/madkoding/kitties/internal/kitty"
@@ -22,7 +24,7 @@ import (
 func refreshKitties(sess *Session) {
 	delegates := make([]string, 0, len(sess.Delegates))
 	add := func(id string) {
-		if id != "" && !contains(sess.Members, id) && !contains(delegates, id) {
+		if id != "" && !contains(sess.Members, id) && !contains(delegates, id) && !contains(sess.Dismissed, id) {
 			delegates = append(delegates, id)
 		}
 	}
@@ -63,6 +65,8 @@ func (s *Service) addDelegate(id, kittyID string) {
 	if !ok || contains(sess.Members, kittyID) || contains(sess.Delegates, kittyID) {
 		return
 	}
+	// Handed work again, a delegate the person took off is back.
+	sess.Dismissed = without(sess.Dismissed, kittyID)
 	sess.Delegates = append(sess.Delegates, kittyID)
 	_ = s.save(sess)
 }
@@ -126,13 +130,83 @@ func wholeAnswer(answer string, cut int) string {
 
 // tellDelegation says how a hand-over went: in the lead's Reports thread, unless the lead itself
 // asked (it has the answer already), and to the person when they chose to hear of hand-overs.
+// The notices of one chat that end within HandOverWait go out as one message.
 func (s *Service) tellDelegation(from, to *kitty.Kitty, title, body, chatID string) {
-	if lead := s.leadFor(to); lead != nil && lead.ID == from.ID {
-		if s.notifier != nil {
-			name, line := signed(lead, to, title)
-			s.notifier.Notify(notify.Notification{Event: notify.Delegated, Kitty: name, Title: line, Body: body, Chat: chatID})
-		}
+	lead := s.leadFor(to)
+	if lead != nil && lead.ID != from.ID {
+		s.report(lead, to, notify.Delegated, title, body, chatID)
+	}
+	if s.notifier == nil {
 		return
 	}
-	s.tell(notify.Delegated, to, title, body, chatID)
+	name, line := signed(lead, to, title)
+	s.queueHandOver(notify.Notification{Event: notify.Delegated, Kitty: name, Title: line, Body: body, Chat: chatID})
+}
+
+// queueHandOver keeps a hand-over's notice for HandOverWait, the first of a chat starting the
+// wait; with no wait it goes out at once.
+func (s *Service) queueHandOver(n notify.Notification) {
+	if s.HandOverWait <= 0 {
+		s.notifier.Notify(n)
+		return
+	}
+	s.handOverMu.Lock()
+	defer s.handOverMu.Unlock()
+	if s.handOvers == nil {
+		s.handOvers = map[string][]notify.Notification{}
+	}
+	if len(s.handOvers[n.Chat]) == 0 {
+		chat := n.Chat
+		time.AfterFunc(s.HandOverWait, func() { s.flushHandOvers(chat) })
+	}
+	s.handOvers[n.Chat] = append(s.handOvers[n.Chat], n)
+}
+
+// flushHandOvers sends a chat's waiting hand-over notices: one as it is, several as one message
+// that lists them.
+func (s *Service) flushHandOvers(chat string) {
+	s.handOverMu.Lock()
+	list := s.handOvers[chat]
+	delete(s.handOvers, chat)
+	s.handOverMu.Unlock()
+	if len(list) == 0 {
+		return
+	}
+	s.notifier.Notify(combineHandOvers(list))
+}
+
+// combineHandOvers is one notice for several hand-overs of a chat, in the name of the first.
+func combineHandOvers(list []notify.Notification) notify.Notification {
+	if len(list) == 1 {
+		return list[0]
+	}
+	lines := make([]string, len(list))
+	for i, n := range list {
+		lines[i] = "• " + n.Title
+		if n.Body != "" {
+			lines[i] += ": " + n.Body
+		}
+	}
+	first := list[0]
+	return notify.Notification{Event: notify.Delegated, Kitty: first.Kitty, Chat: first.Chat,
+		Title: fmt.Sprintf("%d hand-overs ended", len(list)), Body: strings.Join(lines, "\n")}
+}
+
+// dismissDelegate takes a delegate off a chat for good: its old hand-overs no longer bring it back.
+func dismissDelegate(sess *Session, kittyID string) {
+	sess.Delegates = without(sess.Delegates, kittyID)
+	if !contains(sess.Dismissed, kittyID) {
+		sess.Dismissed = append(sess.Dismissed, kittyID)
+	}
+}
+
+// without is list less id, nil when nothing is left.
+func without(list []string, id string) []string {
+	var out []string
+	for _, x := range list {
+		if x != id {
+			out = append(out, x)
+		}
+	}
+	return out
 }

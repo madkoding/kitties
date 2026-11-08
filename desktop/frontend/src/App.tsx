@@ -7,7 +7,7 @@ import Login from "./Login";
 import Welcome from "./Welcome";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
-import { IconMenu, IconMonitor, IconPlus, IconShield, IconTrash, IconUsers } from "./icons";
+import { IconMenu, IconMonitor, IconPlus, IconShield, IconTrash, IconUsers, IconX } from "./icons";
 import LiveDesktop from "./LiveDesktop";
 import { ConnectModal, KittyDrawer, NewChatModal, NewKittyModal } from "./Modals";
 import SettingsModal from "./Settings";
@@ -465,6 +465,31 @@ export default function App() {
     }
   };
 
+  // dismiss takes a kitty that helped through a hand-over off the chat: it is no longer shown as
+  // one of its kitties, until it is handed work there again.
+  const dismiss = async (k: Kitty) => {
+    if (!session) {
+      return;
+    }
+    if (
+      !(await ask(
+        t(
+          "Take {name} off this chat? Its answers stay; it shows again if it is handed work here.",
+          { name: k.name },
+        ),
+        t("Take it off"),
+      ))
+    ) {
+      return;
+    }
+    try {
+      setSession(await api.removeMember(session.id, k.id));
+      refresh();
+    } catch (e) {
+      setError(errText(e));
+    }
+  };
+
   // Every kitty of the chat: its members and the ones handed a subtask in it.
   const members = session
     ? chatKitties(session)
@@ -561,7 +586,7 @@ export default function App() {
                 size={18}
               />{" "}
               {k!.name}
-              {session && !session.members.includes(k!.id) && (
+              {session?.delegates?.includes(k!.id) && (
                 <button
                   class="plain tag-promote"
                   onClick={() => promote(k!)}
@@ -570,6 +595,17 @@ export default function App() {
                   data-testid="promote-delegate"
                 >
                   <IconPlus size={10} />
+                </button>
+              )}
+              {session?.delegates?.includes(k!.id) && (
+                <button
+                  class="plain tag-promote"
+                  onClick={() => dismiss(k!)}
+                  title={t("Take {name} off this chat", { name: k!.name })}
+                  aria-label={t("Take {name} off this chat", { name: k!.name })}
+                  data-testid="dismiss-delegate"
+                >
+                  <IconX size={10} />
                 </button>
               )}
             </span>

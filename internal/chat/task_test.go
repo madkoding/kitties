@@ -108,17 +108,18 @@ func TestDesktopTaskRunsInBackground(t *testing.T) {
 	}
 	got := waitDone(t, s, sess.ID)
 	turn := got.Turns[1]
-	if turn.Text != "Opening the site.\n\nI see it. Clicking.\n\nOpened example.com and clicked the link." {
+	// What it says between batches is a plan step the person follows, not part of the answer.
+	if turn.Text != "Opening the site.\n\nOpened example.com and clicked the link." {
 		t.Errorf("text = %q", turn.Text)
 	}
 	actions := []string{}
 	for _, st := range turn.Steps {
 		actions = append(actions, st.Action)
 	}
-	if strings.Join(actions, ",") != "open,wait,click,done" {
+	if strings.Join(actions, ",") != "open,wait,plan,click,done" || turn.Steps[2].Result != "I see it. Clicking." {
 		t.Errorf("steps = %v", actions)
 	}
-	if turn.Steps[1].Shot != "1-2.png" || turn.Steps[2].Shot != "1-3.png" || turn.Steps[0].Shot != "" {
+	if turn.Steps[1].Shot != "1-2.png" || turn.Steps[3].Shot != "1-4.png" || turn.Steps[0].Shot != "" || turn.Steps[2].Shot != "" {
 		t.Errorf("shots = %+v", turn.Steps)
 	}
 	if len(d.execs) != 2 || !strings.HasPrefix(d.execs[0], "a1:kitty-open https://example.com") || !strings.Contains(d.execs[1], "xdotool mousemove 10 20 click 1") {
@@ -542,5 +543,36 @@ func TestUnattendedTaskHasNoRoundCapByDefault(t *testing.T) {
 	turn := waitDone(t, s, sess.ID).Turns[1]
 	if turn.Resumable || turn.Detail != "" {
 		t.Errorf("the task stopped: %+v", turn)
+	}
+}
+
+func TestPlanStep(t *testing.T) {
+	now := time.Now()
+	click := []action{{kind: "tool", name: "click", args: map[string]any{"x": 1.0, "y": 2.0}}}
+	done := []action{{kind: "tool", name: "done", args: map[string]any{"summary": "ok"}}}
+	if st, ok := planStep(now, "  I open the browser.  ", click); !ok || st.Action != StepPlan || st.Result != "I open the browser." {
+		t.Errorf("plan = %+v %v", st, ok)
+	}
+	for _, c := range []struct {
+		text    string
+		actions []action
+	}{{"", click}, {"words", nil}, {"All good.", done}} {
+		if _, ok := planStep(now, c.text, c.actions); ok {
+			t.Errorf("%q with %v is no plan", c.text, c.actions)
+		}
+	}
+}
+
+func TestShotAfterAPlanIsItsOwnStep(t *testing.T) {
+	s, _, _ := deskService(t, "@tool done {\"summary\": \"x\"}")
+	sess, _ := s.Create("", []string{"ana"})
+	s.mu.Lock()
+	s.sessions[sess.ID].Turns = append(s.sessions[sess.ID].Turns, Turn{From: "ana", Steps: []Step{{Action: StepPlan, Result: "I look."}}})
+	s.mu.Unlock()
+	s.markShot(sess.ID, 0, "0-1.png")
+	got, _ := s.Get(sess.ID)
+	steps := got.Turns[0].Steps
+	if len(steps) != 2 || steps[0].Shot != "" || steps[1].Action != "screenshot" || steps[1].Shot != "0-1.png" {
+		t.Errorf("steps = %+v", steps)
 	}
 }

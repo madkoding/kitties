@@ -25,8 +25,9 @@ a desktop app and an Android app.
 ## Features
 
 - **A real desktop per kitty.** Ask it to open a site or fill a form: it works in the background,
-  looking at a screenshot after every action, while the chat shows each step. You can watch it live
-  and **take control** for what it cannot do alone (a password, a captcha).
+  looking at a screenshot after every action, while the chat shows a short line of what it is about to
+  do, with the actions folded under how many they were (a tap opens them) and the view following the
+  latest. You can watch it live and **take control** for what it cannot do alone (a password, a captcha).
 - **Files in the chat.** Attach pictures, PDFs, Office documents and text with the paperclip, by dragging
   them onto the page, by pasting, or with `/attach` in the CLI. The model sees pictures and PDFs where its provider reads
   them, gets the text of the rest, and a kitty with a machine finds the file in

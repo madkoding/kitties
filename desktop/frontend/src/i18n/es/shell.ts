@@ -62,6 +62,10 @@ const dict: Dictionary = {
   // Sidebar
   Chats: "Chats",
   "{count} kitties": "{count} kitties",
+  "Take {name} off this chat": "Quitar a {name} de este chat",
+  "Take {name} off this chat? Its answers stay; it shows again if it is handed work here.":
+    "¿Quitar a {name} de este chat? Sus respuestas se quedan; vuelve a aparecer si le encargan algo aquí.",
+  "Take it off": "Quitarlo",
   "Make {name} a member: it answers here too": "Hacer miembro a {name}: también responde aquí",
   "Make {name} a member of this chat? It will answer what you write here too.":
     "¿Hacer a {name} miembro de este chat? También responderá lo que escribas aquí.",

@@ -298,6 +298,8 @@ export interface Session {
   kitties?: string[];
   // helping are the kitties at work right now on a subtask handed over from this chat.
   helping?: Helper[];
+  // dismissed are delegates the person took off the chat.
+  dismissed?: string[];
 }
 
 // Helper is a kitty at work on a subtask handed over from a chat.
@@ -954,6 +956,12 @@ export const api = {
   createChat: (title: string, members: string[]) =>
     request<{ chat: Session }>("POST", "/v1/chats", { title, members }).then((r) => r.chat),
   deleteChat: (id: string) => request("DELETE", `/v1/chats/${id}`),
+  // removeMember takes a member out of a chat, or a delegate off it (until it is handed work there
+  // again).
+  removeMember: (id: string, ref: string) =>
+    request<{ chat: Session }>("DELETE", `/v1/chats/${id}/members/${encodeURIComponent(ref)}`).then(
+      (r) => r.chat,
+    ),
   addMembers: (id: string, members: string[]) =>
     request<{ chat: Session }>("POST", `/v1/chats/${id}/members`, { members }).then((r) => r.chat),
   send: async (id: string, text: string, files: File[] = []) => {

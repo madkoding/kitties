@@ -65,7 +65,11 @@ sequenceDiagram
     M-->>K: done: lo que logró
 ```
 
-Corre en segundo plano; cada paso, con su captura, aparece en el chat. Una tarea tiene límites
+Corre en segundo plano. En el chat la tarea se lee en frases cortas que la kitty escribe al pasar a
+algo nuevo ("Abro el navegador y busco vuelos a Lima": qué hace y para qué, nunca los clics), cada
+una con sus acciones plegadas bajo cuántas fueron; un toque las abre una por una, con su captura. El
+chat sigue lo último mientras estás al final; si subes para leer, espera y ofrece un botón para
+volver a lo último. Una tarea tiene límites
 (tiempo, rondas, tokens) y se puede cancelar en cualquier momento.
 
 ## Mirar sin imagen
