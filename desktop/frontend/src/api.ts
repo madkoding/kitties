@@ -305,6 +305,33 @@ export interface Session {
   helping?: Helper[];
   // dismissed are delegates the person took off the chat.
   dismissed?: string[];
+  // kind is what the thread is: a chat, a scheduled task's (goal) or a hand-over between two
+  // kitties; listed says it goes in the sidebar (a goal's thread and a hand-over not kept do not).
+  kind?: "chat" | "goal" | "handover";
+  listed?: boolean;
+  // keep marks a hand-over the person kept; expires_at is when one not kept goes.
+  keep?: boolean;
+  ended_at?: string;
+  expires_at?: string;
+}
+
+// isListed says a chat goes in the sidebar: an older gateway that does not tell its threads apart
+// lists them all.
+export function isListed(c: Session): boolean {
+  return c.listed !== false;
+}
+
+// Run is one run of a scheduled task: why it ran, how it ended and the kitty's last words.
+export interface Run {
+  turn: number;
+  turns: number;
+  at: string;
+  end?: string;
+  why?: string;
+  result: string;
+  answer?: string;
+  kitty?: string;
+  actions?: number;
 }
 
 // HandOverStat is how one kitty has handed work out (asked) and taken it on (took), and how much
@@ -491,6 +518,7 @@ export interface SettingsView {
     stand_ins?: string;
     lead_limits?: string;
     parallel_handovers?: string;
+    handover_keep?: string;
     lead_summary?: string;
   };
   accounts: Account[];
@@ -1094,6 +1122,14 @@ export const api = {
   removeGoal: (id: string) => request("DELETE", `/v1/goals/${id}`),
   runGoal: (id: string) =>
     request<{ ok: boolean; chat: string }>("POST", `/v1/goals/${id}/run`).then((r) => r.chat),
+  goalRuns: (id: string, n = 30) =>
+    request<{ chat: string; runs: Run[] }>("GET", `/v1/goals/${id}/runs?n=${n}`).then((r) => ({
+      chat: r.chat,
+      runs: r.runs || [],
+    })),
+  // keepChat keeps a hand-over thread (it stays, among the chats) or lets it go again.
+  keepChat: (id: string, keep: boolean) =>
+    request<{ chat: Session }>("PUT", `/v1/chats/${id}/keep`, { keep }).then((r) => r.chat),
   approvals: (status = "") =>
     request<{ approvals: Approval[] }>(
       "GET",
@@ -1164,6 +1200,7 @@ export const api = {
     stand_ins: string;
     lead_limits?: string;
     parallel_handovers?: string;
+    handover_keep?: string;
     lead_summary?: string;
   }) => request<SettingsView>("PUT", "/v1/settings/autonomy", a),
   testNotify: (connector = "") =>
