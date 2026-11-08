@@ -1,6 +1,6 @@
 import { useState } from "preact/hooks";
 import type { Goal, Kitty } from "./api";
-import { GoalsPanel } from "./Agenda";
+import { GoalsPanel, TASK_FILTERS } from "./Agenda";
 import { t } from "./i18n";
 import { Modal } from "./Modal";
 import PixelCat from "./PixelCat";
@@ -29,9 +29,13 @@ export default function ScheduledTasksModal({
   const focused = goals.find((g) => g.id === focus);
   // pick is the kitty whose tasks show; "" shows every kitty that has some.
   const [pick, setPick] = useState(focused?.kitty || "");
+  // filter keeps the tasks by how their last run ended.
+  const [filter, setFilter] = useState("all");
+  const keep = TASK_FILTERS.find((f) => f.id === filter)?.keep || (() => true);
+  const matching = goals.filter(keep);
   const shown = pick
     ? kitties.filter((k) => k.id === pick)
-    : kitties.filter((k) => goals.some((g) => g.kitty === k.id));
+    : kitties.filter((k) => matching.some((g) => g.kitty === k.id));
   return (
     <Modal title={t("Scheduled tasks")} onClose={onClose} wide>
       <p class="text-xs text-[var(--t4)] -mt-1 mb-3">
@@ -65,7 +69,28 @@ export default function ScheduledTasksModal({
           );
         })}
       </div>
-      {shown.length === 0 && (
+      <div class="flex flex-wrap items-center gap-1 mt-2" data-testid="tasks-filter">
+        <span class="text-xs text-[var(--t4)] mr-1">{t("Last run")}</span>
+        {TASK_FILTERS.map((f) => {
+          const n = goals.filter(f.keep).length;
+          return (
+            <button
+              key={f.id}
+              class={`tag chat-filter ${filter === f.id ? "tag-accent" : ""}`}
+              aria-pressed={filter === f.id}
+              disabled={f.id !== "all" && n === 0}
+              onClick={() => setFilter(f.id)}
+              data-filter={f.id}
+            >
+              {t(f.label)} {f.id !== "all" && n}
+            </button>
+          );
+        })}
+      </div>
+      {shown.length === 0 && filter !== "all" && (
+        <p class="text-sm text-[var(--t3)] mt-4">{t("No scheduled task matches.")}</p>
+      )}
+      {shown.length === 0 && filter === "all" && (
         <p class="text-sm text-[var(--t3)] mt-4" data-testid="tasks-empty">
           {kitties.length === 0
             ? t("No kitties yet.")
@@ -80,6 +105,7 @@ export default function ScheduledTasksModal({
             focus={focused?.kitty === k.id ? focused.id : undefined}
             onOpenChat={onOpenChat}
             onChanged={onChanged}
+            only={filter === "all" ? undefined : keep}
             heading={
               <span class="flex items-center gap-2">
                 <PixelCat breed={k.avatar?.breed} color={k.avatar?.color} size={18} />

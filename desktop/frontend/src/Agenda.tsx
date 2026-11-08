@@ -102,6 +102,23 @@ function runTag(r: string): string {
 
 // GoalRuns is a scheduled task's history: each run, newest first, with why it ran, how it
 // ended and the kitty's last words; the whole thread is a click away.
+// TASK_FILTERS sort the scheduled tasks by how their last run ended.
+export const TASK_FILTERS: { id: string; label: string; keep: (g: Goal) => boolean }[] = [
+  { id: "all", label: "all", keep: () => true },
+  {
+    id: "attention",
+    label: "need a look",
+    keep: (g) => ["blocked", "escalated", "failed"].includes(g.last_result || ""),
+  },
+  { id: "running", label: "running", keep: (g) => g.last_result === "running" },
+  {
+    id: "done",
+    label: "done",
+    keep: (g) => g.last_result === "done" || g.last_result === "delegated",
+  },
+  { id: "paused", label: "paused", keep: (g) => !g.enabled },
+];
+
 export function GoalRuns({ goal, onOpenChat }: { goal: Goal; onOpenChat: (id: string) => void }) {
   const [runs, setRuns] = useState<Run[] | null>(null);
   const [chat, setChat] = useState("");
@@ -186,6 +203,7 @@ export function GoalsPanel({
   focus,
   heading,
   onChanged,
+  only,
 }: {
   kitty: Kitty;
   onOpenChat: (id: string) => void;
@@ -194,8 +212,11 @@ export function GoalsPanel({
   // heading replaces the section's title (the window of every scheduled task names the kitty).
   heading?: preact.ComponentChildren;
   onChanged?: () => void;
+  // only keeps the tasks it says yes to (the window's filter by how they ended).
+  only?: (g: Goal) => boolean;
 }) {
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [every, setGoals] = useState<Goal[]>([]);
+  const goals = only ? every.filter(only) : every;
   const [allGoals, setAllGoals] = useState(!!focus);
   const [history, setHistory] = useState<string | null>(focus || null);
   const [connectors, setConnectors] = useState<ConnectorView[]>([]);
@@ -261,7 +282,7 @@ export function GoalsPanel({
           </>
         )}
       </div>
-      {goals.length === 0 && !adding && (
+      {every.length === 0 && !adding && (
         <p class="text-xs text-[var(--t4)]">
           {t("No scheduled tasks yet: {name} only works when asked.", { name: kitty.name })}
         </p>

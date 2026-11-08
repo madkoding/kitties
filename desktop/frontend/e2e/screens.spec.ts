@@ -1407,7 +1407,7 @@ test("a chat where a kitty hands a subtask to another reads as a group of both",
   await expect(chats.getByRole("button", { name: "Announcement", exact: true })).toBeVisible();
   // The thread between the two is no chat of the person: the sidebar leaves it out (luna's
   // answer is in the chat that asked), and it says when it goes.
-  await expect(chats.getByRole("button", { name: "mimi → luna" })).toHaveCount(0);
+  await expect(chats.getByRole("button", { name: "mimi → luna", exact: true })).toHaveCount(0);
   await reply.getByRole("link").click();
   await expect(page.locator("h1", { hasText: "mimi → luna" })).toBeVisible();
   await expect(page.getByText("summarise the launch plan").first()).toBeVisible();
@@ -1420,15 +1420,18 @@ test("a chat where a kitty hands a subtask to another reads as a group of both",
   // Kept, it stays and shows among the chats; let go, it leaves them again.
   await note.getByTestId("thread-keep").click();
   await expect(note.getByTestId("thread-expiry")).toContainText("Kept");
-  await expect(chats.getByRole("button", { name: "mimi → luna" })).toBeVisible();
+  await expect(chats.getByRole("button", { name: "mimi → luna", exact: true })).toBeVisible();
   await expect(
-    chats.getByRole("button", { name: "mimi → luna" }).locator("xpath=..").locator(".tag", {
-      hasText: "kept",
-    }),
+    chats
+      .getByRole("button", { name: "mimi → luna", exact: true })
+      .locator("xpath=..")
+      .locator(".tag", {
+        hasText: "kept",
+      }),
   ).toBeVisible();
   await note.getByTestId("thread-keep").click();
   await expect(note.getByTestId("thread-expiry")).toContainText("Deleted after");
-  await expect(chats.getByRole("button", { name: "mimi → luna" })).toHaveCount(0);
+  await expect(chats.getByRole("button", { name: "mimi → luna", exact: true })).toHaveCount(0);
 });
 
 test("a kitty that helped through a hand-over can be made a member of the chat, or taken off it", async ({
@@ -1592,8 +1595,10 @@ test("the scheduled tasks have a section of their own, with each one's history",
   await expect(section.getByTestId("task-row").first()).toBeVisible();
   // The goals' threads are not among the chats.
   const chats = page.getByTestId("sidebar-chats");
-  await expect(chats.getByRole("button", { name: "Inbox check" })).toHaveCount(0);
-  await expect(chats.getByRole("button", { name: "Triage new issues" })).toHaveCount(0);
+  await expect(chats.getByRole("button", { name: "Inbox check", exact: true })).toHaveCount(0);
+  await expect(chats.getByRole("button", { name: "Triage new issues", exact: true })).toHaveCount(
+    0,
+  );
   // One click opens the task with its runs in view.
   await section.getByRole("button", { name: "Inbox check" }).click();
   const box = page.getByTestId("scheduled-tasks");
@@ -1610,6 +1615,12 @@ test("the scheduled tasks have a section of their own, with each one's history",
   expect(listed.chats.some((c: { title: string }) => c.title === "Inbox check")).toBeFalsy();
   const goal = await (await page.request.get(`${GATEWAY}/v1/chats?kind=goal`, { headers })).json();
   expect(goal.chats.some((c: { title: string }) => c.title === "Inbox check")).toBeTruthy();
+  // The filter keeps the tasks by how their last run ended.
+  const filters = page.getByTestId("tasks-filter");
+  await filters.locator('[data-filter="done"]').click();
+  await expect(box.getByTestId("goal").filter({ hasText: "Inbox check" })).toBeVisible();
+  await expect(filters.locator('[data-filter="attention"]')).toBeDisabled();
+  await filters.locator('[data-filter="all"]').click();
   // Every kitty: the tabs pick one kitty's tasks.
   await page.getByTestId("tasks-kitties").getByRole("tab", { name: /tom/ }).click();
   await expect(box.getByTestId("goal")).toHaveCount(0);
@@ -2511,7 +2522,10 @@ test("in a kitty's drawer the desktop is there, live, and one click on it takes 
   // The desktop comes right after the header, above the goals and the journal: those grow and
   // must not push it down.
   const deskBox = (await live.boundingBox())!;
-  const goalsBox = (await drawer.getByText("Scheduled tasks", { exact: true }).first().boundingBox())!;
+  const goalsBox = (await drawer
+    .getByText("Scheduled tasks", { exact: true })
+    .first()
+    .boundingBox())!;
   const journalBox = (await drawer.getByText("Journal", { exact: true }).first().boundingBox())!;
   expect(deskBox.y).toBeLessThan(goalsBox.y);
   expect(deskBox.y).toBeLessThan(journalBox.y);
@@ -4010,8 +4024,8 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     // Each row lists the kitty's hand-over threads, one click from opening them.
     await stats.getByTestId("handover-row").filter({ hasText: "mimi" }).getByRole("button").click();
     const threads = stats.getByTestId("handover-threads");
-    await expect(threads.getByRole("button", { name: "mimi → luna" })).toBeVisible();
-    await threads.getByRole("button", { name: "mimi → luna" }).click();
+    await expect(threads.getByRole("button", { name: "mimi → luna", exact: true })).toBeVisible();
+    await threads.getByRole("button", { name: "mimi → luna", exact: true }).click();
     await expect(page.locator("h1", { hasText: "mimi → luna" })).toBeVisible();
 
     // Another kitty's drawer offers to take the lead.
@@ -4022,6 +4036,18 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     await open(page, `#kitty/${luna.id}`);
     await page.getByRole("button", { name: "Open reports" }).click();
     await expect(page.getByText("finished a goal", { exact: false }).first()).toBeVisible();
+    // The Reports thread has a section of its own in the sidebar, between the chats and the
+    // scheduled tasks, and is not among the chats.
+    const order = await page
+      .locator("aside section[data-testid]")
+      .evaluateAll((els) => els.map((e) => e.getAttribute("data-testid")));
+    expect(order).toEqual(["sidebar-kitties", "sidebar-chats", "sidebar-reports", "sidebar-tasks"]);
+    await expect(
+      page.getByTestId("sidebar-reports").getByRole("button", { name: "Reports" }),
+    ).toBeVisible();
+    await expect(
+      page.getByTestId("sidebar-chats").getByRole("button", { name: "Reports", exact: true }),
+    ).toHaveCount(0);
     await shot(page, "72-lead-reports");
 
     // One click asks the lead to sum the reports up, in that same thread.

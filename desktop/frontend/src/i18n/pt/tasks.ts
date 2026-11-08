@@ -37,6 +37,11 @@ const dict: Dictionary = {
   "Keep the threads between two kitties for": "Manter as conversas entre dois kitties por",
   "When a kitty hands a subtask to another, the answer shows in the chat that asked; the thread between the two is deleted this long after the work ends (1h to 2160h), unless you keep it. Write off to keep them all.":
     "Quando um kitty passa uma subtarefa para outro, a resposta aparece no chat que pediu; a conversa entre os dois é apagada esse tempo depois de terminar (1h a 2160h), a menos que você a mantenha. Escreva off para manter todas.",
+  "Last run": "Última execução",
+  "No scheduled task matches.": "Nenhuma tarefa agendada corresponde.",
+  Reports: "Relatórios",
+  all: "todas",
+  "need a look": "a revisar",
 };
 
 export default dict;

@@ -141,11 +141,14 @@ export default function Sidebar(p: Props) {
       /* kept for this visit only */
     }
   };
-  const groups = p.chats.filter((c) => chatKitties(c).length > 1);
+  // The lead's Reports thread has a section of its own, after the chats.
+  const reports = p.chats.filter((c) => c.reports);
+  const plain = p.chats.filter((c) => !c.reports);
+  const groups = plain.filter((c) => chatKitties(c).length > 1);
   // query finds chats by their title, description or last words.
   const [query, setQuery] = useState("");
   const words = fold(query).split(/\s+/).filter(Boolean);
-  const chats = (onlyGroups ? groups : p.chats).filter(
+  const chats = (onlyGroups ? groups : plain).filter(
     (c) =>
       words.length === 0 ||
       words.every((w) => fold(`${c.title} ${c.description || ""} ${c.gist || ""}`).includes(w)),
@@ -209,75 +212,6 @@ export default function Sidebar(p: Props) {
             </button>
           </section>
 
-          {p.goals !== null && p.kitties.length > 0 && (
-            <section aria-labelledby="sidebar-tasks" data-testid="sidebar-tasks">
-              <div class="flex items-center justify-between">
-                <h2 id="sidebar-tasks" class="section-title">
-                  {t("Scheduled tasks")}
-                </h2>
-                {p.goals.length > FEW_TASKS && (
-                  <button
-                    class="tag chat-filter"
-                    onClick={() => p.onOpenTasks()}
-                    data-testid="tasks-all"
-                  >
-                    {t("all {count}", { count: p.goals.length })}
-                  </button>
-                )}
-              </div>
-              {p.goals.length === 0 && (
-                <div class="px-3 text-xs text-[var(--t4)]">{t("No scheduled tasks yet.")}</div>
-              )}
-              {p.goals.slice(0, FEW_TASKS).map((g) => {
-                const k = byId.get(g.kitty);
-                const next = g.enabled && g.every && g.next_run ? when(g.next_run) : "";
-                return (
-                  <div
-                    key={g.id}
-                    class={`row task-row ${g.enabled ? "" : "off"}`}
-                    data-testid="task-row"
-                  >
-                    <button
-                      class="row-hit"
-                      onClick={() => p.onOpenTasks(g.id)}
-                      aria-label={g.title}
-                    />
-                    {k && (
-                      <PixelCat
-                        breed={k.avatar?.breed}
-                        color={k.avatar?.color}
-                        mood={g.last_result === "running" ? "working" : moodOf(k)}
-                        size={22}
-                      />
-                    )}
-                    <span class="flex-1 min-w-0 flex flex-col">
-                      <span class="truncate text-sm">{g.title}</span>
-                      <span class="task-when">
-                        <IconClock size={10} />
-                        {!g.enabled
-                          ? t("paused")
-                          : next
-                            ? t("next {time}", { time: next })
-                            : g.every
-                              ? describeEvery(g.every)
-                              : t("on events")}
-                      </span>
-                    </span>
-                    {g.last_result && <span class={`tag ${taskTag(g)}`}>{t(g.last_result)}</span>}
-                  </div>
-                );
-              })}
-              <button
-                class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm"
-                onClick={() => p.onOpenTasks()}
-                data-testid="tasks-open"
-              >
-                <IconClock size={14} />{" "}
-                {p.goals.length > 0 ? t("See scheduled tasks") : t("New scheduled task")}
-              </button>
-            </section>
-          )}
-
           <section aria-labelledby="sidebar-chats" data-testid="sidebar-chats">
             <div class="flex items-center justify-between">
               <h2 id="sidebar-chats" class="section-title">
@@ -299,7 +233,7 @@ export default function Sidebar(p: Props) {
                 </button>
               )}
             </div>
-            {(p.chats.length >= SEARCH_FROM || query) && (
+            {(plain.length >= SEARCH_FROM || query) && (
               <label class="chat-search">
                 <IconSearch size={12} class="text-[var(--t4)] flex-none" />
                 <input
@@ -315,7 +249,7 @@ export default function Sidebar(p: Props) {
                 />
               </label>
             )}
-            {p.chats.length === 0 && (
+            {plain.length === 0 && (
               <div class="px-3 text-xs text-[var(--t4)]">{t("No chats yet.")}</div>
             )}
             {words.length > 0 && chats.length === 0 && (
@@ -323,7 +257,7 @@ export default function Sidebar(p: Props) {
                 {t("No chat matches “{query}”.", { query: query.trim() })}
               </div>
             )}
-            {onlyGroups && words.length === 0 && p.chats.length > 0 && chats.length === 0 && (
+            {onlyGroups && words.length === 0 && plain.length > 0 && chats.length === 0 && (
               <div class="px-3 text-xs text-[var(--t4)]">{t("No group chats yet.")}</div>
             )}
             {chats.map((c, i) => (
@@ -417,6 +351,116 @@ export default function Sidebar(p: Props) {
               <IconPlus size={14} /> {t("New chat")}
             </button>
           </section>
+
+          {reports.length > 0 && (
+            <section aria-labelledby="sidebar-reports" data-testid="sidebar-reports">
+              <h2 id="sidebar-reports" class="section-title">
+                {t("Reports")}
+              </h2>
+              {reports.map((c) => {
+                const k = byId.get(c.members[0]);
+                return (
+                  <div key={c.id} class={`row chat-row ${p.current === c.id ? "on" : ""}`}>
+                    <button
+                      class="row-hit"
+                      onClick={() => p.onOpenChat(c.id)}
+                      aria-label={c.title}
+                      aria-current={p.current === c.id ? "page" : undefined}
+                    />
+                    {k && (
+                      <PixelCat
+                        breed={k.avatar?.breed}
+                        color={k.avatar?.color}
+                        mood={p.workingChats.has(c.id) ? "working" : moodOf(k)}
+                        size={26}
+                      />
+                    )}
+                    <span class="flex-1 min-w-0 flex flex-col">
+                      <span class="flex items-center gap-1.5 min-w-0">
+                        {c.needs_help && <span class="tag tag-amber">{t("help")}</span>}
+                        <span class="truncate text-sm">{c.title}</span>
+                        {k && <span class="text-[0.625rem] text-[var(--t4)]">{k.name}</span>}
+                      </span>
+                      {c.gist && (
+                        <span class="chat-gist" data-testid="chat-gist" title={gistLine(c)}>
+                          {gistLine(c)}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </section>
+          )}
+
+          {p.goals !== null && p.kitties.length > 0 && (
+            <section aria-labelledby="sidebar-tasks" data-testid="sidebar-tasks">
+              <div class="flex items-center justify-between">
+                <h2 id="sidebar-tasks" class="section-title">
+                  {t("Scheduled tasks")}
+                </h2>
+                {p.goals.length > FEW_TASKS && (
+                  <button
+                    class="tag chat-filter"
+                    onClick={() => p.onOpenTasks()}
+                    data-testid="tasks-all"
+                  >
+                    {t("all {count}", { count: p.goals.length })}
+                  </button>
+                )}
+              </div>
+              {p.goals.length === 0 && (
+                <div class="px-3 text-xs text-[var(--t4)]">{t("No scheduled tasks yet.")}</div>
+              )}
+              {p.goals.slice(0, FEW_TASKS).map((g) => {
+                const k = byId.get(g.kitty);
+                const next = g.enabled && g.every && g.next_run ? when(g.next_run) : "";
+                return (
+                  <div
+                    key={g.id}
+                    class={`row task-row ${g.enabled ? "" : "off"}`}
+                    data-testid="task-row"
+                  >
+                    <button
+                      class="row-hit"
+                      onClick={() => p.onOpenTasks(g.id)}
+                      aria-label={g.title}
+                    />
+                    {k && (
+                      <PixelCat
+                        breed={k.avatar?.breed}
+                        color={k.avatar?.color}
+                        mood={g.last_result === "running" ? "working" : moodOf(k)}
+                        size={22}
+                      />
+                    )}
+                    <span class="flex-1 min-w-0 flex flex-col">
+                      <span class="truncate text-sm">{g.title}</span>
+                      <span class="task-when">
+                        <IconClock size={10} />
+                        {!g.enabled
+                          ? t("paused")
+                          : next
+                            ? t("next {time}", { time: next })
+                            : g.every
+                              ? describeEvery(g.every)
+                              : t("on events")}
+                      </span>
+                    </span>
+                    {g.last_result && <span class={`tag ${taskTag(g)}`}>{t(g.last_result)}</span>}
+                  </div>
+                );
+              })}
+              <button
+                class="btn-outline w-full mt-2 flex items-center gap-2 px-3 py-2 text-sm"
+                onClick={() => p.onOpenTasks()}
+                data-testid="tasks-open"
+              >
+                <IconClock size={14} />{" "}
+                {p.goals.length > 0 ? t("See scheduled tasks") : t("New scheduled task")}
+              </button>
+            </section>
+          )}
         </div>
 
         {p.update && (
