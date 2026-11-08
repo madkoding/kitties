@@ -199,14 +199,14 @@ func TestLeadTasksAreReadFresh(t *testing.T) {
 func TestTeamGoalsReachThePersonAsOneMessage(t *testing.T) {
 	f, _, _, _ := fleet(t)
 	s := service(t, f)
-	s.HandOverWait = 20 * time.Millisecond
+	s.HandOverWait = time.Hour
 	b := &bell{}
 	s.SetNotifier(b)
 	f.kitties["b1"].Lead = true
 	ana, _ := f.Get("ana")
 	s.tell(notify.GoalDone, ana, "finished a goal", "inbox", "c1")
 	s.tell(notify.GoalDone, ana, "finished a goal", "invoices", "c2")
-	time.Sleep(100 * time.Millisecond)
+	s.FlushHandOvers()
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if len(b.seen) != 1 {

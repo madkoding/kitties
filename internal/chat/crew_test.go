@@ -178,14 +178,16 @@ func TestHandOversFoldIntoOneNotice(t *testing.T) {
 	s := service(t, f)
 	b := &bell{}
 	s.SetNotifier(b)
-	s.HandOverWait = 50 * time.Millisecond
+	// A wait longer than the test: the notices are let go by hand once both hand-overs ended, so
+	// how fast the machine runs them does not matter.
+	s.HandOverWait = time.Hour
 	chat, _ := s.Create("", []string{"bo"})
 	sb.replies = []string{"@delegate ana {\"task\": \"count\"}\n@delegate ana {\"task\": \"spell\"}", "ok"}
 	sa.replies = []string{"three", "c-a-t"}
 	if _, err := s.Send(context.Background(), chat.ID, "go"); err != nil {
 		t.Fatal(err)
 	}
-	time.Sleep(200 * time.Millisecond)
+	s.FlushHandOvers()
 	var got []notify.Notification
 	b.mu.Lock()
 	seen := append([]notify.Notification(nil), b.seen...)
