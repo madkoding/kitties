@@ -1,5 +1,7 @@
 package chat
 
+import "time"
+
 // THE KITTIES OF A CHAT.
 //
 // A chat's members are the kitties the person talks to there: they answer what is written. When
@@ -58,4 +60,61 @@ func (s *Service) addDelegate(id, kittyID string) {
 	}
 	sess.Delegates = append(sess.Delegates, kittyID)
 	_ = s.save(sess)
+}
+
+// Helper is a kitty at work on a subtask handed over from a chat.
+type Helper struct {
+	Kitty   string    `json:"kitty"`
+	KittyID string    `json:"kitty_id"`
+	From    string    `json:"from"` // the kitty that asked
+	Task    string    `json:"task"`
+	Chat    string    `json:"chat"` // the thread between the two
+	Since   time.Time `json:"since"`
+}
+
+// helping marks a kitty at work for a chat, and returns what ends it: the watchers of the chat
+// are told both times ("helping"), so the page shows the kitty working while it does.
+func (s *Service) helping(id string, h Helper) func() {
+	s.setHelping(id, func(list []Helper) []Helper { return append(list, h) })
+	return func() {
+		s.setHelping(id, func(list []Helper) []Helper {
+			kept := list[:0]
+			for _, x := range list {
+				if x.KittyID != h.KittyID || x.Chat != h.Chat {
+					kept = append(kept, x)
+				}
+			}
+			if len(kept) == 0 {
+				return nil
+			}
+			return kept
+		})
+	}
+}
+
+func (s *Service) setHelping(id string, fn func([]Helper) []Helper) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	if !ok {
+		return
+	}
+	sess.Helping = fn(append([]Helper(nil), sess.Helping...))
+	_ = s.save(sess)
+	s.emitLocked(Event{Type: "helping", Session: id, Index: -1})
+}
+
+// answerMax is the most of a delegate's answer kept whole in the chat that asked.
+const answerMax = 20000
+
+// wholeAnswer is the answer to keep beside the cut Result: empty when Result holds it all.
+func wholeAnswer(answer string, cut int) string {
+	if len(answer) <= cut {
+		return ""
+	}
+	r := []rune(answer)
+	if len(r) > answerMax {
+		return string(r[:answerMax]) + "…"
+	}
+	return answer
 }

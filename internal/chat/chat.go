@@ -108,7 +108,9 @@ type Delegation struct {
 	Chat    string `json:"chat"` // where it happened
 	Task    string `json:"task"`
 	Result  string `json:"result,omitempty"`
-	Error   string `json:"error,omitempty"`
+	// Answer is the whole answer, up to answerMax, when Result had to be cut.
+	Answer string `json:"answer,omitempty"`
+	Error  string `json:"error,omitempty"`
 	// Limits says what the lead gave the kitty for this task alone, when it did.
 	Limits string `json:"limits,omitempty"`
 }
@@ -160,6 +162,9 @@ type Session struct {
 	// owner and delegates (crew.go). More than one makes the chat a group of kitties.
 	Delegates []string `json:"delegates,omitempty"`
 	Kitties   []string `json:"kitties,omitempty"`
+	// Helping are the kitties at work on a subtask handed over from this chat right now: the page
+	// shows them working until they answer. Cleared when the gateway starts.
+	Helping []Helper `json:"helping,omitempty"`
 }
 
 // NeedsHelp reports whether the last turn is a kitty asking the person for help.
@@ -293,7 +298,7 @@ type task struct {
 
 // Event is what a watcher of a session is told.
 type Event struct {
-	Type    string `json:"type"` // turn | update | done | deleted
+	Type    string `json:"type"` // turn | update | done | deleted | helping
 	Session string `json:"session"`
 	Index   int    `json:"index"`
 	Turn    *Turn  `json:"turn,omitempty"`
@@ -556,6 +561,7 @@ func (s *Service) load() error {
 		// Recomputed rather than trusted: a chat saved before gists, or under older masking rules.
 		refreshGist(&sess)
 		refreshKitties(&sess)
+		sess.Helping = nil // nobody is still at work after a restart
 		s.sessions[sess.ID] = &sess
 	}
 	return nil
@@ -712,6 +718,7 @@ func (s *Service) Get(id string) (*Session, error) {
 	c.Members = append([]string(nil), sess.Members...)
 	c.Delegates = append([]string(nil), sess.Delegates...)
 	c.Kitties = append([]string(nil), sess.Kitties...)
+	c.Helping = append([]Helper(nil), sess.Helping...)
 	c.Turns = append([]Turn(nil), sess.Turns...)
 	c.Help = sess.NeedsHelp()
 	return &c, nil

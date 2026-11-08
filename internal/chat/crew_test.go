@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -87,5 +88,41 @@ func TestExposedChatDoesNotBecomeAGroup(t *testing.T) {
 	got, _ := s.Get(id)
 	if got.Crew() || len(got.Delegates) != 0 || len(sb.seen) != 0 {
 		t.Errorf("exposed chat: kitties %v, bo asked %d times", got.Kitties, len(sb.seen))
+	}
+}
+
+// While a delegate works the chat shows it as helping, and a long answer is kept whole too.
+func TestDelegateHelpingAndWholeAnswer(t *testing.T) {
+	f, sa, sb, _ := fleet(t)
+	s := service(t, f)
+	sess, _ := s.Create("", []string{"ana"})
+	events, stop := s.Subscribe(sess.ID)
+	defer stop()
+	long := strings.Repeat("a long answer, ", 40)
+	sa.replies = []string{"@delegate bo {\"task\": \"write a lot\"}", "done"}
+	sb.replies = []string{long}
+	turns, err := s.Send(context.Background(), sess.ID, "go")
+	if err != nil {
+		t.Fatal(err)
+	}
+	helping := 0
+	for len(events) > 0 {
+		if ev := <-events; ev.Type == "helping" {
+			helping++
+		}
+	}
+	if helping != 2 {
+		t.Errorf("helping events = %d, want start and end", helping)
+	}
+	if got, _ := s.Get(sess.ID); len(got.Helping) != 0 {
+		t.Errorf("still helping: %+v", got.Helping)
+	}
+	d := turns[0].Delegations[0]
+	if len(d.Result) > 310 || d.Answer != strings.TrimSpace(long) {
+		t.Errorf("result %d bytes, answer %d bytes", len(d.Result), len(d.Answer))
+	}
+	// A short answer is not kept twice.
+	if wholeAnswer("short", 300) != "" {
+		t.Error("short answer kept twice")
 	}
 }

@@ -198,13 +198,16 @@ func (s *Service) delegate(ctx context.Context, id string, a action, k *kitty.Ki
 		d.Limits = line
 		s.note(target, agenda.KindLimit, "", did, k.Name+" gave "+line)
 	}
+	done := s.helping(id, Helper{Kitty: target.Name, KittyID: target.ID, From: k.Name, Task: d.Task, Chat: did, Since: s.now()})
 	answer, err := s.askKitty(ctx, did, k, target, task)
+	done()
 	if err != nil {
 		d.Error = err.Error()
 		turn.Delegations = append(turn.Delegations, d)
 		return outcome{action: a, err: target.Name + ": " + err.Error()}
 	}
 	d.Result = clip(answer, 300)
+	d.Answer = wholeAnswer(answer, 300)
 	turn.Delegations = append(turn.Delegations, d)
 	return outcome{action: a, text: target.Name + " answered:\n" + answer}
 }
