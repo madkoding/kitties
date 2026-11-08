@@ -328,7 +328,10 @@ with `@tool <name> <json>` lines. When a reply carries such lines:
 3. After the batch a screenshot is taken, saved under the chat's folder, attached to the turn's
    last step and shown to the model as an image together with the results. Every provider
    family carries images (data URLs for chat completions and responses, base64 blocks for
-   Anthropic and Gemini). Only the last screenshots go as pictures: the client
+   Anthropic and Gemini). The model gets the screenshot as JPEG (quality 85, same size, so its
+   coordinates are the screen's) when that is clearly lighter than the PNG, which the chat keeps;
+   `fitContext` weighs each picture by its pixels (about 750 per token, 85 to 1,600 tokens).
+   Only the last screenshots go as pictures: the client
    (`internal/provider/lighten.go`) sends the last 6 to 11 (the cut moves in steps of 6, so the
    prompt cache keeps the start of the conversation) and at most 12 MB of pictures and documents;
    the older ones go as a line "(N earlier picture(s) left out to keep the request light)".

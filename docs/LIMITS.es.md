@@ -25,7 +25,7 @@ puede frenar una petición viene del modelo, no de Kitties.
 - **Tamaño de la respuesta.** Lo máximo que puede escribir una respuesta; Anthropic exige el valor.
   Sube `max_tokens` si el modelo permite más, bájalo si permite menos (rechazaría la petición).
 - **Imágenes (5 MB) y PDF (32 MB).** Límites de tamaño de los propios proveedores.
-- **Tamaño de la petición.** Una petición lleva como imagen las últimas 6 a 11 capturas y como
+- **Tamaño de la petición.** Las capturas van al modelo en JPEG cuando pesan menos (mismo tamaño). Una petición lleva como imagen las últimas 6 a 11 capturas y como
   mucho 12 MB entre imágenes y documentos; las anteriores se nombran en una línea. Si el proveedor
   igual responde «failed to read request body» (demasiado grande, o cortada por un proxy), se
   reenvía solo con las 2 últimas, y el chat lo dice en palabras simples.

@@ -1633,7 +1633,7 @@ func (s *Service) screenMessageWith(id string, index int, png []byte, err error,
 		m.Content = "The screenshot failed: " + err.Error() + ". Continue with your next actions, or call done when the task is finished."
 	} else if name, err := s.saveShot(id, index, png); err == nil {
 		s.markShot(id, index, name)
-		m.Images = []provider.Image{{MIME: "image/png", Data: png}}
+		m.Images = []provider.Image{forModel(png)}
 	}
 	if before != "" {
 		m.Content = before + "\n" + m.Content
@@ -1826,17 +1826,17 @@ func (s *Service) transcriptFor(id string, brain provider.Client, paths map[stri
 // messages go (after the first, the system prompt), instead of sending what the provider would
 // refuse. A fifth of the window is left for the answer. Nothing is dropped while it fits, and the
 // last message is always kept.
-// What pictures and documents weigh in fitContext, in characters: a picture is about 1,600 tokens;
-// a document's bytes count a fiftieth of a token each.
-const (
-	imageChars       = 1600 * attach.CharsPerToken
-	fileBytesPerChar = 50 / attach.CharsPerToken
-)
+// What documents weigh in fitContext: a document's bytes count a fiftieth of a token each. A
+// picture weighs by its pixels (imageTokens).
+const fileBytesPerChar = 50 / attach.CharsPerToken
 
 func fitContext(messages []provider.Message, window int) []provider.Message {
 	budget := window / 5 * 4 * attach.CharsPerToken
 	size := func(m provider.Message) int {
-		n := len(m.Content) + len(m.Images)*imageChars
+		n := len(m.Content)
+		for _, img := range m.Images {
+			n += imageTokens(img) * attach.CharsPerToken
+		}
 		for _, f := range m.Files {
 			n += len(f.Data) / fileBytesPerChar
 		}
