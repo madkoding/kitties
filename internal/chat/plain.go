@@ -10,10 +10,18 @@ import (
 
 var httpStatus = regexp.MustCompile(`\bHTTP (\d{3})\b`)
 
+// BodyUnread is what a person reads when the model's service could not take a request: too big,
+// or cut off on the way, even after it was sent again with fewer screenshots.
+const BodyUnread = "the message to the model was too big or got cut off on the way: try again, or start a new chat if it keeps happening"
+
 // Plain says an error the way a person who is not technical understands it, and what they can
 // do about it. An error it does not recognise is kept as it is, which is better than a guess.
 func Plain(msg string) string {
 	low := strings.ToLower(msg)
+	if strings.Contains(low, "failed to read request body") || strings.Contains(low, "request entity too large") ||
+		strings.Contains(low, "payload too large") || strings.Contains(msg, "HTTP 413") {
+		return BodyUnread
+	}
 	if m := httpStatus.FindStringSubmatch(msg); m != nil {
 		switch code := m[1]; {
 		case code == "401":

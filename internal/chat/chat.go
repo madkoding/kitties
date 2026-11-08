@@ -1357,7 +1357,7 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 			break
 		}
 		s.note(k, agenda.KindRetry, "", id, fmt.Sprintf("attempt %d failed (%s); trying another way", attempt+1, fail))
-		st.parts = append(st.parts, fmt.Sprintf("(attempt %d failed: %s; trying another way)", attempt+1, fail))
+		st.parts = append(st.parts, fmt.Sprintf("(attempt %d failed: %s; trying another way)", attempt+1, Plain(fail)))
 		st.messages = append(st.messages, provider.Message{Role: "user", Content: "That attempt failed: " + fail + ". Try a different approach: do not repeat the same actions, and call done when the task is finished."})
 		st.actions, st.rounds = nil, 0
 	}

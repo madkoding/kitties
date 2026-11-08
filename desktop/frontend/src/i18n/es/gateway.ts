@@ -36,6 +36,8 @@ const dict: Dictionary = {
     "el servicio tardó demasiado en responder: inténtalo de nuevo en un rato",
   "the service could not be reached: check the internet connection, or that it is running":
     "no se pudo llegar al servicio: revisa la conexión a internet, o que esté funcionando",
+  "the message to the model was too big or got cut off on the way: try again, or start a new chat if it keeps happening":
+    "el mensaje al modelo era demasiado grande o se cortó en el camino: inténtalo de nuevo, o abre un chat nuevo si se repite",
 };
 
 export default dict;

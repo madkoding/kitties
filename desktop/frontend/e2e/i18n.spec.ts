@@ -52,3 +52,22 @@ test("every text of the page has its Spanish and its Portuguese", async () => {
   );
   expect(wrong).toEqual([]);
 });
+
+// The gateway's plain sentences for an error (internal/chat/plain.go) are what a person reads in
+// "(ana could not finish: …)": each has its Spanish and its Portuguese, or the page shows English.
+test("every plain error sentence of the gateway has its Spanish and its Portuguese", async () => {
+  const es = await load("es");
+  const pt = await load("pt");
+  const plain = fs.readFileSync(
+    path.join(src, "..", "..", "..", "internal", "chat", "plain.go"),
+    "utf8",
+  );
+  const sentences = [...plain.matchAll(/(?:return|BodyUnread =) ("(?:[^"\\]|\\.)*")/g)]
+    .map((m) => JSON.parse(m[1]) as string)
+    .filter((s) => s !== "");
+  expect(sentences).toContain(
+    "the message to the model was too big or got cut off on the way: try again, or start a new chat if it keeps happening",
+  );
+  const missing = sentences.filter((s) => !(s in es) || !(s in pt));
+  expect(missing).toEqual([]);
+});
