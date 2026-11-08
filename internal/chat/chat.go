@@ -155,6 +155,11 @@ type Session struct {
 	// public chat): the guardrails apply (guard.go). Audience says who writes there.
 	Exposed  bool   `json:"exposed,omitempty"`
 	Audience string `json:"audience,omitempty"`
+	// Delegates are the kitties that took part through a hand-over without being members (they
+	// do not answer what the person writes), and Kitties every kitty of the chat: members,
+	// owner and delegates (crew.go). More than one makes the chat a group of kitties.
+	Delegates []string `json:"delegates,omitempty"`
+	Kitties   []string `json:"kitties,omitempty"`
 }
 
 // NeedsHelp reports whether the last turn is a kitty asking the person for help.
@@ -550,6 +555,7 @@ func (s *Service) load() error {
 		}
 		// Recomputed rather than trusted: a chat saved before gists, or under older masking rules.
 		refreshGist(&sess)
+		refreshKitties(&sess)
 		s.sessions[sess.ID] = &sess
 	}
 	return nil
@@ -557,6 +563,7 @@ func (s *Service) load() error {
 
 func (s *Service) save(sess *Session) error {
 	refreshGist(sess)
+	refreshKitties(sess)
 	if err := os.MkdirAll(s.dir, 0o700); err != nil {
 		return fmt.Errorf("create the chats folder: %w", err)
 	}
@@ -703,6 +710,8 @@ func (s *Service) Get(id string) (*Session, error) {
 	}
 	c := *sess
 	c.Members = append([]string(nil), sess.Members...)
+	c.Delegates = append([]string(nil), sess.Delegates...)
+	c.Kitties = append([]string(nil), sess.Kitties...)
 	c.Turns = append([]Turn(nil), sess.Turns...)
 	c.Help = sess.NeedsHelp()
 	return &c, nil

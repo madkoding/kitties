@@ -184,6 +184,8 @@ func (s *Service) delegate(ctx context.Context, id string, a action, k *kitty.Ki
 	if err != nil {
 		return outcome{action: a, err: err.Error()}
 	}
+	// The kitty joins the chat it helps in at once, so the chat reads as a group while it works.
+	s.addDelegate(id, target.ID)
 	d := Delegation{Kitty: target.Name, KittyID: target.ID, Chat: did, Task: clip(task, 300)}
 	s.note(k, agenda.KindDelegated, "", id, "to "+target.Name+": "+firstLine(task))
 	// The lead may give the kitty more (or less) for this task alone: it ends with the task.
