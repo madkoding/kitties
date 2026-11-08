@@ -12,6 +12,7 @@ import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
 import {
   IconCamera,
+  IconCrown,
   IconHand,
   IconMonitor,
   IconStop,
@@ -800,6 +801,15 @@ function TurnCard({
       {turn.needs_help && (
         <div class="help-line">
           <IconHand size={14} /> {t("{name} needs your help with this one.", { name: turn.from })}
+        </div>
+      )}
+      {turn.asked_lead && !turn.needs_help && (
+        <div class="help-line asked-lead" data-testid="asked-lead">
+          <IconCrown size={14} />{" "}
+          {t("{name} asked {lead}; the answer comes back here.", {
+            name: turn.from,
+            lead: turn.asked_lead,
+          })}
         </div>
       )}
       {turn.text && (

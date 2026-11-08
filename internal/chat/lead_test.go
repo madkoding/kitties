@@ -20,6 +20,7 @@ import (
 func TestLeadReportsForTheOthers(t *testing.T) {
 	f, sa, sb, _ := fleet(t)
 	s := service(t, f)
+	s.HandOverWait = 0
 	b := &bell{}
 	s.SetNotifier(b)
 	withAgenda(t, s)

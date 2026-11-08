@@ -57,7 +57,17 @@ func (s *Service) tell(e notify.Event, k *kitty.Kitty, title, body, chatID strin
 		return
 	}
 	name, title := signed(lead, k, title)
-	s.notifier.Notify(notify.Notification{Event: e, Kitty: name, Title: title, Body: body, Chat: chatID})
+	n := notify.Notification{Event: e, Kitty: name, Title: title, Body: body, Chat: chatID}
+	if lead != nil && e == notify.GoalDone {
+		// The goals the team finishes within HandOverWait reach the person as one message of the
+		// lead, which opens its Reports thread.
+		if id, err := s.ReportsChat(lead); err == nil {
+			n.Chat = id
+		}
+		s.queueNotice("lead:"+lead.ID, n)
+		return
+	}
+	s.notifier.Notify(n)
 }
 
 // goalOf is the goal a thread works on, if it works one.

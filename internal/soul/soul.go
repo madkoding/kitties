@@ -124,18 +124,42 @@ type Context struct {
 	// LeadName names the fleet's lead for the other kitties, empty when there is none or this
 	// kitty is it.
 	LeadName string
+	// AskLead is true when this kitty may ask the lead what it doubts in this chat (ask_lead):
+	// there is a lead, this kitty is not it, and the chat is neither a hand-over nor exposed.
+	AskLead bool
 }
 
-// leadWords is what the principal kitty is told about its role.
+// leadWords is what the principal kitty is told about its role. It is the elephant of the
+// elephant-goldfish model: it keeps the long memory and the whole picture, and hands the others
+// (the goldfish) tasks they can do from the task alone.
 const leadWords = "You are the lead kitty: the person's main contact and the orchestrator of the whole fleet. " +
+	"The person talks with you; the other kitties work for you and report to you, so you speak for all of them. " +
 	"When they ask for something, decide who does what: do yourself what is quick or yours, and hand each piece " +
-	"another kitty is better placed for to it (@delegate <name> {\"task\": \"...\"}, with everything it needs to know). " +
+	"another kitty is better placed for to it (@delegate <name> {\"task\": \"...\"}). " +
+	"You keep the whole picture (what the person wants, what was decided, what each kitty did); a kitty you hand " +
+	"a task to starts it fresh, without this conversation or its earlier tasks, so write every task self-contained: " +
+	"the goal, the facts and limits it needs, and what to give back. To check an important result, hand it to " +
+	"another kitty to review with fresh eyes. " +
 	"Several pieces may go to several kitties in the same reply: they work on them at the same time. Gather their answers, check them, and give the person one clear report " +
 	"of the whole: what was done, by whom, what failed and what is left. The other kitties' reports (goals they " +
 	"finished or could not, help they need) reach you in your Reports thread; when the person asks how things are " +
-	"going, answer from them. When a kitty needs more for a long task you hand it (rounds, tokens or seconds), " +
+	"going, answer from them. When a kitty asks you something there, answer it if you know (@answer_kitty <name> " +
+	"{\"text\": \"...\"}: it goes back to that kitty, which carries on); if only the person can decide, ask them in " +
+	"one short message and, once they answer, pass it on the same way. When a kitty needs more for a long task you hand it (rounds, tokens or seconds), " +
 	"give them for that task alone with delegate (max_rounds, max_tokens, max_seconds); to change them for good, use " +
 	"@task_limits <name> {\"max_rounds\": N}. Say so in your report.\n"
+
+// followWords is what the other kitties are told when there is a lead: they follow it, work from
+// the task it gives them alone, and report to it rather than to the person.
+const followWords = "%s is the lead kitty: it coordinates the fleet and is the one who talks with %s. Follow its " +
+	"instructions first: a task it hands you comes from the person and goes before your own work; do it fully, from " +
+	"what the task says (you do not see its earlier talk), and end with a short report: what you did, what failed, " +
+	"what is left. What you finish or cannot finish on your own (goals, scheduled tasks) reaches %s by itself.\n"
+
+// askLeadWords tells a kitty with a lead how to raise a doubt: to the lead, not the person.
+const askLeadWords = "When you have a doubt in work you do on your own (a goal, a scheduled task), do not ask %s: ask " +
+	"%s with @ask_lead {\"question\": \"...\"}, say in one line what you wait for and stop there; its answer comes " +
+	"back in this thread and you go on.\n"
 
 // persistWords is what an unattended kitty is told about finishing what it was asked. It is
 // static text, so it sits in the cacheable start of the prompt.
@@ -232,8 +256,10 @@ func (s Soul) SystemPrompt(c Context) string {
 			}
 		}
 	} else if c.LeadName != "" {
-		fmt.Fprintf(&b, "%s is the lead kitty: it coordinates the fleet and reports to %s for everyone, so a task it "+
-			"hands you comes from the person; answer it fully, as you would answer them.\n", c.LeadName, user)
+		fmt.Fprintf(&b, followWords, c.LeadName, user, c.LeadName)
+		if c.AskLead {
+			fmt.Fprintf(&b, askLeadWords, user, c.LeadName)
+		}
 	}
 	if len(c.Peers) > 0 && !c.Lead {
 		fmt.Fprintf(&b, "Other kitties you can hand a subtask to: %s. Write @delegate <name> {\"task\": \"...\"} on its own line "+

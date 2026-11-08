@@ -1448,6 +1448,9 @@ html[data-motion="off"] .cat-spark {
   border-color: rgb(255 191 71 / 0.6);
   box-shadow: 0 0 0 1px rgb(255 191 71 / 0.25);
 }
+.help-line.asked-lead {
+  color: var(--accent);
+}
 .help-line {
   display: inline-flex;
   align-items: center;
