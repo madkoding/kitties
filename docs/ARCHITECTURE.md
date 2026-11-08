@@ -178,6 +178,12 @@ JSON `{title, description}` (in the person's language), parsed even inside a cod
 with `Redact` and cut to the limits; nothing is saved until `Edit` (the page lets the person check
 it first, `apply` in the API and MCP saves it at once).
 
+Every new description pushes the one it replaces onto `Descriptions` (newest first, at most 10,
+with who wrote it and when). A kitty may propose one when the chat changes course (`@describe
+propose …` or the native `describe_chat` tool, `runDescribe`): it waits as `Session.Proposal` until
+`AnswerProposal` takes or drops it. The prompt offers it only while no proposal waits, never in an
+exposed chat, and not for `ProposeAgainAfter` (10) turns after the person said no.
+
 `Send` appends the person's message and picks the responders: in a one-to-one chat the kitty;
 in a group, the kitties the message mentions with `@name`, or every member when it mentions none.
 Each responder answers in turn:
