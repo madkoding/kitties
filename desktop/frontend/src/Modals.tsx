@@ -801,16 +801,48 @@ export function LeadPanel({
 }
 
 // KittyTab is a section of a kitty's drawer.
-export type KittyTab = "desktop" | "goals" | "journal" | "notes" | "config";
+export type KittyTab = "desktop" | "goals" | "team" | "journal" | "notes" | "config";
 
-// KITTY_TABS are the drawer's sections, in order, in the page's language.
+// KITTY_TABS are the drawer's sections, in order, in the page's language. Desktop is only for a
+// kitty with one, and Team only for the lead (the others offer to lead under Configuration).
 const KITTY_TABS = (): { id: KittyTab; label: string }[] => [
   { id: "desktop", label: t("Desktop") },
   { id: "goals", label: t("Goals") },
+  { id: "team", label: t("Team") },
   { id: "journal", label: t("Journal") },
   { id: "notes", label: t("Notes") },
   { id: "config", label: t("Configuration") },
 ];
+
+// ATTENTION are how a goal's last run ends when it needs the person to look at it.
+const ATTENTION = ["blocked", "escalated", "failed"];
+
+// useTabCounts counts what waits for the person in a kitty's drawer: goals that need a look and
+// notes proposed for every kitty. It counts again when the person moves between tabs, so what
+// was handled in one shows on the way out.
+function useTabCounts(kitty: string, tab: string): Partial<Record<KittyTab, number>> {
+  const [goals, setGoals] = useState(0);
+  const [notes, setNotes] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    api
+      .goals(kitty)
+      .then((r) => {
+        if (alive) setGoals(r.filter((g) => ATTENTION.includes(g.last_result || "")).length);
+      })
+      .catch(() => alive && setGoals(0));
+    api
+      .memory(kitty)
+      .then((v) => {
+        if (alive) setNotes(v.notes.filter((n) => n.proposed).length);
+      })
+      .catch(() => alive && setNotes(0));
+    return () => {
+      alive = false;
+    };
+  }, [kitty, tab]);
+  return { goals, notes };
+}
 
 export function KittyDrawer({
   kitty,
@@ -820,6 +852,8 @@ export function KittyDrawer({
   onChat,
   onOpenChat,
   chat,
+  tab: wanted = "",
+  onTab = () => undefined,
 }: {
   kitty: Kitty;
   kitties: Kitty[];
@@ -827,6 +861,9 @@ export function KittyDrawer({
   onChanged: () => void;
   onChat: () => void;
   onOpenChat: (id: string) => void;
+  // tab is the tab the address names (#kitty/<id>/<tab>); onTab tells the address the one picked.
+  tab?: string;
+  onTab?: (tab: KittyTab) => void;
   // chat is the direct chat with this kitty, for the sidebar of its enlarged desktop.
   chat?: LiveChatProps;
 }) {
@@ -877,13 +914,18 @@ export function KittyDrawer({
   const model = models.find((m) => m.name === kitty.provider);
   // The drawer is split in tabs; the desktop's only shows for a kitty that has one. The tab the
   // person left a kitty on is where its drawer opens next time.
-  const tabs = KITTY_TABS().filter((x) => x.id !== "desktop" || kitty.desktop);
-  const [chosen, setChosen] = useState<KittyTab>(() => kittyTab(kitty.id) as KittyTab);
-  useEffect(() => setChosen(kittyTab(kitty.id) as KittyTab), [kitty.id]);
+  // The address's tab wins over the one kept from last time.
+  const [chosen, setChosen] = useState<KittyTab>(() => (wanted || kittyTab(kitty.id)) as KittyTab);
+  useEffect(() => setChosen((wanted || kittyTab(kitty.id)) as KittyTab), [kitty.id, wanted]);
+  const counts = useTabCounts(kitty.id, chosen);
+  const tabs = KITTY_TABS()
+    .filter((x) => (x.id !== "desktop" || kitty.desktop) && (x.id !== "team" || kitty.lead))
+    .map((x) => ({ ...x, count: counts[x.id] }));
   const tab = tabs.some((x) => x.id === chosen) ? chosen : tabs[0].id;
   const pickTab = (x: KittyTab) => {
     setChosen(x);
     setKittyTab(kitty.id, x);
+    onTab(x);
   };
   return (
     <Modal title={kitty.name} onClose={onClose} wide>
@@ -989,46 +1031,54 @@ export function KittyDrawer({
             </div>
           </>
         )}
-        {tab === "goals" && (
-          <>
-            <GoalsPanel kitty={kitty} onOpenChat={onOpenChat} />
-            <LeadPanel
-              kitty={kitty}
-              kitties={kitties}
-              onChanged={onChanged}
-              onOpenChat={onOpenChat}
-            />
-          </>
+        {tab === "goals" && <GoalsPanel kitty={kitty} onOpenChat={onOpenChat} />}
+        {tab === "team" && (
+          <LeadPanel
+            kitty={kitty}
+            kitties={kitties}
+            onChanged={onChanged}
+            onOpenChat={onOpenChat}
+          />
         )}
         {tab === "journal" && <JournalPanel kitty={kitty} onOpenChat={onOpenChat} />}
         {tab === "notes" && <MemoryPanel kitty={kitty} />}
         {tab === "config" && (
-          <div class="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm" data-testid="kitty-config">
-            <div class="min-w-0">
-              <div class="section-title !mx-0">{t("Looks")}</div>
-              <CatPicker
-                breed={kitty.avatar?.breed || "tabby"}
-                color={kitty.avatar?.color || "orange"}
-                onChange={pick}
+          <div data-testid="kitty-config">
+            <div class="grid md:grid-cols-2 gap-x-6 gap-y-2 text-sm">
+              <div class="min-w-0">
+                <div class="section-title !mx-0">{t("Looks")}</div>
+                <CatPicker
+                  breed={kitty.avatar?.breed || "tabby"}
+                  color={kitty.avatar?.color || "orange"}
+                  onChange={pick}
+                />
+                <div class="mt-4">
+                  <KittyBasics kitty={kitty} models={models} onChanged={onChanged} />
+                </div>
+              </div>
+              <div class="min-w-0">
+                <LimitsForm kitty={kitty} kitties={kitties} onChanged={onChanged} />
+                <div class="mt-6">
+                  <button
+                    class="btn-danger px-3 py-2 text-sm flex items-center gap-2"
+                    onClick={async () =>
+                      (await ask(t("Remove {name} and its container?", { name: kitty.name }))) &&
+                      act(() => api.removeKitty(kitty.id).then(onClose))
+                    }
+                  >
+                    <IconTrash size={14} /> {t("Remove")}
+                  </button>
+                </div>
+              </div>
+            </div>
+            {!kitty.lead && (
+              <LeadPanel
+                kitty={kitty}
+                kitties={kitties}
+                onChanged={onChanged}
+                onOpenChat={onOpenChat}
               />
-              <div class="mt-4">
-                <KittyBasics kitty={kitty} models={models} onChanged={onChanged} />
-              </div>
-            </div>
-            <div class="min-w-0">
-              <LimitsForm kitty={kitty} kitties={kitties} onChanged={onChanged} />
-              <div class="mt-6">
-                <button
-                  class="btn-danger px-3 py-2 text-sm flex items-center gap-2"
-                  onClick={async () =>
-                    (await ask(t("Remove {name} and its container?", { name: kitty.name }))) &&
-                    act(() => api.removeKitty(kitty.id).then(onClose))
-                  }
-                >
-                  <IconTrash size={14} /> {t("Remove")}
-                </button>
-              </div>
-            </div>
+            )}
           </div>
         )}
       </div>

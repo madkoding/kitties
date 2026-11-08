@@ -792,8 +792,15 @@ test("the thumbs under an answer teach the kitty", async ({ page }) => {
 test("what a kitty knows about you: its level of demand, its notes and how far it is trusted", async ({
   page,
 }) => {
-  await open(page, `#kitty/${ids.mimi}`);
+  // A tab can be linked: the address names it, and follows the tab picked.
+  await open(page, `#kitty/${ids.mimi}/journal`);
+  await expect(page.getByTestId("kitty-tab-journal")).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("journal")).toBeVisible();
+  // A note proposed for every kitty waits for a yes: the Notes tab counts it.
+  await expect(page.getByTestId("kitty-tab-notes-count")).toHaveText("1");
+  await expect(page.getByTestId("kitty-tab-goals-count")).toHaveCount(0);
   await kittyTab(page, "notes");
+  await expect(page).toHaveURL(new RegExp(`#kitty/${ids.mimi}/notes$`));
   const memory = page.getByTestId("memory");
   await expect(memory).toBeVisible();
   // Four thumbs down with a word moved the level from balanced to demanding.
@@ -1528,7 +1535,7 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   await open(page, `#kitty/${ids.mimi}`);
   // The drawer is in tabs and opens on the desktop. Its brain, who it is and what it may use are
   // edited under Configuration.
-  const tabs = page.getByTestId("kitty-tabs").getByRole("tab");
+  const tabs = page.getByTestId("kitty-tabs").locator(".tab-label");
   await expect(tabs).toHaveText(["Desktop", "Goals", "Journal", "Notes", "Configuration"]);
   await expect(page.getByTestId("kitty-tab-desktop")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("kitty-basics")).toBeHidden();
@@ -2551,7 +2558,7 @@ test("in a kitty's drawer the desktop is there, live, and one click on it takes 
   await expect(live).toBeVisible();
   // The drawer opens on its Desktop tab, the first of five, and the viewer comes first in it:
   // the machine's power and its care follow.
-  await expect(drawer.getByTestId("kitty-tabs").getByRole("tab")).toHaveText([
+  await expect(drawer.getByTestId("kitty-tabs").locator(".tab-label")).toHaveText([
     "Desktop",
     "Goals",
     "Journal",
@@ -4048,14 +4055,17 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
       .toBeGreaterThan(0);
 
     await open(page, `#kitty/${luna.id}`);
-    // luna has no desktop: no Desktop tab, and its drawer opens on its goals and the lead panel.
-    await expect(page.getByTestId("kitty-tabs").getByRole("tab")).toHaveText([
+    // luna has no desktop: no Desktop tab, and it opens on its goals; as the lead it has a Team
+    // tab, with the lead panel and how the team hands work around.
+    await expect(page.getByTestId("kitty-tabs").locator(".tab-label")).toHaveText([
       "Goals",
+      "Team",
       "Journal",
       "Notes",
       "Configuration",
     ]);
     await expect(page.getByTestId("kitty-tab-goals")).toHaveAttribute("aria-selected", "true");
+    await kittyTab(page, "team");
     const panel = page.getByTestId("lead-panel");
     await expect(panel).toContainText("luna is the lead kitty");
     await expect(page.getByTestId("lead-tag")).toBeVisible();
@@ -4073,8 +4083,10 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     await expect(page.locator("h1", { hasText: "mimi → luna" })).toBeVisible();
 
     // Another kitty's drawer offers to take the lead.
+    // Another kitty has no Team tab: it offers to take the lead under Configuration.
     await open(page, `#kitty/${ids.mimi}`);
-    await kittyTab(page, "goals");
+    await expect(page.getByTestId("kitty-tab-team")).toHaveCount(0);
+    await kittyTab(page, "config");
     await expect(page.getByTestId("lead-panel")).toContainText("luna leads the fleet now");
 
     // The Reports thread: the others' news, from the kitty that sent each.

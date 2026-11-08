@@ -60,16 +60,18 @@ type ModalKind =
   | "preferences"
   | "tasks";
 
-// The route is the hash: #chat/<id> or #kitty/<id>, so a view can be linked and reloaded.
+// The route is the hash: #chat/<id> or #kitty/<id>[/<tab>], so a view (and a tab of a kitty's
+// drawer) can be linked and reloaded.
 function routeFromHash(): {
   chat: string | null;
   kitty: string | null;
+  tab: string;
   modal: ModalKind;
   connector: string;
   artifact: string;
 } {
   const m = location.hash.match(
-    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|machines|preferences|tasks))?/,
+    /^#(chat|kitty)\/([a-z0-9-]+)(?:\/(desktop|goals|team|journal|notes|config))?(?:\/new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|machines|preferences|tasks))?/,
   );
   const n = location.hash.match(
     /^#new-(chat|kitty|connectors-add|connectors|models-add|connect|settings|library|artifacts|shared|approvals|notifications|machines|preferences|tasks)/,
@@ -83,10 +85,11 @@ function routeFromHash(): {
   } catch {
     artifact = "";
   }
-  const modal = (c ? "connector" : artifact ? "artifact" : m?.[3] || n?.[1] || "none") as ModalKind;
+  const modal = (c ? "connector" : artifact ? "artifact" : m?.[4] || n?.[1] || "none") as ModalKind;
   return {
     chat: m?.[1] === "chat" ? m[2] : null,
     kitty: m?.[1] === "kitty" ? m[2] : null,
+    tab: m?.[1] === "kitty" ? m[3] || "" : "",
     modal,
     connector: c?.[1] || "",
     artifact,
@@ -104,6 +107,8 @@ export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   const [current, setCurrent] = useState<string | null>(routeFromHash().chat);
   const [kittyOpen, setKittyOpen] = useState<string | null>(routeFromHash().kitty);
+  // kittyTabRoute is the tab of the drawer the address names (#kitty/<id>/<tab>).
+  const [kittyTabRoute, setKittyTabRoute] = useState(routeFromHash().tab);
   const [modal, setModal] = useState<ModalKind>(routeFromHash().modal);
   // editing is the chat whose title or description is being changed, from its ⋯ menu.
   const [editing, setEditing] = useState<{ chat: Session; field: ChatField } | null>(null);
@@ -256,6 +261,7 @@ export default function App() {
         r.chat || (/^#(new-|connector\/|artifact\/)/.test(location.hash) ? lastChat.current : null),
       );
       setKittyOpen(r.kitty);
+      setKittyTabRoute(r.tab);
       // The address decides the dialog: one that no longer names it closes it, except the
       // sign-in and the gateway's, which the page opens itself.
       setModal((m) => (r.modal === "none" && (m === "login" || m === "connect") ? m : r.modal));
@@ -400,7 +406,7 @@ export default function App() {
   const closeModal = () => {
     setModal("none");
     const h = location.hash;
-    const nested = h.match(/^(#(?:chat|kitty)\/[a-z0-9-]+)\/new-[a-z-]+$/);
+    const nested = h.match(/^(#(?:chat|kitty)\/[a-z0-9-]+(?:\/[a-z]+)?)\/new-[a-z-]+$/);
     if (nested) {
       location.hash = nested[1];
     } else if (/^#(new-|connector\/|artifact\/)/.test(h)) {
@@ -1046,6 +1052,15 @@ export default function App() {
           kitty={kitty}
           kitties={kitties}
           onOpenChat={openChat}
+          tab={kittyTabRoute}
+          onTab={(x) => {
+            // The address follows the tab, without a step in the history for each one.
+            const h = `#kitty/${kittyOpen}/${x}`;
+            if (location.hash !== h) {
+              history.replaceState(null, "", h);
+              setKittyTabRoute(x);
+            }
+          }}
           chat={
             drawerSession
               ? {

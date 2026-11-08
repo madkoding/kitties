@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "preact/hooks";
+import { t } from "./i18n";
 
 // Tabs are the sections of a dialog: pills that stay at the top while the dialog scrolls, wrap on
 // a wide screen and slide sideways on a phone, the chosen one kept in view. The arrow keys, Home
@@ -12,7 +13,8 @@ export default function Tabs<T extends string>({
   label,
   panels,
 }: {
-  tabs: { id: T; label: string }[];
+  // count is what waits in a tab (shown when more than none).
+  tabs: { id: T; label: string; count?: number }[];
   tab: T;
   onPick: (t: T) => void;
   prefix: string;
@@ -65,7 +67,16 @@ export default function Tabs<T extends string>({
           onClick={() => onPick(x.id)}
           data-testid={`${prefix}-tab-${x.id}`}
         >
-          {x.label}
+          <span class="tab-label">{x.label}</span>
+          {!!x.count && (
+            <span
+              class="tab-count"
+              data-testid={`${prefix}-tab-${x.id}-count`}
+              aria-label={t("{n} waiting", { n: x.count })}
+            >
+              {x.count}
+            </span>
+          )}
         </button>
       ))}
     </div>
