@@ -26,3 +26,5 @@ if [ -z "$(find /var/lib/apt/lists -maxdepth 1 -name '*Packages*' -mmin -1440 2>
     apt-get -o DPkg::Lock::Timeout=300 update -qq
 fi
 apt-get -o DPkg::Lock::Timeout=300 install -y -qq --no-install-recommends -- "$@"
+# The downloaded .deb files are of no use once installed: they would stay in the container's layer.
+apt-get clean

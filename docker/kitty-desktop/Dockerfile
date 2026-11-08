@@ -157,6 +157,7 @@ RUN mkdir -p /usr/share/backgrounds/kitties \
 
 COPY --chmod=755 entrypoint.sh /usr/local/bin/kitty-entrypoint
 COPY --chmod=755 kitty-shot.sh /usr/local/bin/kitty-shot
+COPY --chmod=755 kitty-tidy.sh /usr/local/bin/kitty-tidy
 COPY --chmod=755 kitty-ocr.sh /usr/local/bin/kitty-ocr
 COPY --chmod=755 kitty-backup.sh /usr/local/bin/kitty-backup
 COPY --chmod=755 kitty-restore.sh /usr/local/bin/kitty-restore

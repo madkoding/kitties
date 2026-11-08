@@ -321,6 +321,8 @@ jobs:
         run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/shelf-feeds.sh
       - name: what outlives the container (home, Shared, packages, import)
         run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/home.sh
+      - name: the desktop's scratch space stays small (kitty-tidy)
+        run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/tidy.sh
       - name: a desktop on an empty home of the host comes up seeded
         run: |
           mkdir -p "$RUNNER_TEMP/home" "$RUNNER_TEMP/shared" && chmod 777 "$RUNNER_TEMP/home" "$RUNNER_TEMP/shared"

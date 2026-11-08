@@ -1,5 +1,6 @@
 {
   "RestoreOnStartup": 1,
   "PasswordManagerEnabled": true,
-  "BackgroundModeEnabled": false
+  "BackgroundModeEnabled": false,
+  "DiskCacheSize": 268435456
 }
