@@ -3814,3 +3814,24 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
     await page.request.put(`${GATEWAY}/v1/lead`, { headers: H, data: { kitty: "" } });
   }
 });
+
+// Settings › Preferences › Storage: what the data takes, how long the screenshots stay, and a
+// sweep on request.
+test("Settings: storage shows the disk use and keeps the screenshots by a retention", async ({
+  page,
+}) => {
+  await open(page, "#new-preferences");
+  const box = page.getByTestId("storage");
+  await expect(box.getByTestId("storage-total")).toContainText("Kitties takes");
+  await expect(box.getByTestId("retention-days")).toHaveValue("30");
+  await box.getByTestId("retention-days").selectOption("14");
+  await expect(box.getByTestId("retention-days")).toHaveValue("14");
+  await box.getByTestId("storage-clean").click();
+  await expect(box.locator(".text-\\[var\\(--c-green\\)\\]")).toBeVisible();
+  await box.scrollIntoViewIfNeeded();
+  await shot(page, "77-settings-storage");
+  const r = await page.request.get(`${GATEWAY}/v1/settings/storage`, {
+    headers: { Authorization: "Bearer e2e-token" },
+  });
+  expect((await r.json()).retention).toMatchObject({ shot_days: 14 });
+});

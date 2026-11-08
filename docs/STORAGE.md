@@ -4,6 +4,8 @@ Kitties keeps its data in one folder (`data_dir`, `~/.kitties` by default). Some
 and stays until you delete it; some grows by itself and is swept. **Settings › Preferences ›
 Storage** shows what each part takes, how much is free on that disk, and has **Free up space now**.
 
+![Settings, Preferences, Storage: the disk use by area, the retention of the screenshots and Free up space now](screenshots/77-settings-storage.png)
+
 ## What is swept by itself
 
 | What | Where | Bound |

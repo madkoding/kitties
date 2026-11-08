@@ -5,6 +5,8 @@ queda hasta que la borres; otra crece sola y se limpia. **Ajustes › Preferenci
 Almacenamiento** muestra cuánto ocupa cada parte, cuánto queda libre en ese disco, y tiene
 **Liberar espacio ahora**.
 
+![Ajustes, Preferencias, Almacenamiento: el uso de disco por área, la retención de las capturas y Liberar espacio ahora](screenshots/77-settings-storage.png)
+
 ## Lo que se limpia solo
 
 | Qué | Dónde | Límite |
