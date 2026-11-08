@@ -125,6 +125,21 @@ type Step struct {
 	Shot string `json:"shot,omitempty"`
 }
 
+// StepPlan is the action of a step that is no action: what the kitty said it was about to do
+// (its words next to a batch of desktop actions), kept in the steps as the line the person
+// follows the task by, instead of in the message, which keeps the answer only.
+const StepPlan = "plan"
+
+// planStep is the kitty's words next to a batch of actions, as a step; ok is false when it said
+// nothing or the batch ends the task (then the words belong to the answer).
+func planStep(at time.Time, text string, actions []action) (Step, bool) {
+	text = strings.TrimSpace(text)
+	if text == "" || len(actions) == 0 || endsTask(actions) {
+		return Step{}, false
+	}
+	return Step{At: at, Action: StepPlan, Result: text}, true
+}
+
 // Session is one thread.
 type Session struct {
 	ID        string    `json:"id"`
@@ -1515,7 +1530,10 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		} else {
 			st.actions, text = fromText(answer.Content)
 		}
-		if text = strings.TrimSpace(text); text != "" {
+		if plan, ok := planStep(s.now(), text, st.actions); ok {
+			// The kitty says what it goes on to do: a line the person follows, not the answer.
+			s.appendStep(id, index, plan)
+		} else if text = strings.TrimSpace(text); text != "" {
 			st.parts = append(st.parts, text)
 		}
 		if len(st.actions) == 0 {
@@ -1633,7 +1651,7 @@ func (s *Service) appendStep(id string, index int, step Step) {
 
 func (s *Service) markShot(id string, index int, name string) {
 	s.edit(id, index, func(t *Turn) {
-		if len(t.Steps) > 0 {
+		if len(t.Steps) > 0 && t.Steps[len(t.Steps)-1].Action != StepPlan {
 			// A copy: whoever holds the turn's steps (a reader of the session, a subscriber)
 			// never sees an element change under it.
 			steps := append([]Step(nil), t.Steps...)

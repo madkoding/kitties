@@ -82,7 +82,11 @@ func Catalogue() string {
 		"When something needs the person (a password, a captcha, a code they receive), use ask_help: they get a " +
 		"button to take control of your desktop, see it live and click and type in it, and you go on when they " +
 		"give it back. CAPTCHAs and other checks that a human is there are the person's to pass: never try to " +
-		"solve or get around them yourself, ask for help at once. The tools:\n")
+		"solve or get around them yourself, ask for help at once. " +
+		"The person follows your work by short lines, not by your actions: when you start a task and each time " +
+		"you move on to a new part of it, write next to the actions one short sentence, in the person's language, " +
+		"saying what you are about to do and what for (\"I open the browser and look up flights to Lima\"), never " +
+		"the clicks, keys or coordinates; say nothing while you go on with the same part. The tools:\n")
 	for _, t := range Tools {
 		fmt.Fprintf(&b, "- %s %s: %s\n", t.Name, t.Args, t.Help)
 	}

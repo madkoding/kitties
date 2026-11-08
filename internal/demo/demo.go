@@ -229,9 +229,9 @@ func (b *Brain) nextRound(results string) string {
 	b.rounds[key]++
 	switch b.rounds[key] % 3 {
 	case 1:
-		return "The page is up. I can see the heading and a link; I will click it.\n@tool click {\"x\": 640, \"y\": 420}\n@tool wait {\"seconds\": 1}"
+		return "I follow the page's link to see where it leads.\n@tool click {\"x\": 640, \"y\": 420}\n@tool wait {\"seconds\": 1}"
 	case 2:
-		return "@tool scroll {\"direction\": \"down\", \"amount\": 3}\n@tool screenshot {}"
+		return "I scroll down to read the rest of the page.\n@tool scroll {\"direction\": \"down\", \"amount\": 3}\n@tool screenshot {}"
 	default:
 		_ = results
 		return "@tool done {\"summary\": \"Opened the site, followed the first link and read the page. It is a placeholder domain with one paragraph and a link to the IANA page about reserved domains.\"}"

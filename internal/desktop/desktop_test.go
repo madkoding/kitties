@@ -303,3 +303,10 @@ func TestTypeSecretKeepsTheTextOutOfTheCommandLine(t *testing.T) {
 		t.Error("a runner with no input was used")
 	}
 }
+
+func TestCatalogueAsksForShortPlans(t *testing.T) {
+	c := Catalogue()
+	if !strings.Contains(c, "one short sentence, in the person's language") || !strings.Contains(c, "never the clicks, keys or coordinates") {
+		t.Error("the catalogue asks for a short line of what the kitty is about to do")
+	}
+}
