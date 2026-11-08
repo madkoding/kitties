@@ -1223,6 +1223,33 @@ test("a chat where a kitty hands a subtask to another reads as a group of both",
   await expect(page.getByTestId("chat-kitty")).toHaveCount(2);
 });
 
+test("a kitty that helped through a hand-over can be made a member of the chat", async ({
+  page,
+}) => {
+  const headers = { Authorization: "Bearer e2e-token" };
+  const created = await page.request.post(`${GATEWAY}/v1/chats`, {
+    headers,
+    data: { members: ["mimi"], title: "Budget check" },
+  });
+  const chat = ((await created.json()) as { chat: { id: string } }).chat.id;
+  const sent = await page.request.post(`${GATEWAY}/v1/chats/${chat}/messages`, {
+    headers,
+    data: { text: "Mimi, ask tom to check the budget numbers." },
+  });
+  expect(sent.ok()).toBeTruthy();
+  await open(page, `#chat/${chat}`);
+  const promote = page.getByTestId("promote-delegate");
+  await expect(promote).toHaveCount(1);
+  await promote.click();
+  await page.getByTestId("confirm").getByRole("button", { name: "Make it a member" }).click();
+  await expect(page.getByTestId("promote-delegate")).toHaveCount(0);
+  await expect(page.locator(".tag-delegate")).toHaveCount(0);
+  const res = await page.request.get(`${GATEWAY}/v1/chats/${chat}`, { headers });
+  const after = (await res.json()).chat;
+  expect(after.members).toHaveLength(2);
+  expect(after.delegates ?? []).toHaveLength(0);
+});
+
 test("a long list of goals shows its first few, and the rest on request", async ({ page }) => {
   const headers = { Authorization: "Bearer e2e-token" };
   const made: string[] = [];

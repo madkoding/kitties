@@ -62,6 +62,10 @@ const dict: Dictionary = {
   // Sidebar
   Chats: "Chats",
   "{count} kitties": "{count} kitties",
+  "Make {name} a member: it answers here too": "Hacer miembro a {name}: también responde aquí",
+  "Make {name} a member of this chat? It will answer what you write here too.":
+    "¿Hacer a {name} miembro de este chat? También responderá lo que escribas aquí.",
+  "Make it a member": "Hacerlo miembro",
   groups: "grupos",
   "Show every chat": "Mostrar todos los chats",
   "Show only the chats with more than one kitty": "Mostrar solo los chats con más de un kitty",

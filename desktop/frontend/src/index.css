@@ -2394,3 +2394,12 @@ html.mac-inset .live-head {
   margin: 0.875rem 0.625rem 0.375rem;
   cursor: pointer;
 }
+.tag-promote {
+  display: inline-flex;
+  margin-left: 0.25rem;
+  padding: 0 0.125rem;
+  color: var(--t3);
+}
+.tag-promote:hover {
+  color: var(--color-accent);
+}

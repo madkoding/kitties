@@ -7,7 +7,7 @@ import Login from "./Login";
 import Welcome from "./Welcome";
 import Composer from "./Composer";
 import Conversation from "./Conversation";
-import { IconMenu, IconMonitor, IconShield, IconTrash, IconUsers } from "./icons";
+import { IconMenu, IconMonitor, IconPlus, IconShield, IconTrash, IconUsers } from "./icons";
 import LiveDesktop from "./LiveDesktop";
 import { ConnectModal, KittyDrawer, NewChatModal, NewKittyModal } from "./Modals";
 import SettingsModal from "./Settings";
@@ -441,6 +441,30 @@ export default function App() {
     }
   };
 
+  // promote makes a kitty that helped through a hand-over a member of the chat: from then on it
+  // answers what the person writes there too.
+  const promote = async (k: Kitty) => {
+    if (!session) {
+      return;
+    }
+    if (
+      !(await ask(
+        t("Make {name} a member of this chat? It will answer what you write here too.", {
+          name: k.name,
+        }),
+        t("Make it a member"),
+      ))
+    ) {
+      return;
+    }
+    try {
+      setSession(await api.addMembers(session.id, [k.id]));
+      refresh();
+    } catch (e) {
+      setError(errText(e));
+    }
+  };
+
   // Every kitty of the chat: its members and the ones handed a subtask in it.
   const members = session
     ? chatKitties(session)
@@ -537,6 +561,17 @@ export default function App() {
                 size={18}
               />{" "}
               {k!.name}
+              {session && !session.members.includes(k!.id) && (
+                <button
+                  class="plain tag-promote"
+                  onClick={() => promote(k!)}
+                  title={t("Make {name} a member: it answers here too", { name: k!.name })}
+                  aria-label={t("Make {name} a member: it answers here too", { name: k!.name })}
+                  data-testid="promote-delegate"
+                >
+                  <IconPlus size={10} />
+                </button>
+              )}
             </span>
           ))}
           {members

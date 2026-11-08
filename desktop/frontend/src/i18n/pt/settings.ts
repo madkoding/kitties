@@ -183,6 +183,8 @@ const dict: Dictionary = {
   "A kitty gave up and needs my help": "Um kitty desistiu e precisa da minha ajuda",
   "An action is waiting for my yes": "Uma ação está esperando o meu sim",
   "A goal finished": "Um objetivo terminou",
+  "A kitty finished a subtask another handed it, or could not":
+    "Um kitty terminou uma subtarefa que outro lhe passou, ou não conseguiu",
   "A goal could not finish": "Um objetivo não conseguiu terminar",
   "A kitty's container was brought back": "O contêiner de um kitty foi recuperado",
   "A kitty spent its day's tokens": "Um kitty gastou os tokens do dia",
