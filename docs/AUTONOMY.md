@@ -8,7 +8,9 @@ A kitty is not only something you talk to. Each one has an agenda:
   (cron, or *hourly*, *daily*, *weekdays at nine*), when a service reports something, or when you
   press *run now*. They have a section of their own in the sidebar, *Scheduled tasks*, apart from
   the chats: a task opens the window of every kitty's tasks, where *history* lists its runs,
-  newest first (when and why it ran, how it ended, the kitty's last words), and *Open every run
+  newest first (when and why it ran, how it ended, the kitty's last words); the filter keeps the
+  tasks by how their last run ended (*need a look*: blocked, escalated or failed; running; done;
+  paused), and *Open every run
   in full* opens its thread, so you can read along and chime in. That thread is not a chat: the
   sidebar does not list it, and a line over it says whose task it is. The same tasks are in the
   kitty's drawer. API: `GET /v1/goals/{id}/runs`; MCP: `goal_runs`. A task you remove gives its
@@ -130,6 +132,10 @@ one before.
   **Reports** thread, from the kitty that sent it, and the notification goes out in the lead's
   name (*luna: mimi finished a goal*). The daily summary is the lead's too, and stays in that
   thread. Nothing is lost: the original thread is linked, and the notification still arrives.
+  The news of one chat that come within 10 minutes is **one report** (a hand-over that ended and
+  the goal that ended through it read as one message, each line by the kitty that sent it; the
+  same line twice is kept once). The Reports thread has a section of its own in the sidebar,
+  after the chats: the sidebar reads *Chats*, *Reports*, *Scheduled tasks*.
 - **It gives the others more room.** For a long task it hands out, the lead can give a kitty more
   rounds of actions, tokens or seconds per task (or fewer, to keep one short), within caps: 500
   rounds, 2,000,000 tokens, 7,200 seconds (0 goes back to the default). Only the lead may, never
