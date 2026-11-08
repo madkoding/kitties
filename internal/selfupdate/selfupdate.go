@@ -466,7 +466,6 @@ func (u *Updater) Begin(ctx context.Context, done func(to string, err error)) (s
 	u.progress.To = rel.Tag
 	u.mu.Unlock()
 	go func() {
-		defer u.unclaim()
 		run, cancel := context.WithTimeout(context.Background(), applyTimeout)
 		defer cancel()
 		to, err := u.install(run, rel)
@@ -475,6 +474,8 @@ func (u *Updater) Begin(ctx context.Context, done func(to string, err error)) (s
 		} else {
 			u.step(PhaseRestart, 100, 0, 0)
 		}
+		// The update is over before whoever waits hears it: a new one may start right away.
+		u.unclaim()
 		if done != nil {
 			done(to, err)
 		}
