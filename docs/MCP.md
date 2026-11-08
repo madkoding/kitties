@@ -122,6 +122,9 @@ signs in again.
 | `kitty_exec` | a command in its container (only with `allow_exec`) |
 | `chat_create`, `chat_list`, `chat_get` | threads (`chat_create` with no members opens one with the lead kitty); `chat_get` returns the last turns; `chat_list` gives each thread's short `gist`, with secrets masked |
 | `chat_send`, `chat_cancel` | give a task and read the answer; stop it |
+| `chat_update`, `chat_delete` | rename a thread or change its `description`, the base its kitties work from on every turn; delete it (`confirm: true`) |
+| `chat_suggest` | one of the thread's kitties reads it all and proposes a title and a description; `apply: true` saves them |
+| `chat_proposal` | accept or dismiss the description a kitty proposed for a thread (`proposal` in `chat_get`) |
 | `kitty_power`, `kitty_compute` | turn a machine on or off; where it runs (local or cloud) and its state |
 | `goal_list`, `goal_add`, `goal_run`, `goal_remove`, `kitty_journal` | goals on a schedule or event, run one now, read the journal |
 | `memory_list`, `memory_remember`, `memory_edit`, `memory_forget` | what a kitty knows about you and the work (the Memory panel), including the `shared` notes every kitty sees; a note written here is pinned |

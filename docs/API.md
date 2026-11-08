@@ -20,13 +20,16 @@
 | `GET/PUT /v1/kitties/{ref}/clipboard` `{text}` | its clipboard, both ways                  |
 | `POST /v1/scale/{name}` `{replicas}`      | run n replicas of a configured kitty           |
 | `GET/POST /v1/chats`                      | threads; create `{title, members: [names]}`. Each carries `gist`, its last words, at most 140 characters on one line (no markdown; secrets, addresses, long numbers and link paths masked), and `gist_by`, who said them (`user` or a kitty's name) |
+| `PATCH /v1/chats/{id}` `{title, description}` · `DELETE /v1/chats/{id}` | rename a thread or change its `description` (either field, or both; `""` takes the description off; a title is one line of at most 120 characters, a description at most 500), which its kitties read on every turn as what the chat is for; delete it with its turns, screenshots and files |
+| `POST /v1/chats/{id}/suggest` `{apply}` | one of the thread's kitties reads it all (its summary and last 60 turns) and proposes `{suggestion: {title, description}}`, secrets masked; with `apply: true` it is saved too and `chat` comes back (409 when the thread has no messages yet) |
+| `POST /v1/chats/{id}/proposal` `{accept}` | answer the description a kitty proposed (`proposal: {description, by, at}` on the chat): `true` takes it (the old one goes to `descriptions`, the last 10 with `by` and `at`), `false` dismisses it and the kitties wait 10 turns before proposing again (409 when none waits) |
 | `POST /v1/chats/{id}/members` · `DELETE /v1/chats/{id}/members/{ref}` | who is in the group |
 | `POST /v1/chats/{id}/messages` `{text, files: [{name, mime, data}]}` | send a message; returns the kitties' turns (a desktop task goes on in the background: poll the chat). `files` is optional, `data` is base64; up to 6 files and 20 MB in all, checked by their real type (a program is refused with 400, a body over the limit with 413). The turn lists them in `attachments` |
 | `GET /v1/chats/{id}/files/{file}`         | a file of the chat: a picture inline, anything else as a download |
 | `POST /v1/chats/{id}/cancel` · `GET /v1/chats/{id}/shots/{name}` | stop a task; a step's screenshot |
 | `GET /v1/settings` · `PUT/DELETE /v1/settings/providers/{name}` · `POST …/test` · `PUT/DELETE /v1/settings/connectors/{name}` | the models and the connectors (a connector that signs in needs its sign-in or a key; `?sign_in=1` saves it just before its sign-in); `POST …/connectors/{name}/test` checks its account with a request that only reads |
 | `GET /v1/local-token`                     | the token, handed only to a client on the same machine |
-| `GET /v1/chats/{id}/events`               | server-sent events: `turn`, `update`, `done`, `deleted` |
+| `GET /v1/chats/{id}/events`               | server-sent events: `turn`, `update`, `done`, `deleted`, `helping`, `edited` (renamed or a new description: read the chat again) |
 | `POST /v1/oauth/{connector}/start` · `GET /v1/oauth/callback` · `POST /v1/oauth/fragment` | the OAuth sign-in of a connector (`fragment`: the token of a flow that returns it in the address, Trello; open, tied to the flow by its `state`) |
 | `PATCH /v1/kitties/{ref}` `{avatar, soul}` · `GET /v1/avatars` | change a kitty's looks; the breeds and coats |
 | `PATCH /v1/kitties/{ref}` `{limits: {max_rounds, …}}` | a kitty's limits per task and per day, rounds included (the whole object replaces the old one) |

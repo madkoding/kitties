@@ -21,7 +21,7 @@ import (
 
 // action is one thing the model asked for.
 type action struct {
-	kind   string // tool | connector | skill | artifact | delegate | memory | limit | task_limits
+	kind   string // tool | connector | skill | artifact | delegate | memory | limit | task_limits | describe
 	name   string // the tool, the connector, or the verb (skill/artifact)
 	args   map[string]any
 	raw    string
@@ -122,6 +122,8 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 		tools = append(tools, provider.Tool{Name: "delegate", Description: "Hand a subtask to another kitty and get its answer back. For work another kitty is better placed for, never the whole task.",
 			Parameters: obj(props, "kitty", "task")})
 	}
+	tools = append(tools, provider.Tool{Name: "describe_chat", Description: describeHelp,
+		Parameters: obj(map[string]any{"description": str("what the chat is for now: its goal, what still holds and what is pending, 1 to 3 sentences")}, "description")})
 	if s.canSetLimits(k) {
 		tools = append(tools, provider.Tool{Name: "task_limits", Description: taskLimitsHelp,
 			Parameters: obj(map[string]any{"kitty": str("the kitty's name"),
@@ -176,6 +178,8 @@ func fromCalls(calls []provider.ToolCall) []action {
 		case c.Name == "delegate":
 			a.kind = "delegate"
 			a.name, _ = a.args["kitty"].(string)
+		case c.Name == "describe_chat":
+			a.kind, a.name = "describe", "propose"
 		case c.Name == "task_limits":
 			a.kind = "task_limits"
 			a.name, _ = a.args["kitty"].(string)
@@ -257,6 +261,8 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 			out = append(out, s.runLimit(id, a, k, allowed, turn))
 		case "task_limits":
 			out = append(out, s.runTaskLimits(id, a, k, turn))
+		case "describe":
+			out = append(out, s.runDescribe(id, a, k))
 		case "machine":
 			out = append(out, s.runMachine(ctx, a, k))
 		case "connector":

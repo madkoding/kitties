@@ -163,12 +163,25 @@ func planStep(at time.Time, text string, actions []action) (Step, bool) {
 
 // Session is one thread.
 type Session struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Members   []string  `json:"members"` // kitty ids
-	Turns     []Turn    `json:"turns"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	// Description is what the person says the chat is about (Edit): the sidebar's tooltip, the
+	// header's second line and a line of the kitties' prompt.
+	Description string `json:"description,omitempty"`
+	// DescriptionBy wrote the description ("user", or a kitty's name when the person accepted its
+	// proposal) and DescriptionAt is when; Descriptions are the earlier ones, newest first.
+	DescriptionBy string        `json:"description_by,omitempty"`
+	DescriptionAt *time.Time    `json:"description_at,omitempty"`
+	Descriptions  []Description `json:"descriptions,omitempty"`
+	// Proposal is a new description a kitty proposes because the chat changed course: it waits
+	// for the person to accept or dismiss it. DismissedAt is how many turns the chat had when the
+	// person last dismissed one, so the kitties do not ask again at once.
+	Proposal    *Proposal `json:"proposal,omitempty"`
+	DismissedAt int       `json:"proposal_dismissed_at,omitempty"`
+	Members     []string  `json:"members"` // kitty ids
+	Turns       []Turn    `json:"turns"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 	// Goal is the goal this thread works on, when the scheduler opened it.
 	Goal string `json:"goal,omitempty"`
 	// Owner is the kitty that opened this thread to delegate, and Depth how many hand-overs
@@ -343,7 +356,7 @@ type task struct {
 
 // Event is what a watcher of a session is told.
 type Event struct {
-	Type    string `json:"type"` // turn | update | done | deleted | helping
+	Type    string `json:"type"` // turn | update | done | deleted | helping | edited
 	Session string `json:"session"`
 	Index   int    `json:"index"`
 	Turn    *Turn  `json:"turn,omitempty"`
@@ -458,6 +471,8 @@ func parseDirectives(text string) ([]Directive, string) {
 			kind = "limit"
 		case strings.HasPrefix(trimmed, "@task_limits "):
 			kind = "task_limits"
+		case strings.HasPrefix(trimmed, "@describe "):
+			kind = "describe"
 		default:
 			kept = append(kept, line)
 			continue
@@ -475,6 +490,8 @@ func parseDirectives(text string) ([]Directive, string) {
 					key = "text"
 				case "task_limits":
 					key = "max_rounds"
+				case "describe":
+					key = "description"
 				}
 				d.Args[key] = strings.Trim(argsText, "\"' ")
 			}
@@ -1136,6 +1153,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	}
 	system += s.memoryPrompt(k, sess)
 	system += s.limitPrompt(allowed)
+	system += descriptionPrompt(sess) + proposePrompt(sess)
 	if sess.Summary != "" {
 		system += fmt.Sprintf("\nEarlier in this conversation (a summary of its first %d messages, which you no longer see one by one):\n%s\n", sess.SummaryUpTo, sess.Summary)
 	}

@@ -165,6 +165,25 @@ line of at most 140 characters (the sidebar shows up to two lines), without mark
 name, e-mail addresses, long numbers and link paths masked. It needs no model, so listing chats
 stays free; the sidebar shows it under each chat's title and `chat_list` (MCP) returns it.
 
+`Edit` (`edit.go`) renames a session or changes its **description** (`PATCH /v1/chats/{id}`, the
+⋯ menu, MCP `chat_update`): a title is one line of at most 120 characters and never empty, a
+description at most 500 characters, and an empty one takes it off. Renaming does not touch
+`UpdatedAt`, so the chat keeps its place in the list; watchers get an `edited` event. The
+description is what the chat is for: `answer` (and `answerExposed`, in an exposed chat) puts it in
+every kitty's system prompt, read again on each turn, so a new description is the context from the
+next message on.
+
+`Suggest` has the chat's first kitty read the running summary and the last 60 turns and answer a
+JSON `{title, description}` (in the person's language), parsed even inside a code fence, masked
+with `Redact` and cut to the limits; nothing is saved until `Edit` (the page lets the person check
+it first, `apply` in the API and MCP saves it at once).
+
+Every new description pushes the one it replaces onto `Descriptions` (newest first, at most 10,
+with who wrote it and when). A kitty may propose one when the chat changes course (`@describe
+propose …` or the native `describe_chat` tool, `runDescribe`): it waits as `Session.Proposal` until
+`AnswerProposal` takes or drops it. The prompt offers it only while no proposal waits, never in an
+exposed chat, and not for `ProposeAgainAfter` (10) turns after the person said no.
+
 `Send` appends the person's message and picks the responders: in a one-to-one chat the kitty;
 in a group, the kitties the message mentions with `@name`, or every member when it mentions none.
 Each responder answers in turn:
