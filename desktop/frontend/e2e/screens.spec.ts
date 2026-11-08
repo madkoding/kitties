@@ -433,12 +433,16 @@ test("every action of a task shows unfolded when the person prefers it", async (
   ).toBeHidden();
 });
 
-// openConfig unfolds the configuration of the kitty's drawer, where its options are edited.
+// kittyTab picks a tab of the kitty's drawer: desktop, goals, journal, notes or config.
+async function kittyTab(page: Page, tab: string) {
+  const pick = page.locator("[data-modal]").getByTestId(`kitty-tab-${tab}`);
+  await pick.click();
+  await expect(pick).toHaveAttribute("aria-selected", "true");
+}
+
+// openConfig opens the drawer's Configuration tab, where the kitty's options are edited.
 async function openConfig(page: Page) {
-  const config = page.getByTestId("kitty-config");
-  if (!(await config.evaluate((el) => (el as HTMLDetailsElement).open))) {
-    await config.locator("summary").click();
-  }
+  await kittyTab(page, "config");
 }
 
 test("a kitty's drawer shows its display", async ({ page }) => {
@@ -789,7 +793,7 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   page,
 }) => {
   await open(page, `#kitty/${ids.mimi}`);
-  await openConfig(page);
+  await kittyTab(page, "notes");
   const memory = page.getByTestId("memory");
   await expect(memory).toBeVisible();
   // Four thumbs down with a word moved the level from balanced to demanding.
@@ -807,8 +811,6 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   // The yes it gave to Slack is on its way to being trusted: twelve in a row for a demanding person.
   await expect(page.getByTestId("trust")).toContainText("team-slack.send");
   await expect(page.getByTestId("trust")).toContainText("of 12 yeses in a row");
-  // By default it acts on its own, as far as the account allows.
-  await expect(page.getByLabel("When it wants to publish, send or spend")).toHaveValue("");
   // Today's spending against the daily limits.
   await expect(page.getByTestId("spent")).toContainText("of 5,000,000");
   await expect(page.getByTestId("spent")).toContainText("of 5");
@@ -875,9 +877,16 @@ test("what a kitty knows about you: its level of demand, its notes and how far i
   await expect(memory).toContainText("That file is not a kitty's memory.");
   await memory.getByRole("button", { name: "Forget: Invoices go out on the 1st" }).click();
   await expect(notes).not.toContainText("Invoices go out on the 1st");
-  await open(page, `#kitty/${ids.tom}`);
+  // By default it acts on its own, as far as the account allows: a limit, under Configuration.
   await openConfig(page);
+  await expect(page.getByLabel("When it wants to publish, send or spend")).toHaveValue("");
+  // The tab is remembered per kitty: mimi opens on Configuration next time, tom on its desktop.
+  await open(page, `#kitty/${ids.tom}`);
+  await expect(page.getByTestId("kitty-tab-desktop")).toHaveAttribute("aria-selected", "true");
+  await kittyTab(page, "notes");
   await expect(page.getByTestId("notes")).toContainText("My name is Mad and I work from Santiago");
+  await open(page, `#kitty/${ids.mimi}`);
+  await expect(page.getByTestId("kitty-tab-config")).toHaveAttribute("aria-selected", "true");
 });
 
 test("the memory every kitty shares is tended in Settings", async ({ page }) => {
@@ -909,7 +918,7 @@ test("the memory every kitty shares is tended in Settings", async ({ page }) => 
   await expect(notes).toContainText("Dates go day-month-year");
   // What is written here, every kitty knows.
   await open(page, `#kitty/${ids.tom}`);
-  await openConfig(page);
+  await kittyTab(page, "notes");
   await expect(page.getByTestId("notes")).toContainText("Dates go day-month-year");
   await open(page, `#chat/${ids.desktop}`);
   await page.locator("aside").getByRole("button", { name: "Settings" }).click();
@@ -1517,8 +1526,11 @@ test("a long list of goals shows its first few, and the rest on request", async 
 
 test("the kitty's drawer: goals, the journal, limits and the backup", async ({ page }) => {
   await open(page, `#kitty/${ids.mimi}`);
-  // What it does is in view; its brain, who it is and what it may use are edited under
-  // its configuration.
+  // The drawer is in tabs and opens on the desktop. Its brain, who it is and what it may use are
+  // edited under Configuration.
+  const tabs = page.getByTestId("kitty-tabs").getByRole("tab");
+  await expect(tabs).toHaveText(["Desktop", "Goals", "Journal", "Notes", "Configuration"]);
+  await expect(page.getByTestId("kitty-tab-desktop")).toHaveAttribute("aria-selected", "true");
   await expect(page.getByTestId("kitty-basics")).toBeHidden();
   await openConfig(page);
   const basics = page.getByTestId("kitty-basics");
@@ -1534,20 +1546,6 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   await expect(page.getByTestId("kitty-connections").locator(".chip.on").first()).toContainText(
     "All, new ones too",
   );
-  const goals = page.getByTestId("goals");
-  await expect(goals.getByText("Inbox check")).toBeVisible();
-  await expect(goals.getByText("Triage new issues")).toBeVisible();
-  await expect(goals.getByText("hourly").first()).toBeVisible();
-  await expect(goals.getByText("on events from github")).toBeVisible();
-  await expect(goals.locator(".tag", { hasText: "done" })).toHaveCount(2);
-  const journal = page.getByTestId("journal");
-  // Only the first lines show: the rest are a click away.
-  if (await page.getByTestId("journal-more").count()) {
-    await page.getByTestId("journal-more").click();
-  }
-  await expect(journal.locator(".tag", { hasText: "event" }).first()).toBeVisible();
-  await expect(journal.locator(".tag", { hasText: "done" }).first()).toBeVisible();
-  await expect(journal.locator(".tag", { hasText: "delegated" }).first()).toBeVisible();
   await expect(page.getByLabel("Backup (takes over a task mimi gives up on)")).toHaveValue("luna");
   await expect(page.getByLabel("Retries (another way)")).toHaveValue("2");
   await expect(page.getByLabel("Tokens per day")).toHaveValue("5000000");
@@ -1564,8 +1562,27 @@ test("the kitty's drawer: goals, the journal, limits and the backup", async ({ p
   await expect(never).toContainText("never");
   await never.getByRole("button", { name: "remove" }).click();
   await expect(limits.getByText("anything on github")).toHaveCount(0);
-  await goals.scrollIntoViewIfNeeded();
-  await shot(page, "21-goals-journal");
+  await shot(page, "79-kitty-config");
+  // The journal, a tab of its own.
+  await kittyTab(page, "journal");
+  const journal = page.getByTestId("journal");
+  // Only the first lines show (once loaded): the rest are a click away.
+  await expect(journal.locator(".tag").first()).toBeVisible();
+  if (await page.getByTestId("journal-more").count()) {
+    await page.getByTestId("journal-more").click();
+  }
+  await expect(journal.locator(".tag", { hasText: "event" }).first()).toBeVisible();
+  await expect(journal.locator(".tag", { hasText: "done" }).first()).toBeVisible();
+  await expect(journal.locator(".tag", { hasText: "delegated" }).first()).toBeVisible();
+  await shot(page, "80-kitty-journal");
+  // The goals: what it does on a schedule or on events.
+  await kittyTab(page, "goals");
+  const goals = page.getByTestId("goals");
+  await expect(goals.getByText("Inbox check")).toBeVisible();
+  await expect(goals.getByText("Triage new issues")).toBeVisible();
+  await expect(goals.getByText("hourly").first()).toBeVisible();
+  await expect(goals.getByText("on events from github")).toBeVisible();
+  await expect(goals.locator(".tag", { hasText: "done" })).toHaveCount(2);
   // A goal's runs are its history, under the task: why it ran, how it ended, what was found.
   const inbox = goals.getByTestId("goal").filter({ hasText: "Inbox check" });
   await inbox.getByTestId("goal-history").click();
@@ -2242,7 +2259,18 @@ test("the buttons of a kitty's drawer never sit over its model and container", a
     }
     const edge = (await header.boundingBox())!;
     expect(actions.x + actions.width).toBeLessThanOrEqual(edge.x + edge.width + 1);
+    // The tabs slide sideways on their own: the drawer never scrolls sideways.
+    const dialog = page.locator("[data-modal] [role=dialog]");
+    expect(
+      await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth + 1),
+      `${width}px: the drawer scrolls sideways`,
+    ).toBe(true);
+    await expect(page.getByTestId("kitty-tab-config")).toBeAttached();
   }
+  // On a phone every tab is still a tap away.
+  await kittyTab(page, "config");
+  await expect(page.getByTestId("kitty-basics")).toBeVisible();
+  await shot(page, "81-kitty-tabs-phone");
 });
 
 test("a kitty's desktop opens live from the chat, and the person can take control and give it back", async ({
@@ -2521,16 +2549,22 @@ test("in a kitty's drawer the desktop is there, live, and one click on it takes 
   const drawer = page.locator("[data-modal]");
   const live = drawer.getByTestId("live-desktop");
   await expect(live).toBeVisible();
-  // The desktop comes right after the header, above the goals and the journal: those grow and
-  // must not push it down.
+  // The drawer opens on its Desktop tab, the first of five, and the viewer comes first in it:
+  // the machine's power and its care follow.
+  await expect(drawer.getByTestId("kitty-tabs").getByRole("tab")).toHaveText([
+    "Desktop",
+    "Goals",
+    "Journal",
+    "Notes",
+    "Configuration",
+  ]);
+  await expect(drawer.getByTestId("kitty-tab-desktop")).toHaveAttribute("aria-selected", "true");
   const deskBox = (await live.boundingBox())!;
-  const goalsBox = (await drawer
-    .getByText("Scheduled tasks", { exact: true })
-    .first()
-    .boundingBox())!;
-  const journalBox = (await drawer.getByText("Journal", { exact: true }).first().boundingBox())!;
-  expect(deskBox.y).toBeLessThan(goalsBox.y);
-  expect(deskBox.y).toBeLessThan(journalBox.y);
+  const powerBox = (await drawer.getByTestId("machine-power").boundingBox())!;
+  const careBox = (await drawer.getByTestId("desktop-care").boundingBox())!;
+  expect(deskBox.y).toBeLessThan(powerBox.y);
+  expect(deskBox.y).toBeLessThan(careBox.y);
+  await expect(drawer.getByTestId("goals")).toHaveCount(0);
   // One picture of the desktop, and it is the live one: nothing else shows it, nothing to open.
   await expect(drawer.getByTestId("live-frame")).toHaveCount(1);
   await expect(drawer.getByTestId("open-desktop")).toHaveCount(0);
@@ -4014,6 +4048,14 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
       .toBeGreaterThan(0);
 
     await open(page, `#kitty/${luna.id}`);
+    // luna has no desktop: no Desktop tab, and its drawer opens on its goals and the lead panel.
+    await expect(page.getByTestId("kitty-tabs").getByRole("tab")).toHaveText([
+      "Goals",
+      "Journal",
+      "Notes",
+      "Configuration",
+    ]);
+    await expect(page.getByTestId("kitty-tab-goals")).toHaveAttribute("aria-selected", "true");
     const panel = page.getByTestId("lead-panel");
     await expect(panel).toContainText("luna is the lead kitty");
     await expect(page.getByTestId("lead-tag")).toBeVisible();
@@ -4032,6 +4074,7 @@ test("the lead kitty orchestrates the others and their news reach it", async ({ 
 
     // Another kitty's drawer offers to take the lead.
     await open(page, `#kitty/${ids.mimi}`);
+    await kittyTab(page, "goals");
     await expect(page.getByTestId("lead-panel")).toContainText("luna leads the fleet now");
 
     // The Reports thread: the others' news, from the kitty that sent each.
