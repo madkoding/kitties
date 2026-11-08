@@ -55,7 +55,8 @@ A kitty is not only something you talk to. Each one has an agenda:
   **×** takes it off the chat (its answers stay; it is back if handed work there again). When a
   hand-over finishes or fails, the lead hears it in its Reports thread (unless the lead asked),
   and you do too if *Notifications* has "A kitty finished a subtask…" (`delegated`) on; the
-  hand-overs of a chat that end within a minute arrive as one message. An exposed chat
+  hand-overs of a chat that end within a minute arrive as one message (sent at once if the
+  gateway stops). A kitty you delete leaves every chat it helped in. An exposed chat
   (guardrails) never delegates, so it stays a chat of one kitty.
 - **A journal.** Every run, event, retry, hand-over, cry for help and recovery is a line in the
   kitty's journal, in its drawer.
