@@ -289,7 +289,7 @@ func TestIndependentKittyAsksTheLeadFromAGroupWithThePersonsYes(t *testing.T) {
 		t.Fatalf("said before the person looked: %v", relayed)
 	}
 	say := store.List("pending", 10)
-	if len(say) != 1 || say[0].Action != "say" || !strings.Contains(say[0].Summary, "Yes, mad comes on Friday!") {
+	if len(say) != 1 || say[0].Action != "say:"+id || !strings.Contains(say[0].Summary, "Yes, mad comes on Friday!") || !strings.Contains(say[0].Summary, "Is mad free on Friday") {
 		t.Fatalf("pending say = %+v", say)
 	}
 	if _, err := s.DecideApproval(context.Background(), say[0].ID, true, "", false); err != nil {
@@ -323,7 +323,7 @@ func TestIndependentKittyAsksTheLeadFromAGroupWithThePersonsYes(t *testing.T) {
 	_, _ = s.DecideApproval(context.Background(), pending[0].ID, true, "", false)
 	s.Wait()
 	pending = store.List("pending", 10)
-	if len(pending) != 1 || pending[0].Action != "say" {
+	if len(pending) != 1 || pending[0].Action != "say:"+id {
 		t.Fatalf("pending = %+v", pending)
 	}
 	if _, err := s.DecideApproval(context.Background(), pending[0].ID, false, "", false); err != nil {
@@ -348,5 +348,58 @@ func TestOtherKittiesDoNotAskTheLeadFromGroups(t *testing.T) {
 	}
 	if strings.Contains(sb.seen[0][0].Content, "@ask_lead") || len(store.List("pending", 10)) != 0 {
 		t.Error("a kitty that is not independent may ask the lead from a group")
+	}
+}
+
+func TestAlwaysTrustsOneGroupWithTheLeadsAnswers(t *testing.T) {
+	f, _, sb, _ := fleet(t)
+	sc := withLead(f)
+	s := service(t, f)
+	s.HandOverWait = 0
+	guarded(t, s)
+	store, _ := approvals.Open(filepath.Join(t.TempDir(), "approvals.json"))
+	s.SetApprovals(store)
+	alone(s, "b1")
+	var relayed []string
+	s.SetRelay(func(_ context.Context, _ string, text string) error {
+		relayed = append(relayed, text)
+		return nil
+	})
+	id := exposedChat(t, s, "bo")
+	ask := func(q, answer string) {
+		t.Helper()
+		sc.replies = []string{"@answer_kitty bo {\"text\": \"" + answer + "\"}", "ok"}
+		sb.replies = []string{"@ask_lead {\"question\": \"" + q + "\"}", "I will check.", answer}
+		if _, err := s.Send(context.Background(), id, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// The first time, both yeses are "always": for this chat, from now on.
+	ask("Friday?", "Yes, Friday.")
+	p := store.List("pending", 10)
+	if _, err := s.DecideApproval(context.Background(), p[0].ID, true, "", true); err != nil {
+		t.Fatal(err)
+	}
+	s.Wait()
+	p = store.List("pending", 10)
+	if _, err := s.DecideApproval(context.Background(), p[0].ID, true, "", true); err != nil {
+		t.Fatal(err)
+	}
+	if len(relayed) != 1 {
+		t.Fatalf("relayed = %v", relayed)
+	}
+	// The next question goes to the lead and back to the group without asking.
+	ask("Saturday?", "No, not Saturday.")
+	s.Wait()
+	if len(store.List("pending", 10)) != 0 || len(relayed) != 2 || relayed[1] != "No, not Saturday." {
+		t.Errorf("pending %v relayed %v", store.List("pending", 10), relayed)
+	}
+	// Another chat still asks.
+	other, _ := s.Create("WhatsApp +56922222222", []string{"bo"})
+	_ = s.Expose(other.ID, "WhatsApp +56922222222", true)
+	sb.replies = []string{"@ask_lead {\"question\": \"x?\"}", "I will check."}
+	_, _ = s.Send(context.Background(), other.ID, "x?")
+	if len(store.List("pending", 10)) != 1 {
+		t.Errorf("another chat did not ask: %v", store.List("pending", 10))
 	}
 }

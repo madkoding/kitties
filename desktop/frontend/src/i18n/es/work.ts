@@ -659,6 +659,19 @@ const dict: Dictionary = {
   "{name} now speaks with the voice {voice}.": "{name} ahora habla con la voz {voice}.",
   "{name} speaks with the gateway's voice.": "{name} habla con la voz del gateway.",
   "The gateway's voice": "La voz del gateway",
+  "They asked": "Preguntaron",
+  "Question for the lead": "Pregunta para el principal",
+  "Would say on WhatsApp": "Diría en WhatsApp",
+  "From now on, in this chat only, {name} does this without asking":
+    "Desde ahora, solo en este chat, {name} lo hace sin preguntar",
+  "Approve, always in this chat": "Aprobar, siempre en este chat",
+  "saying the lead's answers in one WhatsApp chat":
+    "decir las respuestas del principal en un chat de WhatsApp",
+  "asking the lead from one WhatsApp chat": "preguntarle al principal desde un chat de WhatsApp",
+  "wants to say the lead's answer on WhatsApp":
+    "quiere decir la respuesta del principal en WhatsApp",
+  "wants to ask the lead from a WhatsApp chat":
+    "quiere preguntarle al principal desde un chat de WhatsApp",
 };
 
 export default dict;

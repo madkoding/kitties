@@ -162,7 +162,12 @@ olvida la sesión.
     respuesta ahí), y esa respuesta también espera en **Aprobaciones** (*say in <chat>: …*), una
     segunda revisión antes de salir: con tu sí vuelve a WhatsApp, dentro de la lista, el horario de
     silencio y el límite por hora; con un no queda solo en el chat. Un no a la pregunta deja fuera al
-    principal. Los kitties que no trabajan por su cuenta nunca le
+    principal. La tarjeta muestra la pregunta y lo que se diría, por separado. **Aprobar, siempre
+    en este chat** confía en ese chat (un grupo de confianza) para siempre: sus próximas preguntas
+    van al principal, o sus próximas respuestas salen, sin preguntar; los demás chats siguen
+    preguntando. La lista de límites lo muestra, y *quitar* lo deshace.
+
+    ![Una pregunta al principal desde un grupo, con lo que se diría](screenshots/85-ask-lead-approval.png) Los kitties que no trabajan por su cuenta nunca le
     preguntan al principal desde esos chats.
   - **Se nota.** El cajón del kitty muestra **Por su cuenta** y la barra lateral un escudo junto a
     su nombre (`independent: true` en `GET /v1/kitties`).

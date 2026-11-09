@@ -154,7 +154,12 @@ session, without a new code. **Unlink** removes the device from the phone and fo
     (filtered by the guardrails as any answer there), and that answer waits in **Approvals** too
     (*say in <chat>: …*), a second look before it leaves: on your yes it goes back to WhatsApp,
     within the list, the quiet hours and the hourly limit; on a no it stays in the chat. A no to
-    the question leaves the lead out. Kitties that do not
+    the question leaves the lead out. The card shows the question and what would be said, apart.
+    **Approve, always in this chat** trusts that one chat (a group you trust) for good: its next
+    questions go to the lead, or its next answers go out, without asking; every other chat still
+    asks. The limits list shows it, and *remove* takes it back.
+
+    ![A question to the lead from a group, with what would be said](screenshots/85-ask-lead-approval.png) Kitties that do not
     work on their own never ask the lead from those chats.
   - **Shown as such.** The kitty's drawer shows **On its own** and the sidebar a shield next to
     its name (`independent: true` in `GET /v1/kitties`).

@@ -287,7 +287,7 @@ func (s *Service) runAnswerKitty(a action, lead *kitty.Kitty) outcome {
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
-			s.answerExposedAsk(lead, target, ask.Chat, msg)
+			s.answerExposedAsk(lead, target, ask.Chat, ask.Question, msg)
 		}()
 		return outcome{action: a, text: "sent to " + target.Name + ", who answers the people in that chat"}
 	}

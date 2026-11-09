@@ -137,6 +137,20 @@ const AskLeadConnector = "ask-lead"
 // bound to, outside an answer to a message: the lead's answer to a question asked from there.
 func (s *Service) SetRelay(f func(ctx context.Context, chatID, text string) error) { s.relay = f }
 
+// askAction and sayAction are the approval actions of a chat's questions to the lead and of
+// what the kitty says there with its answers: one per chat, so "always" on one is for that chat
+// (a trusted group) only.
+func askAction(chat string) string { return "ask:" + chat }
+func sayAction(chat string) string { return "say:" + chat }
+
+// leadMode is the person's standing rule for one of those actions: auto, never or "" (ask).
+func (s *Service) leadMode(k *kitty.Kitty, action string) string {
+	if s.approvals == nil {
+		return ""
+	}
+	return s.approvals.ModeOf(k.ID, AskLeadConnector, action)
+}
+
 // asksFromExposed reports whether k may ask the lead from an exposed chat (with the person's yes).
 func (s *Service) asksFromExposed(k *kitty.Kitty) bool {
 	return s.independent(k) && s.approvals != nil && s.leadFor(k) != nil
@@ -148,17 +162,28 @@ func (s *Service) holdAskLead(id string, a action, k *kitty.Kitty, question stri
 		return outcome{action: a, err: "you cannot ask the lead from this chat: answer in words, or say " + s.userName() + " will answer it"}
 	}
 	lead := s.leadFor(k)
+	switch s.leadMode(k, askAction(id)) {
+	case "never":
+		return outcome{action: a, err: s.userName() + " does not want the lead asked from this chat: answer in words, or say " + s.userName() + " will answer it"}
+	case "auto":
+		// The person allowed it for good in this chat.
+		if _, ok := s.askLeadFrom(k, id, question, true); ok {
+			turn.AskedLead = lead.Name
+			return outcome{action: a, text: "asked " + lead.Name + ". Say here, in one line, that you will check and come back, and stop."}
+		}
+		return outcome{action: a, err: "there is no lead to ask now (or you asked it enough): answer in words"}
+	}
 	where := id
 	if sess, err := s.Get(id); err == nil && sess.Title != "" {
 		where = sess.Title
 	}
 	summary := clip(fmt.Sprintf("ask %s, from %s: %s", lead.Name, where, question), 300)
-	ap, err := s.approvals.Request(approvals.Approval{Kitty: k.ID, KittyName: k.Name, Connector: AskLeadConnector, Kind: "ask", Action: "ask",
+	ap, err := s.approvals.Request(approvals.Approval{Kitty: k.ID, KittyName: k.Name, Connector: AskLeadConnector, Kind: "ask", Action: askAction(id),
 		Args: map[string]any{"question": clip(question, 2000)}, Summary: summary, Risk: "ask", Chat: id})
 	if err != nil {
 		return outcome{action: a, err: "could not hold the question: " + err.Error()}
 	}
-	turn.Approvals = append(turn.Approvals, ApprovalRef{ID: ap.ID, Connector: AskLeadConnector, Action: "ask", Summary: summary})
+	turn.Approvals = append(turn.Approvals, ApprovalRef{ID: ap.ID, Connector: AskLeadConnector, Action: ap.Action, Summary: summary})
 	s.note(k, agenda.KindApproval, "", id, "waiting for approval: "+summary)
 	s.tell(notify.Approval, k, "wants to ask "+lead.Name+" from a WhatsApp chat", summary, id)
 	return outcome{action: a, text: "held: " + s.userName() + " decides first whether " + lead.Name + " is asked. Say here, in one line, that you will check and come back, and stop."}
@@ -167,7 +192,7 @@ func (s *Service) holdAskLead(id string, a action, k *kitty.Kitty, question stri
 // decideAskLead is the person's answer to such a question (a yes puts it to the lead) or to what
 // the kitty would say with the lead's answer (a yes says it on WhatsApp).
 func (s *Service) decideAskLead(ctx context.Context, ap *approvals.Approval, k *kitty.Kitty, approve bool) {
-	if ap.Action == "say" {
+	if strings.HasPrefix(ap.Action, "say:") {
 		s.decideSay(ctx, ap, k, approve)
 		return
 	}
@@ -196,7 +221,7 @@ func (s *Service) decideAskLead(ctx context.Context, ap *approvals.Approval, k *
 // answerExposedAsk passes the lead's answer to a chat with other people: the independent kitty
 // answers them there, through the guard as any answer of that chat, and what it says goes back to
 // WhatsApp.
-func (s *Service) answerExposedAsk(lead, k *kitty.Kitty, chatID, msg string) {
+func (s *Service) answerExposedAsk(lead, k *kitty.Kitty, chatID, question, msg string) {
 	deadline := time.Now().Add(leadAnswerWait)
 	var turns []Turn
 	var err error
@@ -223,10 +248,22 @@ func (s *Service) answerExposedAsk(lead, k *kitty.Kitty, chatID, msg string) {
 		if t.Kitty != k.ID || text == "" {
 			continue
 		}
-		// A second look: what the kitty says with the lead's answer waits for the person's yes.
-		summary := clip("say in "+where+": "+text, 300)
-		_, err := s.approvals.Request(approvals.Approval{Kitty: k.ID, KittyName: k.Name, Connector: AskLeadConnector, Kind: "ask", Action: "say",
-			Args: map[string]any{"text": text}, Summary: summary, Risk: "ask", Chat: chatID})
+		switch s.leadMode(k, sayAction(chatID)) {
+		case "auto":
+			// The person trusts what goes out in this chat for good.
+			if err := s.relay(context.Background(), chatID, text); err != nil {
+				s.note(k, agenda.KindBlocked, "", chatID, "could not say the lead's answer on WhatsApp: "+err.Error())
+			}
+			continue
+		case "never":
+			s.note(k, agenda.KindApproval, "", chatID, "kept in the chat (never said on WhatsApp here): "+clip(text, 120))
+			continue
+		}
+		// A second look: what the kitty says with the lead's answer waits for the person's yes,
+		// shown with the question it answers.
+		summary := clip(fmt.Sprintf("say in %s (asked: %q): %s", where, clip(question, 120), text), 400)
+		_, err := s.approvals.Request(approvals.Approval{Kitty: k.ID, KittyName: k.Name, Connector: AskLeadConnector, Kind: "ask", Action: sayAction(chatID),
+			Args: map[string]any{"text": text, "question": clip(question, 2000)}, Summary: summary, Risk: "ask", Chat: chatID})
 		if err != nil {
 			s.note(k, agenda.KindBlocked, "", chatID, "could not hold the lead's answer for approval: "+err.Error())
 			continue

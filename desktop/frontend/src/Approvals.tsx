@@ -59,15 +59,43 @@ function ApprovalCard({
         />
         <div class="min-w-0 flex-1">
           <div class="text-sm">
-            <b>{a.kitty_name}</b> {t("wants to")}{" "}
-            <code class="font-mono">
-              {a.connector}.{a.action}
-            </code>
+            <b>{a.kitty_name}</b>{" "}
+            {a.connector === "ask-lead" ? (
+              a.action.startsWith("say:") ? (
+                t("wants to say the lead's answer on WhatsApp")
+              ) : (
+                t("wants to ask the lead from a WhatsApp chat")
+              )
+            ) : (
+              <>
+                {t("wants to")}{" "}
+                <code class="font-mono">
+                  {a.connector}.{a.action}
+                </code>
+              </>
+            )}
           </div>
           <div class="text-xs text-[var(--t3)]">{when(a.at)}</div>
         </div>
       </div>
-      <p class="approval-summary">{a.summary}</p>
+      {a.connector === "ask-lead" && typeof a.args?.question === "string" ? (
+        // A question to the lead from a WhatsApp chat, or what the kitty would say there with its
+        // answer: the question and the words to go out, apart.
+        <div class="approval-summary" data-testid="ask-lead-approval">
+          <div class="text-xs text-[var(--t3)]">
+            {a.action.startsWith("say:") ? t("They asked") : t("Question for the lead")}
+          </div>
+          <p>{a.args.question as string}</p>
+          {a.action.startsWith("say:") && typeof a.args?.text === "string" && (
+            <>
+              <div class="text-xs text-[var(--t3)] mt-1">{t("Would say on WhatsApp")}</div>
+              <p>{a.args.text as string}</p>
+            </>
+          )}
+        </div>
+      ) : (
+        <p class="approval-summary">{a.summary}</p>
+      )}
       <details class="text-xs text-[var(--t3)]">
         <summary>{t("the exact request")}</summary>
         <pre class="approval-args">{JSON.stringify(a.args, null, 2)}</pre>
@@ -110,9 +138,17 @@ function ApprovalCard({
             class="btn-outline px-3 py-1.5 text-xs"
             disabled={busy}
             onClick={() => decide(() => api.approve(a.id, true))}
-            title={t("From now on {name} does this without asking", { name: a.kitty_name })}
+            title={
+              a.connector === "ask-lead"
+                ? t("From now on, in this chat only, {name} does this without asking", {
+                    name: a.kitty_name,
+                  })
+                : t("From now on {name} does this without asking", { name: a.kitty_name })
+            }
           >
-            {t("Approve, don't ask again")}
+            {a.connector === "ask-lead"
+              ? t("Approve, always in this chat")
+              : t("Approve, don't ask again")}
           </button>
           <button
             class="btn-ghost px-3 py-1.5 text-xs"
@@ -143,6 +179,11 @@ const RULE_TAG: Record<string, string> = { auto: "tag-green", ask: "tag-amber", 
 
 // ruleTarget says what a rule covers: an action of a connection, or all of it.
 export function ruleTarget(r: { connector: string; action: string }): string {
+  if (r.connector === "ask-lead") {
+    return r.action.startsWith("say:")
+      ? t("saying the lead's answers in one WhatsApp chat")
+      : t("asking the lead from one WhatsApp chat");
+  }
   return r.action === "*" || !r.action
     ? t("anything on {connector}", { connector: r.connector })
     : t("{action} on {connector}", { action: actionLabel(r.action), connector: r.connector });
