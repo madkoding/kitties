@@ -3683,6 +3683,12 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
   await expect(box.getByTestId("whatsapp-group")).toHaveText(["Familia", "Trabajo"]);
   await box.getByTestId("whatsapp-group").first().click();
   await expect(box.getByTestId("whatsapp-group").first()).toHaveAttribute("aria-pressed", "true");
+  // Everyone (@all) is mentioned only when all must see it, at most once every few hours.
+  const mentionAll = box.getByTestId("whatsapp-mention-all");
+  await expect(mentionAll.locator("select")).toHaveValue("needed");
+  await mentionAll.getByLabel("Hours between two mentions of everyone").fill("6");
+  await mentionAll.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await shot(page, "86-whatsapp-mention-all");
   // The group gets a kitty of its own, and the hourly limit goes down.
   await expect(box.getByTestId("whatsapp-who")).toContainText("Familia");
   await box.getByTestId("whatsapp-who-kitty").nth(1).selectOption(ids.tom);
@@ -3723,6 +3729,8 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
       quiet_to: "08:00",
       voice: "mirror",
       share_with_team: false,
+      mention_all: "needed",
+      mention_all_hours: 6,
       accept_risk: true,
     },
   ]);

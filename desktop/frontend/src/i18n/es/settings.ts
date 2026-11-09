@@ -408,6 +408,13 @@ const dict: Dictionary = {
   Resend: "Reenviar",
   "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.":
     "No se enviaron: salieron más de {limit} mensajes en una hora. Reenvía uno cuando haya espacio, o sube el límite arriba. La lista queda sellada, así que un reinicio no la pierde.",
+  "Mention everyone (@all)": "Mencionar a todos (@todos)",
+  "Only when all must see it": "Solo cuando todos deben verlo",
+  "at most once every": "como máximo una vez cada",
+  "hours per group": "horas por grupo",
+  "Hours between two mentions of everyone": "Horas entre dos menciones a todos",
+  "The kitty answers by quoting the message it answers, which notifies its author, and mentions others by name. It mentions everyone only for a change of plans, an urgent notice or an announcement someone asked for; past the limit, @all goes as plain text.":
+    "El kitty responde citando el mensaje al que contesta, lo que notifica a su autor, y menciona a otros por su nombre. Menciona a todos solo ante un cambio de planes, un aviso urgente o un anuncio que alguien pidió; pasado el límite, @todos va como texto normal.",
   "Works on its own": "Trabaja por su cuenta",
   "Recommended. The WhatsApp kitty keeps its own notes and files, does not see the other kitties' or the shared notes, and talks only with the lead, which hands it nothing secret. So it can take part in groups without mixing what each side knows.":
     "Recomendado. El kitty de WhatsApp guarda sus propias notas y archivos, no ve los de los otros kitties ni las notas compartidas, y solo habla con el principal, que no le pasa nada secreto. Así puede participar en grupos sin mezclar lo que sabe cada lado.",

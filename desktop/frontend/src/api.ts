@@ -1665,6 +1665,11 @@ export type WhatsAppSettings = {
   // share_with_team lets the WhatsApp kitties work with the others; by default (false) they work
   // on their own: no shared notes or files, no chats or work with other kitties, only the lead.
   share_with_team?: boolean;
+  // mention_all is when a kitty may @mention every member of a group: "needed" (only when all
+  // of it must see a message, the default) or "off" (never); mention_all_hours is the least time
+  // between two such mentions in a group (0: 4).
+  mention_all?: "needed" | "off";
+  mention_all_hours?: number;
 };
 
 // WhatsAppHeld is a message the hourly limit did not send: to is a number (digits) or a group
