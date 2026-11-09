@@ -141,6 +141,11 @@ session, without a new code. **Unlink** removes the device from the phone and fo
     files and commands in the chats with contacts and groups (nothing of yours is on it); there it
     never types vault secrets nor asks you to take control, and what it says is filtered as any
     guarded answer.
+  - **Short tasks, checked links.** Since anyone in a group can put it to work, a task asked there
+    gets at most 5 minutes, 30 rounds and 200k tokens, no retries, and it stops at the end instead
+    of going on by itself. Links sent there open only when they are public web pages: nothing on
+    its machine or network (`localhost`, `192.168…`, `.local`), no `name@` hiding the real site, no
+    programs to download (`.exe`, `.apk`…). A refused link counts as blocked in Settings › Guardrails.
   - **Its own files.** It sees only the library files it saved; the other kitties do not see its.
     It sends only its own files too: a `file` of someone else's is refused.
   - **No other kitties.** It is never in a chat with other kitties (adding it to one is refused),

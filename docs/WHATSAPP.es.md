@@ -148,6 +148,12 @@ olvida la sesión.
     escritorio, archivos y comandos en los chats con contactos y grupos (no hay nada tuyo en él); ahí
     nunca escribe secretos de la bóveda ni te pide tomar el control, y lo que dice se filtra como
     cualquier respuesta protegida.
+  - **Tareas cortas, enlaces revisados.** Como cualquiera del grupo puede ponerlo a trabajar, una
+    tarea pedida ahí tiene como máximo 5 minutos, 30 rondas y 200k tokens, sin reintentos, y se
+    detiene al final en vez de seguir sola. Los enlaces que mandan ahí solo se abren si son páginas
+    web públicas: nada de su máquina o su red (`localhost`, `192.168…`, `.local`), ni un `nombre@`
+    que esconda el sitio real, ni programas para descargar (`.exe`, `.apk`…). Un enlace rechazado
+    cuenta como bloqueado en Ajustes › Protecciones.
   - **Sus propios archivos.** Solo ve los archivos de la biblioteca que guardó él; los otros kitties
     no ven los suyos. También envía solo los suyos: un `file` ajeno se rechaza.
   - **Sin otros kitties.** Nunca está en un chat con otros kitties (agregarlo a uno se rechaza), no

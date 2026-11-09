@@ -363,7 +363,8 @@ func (s *Service) setTaskOverride(chatID string, t kitty.TaskLimits) func() {
 }
 
 // limitsFor are k's limits for a task in a thread: its own, with the one-task change the lead
-// made for that thread if any, over the defaults.
+// made for that thread if any, over the defaults; in a chat with people who are not its person
+// (a WhatsApp group or contact), capped short.
 func (s *Service) limitsFor(k *kitty.Kitty, chatID string) kitty.Limits {
 	s.mu.RLock()
 	t, ok := s.overrides[chatID]
@@ -372,7 +373,11 @@ func (s *Service) limitsFor(k *kitty.Kitty, chatID string) kitty.Limits {
 	if ok {
 		l = t.Apply(l)
 	}
-	return l.Or(s.DefaultLimits)
+	l = l.Or(s.DefaultLimits)
+	if s.guardedID(chatID) {
+		l = exposedLimits(l)
+	}
+	return l
 }
 
 // intArg reads a whole number from the arguments, given as a number or as text.

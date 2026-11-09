@@ -1597,6 +1597,10 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 				outs = append(outs, outcome{action: a, err: notHere})
 				continue
 			}
+			if why := s.linkRefused(id, a); why != "" {
+				outs = append(outs, outcome{action: a, err: why})
+				continue
+			}
 			if a.kind != "tool" {
 				if o, ok := st.pre[i]; ok {
 					outs = append(outs, o)
