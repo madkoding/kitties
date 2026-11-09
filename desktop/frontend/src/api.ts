@@ -1669,8 +1669,8 @@ export type WhatsAppSettings = {
   // on their own: no shared notes or files, no chats or work with other kitties, only the lead.
   share_with_team?: boolean;
   // mention_all is when a kitty may @mention every member of a group: "off" (never, the default)
-  // or "asked" (when the message it answers asks to tell the group); mention_all_hours is the least time
-  // between two such mentions in a group (0: 4).
+  // or "asked" (only when the person asks, from their own number); mention_all_hours is the least time
+  // between two such mentions in a group (12 to 168; 0: 24).
   mention_all?: "off" | "asked";
   mention_all_hours?: number;
   // local_network lets the computer of a kitty that works on its own reach the local network;

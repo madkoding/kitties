@@ -94,8 +94,8 @@ type WhatsApp struct {
 	// work on their own and talk only with the lead.
 	ShareWithTeam bool `yaml:"share_with_team"`
 	// MentionAll is when a kitty may @mention every member of a group: off (never, the default)
-	// or asked (when the message it answers asks to tell the group). MentionAllHours is the least time between two
-	// such mentions in a group (0: 4).
+	// or asked (only when the person asks, from one of their own numbers). MentionAllHours is the
+	// least time between two such mentions in a group (12 to 168; 0: 24).
 	MentionAll      string `yaml:"mention_all"`
 	MentionAllHours int    `yaml:"mention_all_hours"`
 	// LocalNetwork lets the computer of a kitty that works on its own reach the local network;

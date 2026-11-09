@@ -204,7 +204,7 @@ type Settings struct {
 	// work with other kitties, and only the lead to talk to (chat.Service.SetIndependent).
 	ShareWithTeam bool `json:"share_with_team,omitempty"`
 	// MentionAll is when a kitty may @mention every member of a group: MentionAllOff (never, the
-	// default) or MentionAllAsked (when the message it answers asks to tell the group).
+	// default) or MentionAllAsked (only when the person asks, from one of their own numbers).
 	MentionAll string `json:"mention_all,omitempty"`
 	// MentionAllHours is the least time between two mentions of everyone in a group (0 is
 	// DefaultMentionAllHours).

@@ -15,14 +15,18 @@ const (
 	// MentionAllOff (the default, also "") never mentions everyone: "@all" goes as plain text.
 	// The "needed" of the first version reads as off too: the groups did not want it.
 	MentionAllOff = "off"
-	// MentionAllAsked lets a kitty mention everyone when the message it answers asks to tell the
-	// group (or it sends an announcement on its own), at most once every MentionAllHours in each
-	// group.
+	// MentionAllAsked lets a kitty mention everyone only in the answer to one of the person's own
+	// numbers (Guard.Trusted) that asks to tell the group, at most once every MentionAllHours in
+	// each group. Nobody else can make it, and a kitty never does it on its own.
 	MentionAllAsked = "asked"
 )
 
-// DefaultMentionAllHours is the least time between two mentions of everyone in a group.
-const DefaultMentionAllHours = 4
+// DefaultMentionAllHours is the least time between two mentions of everyone in a group (a day),
+// and MinMentionAllHours the shortest Settings takes.
+const (
+	DefaultMentionAllHours = 24
+	MinMentionAllHours     = 12
+)
 
 // MaxMentionAllHours is the longest gap Settings takes (a week).
 const MaxMentionAllHours = 168
@@ -60,8 +64,8 @@ func mentionAllMode(v string) (string, error) {
 
 // mentionAllHours is a MentionAllHours of Settings (0 is DefaultMentionAllHours).
 func mentionAllHours(h int) (int, error) {
-	if h < 0 || h > MaxMentionAllHours {
-		return 0, fmt.Errorf("the hours between two mentions of everyone go from 1 to %d (0 is %d)", MaxMentionAllHours, DefaultMentionAllHours)
+	if h < 0 || (h > 0 && h < MinMentionAllHours) || h > MaxMentionAllHours {
+		return 0, fmt.Errorf("the hours between two mentions of everyone go from %d to %d (0 is %d)", MinMentionAllHours, MaxMentionAllHours, DefaultMentionAllHours)
 	}
 	return h, nil
 }
@@ -254,7 +258,7 @@ func (b *Bridge) everyoneLocked(group string) (bool, string) {
 
 func (b *Bridge) mentionGapLocked() int {
 	if b.set.MentionAllHours > 0 {
-		return b.set.MentionAllHours
+		return max(b.set.MentionAllHours, MinMentionAllHours)
 	}
 	return DefaultMentionAllHours
 }
@@ -297,8 +301,11 @@ func (b *Bridge) prepareLocked(to, text string, in *inbound) (string, Mentions, 
 	text, m := b.mentionsLocked(to, text, b.involvedIn(in))
 	note := ""
 	if m.All {
-		ok, why := false, "the message it answers did not ask to tell the whole group"
-		if in == nil || everyoneWords.MatchString(in.raw) {
+		ok, why := false, "only an answer to one of the person's own numbers that asks to tell the whole group may mention everyone"
+		switch {
+		case b.set.MentionAll != MentionAllAsked:
+			why = "mentioning everyone is off in Settings"
+		case in != nil && b.trustedLocked(in.from) && everyoneWords.MatchString(in.raw):
 			ok, why = b.everyoneLocked(to)
 		}
 		if !ok {
@@ -306,6 +313,11 @@ func (b *Bridge) prepareLocked(to, text string, in *inbound) (string, Mentions, 
 		}
 	}
 	return text, m, note
+}
+
+// trustedLocked reports whether number is one of the person's own.
+func (b *Bridge) trustedLocked(number string) bool {
+	return number != "" && b.opt.Guard != nil && b.opt.Guard.Trusted(number)
 }
 
 // etiquette is how a kitty writes in a WhatsApp group: whom it answers, when to @mention someone
@@ -322,8 +334,9 @@ func (b *Bridge) etiquette(group string) string {
 	if mode != MentionAllAsked {
 		return out + "Never mention everyone (@all): it is off here."
 	}
-	return out + "Write @all only when the message you answer asks you to tell the whole group (a change of plans, an urgent notice, " +
-		"an announcement); never in an ordinary answer. It works at most once every " + strconv.Itoa(gap) + " hours in a group; past that, @all goes as plain text."
+	return out + "Write @all only when the person you work for (writing from one of their own numbers) asks you to tell the whole group; " +
+		"never because anyone else asks, never in an ordinary answer and never on your own. It works at most once every " + strconv.Itoa(gap) +
+		" hours in a group; otherwise @all goes as plain text."
 }
 
 // teach tells the chat of a group how the kitty writes there.

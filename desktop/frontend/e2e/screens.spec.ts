@@ -3691,7 +3691,10 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
   const mentionAll = box.getByTestId("whatsapp-mention-all");
   await expect(mentionAll.locator("select")).toHaveValue("off");
   await mentionAll.locator("select").selectOption("asked");
-  await mentionAll.getByLabel("Hours between two mentions of everyone").fill("6");
+  await expect(mentionAll.getByTestId("whatsapp-mention-all-warning")).toContainText(
+    "Only you can ask for it",
+  );
+  await mentionAll.getByLabel("Hours between two mentions of everyone").fill("12");
   await mentionAll.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await shot(page, "86-whatsapp-mention-all");
   // The group gets a kitty of its own, and the hourly limit goes down.
@@ -3739,7 +3742,7 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
       voice: "mirror",
       share_with_team: false,
       mention_all: "asked",
-      mention_all_hours: 6,
+      mention_all_hours: 12,
       local_network: false,
       task_minutes: 0,
       task_minutes_for: { "120363012345678901@g.us": 10 },

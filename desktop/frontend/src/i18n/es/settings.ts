@@ -409,8 +409,6 @@ const dict: Dictionary = {
   "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.":
     "No se enviaron: salieron más de {limit} mensajes en una hora. Reenvía uno cuando haya espacio, o sube el límite arriba. La lista queda sellada, así que un reinicio no la pierde.",
   "Mention everyone (@all)": "Mencionar a todos (@todos)",
-  "at most once every": "como máximo una vez cada",
-  "hours per group": "horas por grupo",
   "Hours between two mentions of everyone": "Horas entre dos menciones a todos",
   "Its computer stays off your local network": "Su computador queda fuera de tu red local",
   "Recommended. It browses the internet, but cannot reach your router, printers, this computer or anything else at home or work. Applies the next time its computer starts.":
@@ -430,9 +428,14 @@ const dict: Dictionary = {
   Minutes: "Minutos",
   "A day": "Al día",
   "Tasks a day for {who}": "Tareas al día para {who}",
-  "When the message asks to tell the group": "Cuando el mensaje pide avisar al grupo",
-  "The kitty answers by quoting the message it answers, which notifies its author, and tags only the people that message names. It never mentions everyone unless you allow it here; even then only when the message asks to tell the group, and past the limit @all goes as plain text.":
-    "El kitty responde citando el mensaje al que contesta, lo que notifica a su autor, y solo etiqueta a quienes ese mensaje nombra. Nunca menciona a todos salvo que lo permitas aquí; aun así, solo cuando el mensaje pide avisar al grupo, y pasado el límite @todos va como texto normal.",
+  "Never (recommended)": "Nunca (recomendado)",
+  "Only when you ask for it, from your own number":
+    "Solo cuando tú lo pidas, desde tu propio número",
+  "Every member of the group is notified, even those who muted it. Only you can ask for it, writing from one of your own numbers (Settings › Guardrails); nobody else in the group can, and the kitty never does it on its own. At most once per group every:":
+    "Se notifica a cada miembro del grupo, aunque lo tenga silenciado. Solo tú puedes pedirlo, escribiendo desde uno de tus propios números (Ajustes › Guardrails); nadie más del grupo puede, y el kitty nunca lo hace por su cuenta. Como máximo una vez por grupo cada:",
+  "The kitty answers by quoting the message it answers, which notifies its author, and tags only the people that message names. With Never, @all goes as plain text and nobody is notified.":
+    "El kitty responde citando el mensaje al que contesta, lo que notifica a su autor, y solo etiqueta a quienes ese mensaje nombra. Con Nunca, @todos va como texto normal y no se notifica a nadie.",
+  hours: "horas",
   "Works on its own": "Trabaja por su cuenta",
   "Recommended. The WhatsApp kitty keeps its own notes and files, does not see the other kitties' or the shared notes, and talks only with the lead, which hands it nothing secret. So it can take part in groups without mixing what each side knows.":
     "Recomendado. El kitty de WhatsApp guarda sus propias notas y archivos, no ve los de los otros kitties ni las notas compartidas, y solo habla con el principal, que no le pasa nada secreto. Así puede participar en grupos sin mezclar lo que sabe cada lado.",

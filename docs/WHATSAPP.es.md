@@ -123,14 +123,16 @@ olvida la sesión.
   grupo un número de otro chat). Un mensaje que un kitty envía por su cuenta (el conector
   `whatsapp`) puede mencionar a cualquier miembro. A **todos** (`@todos`, `@all`, `@everyone`) **nunca**
   se les menciona por defecto: `@todos` va como texto normal. Ajustes › Conexiones › WhatsApp ›
-  **Mencionar a todos** › *Cuando el mensaje pide avisar al grupo* lo permite, solo cuando el
-  mensaje que responde pide avisar al grupo (o el kitty envía un anuncio por su cuenta), nunca en
-  una respuesta normal, y **como máximo una vez cada 4 horas por grupo** (las horas también se
-  eligen ahí). Pasado el límite, `@todos` va como texto normal y al kitty se le dice por qué. En los grupos que ocultan números (los LID de WhatsApp), quién escribió,
+  **Mencionar a todos** › *Solo cuando tú lo pidas, desde tu propio número* lo permite en un caso
+  acotado: la respuesta a un mensaje de **uno de tus propios números** (Ajustes › Guardrails) que
+  pide avisar al grupo. Nadie más del grupo puede activarlo, el kitty nunca lo hace por su cuenta
+  (ni con el conector), y funciona **como máximo una vez por grupo cada 24 horas** (de 12 a 168,
+  también se elige ahí). Si no, `@todos` va como texto normal y al kitty se le dice por qué.
+  Ajustes muestra una advertencia mientras está activado. En los grupos que ocultan números (los LID de WhatsApp), quién escribió,
   de quién es el mensaje que cita una respuesta y a quién menciona se leen de los miembros del
   grupo cuando el teléfono aún no dio sus números, así el kitty siempre sabe quién escribe.
 
-  ![Mencionar a todos en Ajustes: nunca por defecto, o cuando el mensaje pide avisar al grupo, como máximo una vez cada pocas horas](screenshots/86-whatsapp-mention-all.png)
+  ![Mencionar a todos en Ajustes: nunca por defecto, o solo cuando tú lo pidas desde tu número, como máximo una vez al día por grupo](screenshots/86-whatsapp-mention-all.png)
 - **Fotos, videos, documentos y audios.** Le llegan al kitty como archivos del chat (hasta 25 MB
   cada uno), con su pie de foto como texto. Una **nota de voz** se pasa a texto con la API de voz
   (Whisper) de un perfil `openai` o `groq` con llave; sin uno llega como archivo de audio.
@@ -258,8 +260,8 @@ whatsapp:
   speak: ""                      # el perfil openai que lee las respuestas; vacío: el primero; off: ninguno
   speak_voice: nova              # su voz (alloy, nova, shimmer, …); vacío: alloy
   share_with_team: false         # true: los kitties de WhatsApp trabajan con los demás (por defecto: por su cuenta)
-  mention_all: "off"             # @todos en grupos: off (nunca, por defecto) o asked (cuando el mensaje pide avisar al grupo)
-  mention_all_hours: 4           # horas mínimas entre dos menciones a todos en un grupo (0: 4)
+  mention_all: "off"             # @todos en grupos: off (nunca, por defecto) o asked (solo cuando tú lo pidas, desde tu número)
+  mention_all_hours: 24          # horas mínimas entre dos menciones a todos en un grupo (12 a 168; 0: 24)
   local_network: false           # true: su computador puede llegar a la red local (por defecto: solo internet)
   task_minutes: 5                # cuánto puede durar una tarea pedida por WhatsApp (0: 5, máximo 60)
   task_minutes_for: {"120363012345678901@g.us": 10}   # por número o grupo
