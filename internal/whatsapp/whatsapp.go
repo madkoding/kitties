@@ -1273,6 +1273,14 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 		in.sender = "" // one of the person's own numbers: it is the person
 	}
 	in.text = b.withMentionsLocked(in.text, ev.Mentions, in.to)
+	// The quote of the answer shows the message's @tags as names, not as tags of people the answer
+	// is not for; and the people it mentions are the ones the answer may mention back.
+	in.raw = b.plainTagsLocked(in.raw, ev.Mentions, in.to)
+	for _, n := range ev.Mentions {
+		if n != "" && n != b.status.Phone && n != ev.From {
+			in.mentioned = append(in.mentioned, n)
+		}
+	}
 	if q := b.quoteLineLocked(ev.Quote, in.to); q != "" {
 		in.text = q + "\n" + in.text
 	}
@@ -1332,28 +1340,29 @@ func (b *Bridge) dispatchLocked(c Client, in inbound) {
 
 // pending is a message kept for the end of the quiet hours.
 type pending struct {
-	From      string `json:"from"`
-	Name      string `json:"name,omitempty"`
-	Sender    string `json:"sender,omitempty"`
-	Text      string `json:"text"`
-	Raw       string `json:"raw"`
-	Files     []File `json:"files,omitempty"`
-	Key       string `json:"key"`
-	To        string `json:"to"`
-	Who       string `json:"who"`
-	Group     bool   `json:"group,omitempty"`
-	GroupName string `json:"group_name,omitempty"`
-	Ref       Ref    `json:"ref"`
+	From      string   `json:"from"`
+	Name      string   `json:"name,omitempty"`
+	Sender    string   `json:"sender,omitempty"`
+	Text      string   `json:"text"`
+	Raw       string   `json:"raw"`
+	Files     []File   `json:"files,omitempty"`
+	Key       string   `json:"key"`
+	To        string   `json:"to"`
+	Who       string   `json:"who"`
+	Group     bool     `json:"group,omitempty"`
+	GroupName string   `json:"group_name,omitempty"`
+	Ref       Ref      `json:"ref"`
+	Mentioned []string `json:"mentioned,omitempty"`
 }
 
 func pendingOf(in inbound) pending {
 	return pending{From: in.from, Name: in.name, Sender: in.sender, Text: in.text, Raw: in.raw, Files: in.files, Key: in.key, To: in.to,
-		Who: in.who, Group: in.group, GroupName: in.groupName, Ref: in.ref}
+		Who: in.who, Group: in.group, GroupName: in.groupName, Ref: in.ref, Mentioned: in.mentioned}
 }
 
 func (p pending) inbound(qid string) inbound {
 	return inbound{from: p.From, name: p.Name, sender: p.Sender, text: p.Text, raw: p.Raw, files: p.Files, key: p.Key, to: p.To,
-		who: p.Who, group: p.Group, groupName: p.GroupName, ref: p.Ref, qid: qid}
+		who: p.Who, group: p.Group, groupName: p.GroupName, ref: p.Ref, qid: qid, mentioned: p.Mentioned}
 }
 
 // queueAAD binds the sealed queue to its use.
@@ -1430,8 +1439,10 @@ type inbound struct {
 	from, name, text string
 	// sender is how the kitty reads who wrote ("Ana (+56912345678)"); empty for the person.
 	sender string
-	// raw is the text as it came, to quote it.
-	raw       string
+	// raw is the text as it came (its @tags as names), to quote it.
+	raw string
+	// mentioned are the numbers the message @mentions (not the kitty's nor its author's).
+	mentioned []string
 	files     []File
 	key, to   string
 	group     bool
@@ -1923,7 +1934,7 @@ func (b *Bridge) replyTo(ctx context.Context, c Client, to string, in *inbound, 
 		return
 	}
 	b.mu.Lock()
-	text, m, note := b.prepareLocked(to, Plain(text))
+	text, m, note := b.prepareLocked(to, Plain(text), in)
 	b.mu.Unlock()
 	if note != "" {
 		b.opt.Log("whatsapp: @all in %s not mentioned: %s", to, note)
@@ -2142,7 +2153,7 @@ func (b *Bridge) sendWith(ctx context.Context, to, text, file string) (note stri
 		return "", errors.New("the message is empty")
 	}
 	b.mu.Lock()
-	text, m, note := b.prepareLocked(n, Plain(text))
+	text, m, note := b.prepareLocked(n, Plain(text), nil)
 	b.mu.Unlock()
 	parts := Split(text, maxPart)
 	caption := ""

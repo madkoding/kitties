@@ -113,13 +113,17 @@ olvida la sesión.
   está en la lista se ignora y se cuenta.
 - **Menciones en grupos (@).** La respuesta **cita** el mensaje al que contesta (también el
   resultado de una tarea larga, que llega después de mensajes más nuevos), así el grupo ve para
-  quién es y WhatsApp notifica a su autor. Cuando el kitty escribe `@Ana` (alguien que escribió en
-  ese grupo) o `@+56912345678`, el puente lo convierte en una mención real de WhatsApp, que le
-  notifica aunque haya silenciado el grupo; un nombre que comparten dos miembros, o alguien que
-  nunca escribió ahí, no se adivina (y nunca se muestra al grupo un número de otro chat). A
-  **todos** (`@todos`, `@all`, `@everyone`) se les menciona solo **cuando hace falta**: el kitty
-  tiene instrucción de guardarlo para un cambio de planes, un aviso urgente o un anuncio que alguien
-  pidió, nunca para una respuesta normal, y funciona **como máximo una vez cada 4 horas por
+  quién es y WhatsApp notifica a su autor. Una respuesta **etiqueta solo a quienes van dirigidos**:
+  alguien a quien el mensaje que responde menciona con @ o nombra (`Mimi, pregúntale a Pedro…` →
+  `@Pedro`), 3 como máximo. Cualquier otra etiqueta que escriba el kitty (al autor, a alguien de
+  quien solo habla, un nombre que nadie tiene) sale como **nombre simple**, sin `@`, así nadie
+  queda etiquetado en una respuesta que no es para él; la cita también muestra las etiquetas del
+  mensaje como nombres. Una mención real notifica aunque el grupo esté silenciado; un nombre que
+  comparten dos miembros, o alguien que nunca escribió ahí, no se adivina (y nunca se muestra al
+  grupo un número de otro chat). Un mensaje que un kitty envía por su cuenta (el conector
+  `whatsapp`) puede mencionar a cualquier miembro. A **todos** (`@todos`, `@all`, `@everyone`) se
+  les menciona solo **cuando el mensaje que responde pide avisar al grupo** (o el kitty envía un
+  anuncio por su cuenta), nunca en una respuesta normal, y **como máximo una vez cada 4 horas por
   grupo** (Ajustes › Conexiones › WhatsApp › **Mencionar a todos**: *Solo cuando todos deben verlo*
   o *Nunca*, y las horas). Pasado el límite, o si está apagado, `@todos` va como texto normal y al
   kitty se le dice por qué. En los grupos que ocultan números (los LID de WhatsApp), quién escribió,

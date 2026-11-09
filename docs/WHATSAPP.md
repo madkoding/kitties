@@ -108,13 +108,16 @@ session, without a new code. **Unlink** removes the device from the phone and fo
   ignored and counted.
 - **Mentions in groups (@).** The answer **quotes** the message it answers (also the result of a
   long task, which comes after newer messages), so the group sees whom it is for and WhatsApp
-  notifies its author. When the kitty writes `@Ana` (someone who wrote in that group) or
-  `@+56912345678`, the bridge turns it into a real WhatsApp mention, which notifies them even if
-  they muted the group; a name two members share, or someone who never wrote there, is not guessed
-  (and a number from another chat is never shown to the group). **Everyone** (`@all`, `@todos`,
-  `@everyone`) is mentioned only **when it is needed**: the kitty is told to keep it for a change of
-  plans, an urgent notice or an announcement someone asked for, never an ordinary answer, and it
-  works **at most once every 4 hours per group** (Settings › Connections › WhatsApp › **Mention
+  notifies its author. An answer **tags only the people it is for**: someone the message being
+  answered @mentions or names (`Mimi, ask Pedro…` → `@Pedro`), at most 3. Any other tag the kitty
+  writes (its author, someone it only talks about, a name nobody has) goes as a **plain name**,
+  without `@`, so nobody is tagged by an answer that is not for them; the quote shows the
+  message's own tags as names too. A real mention notifies even a muted group; a name two members
+  share, or someone who never wrote there, is not guessed (and a number from another chat is never
+  shown to the group). A message a kitty sends on its own (the `whatsapp` connector) may mention
+  any member. **Everyone** (`@all`, `@todos`, `@everyone`) is mentioned only **when the message
+  being answered asks to tell the group** (or the kitty sends an announcement on its own), never
+  in an ordinary answer, and **at most once every 4 hours per group** (Settings › Connections › WhatsApp › **Mention
   everyone**: *Only when all must see it* or *Never*, and the hours). Past the limit, or with it
   off, `@all` goes as plain text and the kitty is told why. In groups that hide numbers (WhatsApp's
   LIDs), who wrote, whose message a reply quotes and whom it mentions are read from the group's
