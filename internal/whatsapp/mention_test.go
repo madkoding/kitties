@@ -75,7 +75,7 @@ func (r *rig) ask(t *testing.T, f *fakeClient, id, text string, n int) string {
 // A kitty's answer in a group @mentions the members it names (by name or number) so WhatsApp
 // notifies them, and everyone only when it writes @all and the limit lets it.
 func TestGroupMentions(t *testing.T) {
-	r, f := groupRig(t, Settings{})
+	r, f := groupRig(t, Settings{MentionAll: MentionAllAsked})
 	clock := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	r.b.mu.Lock()
 	r.b.now = func() time.Time { return clock }
@@ -154,7 +154,7 @@ func TestGroupEtiquette(t *testing.T) {
 	ec := &etiquetteChats{fakeChats: r.chats, manners: map[string]string{}}
 	r.b.opt.Chats = ec
 	r.b.Start(context.Background())
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Groups: true, AllowGroups: []string{familia}, MentionAllHours: 6}, true); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Groups: true, AllowGroups: []string{familia}, MentionAll: MentionAllAsked, MentionAllHours: 6}, true); err != nil {
 		t.Fatal(err)
 	}
 	f := r.next(t)
@@ -177,16 +177,23 @@ func TestMentionSettings(t *testing.T) {
 	if err := r.b.Apply(Settings{Kitty: "mimi", MentionAllHours: MaxMentionAllHours + 1}, true); err == nil {
 		t.Fatal("a gap too long was taken")
 	}
-	if err := r.b.Apply(Settings{Kitty: "mimi", MentionAll: "Never"}, true); err != nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi", MentionAll: "Asked"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.b.Status(); st.MentionAll != MentionAllAsked {
+		t.Fatalf("mode = %q", st.MentionAll)
+	}
+	// The first version's "needed" reads as off.
+	if err := r.b.Apply(Settings{Kitty: "mimi", MentionAll: "needed"}, true); err != nil {
 		t.Fatal(err)
 	}
 	if st := r.b.Status(); st.MentionAll != MentionAllOff {
-		t.Fatalf("mode = %q", st.MentionAll)
+		t.Fatalf("legacy mode = %q", st.MentionAll)
 	}
 	if err := r.b.Apply(Settings{Kitty: "mimi"}, true); err != nil {
 		t.Fatal(err)
 	}
-	if st := r.b.Status(); st.MentionAll != MentionAllNeeded {
+	if st := r.b.Status(); st.MentionAll != MentionAllOff {
 		t.Fatalf("default mode = %q", st.MentionAll)
 	}
 }

@@ -12,12 +12,13 @@ import (
 
 // The ways the kitties may @mention every member of a group (Settings.MentionAll).
 const (
-	// MentionAllNeeded (the default, also "") lets a kitty mention everyone only when all of the
-	// group must see a message (a change of plans, an urgent notice, an announcement someone asked
-	// for), at most once every MentionAllHours in each group.
-	MentionAllNeeded = "needed"
-	// MentionAllOff never mentions everyone: "@all" goes as plain text.
+	// MentionAllOff (the default, also "") never mentions everyone: "@all" goes as plain text.
+	// The "needed" of the first version reads as off too: the groups did not want it.
 	MentionAllOff = "off"
+	// MentionAllAsked lets a kitty mention everyone when the message it answers asks to tell the
+	// group (or it sends an announcement on its own), at most once every MentionAllHours in each
+	// group.
+	MentionAllAsked = "asked"
 )
 
 // DefaultMentionAllHours is the least time between two mentions of everyone in a group.
@@ -46,15 +47,15 @@ type etiquetter interface {
 	SetEtiquette(id, text string) error
 }
 
-// mentionAllMode is a MentionAll of Settings: MentionAllNeeded for "" too.
+// mentionAllMode is a MentionAll of Settings: MentionAllOff for "" too.
 func mentionAllMode(v string) (string, error) {
 	switch v = strings.ToLower(strings.TrimSpace(v)); v {
-	case "", MentionAllNeeded:
-		return MentionAllNeeded, nil
-	case MentionAllOff, "never":
+	case "", MentionAllOff, "never", "needed":
 		return MentionAllOff, nil
+	case MentionAllAsked:
+		return MentionAllAsked, nil
 	}
-	return "", fmt.Errorf("mention_all is %q (only when all of the group must see it) or %q (never)", MentionAllNeeded, MentionAllOff)
+	return "", fmt.Errorf("mention_all is %q (never, the default) or %q (when the message asks to tell the group)", MentionAllOff, MentionAllAsked)
 }
 
 // mentionAllHours is a MentionAllHours of Settings (0 is DefaultMentionAllHours).
@@ -239,7 +240,7 @@ func (b *Bridge) memberNamedLocked(group, name string) (string, bool) {
 // everyoneLocked reports whether a kitty may mention every member of group now, and takes the
 // turn when it may: never with MentionAll off, and once every MentionAllHours in a group.
 func (b *Bridge) everyoneLocked(group string) (bool, string) {
-	if b.set.MentionAll == MentionAllOff {
+	if b.set.MentionAll != MentionAllAsked {
 		return false, "mentioning everyone is off in Settings"
 	}
 	gap := time.Duration(b.mentionGapLocked()) * time.Hour
@@ -318,7 +319,7 @@ func (b *Bridge) etiquette(group string) string {
 		"Do not @mention anyone else either, unless the message you answer asks you to call, ask or tell a specific person; " +
 		"then write @ and their name (@Ana). Never @mention someone you only talk about, greet or quote: write their name without @. " +
 		"A tag of someone the message did not involve goes as their plain name. "
-	if mode == MentionAllOff {
+	if mode != MentionAllAsked {
 		return out + "Never mention everyone (@all): it is off here."
 	}
 	return out + "Write @all only when the message you answer asks you to tell the whole group (a change of plans, an urgent notice, " +

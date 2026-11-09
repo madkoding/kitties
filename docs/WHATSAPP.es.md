@@ -121,16 +121,16 @@ olvida la sesión.
   mensaje como nombres. Una mención real notifica aunque el grupo esté silenciado; un nombre que
   comparten dos miembros, o alguien que nunca escribió ahí, no se adivina (y nunca se muestra al
   grupo un número de otro chat). Un mensaje que un kitty envía por su cuenta (el conector
-  `whatsapp`) puede mencionar a cualquier miembro. A **todos** (`@todos`, `@all`, `@everyone`) se
-  les menciona solo **cuando el mensaje que responde pide avisar al grupo** (o el kitty envía un
-  anuncio por su cuenta), nunca en una respuesta normal, y **como máximo una vez cada 4 horas por
-  grupo** (Ajustes › Conexiones › WhatsApp › **Mencionar a todos**: *Solo cuando todos deben verlo*
-  o *Nunca*, y las horas). Pasado el límite, o si está apagado, `@todos` va como texto normal y al
-  kitty se le dice por qué. En los grupos que ocultan números (los LID de WhatsApp), quién escribió,
+  `whatsapp`) puede mencionar a cualquier miembro. A **todos** (`@todos`, `@all`, `@everyone`) **nunca**
+  se les menciona por defecto: `@todos` va como texto normal. Ajustes › Conexiones › WhatsApp ›
+  **Mencionar a todos** › *Cuando el mensaje pide avisar al grupo* lo permite, solo cuando el
+  mensaje que responde pide avisar al grupo (o el kitty envía un anuncio por su cuenta), nunca en
+  una respuesta normal, y **como máximo una vez cada 4 horas por grupo** (las horas también se
+  eligen ahí). Pasado el límite, `@todos` va como texto normal y al kitty se le dice por qué. En los grupos que ocultan números (los LID de WhatsApp), quién escribió,
   de quién es el mensaje que cita una respuesta y a quién menciona se leen de los miembros del
   grupo cuando el teléfono aún no dio sus números, así el kitty siempre sabe quién escribe.
 
-  ![Mencionar a todos en Ajustes: solo cuando todos deben verlo, como máximo una vez cada pocas horas](screenshots/86-whatsapp-mention-all.png)
+  ![Mencionar a todos en Ajustes: nunca por defecto, o cuando el mensaje pide avisar al grupo, como máximo una vez cada pocas horas](screenshots/86-whatsapp-mention-all.png)
 - **Fotos, videos, documentos y audios.** Le llegan al kitty como archivos del chat (hasta 25 MB
   cada uno), con su pie de foto como texto. Una **nota de voz** se pasa a texto con la API de voz
   (Whisper) de un perfil `openai` o `groq` con llave; sin uno llega como archivo de audio.
@@ -258,7 +258,7 @@ whatsapp:
   speak: ""                      # el perfil openai que lee las respuestas; vacío: el primero; off: ninguno
   speak_voice: nova              # su voz (alloy, nova, shimmer, …); vacío: alloy
   share_with_team: false         # true: los kitties de WhatsApp trabajan con los demás (por defecto: por su cuenta)
-  mention_all: needed            # @todos en grupos: needed (solo cuando todos deben verlo, por defecto) u off
+  mention_all: "off"             # @todos en grupos: off (nunca, por defecto) o asked (cuando el mensaje pide avisar al grupo)
   mention_all_hours: 4           # horas mínimas entre dos menciones a todos en un grupo (0: 4)
   local_network: false           # true: su computador puede llegar a la red local (por defecto: solo internet)
   task_minutes: 5                # cuánto puede durar una tarea pedida por WhatsApp (0: 5, máximo 60)

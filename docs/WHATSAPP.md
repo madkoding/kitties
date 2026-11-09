@@ -115,15 +115,16 @@ session, without a new code. **Unlink** removes the device from the phone and fo
   message's own tags as names too. A real mention notifies even a muted group; a name two members
   share, or someone who never wrote there, is not guessed (and a number from another chat is never
   shown to the group). A message a kitty sends on its own (the `whatsapp` connector) may mention
-  any member. **Everyone** (`@all`, `@todos`, `@everyone`) is mentioned only **when the message
-  being answered asks to tell the group** (or the kitty sends an announcement on its own), never
-  in an ordinary answer, and **at most once every 4 hours per group** (Settings › Connections › WhatsApp › **Mention
-  everyone**: *Only when all must see it* or *Never*, and the hours). Past the limit, or with it
-  off, `@all` goes as plain text and the kitty is told why. In groups that hide numbers (WhatsApp's
+  any member. **Everyone** (`@all`, `@todos`, `@everyone`) is **never** mentioned by default:
+  `@all` goes as plain text. Settings › Connections › WhatsApp › **Mention everyone** › *When the
+  message asks to tell the group* allows it, only when the message being answered asks to tell the
+  group (or the kitty sends an announcement on its own), never in an ordinary answer, and **at
+  most once every 4 hours per group** (the hours are set there too). Past the limit, `@all` goes as
+  plain text and the kitty is told why. In groups that hide numbers (WhatsApp's
   LIDs), who wrote, whose message a reply quotes and whom it mentions are read from the group's
   members when the phone has not told their numbers yet, so the kitty always knows who writes.
 
-  ![Mention everyone in Settings: only when all must see it, at most once every few hours](screenshots/86-whatsapp-mention-all.png)
+  ![Mention everyone in Settings: never by default, or when the message asks to tell the group, at most once every few hours](screenshots/86-whatsapp-mention-all.png)
 - **Pictures, videos, documents and audio.** They reach the kitty as files of the chat (up to 25 MB
   each), with their caption as the text. A **voice note** is turned into text with the speech API
   (Whisper) of an `openai` or `groq` profile with a key; without one it comes as an audio file.
@@ -244,7 +245,7 @@ whatsapp:
   speak: ""                      # the openai profile that reads answers aloud; empty: the first; off: none
   speak_voice: nova              # its voice (alloy, nova, shimmer, …); empty: alloy
   share_with_team: false         # true: the WhatsApp kitties work with the others (default: on their own)
-  mention_all: needed            # @all in groups: needed (only when all must see it, the default) or off
+  mention_all: "off"             # @all in groups: off (never, the default) or asked (when the message asks to tell the group)
   mention_all_hours: 4           # least hours between two mentions of everyone in a group (0: 4)
   local_network: false           # true: their computer may reach the local network (default: internet only)
   task_minutes: 5                # how long a task asked from WhatsApp may run (0: 5, at most 60)

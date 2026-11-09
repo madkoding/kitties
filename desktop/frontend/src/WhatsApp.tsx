@@ -37,7 +37,7 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     quiet_to: s.quiet_to || "",
     voice: s.voice || "",
     share_with_team: !!s.share_with_team,
-    mention_all: s.mention_all === "off" ? "off" : "needed",
+    mention_all: s.mention_all === "asked" ? "asked" : "off",
     mention_all_hours: s.mention_all_hours || 0,
     local_network: !!s.local_network,
     task_minutes: s.task_minutes || 0,
@@ -59,7 +59,7 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     (a.quiet_to || "") === (b.quiet_to || "") &&
     (a.voice || "") === (b.voice || "") &&
     !!a.share_with_team === !!b.share_with_team &&
-    (a.mention_all || "needed") === (b.mention_all || "needed") &&
+    (a.mention_all || "off") === (b.mention_all || "off") &&
     (a.mention_all_hours || 0) === (b.mention_all_hours || 0) &&
     !!a.local_network === !!b.local_network &&
     (a.task_minutes || 0) === (b.task_minutes || 0) &&
@@ -329,7 +329,7 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           {t("Mention everyone (@all)")}
           <select
             class="px-2 py-1 text-sm"
-            value={want.mention_all || "needed"}
+            value={want.mention_all || "off"}
             disabled={disabled}
             onChange={(e) =>
               setWant({
@@ -339,10 +339,10 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
               })
             }
           >
-            <option value="needed">{t("Only when all must see it")}</option>
             <option value="off">{t("Never")}</option>
+            <option value="asked">{t("When the message asks to tell the group")}</option>
           </select>
-          {want.mention_all !== "off" && (
+          {want.mention_all === "asked" && (
             <label class="flex items-center gap-2">
               {t("at most once every")}
               <input
@@ -369,7 +369,7 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           )}
           <span class="block w-full text-xs text-[var(--t3)]">
             {t(
-              "The kitty answers by quoting the message it answers, which notifies its author, and mentions others by name. It mentions everyone only for a change of plans, an urgent notice or an announcement someone asked for; past the limit, @all goes as plain text.",
+              "The kitty answers by quoting the message it answers, which notifies its author, and tags only the people that message names. It never mentions everyone unless you allow it here; even then only when the message asks to tell the group, and past the limit @all goes as plain text.",
             )}
           </span>
         </div>

@@ -409,12 +409,9 @@ const dict: Dictionary = {
   "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.":
     "Não foram enviadas: saíram mais de {limit} mensagens em uma hora. Reenvie uma quando houver espaço, ou aumente o limite acima. A lista fica selada, então um reinício não a perde.",
   "Mention everyone (@all)": "Mencionar todos (@todos)",
-  "Only when all must see it": "Só quando todos precisam ver",
   "at most once every": "no máximo uma vez a cada",
   "hours per group": "horas por grupo",
   "Hours between two mentions of everyone": "Horas entre duas menções a todos",
-  "The kitty answers by quoting the message it answers, which notifies its author, and mentions others by name. It mentions everyone only for a change of plans, an urgent notice or an announcement someone asked for; past the limit, @all goes as plain text.":
-    "O kitty responde citando a mensagem que responde, o que notifica o autor, e menciona os outros pelo nome. Menciona todos só numa mudança de planos, num aviso urgente ou num anúncio que alguém pediu; passado o limite, @todos vai como texto normal.",
   "Its computer stays off your local network": "O computador dele fica fora da sua rede local",
   "Recommended. It browses the internet, but cannot reach your router, printers, this computer or anything else at home or work. Applies the next time its computer starts.":
     "Recomendado. Navega na internet, mas não alcança o seu roteador, impressoras, este computador nem mais nada de casa ou do trabalho. Vale a partir da próxima vez que o computador dele iniciar.",
@@ -433,6 +430,9 @@ const dict: Dictionary = {
   Minutes: "Minutos",
   "A day": "Por dia",
   "Tasks a day for {who}": "Tarefas por dia para {who}",
+  "When the message asks to tell the group": "Quando a mensagem pede para avisar o grupo",
+  "The kitty answers by quoting the message it answers, which notifies its author, and tags only the people that message names. It never mentions everyone unless you allow it here; even then only when the message asks to tell the group, and past the limit @all goes as plain text.":
+    "O kitty responde citando a mensagem que responde, o que notifica o autor, e só marca quem essa mensagem nomeia. Nunca menciona todos a menos que você permita aqui; mesmo assim, só quando a mensagem pede para avisar o grupo, e passado o limite @todos vai como texto normal.",
   "Works on its own": "Trabalha por conta própria",
   "Recommended. The WhatsApp kitty keeps its own notes and files, does not see the other kitties' or the shared notes, and talks only with the lead, which hands it nothing secret. So it can take part in groups without mixing what each side knows.":
     "Recomendado. O kitty do WhatsApp guarda as suas próprias notas e arquivos, não vê os dos outros kitties nem as notas compartilhadas, e só fala com o principal, que não lhe passa nada secreto. Assim pode participar de grupos sem misturar o que cada lado sabe.",

@@ -3689,7 +3689,8 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
   await expect(box.getByTestId("whatsapp-group").first()).toHaveAttribute("aria-pressed", "true");
   // Everyone (@all) is mentioned only when all must see it, at most once every few hours.
   const mentionAll = box.getByTestId("whatsapp-mention-all");
-  await expect(mentionAll.locator("select")).toHaveValue("needed");
+  await expect(mentionAll.locator("select")).toHaveValue("off");
+  await mentionAll.locator("select").selectOption("asked");
   await mentionAll.getByLabel("Hours between two mentions of everyone").fill("6");
   await mentionAll.evaluate((el) => el.scrollIntoView({ block: "center" }));
   await shot(page, "86-whatsapp-mention-all");
@@ -3737,7 +3738,7 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
       quiet_to: "08:00",
       voice: "mirror",
       share_with_team: false,
-      mention_all: "needed",
+      mention_all: "asked",
       mention_all_hours: 6,
       local_network: false,
       task_minutes: 0,
