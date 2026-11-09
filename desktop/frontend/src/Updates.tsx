@@ -93,6 +93,35 @@ function stepText(p: UpdateProgress, app: boolean): string {
   }
 }
 
+// ProgressBar is how far an update has gone: red when it failed, pulsing while it waits.
+export function ProgressBar({
+  percent,
+  failed,
+  pulse,
+  label,
+}: {
+  percent: number;
+  failed?: boolean;
+  pulse?: boolean;
+  label: string;
+}) {
+  return (
+    <div
+      class="h-2 rounded-full overflow-hidden bg-[rgb(var(--ov-rgb)/0.08)]"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={percent}
+      aria-label={label}
+    >
+      <div
+        class={`h-full rounded-full transition-[width] duration-300 ${failed ? "bg-[var(--c-red)]" : "bg-[var(--color-accent)]"} ${pulse ? "animate-pulse" : ""}`}
+        style={{ width: `${Math.max(2, percent)}%` }}
+      />
+    </div>
+  );
+}
+
 type Stage = "offer" | "working" | "restarting" | "back" | "failed";
 
 // UpdateModal offers the newer version and makes the update: its progress, the restart of the
@@ -266,19 +295,12 @@ export function UpdateModal({
         )}
         {stage !== "offer" && (
           <div class="mt-4" data-testid="update-progress">
-            <div
-              class="h-2 rounded-full overflow-hidden bg-[rgb(var(--ov-rgb)/0.08)]"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={pct}
-              aria-label={t("Update Kitties")}
-            >
-              <div
-                class={`h-full rounded-full transition-[width] duration-300 ${stage === "failed" ? "bg-[var(--c-red)]" : "bg-[var(--color-accent)]"} ${stage === "restarting" ? "animate-pulse" : ""}`}
-                style={{ width: `${Math.max(2, pct)}%` }}
-              />
-            </div>
+            <ProgressBar
+              percent={pct}
+              failed={stage === "failed"}
+              pulse={stage === "restarting"}
+              label={t("Update Kitties")}
+            />
             <p class="text-sm mt-2 flex items-center gap-2" role="status" data-testid="update-step">
               {busy && <span class="spinner" />}
               {stage === "back"

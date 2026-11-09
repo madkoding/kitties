@@ -32,6 +32,8 @@ type fakeContainers struct {
 	pullErr  error
 	stale    bool
 	staleErr error
+	// staleOf, when set, is whether each container's image moved on (a new one is not).
+	staleOf map[string]bool
 }
 
 func newFake() *fakeContainers {
@@ -51,6 +53,9 @@ func (f *fakeContainers) Up(_ context.Context, s container.Spec) (string, error)
 		return "", err
 	}
 	f.exists[s.Name], f.running[s.Name] = true, true
+	if f.staleOf != nil {
+		f.staleOf[s.Name] = false
+	}
 	return "id", nil
 }
 func (f *fakeContainers) Start(_ context.Context, n string) error {
@@ -86,7 +91,10 @@ func (f *fakeContainers) Pull(_ context.Context, image string) error {
 	f.calls = append(f.calls, "pull "+image)
 	return f.pullErr
 }
-func (f *fakeContainers) ImageStale(context.Context, string, string) (bool, error) {
+func (f *fakeContainers) ImageStale(_ context.Context, name, _ string) (bool, error) {
+	if v, ok := f.staleOf[name]; ok {
+		return v, f.staleErr
+	}
 	return f.stale, f.staleErr
 }
 func (f *fakeContainers) ExecInput(_ context.Context, n, stdin string, argv ...string) (string, error) {

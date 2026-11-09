@@ -181,3 +181,71 @@ func TestPowerRoutes(t *testing.T) {
 		t.Errorf("forced off = %d", code)
 	}
 }
+
+// fleetMaintainer also looks for a new desktop image and updates every desktop.
+type fleetMaintainer struct {
+	fakeMaintainer
+	checkErr, updErr error
+	checks           int
+	asked            [][]string
+}
+
+func (f *fleetMaintainer) DesktopUpdates(context.Context) orchestrator.DesktopFleet {
+	return orchestrator.DesktopFleet{Image: "img:latest", Available: 1, Kitties: []orchestrator.FleetDesktop{{ID: "a1", Name: "ana", UpdateAvailable: true}}}
+}
+func (f *fleetMaintainer) CheckDesktopUpdates() error { f.checks++; return f.checkErr }
+func (f *fleetMaintainer) UpdateDesktops(_ context.Context, ids []string) (*orchestrator.DesktopJob, error) {
+	if f.updErr != nil {
+		return nil, f.updErr
+	}
+	f.asked = append(f.asked, ids)
+	return &orchestrator.DesktopJob{Total: 1}, nil
+}
+
+func TestDesktopFleetRoutes(t *testing.T) {
+	f := &fakeFleet{kitties: map[string]*kitty.Kitty{"a1": {ID: "a1", Name: "ana", Status: kitty.StatusRunning}}}
+	chats := &fakeChats{sessions: map[string]*chat.Session{}}
+	// A maintainer that cannot update every desktop (an older one), and no maintainer at all.
+	for _, srv := range []*httptest.Server{
+		httptest.NewServer(New(f, chats, "tok", "test")),
+		httptest.NewServer(New(f, chats, "tok", "test").WithMaintenance(&fakeMaintainer{})),
+	} {
+		for _, c := range [][2]string{{"GET", "/v1/desktops/updates"}, {"POST", "/v1/desktops/updates/check"}, {"POST", "/v1/desktops/updates"}} {
+			if code, _, _ := call(t, srv, c[0], c[1], "tok", nil); code != 404 {
+				t.Errorf("%s %s = %d, want 404", c[0], c[1], code)
+			}
+		}
+		srv.Close()
+	}
+	m := &fleetMaintainer{}
+	srv := httptest.NewServer(New(f, chats, "tok", "test").WithMaintenance(m))
+	defer srv.Close()
+	if code, got, _ := call(t, srv, "GET", "/v1/desktops/updates", "tok", nil); code != 200 || got["available"] != 1.0 || got["image"] != "img:latest" {
+		t.Errorf("news = %d %v", code, got)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/desktops/updates/check", "tok", nil); code != 202 || m.checks != 1 {
+		t.Errorf("check = %d (%d)", code, m.checks)
+	}
+	// All of them (no body), or the ones named.
+	if code, _, _ := call(t, srv, "POST", "/v1/desktops/updates", "tok", nil); code != 202 || len(m.asked) != 1 || m.asked[0] != nil {
+		t.Errorf("update all = %d %v", code, m.asked)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/desktops/updates", "tok", map[string]any{"kitties": []string{"a1"}}); code != 202 || len(m.asked) != 2 || m.asked[1][0] != "a1" {
+		t.Errorf("update some = %d %v", code, m.asked)
+	}
+	if code, _, _ := call(t, srv, "POST", "/v1/desktops/updates", "tok", "{nope"); code != 400 {
+		t.Errorf("a bad body = %d", code)
+	}
+	// One at a time; nothing to update is the caller's mistake; an unknown kitty is not found.
+	for err, want := range map[string]int{"an update of the desktops is already running": 409, "no desktop on this machine waits for an update": 400, "no such kitty": 404} {
+		m.checkErr, m.updErr = errors.New(err), errors.New(err)
+		if code, _, _ := call(t, srv, "POST", "/v1/desktops/updates", "tok", nil); code != want {
+			t.Errorf("update with %q = %d, want %d", err, code, want)
+		}
+		if err != "no such kitty" {
+			if code, _, _ := call(t, srv, "POST", "/v1/desktops/updates/check", "tok", nil); code != map[bool]int{true: 409, false: 500}[want == 409] {
+				t.Errorf("check with %q = %d", err, code)
+			}
+		}
+	}
+}

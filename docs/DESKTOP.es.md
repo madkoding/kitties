@@ -282,6 +282,19 @@ no está en medio de una tarea y no tienes tú su escritorio. En ambos casos baj
 se escriba a disco), respalda, rehace el contenedor y devuelve el respaldo. La carpeta de trabajo
 está en tu computador y nunca se toca.
 
+**Todos los kitties de una vez.** Cuando hay una imagen nueva, la barra lateral muestra **Escritorio
+nuevo** con cuántos kitties pueden tenerla (los que usan un computador contenedor en esta máquina; los
+de la nube no tienen imagen aquí). Su ventana, que también está en Ajustes › Preferencias ›
+Actualizaciones, lista los escritorios, **Buscar un escritorio nuevo** baja la imagen ahora, y
+**Actualizar todos** (o los que marques) los actualiza uno tras otro con una barra de progreso y el
+estado de cada uno: actualizado, al próximo inicio (uno detenido: se quita su contenedor viejo y no se
+enciende ahora), después (trabajando, o tienes tú su escritorio) o falló, con el motivo. Su home,
+programas, perfil del navegador (su volumen) y carpeta Shared se quedan; al final se borra la imagen
+vieja. El gateway busca la imagen nueva cada `containers.update_check_hours` aunque
+`auto_update` esté apagado: así te avisa y tú decides cuándo actualizar.
+
+<img src="screenshots/82-desktops-update.png" alt="La ventana que actualiza los escritorios: cada kitty con un escritorio más nuevo, elegido, y Actualizar todos" width="100%">
+
 Lo que sabe el navegador del kitty (cookies, contraseñas guardadas, almacenamiento local) vive en un
 **volumen de Docker propio**, `kitties-browser-<contenedor>`, montado en `/var/lib/kitty-browser`: está
 en el disco Linux del motor de contenedores y sobrevive a reinicios, actualizaciones y a un contenedor

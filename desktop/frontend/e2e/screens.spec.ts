@@ -2998,6 +2998,103 @@ test("a newer Kitties is told in the sidebar, installed with its progress, and t
   expect(applied).toBe(1);
 });
 
+test("a newer desktop is told in the sidebar and put on every kitty with its progress", async ({
+  page,
+}) => {
+  const kitties = [
+    { id: ids.mimi || "mimi", name: "mimi", status: "running", update_available: true },
+    { id: "tom-id", name: "tom", status: "stopped", update_available: true },
+    { id: "luna-id", name: "luna", status: "running", update_available: true, busy: "working" },
+  ];
+  let fleet: Record<string, unknown> = {
+    image: "ghcr.io/madkoding/kitty-desktop:latest",
+    auto_update: false,
+    checked_at: new Date().toISOString(),
+    checking: false,
+    available: 3,
+    kitties,
+  };
+  let asked: unknown = null;
+  const started = new Date().toISOString();
+  await page.route("**/v1/desktops/updates**", async (route) => {
+    const req = route.request();
+    if (req.method() === "POST" && !req.url().endsWith("/check")) {
+      asked = req.postDataJSON();
+      fleet = {
+        ...fleet,
+        job: {
+          phase: "update",
+          percent: 54,
+          done: 1,
+          total: 3,
+          started,
+          kitties: [
+            { id: kitties[0].id, name: "mimi", state: "done" },
+            { id: "tom-id", name: "tom", state: "updating" },
+            { id: "luna-id", name: "luna", state: "waiting" },
+          ],
+        },
+      };
+      return route.fulfill({ status: 202, json: fleet });
+    }
+    return route.fulfill({ json: fleet });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  // The sidebar tells how many desktops have a newer image; a click lists them.
+  const notice = page.getByTestId("desktops-notice");
+  await expect(notice).toHaveText(/New desktop\s*3/);
+  await notice.click();
+  const modal = page.getByTestId("desktops-modal");
+  await expect(modal.getByTestId("desktops-summary")).toContainText("ready for 3 of your kitties");
+  await expect(modal.getByTestId("desktops-row-luna")).toContainText("working on a task");
+  await expect(modal.getByTestId("desktops-update")).toHaveText("Update all (3)");
+  await shot(page, "82-desktops-update");
+  // Updating all: the progress of the whole and of each desktop; the window stays open meanwhile.
+  await modal.getByTestId("desktops-update").click();
+  await expect(modal.getByRole("progressbar")).toHaveAttribute("aria-valuenow", "54");
+  await expect(modal.getByTestId("desktops-step")).toContainText("Updating desktop 2 of 3");
+  await expect(modal.getByTestId("desktops-row-mimi")).toContainText("updated");
+  expect(asked).toEqual({});
+  await page.keyboard.press("Escape");
+  await expect(modal).toBeVisible();
+  // Done: the busy kitty is left for later with the reason, the stopped one at its next start.
+  fleet = {
+    ...fleet,
+    available: 1,
+    kitties: kitties.map((k) => ({ ...k, update_available: k.name === "luna" })),
+    job: {
+      phase: "done",
+      percent: 100,
+      done: 3,
+      total: 3,
+      started,
+      finished: new Date().toISOString(),
+      freed: "2.4GB",
+      kitties: [
+        { id: kitties[0].id, name: "mimi", state: "done" },
+        { id: "tom-id", name: "tom", state: "on_start" },
+        {
+          id: "luna-id",
+          name: "luna",
+          state: "skipped",
+          error: "it is working on a task: update it when it finishes",
+        },
+      ],
+    },
+  };
+  await expect(modal.getByTestId("desktops-step")).toContainText("1 left for later");
+  await expect(modal.getByTestId("desktops-row-tom")).toContainText("at its next start");
+  await expect(modal.getByTestId("desktops-row-luna")).toContainText("update it when it finishes");
+  await shot(page, "83-desktops-progress");
+  // Only luna is picked now.
+  await modal.getByRole("checkbox", { name: "Update luna" }).click();
+  await expect(modal.getByTestId("desktops-update")).toBeDisabled();
+  await modal.getByRole("checkbox", { name: "Update luna" }).click();
+  await modal.getByRole("button", { name: "Later" }).click();
+  await expect(modal).toHaveCount(0);
+  await expect(page.getByTestId("desktops-notice")).toHaveText(/New desktop\s*1/);
+});
+
 test("the desktop app updates as a whole, and a version can be skipped", async ({ page }) => {
   const status = {
     current: "v1.0.0",

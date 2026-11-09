@@ -38,6 +38,7 @@ import PixelCat from "./PixelCat";
 import { cycleMode } from "./theme";
 import { t } from "./i18n";
 import { UpdateModal, skippedVersion, useUpdateNews } from "./Updates";
+import { DesktopUpdatesModal, useDesktopNews } from "./DesktopUpdates";
 
 type ModalKind =
   | "none"
@@ -172,6 +173,9 @@ export default function App() {
   const [upgrading, setUpgrading] = useState(false);
   // The version the person chose not to be told about (in this browser).
   const [skipped, setSkipped] = useState(skippedVersion);
+  // The news of a newer desktop for the kitties, and whether its window is open.
+  const [desks, readDesks] = useDesktopNews(online === true && containers);
+  const [updatingDesks, setUpdatingDesks] = useState(false);
 
   const user = t("You");
 
@@ -645,6 +649,19 @@ export default function App() {
           }}
         />
       )}
+      {updatingDesks && (
+        <DesktopUpdatesModal
+          initial={desks}
+          onClose={() => {
+            setUpdatingDesks(false);
+            readDesks();
+          }}
+          onChanged={() => {
+            readDesks();
+            void refresh();
+          }}
+        />
+      )}
       <Sidebar
         chats={listedChats}
         goals={goals}
@@ -677,6 +694,8 @@ export default function App() {
         onTheme={cycleMode}
         update={news?.available && news.latest !== skipped ? news.latest || "" : ""}
         onUpdate={() => setUpgrading(true)}
+        desktops={desks?.available || 0}
+        onDesktops={() => setUpdatingDesks(true)}
       />
       <div class="flex-1 flex flex-col min-w-0">
         <header class="titlebar frosted flex items-center gap-3 px-3 sm:px-5 py-2.5 border-b border-white/5 flex-none z-10">

@@ -87,7 +87,7 @@ containers:
   workspace: ""                  # host folder with one subfolder per kitty; empty is data_dir/work
   auto_update: true              # new desktop image: download it and make idle desktops anew (sessions kept)
   shared_quota_mb: 5120          # most each kitty's ~/Shared holds (shown in Library > Shared); negative: no limit
-  update_check_hours: 6          # how often to look for one
+  update_check_hours: 6          # how often to look for one (also with auto_update off: the app tells you)
   auto_off_minutes: 15           # a kitty's machine turns itself off after this long without use (0 = never); per kitty in its window
 
 updates:

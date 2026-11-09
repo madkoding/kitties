@@ -52,6 +52,7 @@ import McpConnector from "./McpConnector";
 import { SharedMemory } from "./Notes";
 import WhatsAppLink from "./WhatsApp";
 import Updates from "./Updates";
+import { DesktopUpdates } from "./DesktopUpdates";
 import { LANGS, currentLang, setLang, t, type Lang } from "./i18n";
 
 // SETTINGS, FOR PEOPLE.
@@ -2373,6 +2374,7 @@ export default function SettingsModal({
             <StorageSettings />
             <McpConnector />
             <Updates />
+            <DesktopUpdates />
           </>
         )}
       </div>

@@ -79,6 +79,8 @@ type Manager struct {
 	use        useTracker
 	mem        memoryCache
 	onPowerOff func(k *kitty.Kitty, idle time.Duration)
+	// desks is the look for a new desktop image and the update of all the desktops (desktops.go).
+	desks deskState
 
 	mu      sync.RWMutex
 	kitties map[string]*kitty.Kitty

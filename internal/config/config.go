@@ -239,7 +239,8 @@ type Containers struct {
 	// UpdateCheckHours, downloads it, and makes a desktop anew (its sessions backed up and put back)
 	// when its kitty is idle, or when a stopped one is started.
 	AutoUpdate bool `yaml:"auto_update"`
-	// UpdateCheckHours is how often the gateway looks for a newer image (6 by default).
+	// UpdateCheckHours is how often the gateway looks for a newer image (6 by default), with or
+	// without AutoUpdate: without it the page tells the person, who updates the desktops from there.
 	UpdateCheckHours int `yaml:"update_check_hours"`
 	// AutoOffMinutes is how long a kitty's machine stays on without use before it turns itself
 	// off (15 by default; 0 is never). Each kitty can have a value of its own.

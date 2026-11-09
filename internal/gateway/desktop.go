@@ -31,6 +31,9 @@ func (s *Server) desktopRoutes() {
 	s.mux.Handle("GET /v1/kitties/{ref}/desktop", api(s.handleDesktopInfo))
 	s.mux.Handle("POST /v1/kitties/{ref}/backup", api(s.handleBackup))
 	s.mux.Handle("POST /v1/kitties/{ref}/update", api(s.handleUpdate))
+	s.mux.Handle("GET /v1/desktops/updates", api(s.handleDesktopUpdates))
+	s.mux.Handle("POST /v1/desktops/updates/check", api(s.handleCheckDesktops))
+	s.mux.Handle("POST /v1/desktops/updates", api(s.handleUpdateDesktops))
 	s.mux.Handle("GET /v1/kitties/{ref}/power", api(s.handlePower))
 	s.mux.Handle("POST /v1/kitties/{ref}/power", api(s.handleSetPower))
 	s.mux.Handle("GET /v1/settings/machines", api(s.handleMachines))
@@ -230,4 +233,68 @@ func (s *Server) handleUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	reply(w, http.StatusAccepted, map[string]any{"kitty": started})
+}
+
+// DesktopFleeter looks for a new desktop image and moves the desktops of all the kitties (or some)
+// to it in one go.
+type DesktopFleeter interface {
+	DesktopUpdates(ctx context.Context) orchestrator.DesktopFleet
+	CheckDesktopUpdates() error
+	UpdateDesktops(ctx context.Context, ids []string) (*orchestrator.DesktopJob, error)
+}
+
+func (s *Server) fleeter(w http.ResponseWriter) DesktopFleeter {
+	f, ok := s.maintainer.(DesktopFleeter)
+	if !ok {
+		fail(w, http.StatusNotFound, errNoMaintenance)
+	}
+	return f
+}
+
+// handleDesktopUpdates is the news of the desktops' image: which desktops are of an older one,
+// when it was last looked for, and how the update of them goes.
+func (s *Server) handleDesktopUpdates(w http.ResponseWriter, r *http.Request) {
+	if f := s.fleeter(w); f != nil {
+		reply(w, http.StatusOK, f.DesktopUpdates(r.Context()))
+	}
+}
+
+// handleCheckDesktops looks for a new desktop image in the background (202).
+func (s *Server) handleCheckDesktops(w http.ResponseWriter, r *http.Request) {
+	f := s.fleeter(w)
+	if f == nil {
+		return
+	}
+	if err := f.CheckDesktopUpdates(); err != nil {
+		fail(w, codeFor(err), err)
+		return
+	}
+	reply(w, http.StatusAccepted, f.DesktopUpdates(r.Context()))
+}
+
+// handleUpdateDesktops moves desktops to the newest image in the background (202):
+// {"kitties": ["id", …]}, or every desktop of an older image when it names none.
+func (s *Server) handleUpdateDesktops(w http.ResponseWriter, r *http.Request) {
+	f := s.fleeter(w)
+	if f == nil {
+		return
+	}
+	var body struct {
+		Kitties []string `json:"kitties"`
+	}
+	if r.ContentLength != 0 {
+		if err := decode(r, &body); err != nil {
+			fail(w, http.StatusBadRequest, err)
+			return
+		}
+	}
+	if _, err := f.UpdateDesktops(r.Context(), body.Kitties); err != nil {
+		code := codeFor(err)
+		if code == http.StatusInternalServerError {
+			code = http.StatusBadRequest
+		}
+		fail(w, code, err)
+		return
+	}
+	reply(w, http.StatusAccepted, f.DesktopUpdates(r.Context()))
 }
