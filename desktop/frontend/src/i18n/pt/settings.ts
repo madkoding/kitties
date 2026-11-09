@@ -527,6 +527,49 @@ const dict: Dictionary = {
   "Freed {size} ({n} screenshots).": "Foram liberados {size} ({n} capturas).",
   "No screenshot was old enough to go.": "Nenhuma captura era antiga o bastante para ser apagada.",
   "Old desktop images: {size}.": "Imagens antigas da área de trabalho: {size}.",
+
+  // The desktops of all the kitties, on a newer image
+  "A newer desktop is ready for {count} of your kitties.":
+    "Há um desktop mais novo pronto para {count} dos seus kitties.",
+  "Done, with {count} that could not be updated.":
+    "Pronto, com {count} que não puderam ser atualizados.",
+  "Done.": "Pronto.",
+  "Downloading the new desktop…": "Baixando o desktop novo…",
+  "Each desktop restarts. Its files, settings, programs, browser profile and Shared folder stay on this computer; its cookies, sessions and passwords are backed up and put back. A stopped kitty gets the new desktop when it starts; a kitty at work, or whose desktop you have, is left for later.":
+    "Cada desktop reinicia. Seus arquivos, configurações, programas, perfil do navegador e pasta Shared ficam neste computador; seus cookies, sessões e senhas são salvos e devolvidos. Um kitty parado recebe o desktop novo ao iniciar; um que está trabalhando, ou cujo desktop está com você, fica para depois.",
+  "Every desktop on this computer is on the newest image.":
+    "Todos os desktops deste computador estão na imagem mais nova.",
+  "Kitties looks for a new desktop and puts it on each kitty by itself when it is idle; update them all now from here.":
+    "O Kitties procura um desktop novo e o coloca sozinho em cada kitty quando está livre; atualize todos agora daqui.",
+  "Kitties looks for a new desktop and tells you; you decide when to update them.":
+    "O Kitties procura um desktop novo e avisa; você decide quando atualizar.",
+  "Kitties' desktops": "Desktops dos kitties",
+  "Look for a new desktop": "Procurar um desktop novo",
+  "Looking for a new desktop (what changed is downloaded)…":
+    "Procurando um desktop novo (o que mudou é baixado)…",
+  "New desktop": "Desktop novo",
+  "No kitty has a desktop on this computer.": "Nenhum kitty tem desktop neste computador.",
+  "See the desktops": "Ver os desktops",
+  "The last look for a new desktop failed: {error}":
+    "A última busca por um desktop novo falhou: {error}",
+  "The old desktop was deleted ({freed} freed).":
+    "O desktop anterior foi apagado ({freed} liberados).",
+  "Update all ({count})": "Atualizar todos ({count})",
+  "Update the desktops": "Atualizar os desktops",
+  "Update {count}": "Atualizar {count}",
+  "Update {name}": "Atualizar {name}",
+  "Updating desktop {done} of {total}…": "Atualizando desktop {done} de {total}…",
+  "a newer one for {count}": "um mais novo para {count}",
+  "all on the newest image": "todos na imagem mais nova",
+  "at its next start": "no próximo início",
+  later: "depois",
+  "looked {when}": "procurado {when}",
+  "new version": "versão nova",
+  "up to date": "em dia",
+  updating: "atualizando",
+  waiting: "aguardando",
+  "you have its desktop": "o desktop está com você",
+  "{count} left for later.": "{count} ficam para depois.",
 };
 
 export default dict;

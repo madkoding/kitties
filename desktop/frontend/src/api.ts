@@ -1024,6 +1024,14 @@ export const api = {
   desktopInfo: (ref: string) => request<DesktopInfo>("GET", `/v1/kitties/${ref}/desktop`),
   backupKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/backup`),
   updateKitty: (ref: string) => request("POST", `/v1/kitties/${ref}/update`),
+  // desktopUpdates is the news of the desktops' image (which desktops are of an older one, and the
+  // update of them in the making); checkDesktops looks for a new image (a download, in the
+  // background); updateDesktops moves the desktops named (every one of an older image when none
+  // is) to it, one after the other.
+  desktopUpdates: () => request<DesktopFleet>("GET", "/v1/desktops/updates"),
+  checkDesktops: () => request<DesktopFleet>("POST", "/v1/desktops/updates/check"),
+  updateDesktops: (kitties?: string[]) =>
+    request<DesktopFleet>("POST", "/v1/desktops/updates", kitties?.length ? { kitties } : {}),
   // shared lists what every kitty left in its Shared folder; keepShared copies one into the
   // library; deleteShared deletes it.
   shared: () =>
@@ -1488,6 +1496,49 @@ export type DesktopInfo = {
   backup?: { saved: string; bytes: number };
   // storage is what the kitty keeps on this computer, which no update deletes.
   storage?: Storage;
+};
+
+// FleetDesktop is one kitty's desktop as the update of all of them sees it: busy says why it would
+// be left for later now ("working", or "held" by the person).
+export type FleetDesktop = {
+  id: string;
+  name: string;
+  status: string;
+  update_available: boolean;
+  busy?: "working" | "held";
+};
+
+// DeskJobItem is how one desktop fares in an update of several.
+export type DeskJobItem = {
+  id: string;
+  name: string;
+  state: "waiting" | "updating" | "done" | "on_start" | "skipped" | "failed";
+  error?: string;
+};
+
+// DesktopJob is an update of several desktops: the download of the image, then each one.
+export type DesktopJob = {
+  phase: "download" | "update" | "done";
+  percent: number;
+  done: number;
+  total: number;
+  started: string;
+  finished?: string;
+  kitties: DeskJobItem[];
+  freed?: string;
+};
+
+// DesktopFleet is the news of the desktops' image, for the desktops on this computer (not those in
+// the cloud).
+export type DesktopFleet = {
+  image: string;
+  auto_update: boolean;
+  checked_at?: string;
+  checking: boolean;
+  check_error?: string;
+  available: number;
+  kitties: FleetDesktop[];
+  job?: DesktopJob;
 };
 
 // Storage is what a kitty keeps on the gateway's computer, by folder: its home (settings and the

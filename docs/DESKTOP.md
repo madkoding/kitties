@@ -275,6 +275,8 @@ the old image is deleted at the end. The gateway looks for a new image every
 `containers.update_check_hours` even with `auto_update: false`, so it can tell you and you decide
 when to update.
 
+<img src="screenshots/82-desktops-update.png" alt="The window that updates the desktops: each kitty with a newer desktop, picked, and Update all" width="100%">
+
 What the kitty's browser knows (cookies, saved passwords, local storage) lives in a **Docker
 volume of its own**, `kitties-browser-<container>`, mounted at `/var/lib/kitty-browser`: it is on
 the container engine's Linux disk and outlives restarts, updates and a container made anew. It is

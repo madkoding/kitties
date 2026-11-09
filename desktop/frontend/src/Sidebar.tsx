@@ -85,6 +85,10 @@ interface Props {
   // update is the newer version of Kitties that is out ("" when there is none); onUpdate offers it.
   update: string;
   onUpdate: () => void;
+  // desktops is how many kitties' desktops have a newer image waiting (0 when none);
+  // onDesktops opens the window that updates them.
+  desktops?: number;
+  onDesktops?: () => void;
 }
 
 // FEW_TASKS is how many scheduled tasks the sidebar lists before "see all".
@@ -517,6 +521,18 @@ export default function Sidebar(p: Props) {
             >
               <IconUpgrade size={14} /> {t("New version")}
               <span class="tag tag-accent ml-auto">{p.update}</span>
+            </button>
+          </div>
+        )}
+        {!!p.desktops && (
+          <div class="px-3 pt-2 flex-none">
+            <button
+              class="btn-outline w-full flex items-center gap-2 px-3 py-2 text-xs"
+              onClick={p.onDesktops}
+              data-testid="desktops-notice"
+            >
+              <IconMonitor size={14} /> {t("New desktop")}
+              <span class="tag tag-accent ml-auto">{p.desktops}</span>
             </button>
           </div>
         )}

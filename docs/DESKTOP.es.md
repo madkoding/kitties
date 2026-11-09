@@ -293,6 +293,8 @@ programas, perfil del navegador (su volumen) y carpeta Shared se quedan; al fina
 vieja. El gateway busca la imagen nueva cada `containers.update_check_hours` aunque
 `auto_update` esté apagado: así te avisa y tú decides cuándo actualizar.
 
+<img src="screenshots/82-desktops-update.png" alt="La ventana que actualiza los escritorios: cada kitty con un escritorio más nuevo, elegido, y Actualizar todos" width="100%">
+
 Lo que sabe el navegador del kitty (cookies, contraseñas guardadas, almacenamiento local) vive en un
 **volumen de Docker propio**, `kitties-browser-<contenedor>`, montado en `/var/lib/kitty-browser`: está
 en el disco Linux del motor de contenedores y sobrevive a reinicios, actualizaciones y a un contenedor
