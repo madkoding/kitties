@@ -1665,6 +1665,13 @@ export type WhatsAppSettings = {
   // share_with_team lets the WhatsApp kitties work with the others; by default (false) they work
   // on their own: no shared notes or files, no chats or work with other kitties, only the lead.
   share_with_team?: boolean;
+  // local_network lets the computer of a kitty that works on its own reach the local network;
+  // by default (false) it reaches only the internet.
+  local_network?: boolean;
+  // task_minutes is how long a task asked from WhatsApp may run (0: 5 minutes);
+  // task_minutes_for changes it for a number (digits) or a group (its JID).
+  task_minutes?: number;
+  task_minutes_for?: Record<string, number>;
 };
 
 // WhatsAppHeld is a message the hourly limit did not send: to is a number (digits) or a group

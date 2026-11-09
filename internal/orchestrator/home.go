@@ -114,7 +114,7 @@ func (m *Manager) desktopSpec(ctx context.Context, k *kitty.Kitty) (container.Sp
 	memoryMB, swapMB, _ := m.MemoryLimits(k)
 	spec := container.Spec{
 		Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: memoryMB, SwapMB: swapMB, CPUs: c.CPUs,
-		Network: c.Network, Workspace: k.Workspace, Shared: m.sharedDir(k), Env: env,
+		Network: c.Network, Workspace: k.Workspace, Shared: m.sharedDir(k), Env: env, NoLAN: m.noLAN(k),
 	}
 	if err := makeOpenDir(spec.Shared); err != nil {
 		return spec, fmt.Errorf("create the Shared folder: %w", err)

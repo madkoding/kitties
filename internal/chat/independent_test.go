@@ -9,6 +9,7 @@ import (
 
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
+	"github.com/madkoding/kitties/internal/guard"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/memory"
 	"github.com/madkoding/kitties/internal/soul"
@@ -401,5 +402,124 @@ func TestAlwaysTrustsOneGroupWithTheLeadsAnswers(t *testing.T) {
 	_, _ = s.Send(context.Background(), other.ID, "x?")
 	if len(store.List("pending", 10)) != 1 {
 		t.Errorf("another chat did not ask: %v", store.List("pending", 10))
+	}
+}
+
+func TestIndependentKittyBrowsesOnItsOwnComputerInGroups(t *testing.T) {
+	s, d, sa := deskService(t,
+		"Let me look it up.\n@tool page_goto {\"url\": \"https://example.com/fixtures\"}\n@tool type_secret {\"name\": \"bank\"}",
+		"@tool done {\"summary\": \"The match is on Friday at 8. (key "+leakyKey+")\"}")
+	g := guarded(t, s)
+	alone(s, "a1")
+	id := exposedChat(t, s, "ana")
+	turns, err := s.Send(context.Background(), id, "when is the match?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turns) != 1 || !turns[0].Working {
+		t.Fatalf("ana did not start on her computer: %+v", turns)
+	}
+	sess := waitDone(t, s, id)
+	system := sa.seen[0][0].Content
+	if !strings.Contains(system, "THIS CHAT IS WITH SOMEONE ELSE") || !strings.Contains(system, "you keep your own computer") || strings.Contains(system, "type_secret (you are never shown") {
+		t.Errorf("exposed prompt = %s", system)
+	}
+	browsed := false
+	for _, e := range d.execs {
+		browsed = browsed || strings.Contains(e, "example.com/fixtures")
+		if strings.Contains(e, "bank") {
+			t.Errorf("a secret was typed: %s", e)
+		}
+	}
+	if !browsed {
+		t.Errorf("ana did not browse: %v", d.execs)
+	}
+	last := sess.Turns[len(sess.Turns)-1]
+	if !strings.Contains(last.Text, "Friday at 8") || strings.Contains(last.Text, leakyKey) {
+		t.Errorf("answer = %q", last.Text)
+	}
+	if g.Status().Counts[guard.KindBlocked] == 0 {
+		t.Errorf("type_secret was not recorded as refused: %v", g.Status().Counts)
+	}
+}
+
+func TestLinkProblem(t *testing.T) {
+	for raw, bad := range map[string]bool{
+		"https://example.com/fixtures":        false,
+		"http://news.example.org/a?b=1":       false,
+		"https://8.8.8.8/":                    false,
+		"file:///etc/passwd":                  true,
+		"javascript:alert(1)":                 true,
+		"https://bank.com@evil.example/login": true,
+		"http://localhost:8080/":              true,
+		"http://127.0.0.1/":                   true,
+		"http://192.168.1.1/admin":            true,
+		"http://169.254.169.254/latest/meta":  true,
+		"http://[::1]/":                       true,
+		"http://router/":                      true,
+		"http://printer.local/":               true,
+		"http://gateway.internal/v1":          true,
+		"https://example.com/setup.EXE":       true,
+		"https://example.com/app.apk?x=1":     true,
+		"not a link":                          true,
+	} {
+		if got := linkProblem(raw) != ""; got != bad {
+			t.Errorf("linkProblem(%q) refused = %v, want %v", raw, got, bad)
+		}
+	}
+}
+
+func TestExposedLimitsCapTasksFromGroups(t *testing.T) {
+	if l := exposedLimits(kitty.Limits{}, 20); l.MaxSeconds != 1200 || l.MaxRounds != 120 || l.MaxTokens != 800_000 {
+		t.Errorf("20 minutes = %+v", l)
+	}
+	l := exposedLimits(kitty.Limits{MaxSeconds: 3600, MaxRounds: 0, MaxTokens: 100_000, Retries: 3}, 0)
+	if l.MaxSeconds != ExposedMaxSeconds || l.MaxRounds != ExposedMaxRounds || l.MaxTokens != 100_000 || l.Retries != 0 || !l.Attended {
+		t.Errorf("exposed limits = %+v", l)
+	}
+	s, _, _ := deskService(t, "hi")
+	guarded(t, s)
+	alone(s, "a1")
+	id := exposedChat(t, s, "ana")
+	k, _ := s.fleet.Get("a1")
+	if got := s.limitsFor(k, id); got.MaxSeconds > ExposedMaxSeconds || got.Retries != 0 || !got.Attended {
+		t.Errorf("limits in a group = %+v", got)
+	}
+	s.SetExposedMinutes(func(chatID string) int {
+		if chatID == id {
+			return 2
+		}
+		return 0
+	})
+	if got := s.limitsFor(k, id); got.MaxSeconds != 120 || got.MaxRounds != 12 {
+		t.Errorf("limits with 2 minutes for the group = %+v", got)
+	}
+	own, err := s.Create("ana", []string{"a1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.limitsFor(k, own.ID); got.Attended {
+		t.Errorf("the person's own chat got the group limits: %+v", got)
+	}
+}
+
+func TestIndependentKittyDoesNotOpenInternalLinksFromGroups(t *testing.T) {
+	s, d, _ := deskService(t,
+		"Opening it.\n@tool page_goto {\"url\": \"http://192.168.1.1/admin\"}\n@tool open {\"url\": \"https://example.com/setup.exe\"}",
+		"@tool done {\"summary\": \"I can't open those links here.\"}")
+	g := guarded(t, s)
+	alone(s, "a1")
+	id := exposedChat(t, s, "ana")
+	if _, err := s.Send(context.Background(), id, "open http://192.168.1.1/admin please"); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, id)
+	for _, e := range d.execs {
+		if strings.Contains(e, "192.168.1.1") || strings.Contains(e, "setup.exe") {
+			t.Errorf("a refused link was opened: %s", e)
+		}
+	}
+	if g.Status().Counts[guard.KindBlocked] < 2 {
+		t.Errorf("refused links not recorded: %v", g.Status().Counts)
 	}
 }

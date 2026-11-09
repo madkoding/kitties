@@ -131,7 +131,7 @@ RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgra
         tesseract-ocr tesseract-ocr-eng tesseract-ocr-spa poppler-utils \
         libx11-6 libxext6 libjpeg62-turbo \
         libx264-164 libyuv0 libopus0 libpulse0 pulseaudio pulseaudio-utils socat \
-        tini procps tzdata \
+        tini procps tzdata iptables \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
     && mkdir -p /home/kitty/work && chown -R kitty:kitty /home/kitty \
@@ -172,6 +172,7 @@ COPY --chmod=755 kitty-profile.sh /usr/local/bin/kitty-profile
 COPY --chmod=755 kitty-launch.sh /usr/local/bin/kitty-launch
 COPY --chmod=755 kitty-install.sh /usr/local/bin/kitty-install
 COPY --chmod=755 kitty-apt.sh /usr/local/sbin/kitty-apt
+COPY --chmod=755 kitty-nolan.sh /usr/local/sbin/kitty-nolan
 COPY --chmod=755 kitty-packages.sh /usr/local/sbin/kitty-packages
 COPY --chmod=755 kitty-home.sh /usr/local/bin/kitty-home
 COPY --chmod=755 kitty-import.sh /usr/local/bin/kitty-import

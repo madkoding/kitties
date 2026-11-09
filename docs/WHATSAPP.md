@@ -137,6 +137,21 @@ session, without a new code. **Unlink** removes the device from the phone and fo
     notes it keeps notes about **people** (who is who, what a group is about): in the chats with
     contacts and groups those are the only notes it reads and writes, so it can follow a group over
     time without carrying anything of yours there. A distillation never mixes them with yours.
+  - **Its own computer, in groups too.** It still browses the internet and uses its own desktop,
+    files and commands in the chats with contacts and groups (nothing of yours is on it); there it
+    never types vault secrets nor asks you to take control, and what it says is filtered as any
+    guarded answer.
+  - **Off your local network.** Its computer reaches the internet but not your router, printers,
+    the host or anything else at home or work (Settings › WhatsApp › *Its computer stays off your
+    local network*, on by default; `whatsapp.local_network: true` turns it off). The desktop closes
+    it with firewall rules when it starts, and the kitty keeps no `sudo` to open it again (only
+    installing programs). It applies the next time its computer starts.
+  - **Short tasks, checked links.** Since anyone in a group can put it to work, a task asked there
+    gets 5 minutes by default (Settings › WhatsApp › *Tasks asked here run for at most*, and one
+    number or group can have its own: `task_minutes`, `task_minutes_for`), with 6 rounds and 40k
+    tokens per minute, no retries, and it stops at the end instead of going on by itself. Links sent there open only when they are public web pages: nothing on
+    its machine or network (`localhost`, `192.168…`, `.local`), no `name@` hiding the real site, no
+    programs to download (`.exe`, `.apk`…). A refused link counts as blocked in Settings › Guardrails.
   - **Its own files.** It sees only the library files it saved; the other kitties do not see its.
     It sends only its own files too: a `file` of someone else's is refused.
   - **No other kitties.** It is never in a chat with other kitties (adding it to one is refused),
@@ -207,6 +222,9 @@ whatsapp:
   speak: ""                      # the openai profile that reads answers aloud; empty: the first; off: none
   speak_voice: nova              # its voice (alloy, nova, shimmer, …); empty: alloy
   share_with_team: false         # true: the WhatsApp kitties work with the others (default: on their own)
+  local_network: false           # true: their computer may reach the local network (default: internet only)
+  task_minutes: 5                # how long a task asked from WhatsApp may run (0: 5, at most 60)
+  task_minutes_for: {"120363012345678901@g.us": 10}   # per number or group
 ```
 
 The QR code is still scanned from Settings, or read with `GET /v1/whatsapp` (`qr_png`).
