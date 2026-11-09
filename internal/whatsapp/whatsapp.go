@@ -209,7 +209,23 @@ type Settings struct {
 	// MentionAllHours is the least time between two mentions of everyone in a group (0 is
 	// DefaultMentionAllHours).
 	MentionAllHours int `json:"mention_all_hours,omitempty"`
+	// LocalNetwork lets the computer of a kitty that works on its own reach the local network
+	// (the person's router, printers, the host). By default (false) it reaches only the internet
+	// (orchestrator.Manager.SetOffLAN ← OffLAN).
+	LocalNetwork bool `json:"local_network,omitempty"`
+	// TaskMinutes is how long a task asked from WhatsApp (a group or a contact) may run, in
+	// minutes (0 is DefaultTaskMinutes); TaskMinutesFor changes it for a number (digits) or a
+	// group (its JID). The rounds and tokens of such a task follow (chat.Service.SetExposedMinutes).
+	TaskMinutes    int            `json:"task_minutes,omitempty"`
+	TaskMinutesFor map[string]int `json:"task_minutes_for,omitempty"`
 }
+
+// DefaultTaskMinutes is how long a task asked from WhatsApp may run when Settings says nothing;
+// MaxTaskMinutes is the most Settings takes.
+const (
+	DefaultTaskMinutes = 5
+	MaxTaskMinutes     = 60
+)
 
 // DefaultPerHour is the hourly limit of messages when Settings sets none.
 const DefaultPerHour = 60
@@ -581,7 +597,12 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 	if len(s.Allow) > MaxAllow {
 		return Settings{}, fmt.Errorf("the allow list holds at most %d numbers", MaxAllow)
 	}
-	out := Settings{Enabled: s.Enabled, Kitty: strings.TrimSpace(s.Kitty), Groups: s.Groups, Allow: []string{}, ShareWithTeam: s.ShareWithTeam}
+	out := Settings{Enabled: s.Enabled, Kitty: strings.TrimSpace(s.Kitty), Groups: s.Groups, Allow: []string{}, ShareWithTeam: s.ShareWithTeam,
+		LocalNetwork: s.LocalNetwork}
+	var err error
+	if out.TaskMinutes, out.TaskMinutesFor, err = taskMinutesOf(s.TaskMinutes, s.TaskMinutesFor); err != nil {
+		return Settings{}, err
+	}
 	groups, err := groupList(s.AllowGroups)
 	if err != nil {
 		return Settings{}, err
@@ -628,6 +649,40 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 		out.Kitty = k.ID
 	}
 	return out, nil
+}
+
+// taskMinutesOf checks the minutes a task asked from WhatsApp may run: all from 1 to
+// MaxTaskMinutes (0 is the default), the keys numbers or groups.
+func taskMinutesOf(all int, by map[string]int) (int, map[string]int, error) {
+	bad := fmt.Errorf("a task asked from WhatsApp runs from 1 to %d minutes (0 is %d)", MaxTaskMinutes, DefaultTaskMinutes)
+	if all < 0 || all > MaxTaskMinutes {
+		return 0, nil, bad
+	}
+	if len(by) > 2*MaxAllow {
+		return 0, nil, fmt.Errorf("at most %d numbers and groups have minutes of their own", 2*MaxAllow)
+	}
+	var out map[string]int
+	for key, n := range by {
+		key = strings.TrimSpace(key)
+		if n < 0 || n > MaxTaskMinutes {
+			return 0, nil, bad
+		}
+		if !IsGroup(key) {
+			d, err := Normalize(key)
+			if err != nil {
+				return 0, nil, err
+			}
+			key = d
+		}
+		if n == 0 {
+			continue
+		}
+		if out == nil {
+			out = map[string]int{}
+		}
+		out[key] = n
+	}
+	return all, out, nil
 }
 
 // voiceMode is a voice mode of Settings, VoiceOff for "", "off" and "never".
@@ -1988,6 +2043,36 @@ func (b *Bridge) sendFile(ctx context.Context, c Client, to, name, caption strin
 // MaxFile is the largest file the kitties send (WhatsApp takes 100 MB of a document, less of
 // the rest; this keeps it to what a phone downloads without asking).
 const MaxFile = 16 << 20
+
+// OffLAN reports whether the computer of kitty id stays off the local network: it works on its
+// own (Independent) and Settings did not let it reach the local network.
+func (b *Bridge) OffLAN(id string) bool {
+	b.mu.Lock()
+	open := b.set.LocalNetwork
+	b.mu.Unlock()
+	return !open && b.Independent(id)
+}
+
+// TaskMinutes is how long a task asked in the WhatsApp chat chatID may run: the minutes of its
+// number or group, else of every chat, else DefaultTaskMinutes. 0 for a chat that is not of
+// WhatsApp.
+func (b *Bridge) TaskMinutes(chatID string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	for key, id := range b.chats {
+		if id != chatID {
+			continue
+		}
+		if n := b.set.TaskMinutesFor[strings.TrimPrefix(key, "g:")]; n > 0 {
+			return n
+		}
+		if b.set.TaskMinutes > 0 {
+			return b.set.TaskMinutes
+		}
+		return DefaultTaskMinutes
+	}
+	return 0
+}
 
 // Relay says text in the WhatsApp chat or group a chat of the kitties is bound to: what a kitty
 // answers there outside a message (the lead's answer to a question asked from a group). It goes

@@ -363,3 +363,15 @@ func TestSeccompProfile(t *testing.T) {
 		t.Error("no profile unless set")
 	}
 }
+
+func TestNoLANArgs(t *testing.T) {
+	s := Spec{Name: "kitty-a", Image: "img:1", NoLAN: true}
+	args := strings.Join(s.Args(), " ")
+	if !strings.Contains(args, "--cap-add NET_ADMIN") || !strings.Contains(args, "-e "+NoLANEnv+"=1") {
+		t.Fatalf("args = %s", args)
+	}
+	s.NoLAN = false
+	if args := strings.Join(s.Args(), " "); strings.Contains(args, "NET_ADMIN") || strings.Contains(args, NoLANEnv) {
+		t.Fatalf("args = %s", args)
+	}
+}

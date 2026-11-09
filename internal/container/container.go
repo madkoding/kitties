@@ -209,7 +209,14 @@ type Spec struct {
 	// Logs are the options that bound what the runtime keeps of the container's output (logArgs);
 	// empty keeps the runtime's own, which may grow without end.
 	Logs []string
+	// NoLAN keeps the machine off the local network (the WhatsApp kitty that works on its own):
+	// the entrypoint closes it with kitty-nolan, which needs NET_ADMIN, and cuts the kitty's sudo
+	// down so nothing it runs can open it again. The internet stays reachable.
+	NoLAN bool
 }
+
+// NoLANEnv is the variable that tells the desktop's entrypoint to close the local network.
+const NoLANEnv = "KITTY_NO_LAN"
 
 // Validate refuses a spec that would build a wrong or dangerous command line.
 func (s Spec) Validate() error {
@@ -252,6 +259,9 @@ func (s Spec) Args() []string {
 	}
 	if s.Seccomp != "" {
 		args = append(args, "--security-opt", "seccomp="+s.Seccomp)
+	}
+	if s.NoLAN {
+		args = append(args, "--cap-add", "NET_ADMIN", "-e", NoLANEnv+"=1")
 	}
 	args = append(args, s.Logs...)
 	// The home first: the workspace and the shared folder are mounted inside it.
@@ -462,6 +472,25 @@ func (m *Manager) ZoneStale(ctx context.Context, name, zone string) (bool, error
 		}
 	}
 	return have != zone, nil
+}
+
+// LANStale tells whether a container is on, or off, the local network otherwise than noLAN asks:
+// the setting changed after it was made.
+func (m *Manager) LANStale(ctx context.Context, name string, noLAN bool) (bool, error) {
+	if !nameRe.MatchString(name) {
+		return false, fmt.Errorf("container name %q is not valid", name)
+	}
+	out, err := runCmd(ctx, m.rt.Bin, "inspect", "-f", "{{range .Config.Env}}{{println .}}{{end}}", name)
+	if err != nil {
+		return false, fmt.Errorf("inspect %s: %s", name, tail(string(out), 4))
+	}
+	have := false
+	for _, line := range strings.Split(string(out), "\n") {
+		if strings.TrimSpace(line) == NoLANEnv+"=1" {
+			have = true
+		}
+	}
+	return have != noLAN, nil
 }
 
 // limitArgs are the flags of a container's RAM and swap: --memory-swap is both together. No RAM

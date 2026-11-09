@@ -2,6 +2,15 @@
 # Starts the virtual display and keeps the container alive. Everything else happens through
 # `docker exec` from the orchestrator.
 set -eu
+# The WhatsApp kitty that works on its own (KITTY_NO_LAN=1) reaches the internet but not the local
+# network: the rules go in first, before anything of the kitty runs, and its sudo is cut down.
+if [ "${KITTY_NO_LAN:-}" = 1 ]; then
+    # The log is the kitty's own (/tmp), written after sudo returns.
+    nolan_ok=true
+    nolan="$(sudo -n /usr/local/sbin/kitty-nolan 2>&1)" || nolan_ok=false
+    printf '%s\n' "$nolan" >/tmp/nolan.log
+    "$nolan_ok" || echo "kitty-nolan failed: see /tmp/nolan.log" >&2
+fi
 # The home may be a folder of the host (it outlives the container): it gets what the image brings.
 kitty-home || echo "kitty-home: the home could not be seeded" >&2
 # What a start before left in /tmp, and logs that grew too big, go; then the logs are kept small

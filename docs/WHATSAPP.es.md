@@ -160,6 +160,22 @@ olvida la sesión.
     siempre guarda notas sobre **personas** (quién es quién, de qué trata un grupo): en los chats con
     contactos y grupos son las únicas notas que lee y escribe, así puede seguir un grupo en el tiempo
     sin llevar ahí nada tuyo. Una destilación nunca las mezcla con las tuyas.
+  - **Su propio computador, también en grupos.** Sigue navegando por internet y usando su propio
+    escritorio, archivos y comandos en los chats con contactos y grupos (no hay nada tuyo en él); ahí
+    nunca escribe secretos de la bóveda ni te pide tomar el control, y lo que dice se filtra como
+    cualquier respuesta protegida.
+  - **Fuera de tu red local.** Su computador llega a internet pero no a tu router, impresoras, el
+    equipo anfitrión ni nada más de tu casa u oficina (Ajustes › WhatsApp › *Su computador queda
+    fuera de tu red local*, activado por defecto; `whatsapp.local_network: true` lo desactiva). El
+    escritorio la cierra con reglas de firewall al arrancar, y al kitty no le queda `sudo` para
+    abrirla de nuevo (solo para instalar programas). Se aplica la próxima vez que arranque.
+  - **Tareas cortas, enlaces revisados.** Como cualquiera del grupo puede ponerlo a trabajar, una
+    tarea pedida ahí dura 5 minutos por defecto (Ajustes › WhatsApp › *Las tareas pedidas aquí duran
+    como máximo*, y un número o grupo puede tener el suyo: `task_minutes`, `task_minutes_for`), con
+    6 rondas y 40k tokens por minuto, sin reintentos, y se detiene al final en vez de seguir sola. Los enlaces que mandan ahí solo se abren si son páginas
+    web públicas: nada de su máquina o su red (`localhost`, `192.168…`, `.local`), ni un `nombre@`
+    que esconda el sitio real, ni programas para descargar (`.exe`, `.apk`…). Un enlace rechazado
+    cuenta como bloqueado en Ajustes › Protecciones.
   - **Sus propios archivos.** Solo ve los archivos de la biblioteca que guardó él; los otros kitties
     no ven los suyos. También envía solo los suyos: un `file` ajeno se rechaza.
   - **Sin otros kitties.** Nunca está en un chat con otros kitties (agregarlo a uno se rechaza), no
@@ -235,6 +251,9 @@ whatsapp:
   share_with_team: false         # true: los kitties de WhatsApp trabajan con los demás (por defecto: por su cuenta)
   mention_all: needed            # @todos en grupos: needed (solo cuando todos deben verlo, por defecto) u off
   mention_all_hours: 4           # horas mínimas entre dos menciones a todos en un grupo (0: 4)
+  local_network: false           # true: su computador puede llegar a la red local (por defecto: solo internet)
+  task_minutes: 5                # cuánto puede durar una tarea pedida por WhatsApp (0: 5, máximo 60)
+  task_minutes_for: {"120363012345678901@g.us": 10}   # por número o grupo
 ```
 
 El código QR se sigue escaneando desde Ajustes, o se lee con `GET /v1/whatsapp` (`qr_png`).

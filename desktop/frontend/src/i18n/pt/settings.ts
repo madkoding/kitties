@@ -415,6 +415,14 @@ const dict: Dictionary = {
   "Hours between two mentions of everyone": "Horas entre duas menções a todos",
   "The kitty answers by quoting the message it answers, which notifies its author, and mentions others by name. It mentions everyone only for a change of plans, an urgent notice or an announcement someone asked for; past the limit, @all goes as plain text.":
     "O kitty responde citando a mensagem que responde, o que notifica o autor, e menciona os outros pelo nome. Menciona todos só numa mudança de planos, num aviso urgente ou num anúncio que alguém pediu; passado o limite, @todos vai como texto normal.",
+  "Its computer stays off your local network": "O computador dele fica fora da sua rede local",
+  "Recommended. It browses the internet, but cannot reach your router, printers, this computer or anything else at home or work. Applies the next time its computer starts.":
+    "Recomendado. Navega na internet, mas não alcança o seu roteador, impressoras, este computador nem mais nada de casa ou do trabalho. Vale a partir da próxima vez que o computador dele iniciar.",
+  "Tasks asked here run for at most": "As tarefas pedidas aqui duram no máximo",
+  minutes: "minutos",
+  "Anyone in a group can put the kitty to work, so tasks from here are short, with no retries. A number or a group can have its own:":
+    "Qualquer pessoa de um grupo pode pôr o kitty para trabalhar, então as tarefas daqui são curtas e sem novas tentativas. Um número ou um grupo pode ter o seu próprio tempo:",
+  "Minutes for {who}": "Minutos para {who}",
   "Works on its own": "Trabalha por conta própria",
   "Recommended. The WhatsApp kitty keeps its own notes and files, does not see the other kitties' or the shared notes, and talks only with the lead, which hands it nothing secret. So it can take part in groups without mixing what each side knows.":
     "Recomendado. O kitty do WhatsApp guarda as suas próprias notas e arquivos, não vê os dos outros kitties nem as notas compartilhadas, e só fala com o principal, que não lhe passa nada secreto. Assim pode participar de grupos sem misturar o que cada lado sabe.",

@@ -178,10 +178,7 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 		system += s.peoplePrompt(k)
 	}
 	asks := people && s.asksFromExposed(k)
-	if asks {
-		system += "\nIf only " + s.leadFor(k).Name + " (the lead kitty) knows what they ask, you may ask it with @ask_lead {\"question\": \"...\"}: " +
-			s.userName() + " decides first, so say you will check and come back. Never ask it for anything private of " + s.userName() + ".\n"
-	}
+	system += s.askFromExposedPrompt(k)
 	s.compact(ctx, id, brain)
 	sess, err := s.Get(id)
 	if err != nil {

@@ -37,7 +37,8 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 	if w.Set() {
 		opt.Defaults = &whatsapp.Settings{Enabled: w.Enabled, Allow: w.Allow, Kitty: w.Kitty, Groups: w.Groups, AllowGroups: w.AllowGroups,
 			Kitties: w.Kitties, MaxPerHour: w.MaxPerHour, QuietFrom: w.Quiet.From, QuietTo: w.Quiet.To, Voice: w.Voice,
-			ShareWithTeam: w.ShareWithTeam, MentionAll: w.MentionAll, MentionAllHours: w.MentionAllHours}
+			ShareWithTeam: w.ShareWithTeam, MentionAll: w.MentionAll, MentionAllHours: w.MentionAllHours,
+			LocalNetwork: w.LocalNetwork, TaskMinutes: w.TaskMinutes, TaskMinutesFor: w.TaskMinutesFor}
 	}
 	if a.arts != nil {
 		opt.File = libraryFile(a.arts.Get)
@@ -57,6 +58,11 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 	if a.chats != nil {
 		a.chats.SetIndependent(b.Independent)
 		a.chats.SetRelay(b.Relay)
+		a.chats.SetExposedMinutes(b.TaskMinutes)
+	}
+	// Its computer reaches the internet but not the local network (kitty-nolan in the desktop).
+	if a.fleet != nil {
+		a.fleet.SetOffLAN(b.OffLAN)
 	}
 	return b
 }

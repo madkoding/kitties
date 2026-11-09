@@ -98,12 +98,20 @@ type WhatsApp struct {
 	// such mentions in a group (0: 4).
 	MentionAll      string `yaml:"mention_all"`
 	MentionAllHours int    `yaml:"mention_all_hours"`
+	// LocalNetwork lets the computer of a kitty that works on its own reach the local network;
+	// by default it reaches only the internet.
+	LocalNetwork bool `yaml:"local_network"`
+	// TaskMinutes is how long a task asked from WhatsApp may run (0: 5 minutes); TaskMinutesFor
+	// changes it for a number or a group.
+	TaskMinutes    int            `yaml:"task_minutes"`
+	TaskMinutesFor map[string]int `yaml:"task_minutes_for"`
 }
 
 // Set reports whether the file says anything about WhatsApp.
 func (w WhatsApp) Set() bool {
 	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != "" || w.Voice != "" || w.ShareWithTeam ||
-		w.MentionAll != "" || w.MentionAllHours != 0
+		w.MentionAll != "" || w.MentionAllHours != 0 ||
+		w.LocalNetwork || w.TaskMinutes != 0 || len(w.TaskMinutesFor) > 0
 }
 
 // Provider is one AI profile.
