@@ -18,6 +18,7 @@ done
 start=$(date +%s)
 if curl -s -m 5 -o /dev/null http://192.168.1.1/; then bad "192.168.1.1 answered"; else ok "192.168.1.1 is not reached"; fi
 [ $(($(date +%s) - start)) -lt 4 ] && ok "refused at once" || bad "it waited for a timeout"
+[ "$(cat /var/lib/kitty-nolan/state)" = closed ] && ok "the state says closed" || bad "state: $(cat /var/lib/kitty-nolan/state 2>&1)"
 grep -qx 'kitty ALL=(root) NOPASSWD: /usr/local/sbin/kitty-apt' /etc/sudoers.d/kitty && ok "sudo is only kitty-apt" || bad "sudoers: $(cat /etc/sudoers.d/kitty)"
 # Twice is harmless (a restart runs it again on the same container).
 /usr/local/sbin/kitty-nolan >/dev/null || bad "a second run failed"

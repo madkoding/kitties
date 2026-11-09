@@ -1153,12 +1153,16 @@ test("a first run signs in with a Claude plan, from a browser on any machine", a
       json: { id: "f1", kind: "claude-code", method: "browser", status: "pending" },
     });
   });
+  // The gateway answers every look at the sign-in with the whole flow (paste included): a poll
+  // that came before the code was pasted used to hide the box and made this test flaky.
   await page.route("**/v1/settings/logins/f1", (route) =>
     route.fulfill({
       json: {
         id: "f1",
         kind: "claude-code",
         method: "browser",
+        url: "https://claude.com/cai/oauth/authorize?code=true",
+        paste: !signedIn,
         status: signedIn ? "connected" : "pending",
       },
     }),
@@ -3701,6 +3705,7 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
   // Its computer stays off the local network, and tasks from the group get 10 minutes.
   await expect(box.getByTestId("whatsapp-lan").locator("input")).toBeChecked();
   await box.getByTestId("whatsapp-task-minutes-row").nth(1).fill("10");
+  await box.getByTestId("whatsapp-tasks-per-day-row").nth(1).fill("3");
   // Turning it on the first time shows the welcome: cancelling it leaves it off.
   await box.getByTestId("whatsapp-enabled").click();
   const welcome = page.getByTestId("whatsapp-welcome");
@@ -3737,6 +3742,8 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
       local_network: false,
       task_minutes: 0,
       task_minutes_for: { "120363012345678901@g.us": 10 },
+      tasks_per_day: 0,
+      tasks_per_day_for: { "120363012345678901@g.us": 3 },
       accept_risk: true,
     },
   ]);
@@ -4481,12 +4488,14 @@ test("the WhatsApp kitty that works on its own is marked in its drawer and the s
     if (route.request().method() !== "GET") return route.continue();
     const res = await route.fetch();
     const body = await res.json();
-    for (const k of body.kitties || []) if (k.id === ids.tom) k.independent = true;
+    for (const k of body.kitties || [])
+      if (k.id === ids.tom) Object.assign(k, { independent: true, local_network: "closed" });
     return route.fulfill({ response: res, json: body });
   });
   await open(page, `#kitty/${ids.tom}`);
   const drawer = page.getByRole("dialog").first();
   await expect(drawer.getByTestId("independent-tag")).toContainText("On its own");
+  await expect(drawer.getByTestId("lan-closed-tag")).toContainText("No local network");
   await expect(page.locator("aside").getByTestId("independent-badge")).toHaveCount(1);
   await shot(page, "84-independent-kitty");
 });

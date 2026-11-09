@@ -160,11 +160,15 @@ session, without a new code. **Unlink** removes the device from the phone and fo
     the host or anything else at home or work (Settings › WhatsApp › *Its computer stays off your
     local network*, on by default; `whatsapp.local_network: true` turns it off). The desktop closes
     it with firewall rules when it starts, and the kitty keeps no `sudo` to open it again (only
-    installing programs). It applies the next time its computer starts.
+    installing programs). It applies the next time its computer starts. Its drawer says *No local
+    network* once the desktop closed it, or *Local network open* when it could not (an older
+    desktop image: update it in Settings › Machines).
   - **Short tasks, checked links.** Since anyone in a group can put it to work, a task asked there
     gets 5 minutes by default (Settings › WhatsApp › *Tasks asked here run for at most*, and one
     number or group can have its own: `task_minutes`, `task_minutes_for`), with 6 rounds and 40k
-    tokens per minute, no retries, and it stops at the end instead of going on by itself. Links sent there open only when they are public web pages: nothing on
+    tokens per minute, no retries, and it stops at the end instead of going on by itself. Each chat
+    gets 10 tasks a day on its computer by default (`tasks_per_day`, `tasks_per_day_for`); past
+    them it answers in words only until the next day, and the refusal counts as blocked. Links sent there open only when they are public web pages: nothing on
     its machine or network (`localhost`, `192.168…`, `.local`), no `name@` hiding the real site, no
     programs to download (`.exe`, `.apk`…). A refused link counts as blocked in Settings › Guardrails.
   - **Its own files.** It sees only the library files it saved; the other kitties do not see its.
@@ -242,6 +246,8 @@ whatsapp:
   local_network: false           # true: their computer may reach the local network (default: internet only)
   task_minutes: 5                # how long a task asked from WhatsApp may run (0: 5, at most 60)
   task_minutes_for: {"120363012345678901@g.us": 10}   # per number or group
+  tasks_per_day: 10              # tasks on its computer each chat may ask for in a day (0: 10, at most 200)
+  tasks_per_day_for: {"120363012345678901@g.us": 3}    # per number or group
 ```
 
 The QR code is still scanned from Settings, or read with `GET /v1/whatsapp` (`qr_png`).

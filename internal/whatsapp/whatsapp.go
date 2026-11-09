@@ -218,6 +218,11 @@ type Settings struct {
 	// group (its JID). The rounds and tokens of such a task follow (chat.Service.SetExposedMinutes).
 	TaskMinutes    int            `json:"task_minutes,omitempty"`
 	TaskMinutesFor map[string]int `json:"task_minutes_for,omitempty"`
+	// TasksPerDay is how many tasks on its computer each WhatsApp chat may ask for in a day (0 is
+	// DefaultTasksPerDay); TasksPerDayFor changes it for a number or a group. Past it the kitty
+	// answers in words only until the next day (chat.Service.SetExposedTasks).
+	TasksPerDay    int            `json:"tasks_per_day,omitempty"`
+	TasksPerDayFor map[string]int `json:"tasks_per_day_for,omitempty"`
 }
 
 // DefaultTaskMinutes is how long a task asked from WhatsApp may run when Settings says nothing;
@@ -225,6 +230,13 @@ type Settings struct {
 const (
 	DefaultTaskMinutes = 5
 	MaxTaskMinutes     = 60
+)
+
+// DefaultTasksPerDay is how many tasks a WhatsApp chat may ask for in a day when Settings says
+// nothing; MaxTasksPerDay is the most Settings takes.
+const (
+	DefaultTasksPerDay = 10
+	MaxTasksPerDay     = 200
 )
 
 // DefaultPerHour is the hourly limit of messages when Settings sets none.
@@ -600,7 +612,12 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 	out := Settings{Enabled: s.Enabled, Kitty: strings.TrimSpace(s.Kitty), Groups: s.Groups, Allow: []string{}, ShareWithTeam: s.ShareWithTeam,
 		LocalNetwork: s.LocalNetwork}
 	var err error
-	if out.TaskMinutes, out.TaskMinutesFor, err = taskMinutesOf(s.TaskMinutes, s.TaskMinutesFor); err != nil {
+	if out.TaskMinutes, out.TaskMinutesFor, err = perChat(s.TaskMinutes, s.TaskMinutesFor, MaxTaskMinutes,
+		fmt.Sprintf("a task asked from WhatsApp runs from 1 to %d minutes (0 is %d)", MaxTaskMinutes, DefaultTaskMinutes)); err != nil {
+		return Settings{}, err
+	}
+	if out.TasksPerDay, out.TasksPerDayFor, err = perChat(s.TasksPerDay, s.TasksPerDayFor, MaxTasksPerDay,
+		fmt.Sprintf("a WhatsApp chat asks for 1 to %d tasks a day (0 is %d)", MaxTasksPerDay, DefaultTasksPerDay)); err != nil {
 		return Settings{}, err
 	}
 	groups, err := groupList(s.AllowGroups)
@@ -651,20 +668,20 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 	return out, nil
 }
 
-// taskMinutesOf checks the minutes a task asked from WhatsApp may run: all from 1 to
-// MaxTaskMinutes (0 is the default), the keys numbers or groups.
-func taskMinutesOf(all int, by map[string]int) (int, map[string]int, error) {
-	bad := fmt.Errorf("a task asked from WhatsApp runs from 1 to %d minutes (0 is %d)", MaxTaskMinutes, DefaultTaskMinutes)
-	if all < 0 || all > MaxTaskMinutes {
+// perChat checks a number for every chat and its changes per number or group: all from 0 (the
+// default) to most, the keys numbers or groups; why is the error when one is out of range.
+func perChat(all int, by map[string]int, most int, why string) (int, map[string]int, error) {
+	bad := errors.New(why)
+	if all < 0 || all > most {
 		return 0, nil, bad
 	}
 	if len(by) > 2*MaxAllow {
-		return 0, nil, fmt.Errorf("at most %d numbers and groups have minutes of their own", 2*MaxAllow)
+		return 0, nil, fmt.Errorf("at most %d numbers and groups have values of their own", 2*MaxAllow)
 	}
 	var out map[string]int
 	for key, n := range by {
 		key = strings.TrimSpace(key)
-		if n < 0 || n > MaxTaskMinutes {
+		if n < 0 || n > most {
 			return 0, nil, bad
 		}
 		if !IsGroup(key) {
@@ -2059,17 +2076,31 @@ func (b *Bridge) OffLAN(id string) bool {
 func (b *Bridge) TaskMinutes(chatID string) int {
 	b.mu.Lock()
 	defer b.mu.Unlock()
+	return b.perChatLocked(chatID, b.set.TaskMinutes, b.set.TaskMinutesFor, DefaultTaskMinutes)
+}
+
+// TasksPerDay is how many tasks the WhatsApp chat chatID may ask for in a day: its number's or
+// group's, else every chat's, else DefaultTasksPerDay. 0 (no limit) for a chat not of WhatsApp.
+func (b *Bridge) TasksPerDay(chatID string) int {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.perChatLocked(chatID, b.set.TasksPerDay, b.set.TasksPerDayFor, DefaultTasksPerDay)
+}
+
+// perChatLocked is the value of the WhatsApp chat chatID: by its number or group, else all, else
+// def; 0 when chatID is not a WhatsApp chat.
+func (b *Bridge) perChatLocked(chatID string, all int, by map[string]int, def int) int {
 	for key, id := range b.chats {
 		if id != chatID {
 			continue
 		}
-		if n := b.set.TaskMinutesFor[strings.TrimPrefix(key, "g:")]; n > 0 {
+		if n := by[strings.TrimPrefix(key, "g:")]; n > 0 {
 			return n
 		}
-		if b.set.TaskMinutes > 0 {
-			return b.set.TaskMinutes
+		if all > 0 {
+			return all
 		}
-		return DefaultTaskMinutes
+		return def
 	}
 	return 0
 }

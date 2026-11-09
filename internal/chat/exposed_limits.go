@@ -142,3 +142,50 @@ func (s *Service) linkRefused(id string, a action) string {
 	}
 	return ""
 }
+
+// dayCount is how many tasks a chat asked for on day ("2006-01-02").
+type dayCount struct {
+	day string
+	n   int
+}
+
+// SetExposedTasks tells how many tasks on its computer a chat with people who are not the kitty's
+// person may ask for in a day (whatsapp.Bridge.TasksPerDay); 0 is no limit.
+func (s *Service) SetExposedTasks(f func(chatID string) int) { s.exposedTasks = f }
+
+// takeExposedTask counts a task of chat id for today, and reports whether the chat had one left.
+func (s *Service) takeExposedTask(id string) bool {
+	if s.exposedTasks == nil {
+		return true
+	}
+	most := s.exposedTasks(id)
+	if most <= 0 {
+		return true
+	}
+	day := s.now().Format("2006-01-02")
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.exposedDay == nil {
+		s.exposedDay = map[string]dayCount{}
+	}
+	c := s.exposedDay[id]
+	if c.day != day {
+		c = dayCount{day: day}
+	}
+	if c.n >= most {
+		return false
+	}
+	c.n++
+	s.exposedDay[id] = c
+	return true
+}
+
+// noTasksLeft is what the kitty is told when its chat used the day's tasks, and the guard hears.
+func (s *Service) noTasksLeft(id string) string {
+	who := ""
+	if sess, err := s.Get(id); err == nil {
+		who = sess.Audience
+	}
+	s.guard.Blocked(id, who, "tasks per day")
+	return "not done: this chat used the tasks on your computer it gets for today. Answer in words, and say it can be asked again tomorrow"
+}
