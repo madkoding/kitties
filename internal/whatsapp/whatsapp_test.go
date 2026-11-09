@@ -1743,6 +1743,9 @@ func TestOffLANAndTaskMinutes(t *testing.T) {
 	r.b.mu.Lock()
 	r.b.chats["56912345678"], r.b.chats["g:123@g.us"], r.b.chats["56977777777"] = "c1", "c2", "c3"
 	r.b.mu.Unlock()
+	if r.b.TasksPerDay("c1") != DefaultTasksPerDay || r.b.TasksPerDay("other") != 0 {
+		t.Fatalf("tasks per day = %d", r.b.TasksPerDay("c1"))
+	}
 	if r.b.TaskMinutes("c1") != 2 || r.b.TaskMinutes("c2") != 30 || r.b.TaskMinutes("c3") != 10 || r.b.TaskMinutes("other") != 0 {
 		t.Fatalf("minutes = %d %d %d %d", r.b.TaskMinutes("c1"), r.b.TaskMinutes("c2"), r.b.TaskMinutes("c3"), r.b.TaskMinutes("other"))
 	}
@@ -1754,7 +1757,14 @@ func TestOffLANAndTaskMinutes(t *testing.T) {
 	if r.b.OffLAN("k1") || r.b.TaskMinutes("c3") != DefaultTaskMinutes {
 		t.Fatal("local_network lets it reach the local network; no minutes is the default")
 	}
-	for _, bad := range []Settings{{TaskMinutes: 61}, {TaskMinutes: -1}, {TaskMinutesFor: map[string]int{"123@g.us": 99}}} {
+	set.TasksPerDay, set.TasksPerDayFor = 3, map[string]int{"123@g.us": 1}
+	if err := r.b.Apply(set, false); err != nil {
+		t.Fatal(err)
+	}
+	if r.b.TasksPerDay("c2") != 1 || r.b.TasksPerDay("c3") != 3 {
+		t.Fatalf("tasks per day = %d %d", r.b.TasksPerDay("c2"), r.b.TasksPerDay("c3"))
+	}
+	for _, bad := range []Settings{{TaskMinutes: 61}, {TaskMinutes: -1}, {TaskMinutesFor: map[string]int{"123@g.us": 99}}, {TasksPerDay: 201}} {
 		if err := r.b.Apply(bad, false); err == nil {
 			t.Errorf("%+v was taken", bad)
 		}

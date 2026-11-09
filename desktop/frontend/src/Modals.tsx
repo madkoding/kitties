@@ -1107,6 +1107,26 @@ export function KittyDrawer({
                 <IconShield size={11} /> {t("On its own")}
               </span>
             )}
+            {kitty.local_network === "closed" && (
+              <span
+                class="tag"
+                title={t("Its computer reaches the internet, not your local network.")}
+                data-testid="lan-closed-tag"
+              >
+                {t("No local network")}
+              </span>
+            )}
+            {kitty.local_network === "failed" && (
+              <span
+                class="tag tag-amber"
+                title={t(
+                  "Its computer could not close your local network: update its desktop in Settings › Machines. Until then it can reach your router, printers and this computer.",
+                )}
+                data-testid="lan-failed-tag"
+              >
+                {t("Local network open")}
+              </span>
+            )}
             <span class="tag tag-accent max-w-full min-w-0">
               <span class="truncate">
                 {model ? modelLabel(model) : kitty.provider || t("no model")}

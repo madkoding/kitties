@@ -16,12 +16,21 @@ pick() {
     return 1
 }
 
+# The state, where only root writes and the gateway reads it (shown in the kitty's drawer):
+# "closed" once every rule is in, "failed" otherwise.
+STATE_DIR=/var/lib/kitty-nolan
+mkdir -p "$STATE_DIR" && chmod 755 "$STATE_DIR"
+echo failed >"$STATE_DIR/state"
+chmod 644 "$STATE_DIR/state"
+
 # Without the rules the kitty keeps its sudo cut anyway: it never gets more than with them.
 lock_sudo() {
     printf 'kitty ALL=(root) NOPASSWD: /usr/local/sbin/kitty-apt\n' >/etc/sudoers.d/kitty
     chmod 440 /etc/sudoers.d/kitty
 }
 
+# A rule that fails stops the script (set -e): the kitty's sudo is cut on the way out anyway.
+trap 'lock_sudo' EXIT
 v4="$(pick iptables iptables-legacy)" || { lock_sudo; echo "kitty-nolan: no iptables (is NET_ADMIN given?)" >&2; exit 1; }
 
 # The name servers of /etc/resolv.conf stay reachable on port 53 (often the router itself).
@@ -57,4 +66,5 @@ if v6="$(pick ip6tables ip6tables-legacy)"; then
 fi
 
 lock_sudo
+echo closed >"$STATE_DIR/state"
 echo "kitty-nolan: local network closed"

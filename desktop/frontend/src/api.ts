@@ -33,6 +33,9 @@ export interface Kitty {
   // independent marks the kitty that answers on WhatsApp working on its own: its own notes and
   // files, no chats or work with other kitties, only the lead to talk to (the gateway sets it).
   independent?: boolean;
+  // local_network is how its machine stands with the local network when it should stay off it:
+  // "closed", or "failed" when its desktop could not close it. Empty: on it as any machine.
+  local_network?: "" | "closed" | "failed";
   // approvals is "ask" (the default: an action that reaches other people waits for a yes until
   // the kitty is trusted with it) or "auto".
   approvals?: "ask" | "auto" | "";
@@ -1672,6 +1675,10 @@ export type WhatsAppSettings = {
   // task_minutes_for changes it for a number (digits) or a group (its JID).
   task_minutes?: number;
   task_minutes_for?: Record<string, number>;
+  // tasks_per_day is how many tasks each chat may ask for in a day (0: 10); tasks_per_day_for
+  // changes it for a number or a group.
+  tasks_per_day?: number;
+  tasks_per_day_for?: Record<string, number>;
 };
 
 // WhatsAppHeld is a message the hourly limit did not send: to is a number (digits) or a group

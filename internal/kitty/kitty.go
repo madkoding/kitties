@@ -70,7 +70,17 @@ type Kitty struct {
 	// only by the limits the person set; "ask": an action that reaches other people waits for a
 	// yes until the kitty has earned the right to do it alone.
 	Approvals string `json:"approvals,omitempty"`
+	// LocalNetwork is how its machine stands with the local network, when it should stay off it
+	// (the WhatsApp kitty that works on its own): LANClosed, or LANFailed when the desktop could
+	// not close it (an older image, no NET_ADMIN). Empty: on the local network as any machine.
+	LocalNetwork string `json:"local_network,omitempty"`
 }
+
+// The states of Kitty.LocalNetwork.
+const (
+	LANClosed = "closed"
+	LANFailed = "failed"
+)
 
 // NoConnectors, as a kitty's only connection, means it may use none: an empty list means all
 // of them (the configuration file's default), so "none" needs a name of its own.

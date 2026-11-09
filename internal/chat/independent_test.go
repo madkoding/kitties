@@ -523,3 +523,34 @@ func TestIndependentKittyDoesNotOpenInternalLinksFromGroups(t *testing.T) {
 		t.Errorf("refused links not recorded: %v", g.Status().Counts)
 	}
 }
+
+func TestAGroupGetsItsTasksPerDay(t *testing.T) {
+	s, d, _ := deskService(t,
+		"On it.\n@tool page_goto {\"url\": \"https://example.com/one\"}",
+		"@tool done {\"summary\": \"Done.\"}",
+		"Again.\n@tool page_goto {\"url\": \"https://example.com/two\"}",
+		"I can't use my computer again today, sorry.")
+	g := guarded(t, s)
+	alone(s, "a1")
+	id := exposedChat(t, s, "ana")
+	s.SetExposedTasks(func(chatID string) int { return 1 })
+	if _, err := s.Send(context.Background(), id, "look at one"); err != nil {
+		t.Fatal(err)
+	}
+	waitDone(t, s, id)
+	turns, err := s.Send(context.Background(), id, "now look at two")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turns) != 1 || turns[0].Working || !strings.Contains(turns[0].Text, "again today") {
+		t.Fatalf("second task = %+v", turns)
+	}
+	for _, e := range d.execs {
+		if strings.Contains(e, "example.com/two") {
+			t.Errorf("the second task ran: %s", e)
+		}
+	}
+	if g.Status().Counts[guard.KindBlocked] == 0 {
+		t.Error("the refused task was not recorded")
+	}
+}

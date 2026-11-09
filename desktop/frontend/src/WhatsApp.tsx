@@ -40,6 +40,8 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     local_network: !!s.local_network,
     task_minutes: s.task_minutes || 0,
     task_minutes_for: { ...(s.task_minutes_for || {}) },
+    tasks_per_day: s.tasks_per_day || 0,
+    tasks_per_day_for: { ...(s.tasks_per_day_for || {}) },
   };
 }
 
@@ -58,6 +60,8 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     !!a.local_network === !!b.local_network &&
     (a.task_minutes || 0) === (b.task_minutes || 0) &&
     pairs(a.task_minutes_for) === pairs(b.task_minutes_for) &&
+    (a.tasks_per_day || 0) === (b.tasks_per_day || 0) &&
+    pairs(a.tasks_per_day_for) === pairs(b.tasks_per_day_for) &&
     pairs(a.kitties) === pairs(b.kitties)
   );
 }
@@ -338,13 +342,11 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           }
         />
       </label>
-      <TaskMinutes
+      <TaskLimits
         want={want}
         seen={cur.seen_groups || []}
         disabled={disabled}
-        onChange={(task_minutes, task_minutes_for) =>
-          setWant({ ...want, task_minutes, task_minutes_for })
-        }
+        onChange={(m) => setWant({ ...want, ...m })}
       />
       <div class="flex flex-wrap items-center gap-2 mt-3 text-sm" data-testid="whatsapp-quiet">
         {t("Quiet hours")}
@@ -703,13 +705,13 @@ function WhoAnswers(props: {
   );
 }
 
-// TaskMinutes is how long a task asked from WhatsApp may run: for every chat, and for each number
-// or group on the list that needs more or less.
-function TaskMinutes(props: {
+// TaskLimits is how long a task asked from WhatsApp may run and how many a chat may ask for in a
+// day: for every chat, and for each number or group on the list that needs more or less.
+function TaskLimits(props: {
   want: WhatsAppSettings;
   seen: WhatsAppGroup[];
   disabled: boolean;
-  onChange: (all: number, by: Record<string, number>) => void;
+  onChange: (m: Partial<WhatsAppSettings>) => void;
 }) {
   const rows = [
     ...props.want.allow.map((n) => ({ id: n, label: "+" + n })),
@@ -718,54 +720,94 @@ function TaskMinutes(props: {
       label: props.seen.find((s) => s.id === g)?.name || g.replace(/@g\.us$/, ""),
     })),
   ];
-  const all = props.want.task_minutes || 0;
-  const by = props.want.task_minutes_for || {};
-  const num = (e: Event) =>
-    Math.min(60, Math.max(0, parseInt((e.target as HTMLInputElement).value, 10) || 0));
-  const set = (id: string, n: number) => {
+  const minutes = props.want.task_minutes || 0;
+  const perDay = props.want.tasks_per_day || 0;
+  const minutesBy = props.want.task_minutes_for || {};
+  const perDayBy = props.want.tasks_per_day_for || {};
+  const num = (e: Event, most: number) =>
+    Math.min(most, Math.max(0, parseInt((e.target as HTMLInputElement).value, 10) || 0));
+  const one = (by: Record<string, number>, id: string, n: number) => {
     const next = { ...by };
     if (n) next[id] = n;
     else delete next[id];
-    props.onChange(all, next);
+    return next;
   };
   return (
     <div class="mt-3 text-sm" data-testid="whatsapp-task-minutes">
-      <label class="flex flex-wrap items-center gap-2">
-        {t("Tasks asked here run for at most")}
-        <input
-          type="number"
-          min={0}
-          max={60}
-          class="w-16 px-2 py-1 text-sm"
-          value={all || ""}
-          placeholder="5"
-          disabled={props.disabled}
-          onInput={(e) => props.onChange(num(e), by)}
-          data-testid="whatsapp-task-minutes-all"
-        />
-        {t("minutes")}
-      </label>
+      <div class="flex flex-wrap items-center gap-2">
+        <label class="flex items-center gap-2">
+          {t("Tasks asked here run for at most")}
+          <input
+            type="number"
+            min={0}
+            max={60}
+            class="w-16 px-2 py-1 text-sm"
+            value={minutes || ""}
+            placeholder="5"
+            disabled={props.disabled}
+            onInput={(e) => props.onChange({ task_minutes: num(e, 60) })}
+            data-testid="whatsapp-task-minutes-all"
+          />
+          {t("minutes")},
+        </label>
+        <label class="flex items-center gap-2">
+          <input
+            type="number"
+            min={0}
+            max={200}
+            class="w-16 px-2 py-1 text-sm"
+            value={perDay || ""}
+            placeholder="10"
+            disabled={props.disabled}
+            onInput={(e) => props.onChange({ tasks_per_day: num(e, 200) })}
+            data-testid="whatsapp-tasks-per-day-all"
+          />
+          {t("a day per chat")}
+        </label>
+      </div>
       <span class="block text-xs text-[var(--t3)] mt-1">
         {t(
-          "Anyone in a group can put the kitty to work, so tasks from here are short, with no retries. A number or a group can have its own:",
+          "Anyone in a group can put the kitty to work, so tasks from here are short, few, and never retried; past the day's tasks it answers in words. A number or a group can have its own:",
         )}
       </span>
       {rows.length > 0 && (
-        <div class="grid gap-1 mt-1" style="grid-template-columns: max-content 5rem">
+        <div
+          class="grid gap-1 mt-1 items-center"
+          style="grid-template-columns: max-content 5rem 5rem"
+        >
+          <span />
+          <span class="text-xs text-[var(--t3)]">{t("Minutes")}</span>
+          <span class="text-xs text-[var(--t3)]">{t("A day")}</span>
           {rows.map((r) => (
             <div key={r.id} class="contents">
-              <span class="self-center pr-3">{r.label}</span>
+              <span class="pr-3">{r.label}</span>
               <input
                 type="number"
                 min={0}
                 max={60}
                 class="px-2 py-1 text-sm"
-                value={by[r.id] || ""}
-                placeholder={String(all || 5)}
+                value={minutesBy[r.id] || ""}
+                placeholder={String(minutes || 5)}
                 disabled={props.disabled}
                 aria-label={t("Minutes for {who}", { who: r.label })}
-                onInput={(e) => set(r.id, num(e))}
+                onInput={(e) =>
+                  props.onChange({ task_minutes_for: one(minutesBy, r.id, num(e, 60)) })
+                }
                 data-testid="whatsapp-task-minutes-row"
+              />
+              <input
+                type="number"
+                min={0}
+                max={200}
+                class="px-2 py-1 text-sm"
+                value={perDayBy[r.id] || ""}
+                placeholder={String(perDay || 10)}
+                disabled={props.disabled}
+                aria-label={t("Tasks a day for {who}", { who: r.label })}
+                onInput={(e) =>
+                  props.onChange({ tasks_per_day_for: one(perDayBy, r.id, num(e, 200)) })
+                }
+                data-testid="whatsapp-tasks-per-day-row"
               />
             </div>
           ))}
