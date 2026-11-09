@@ -775,3 +775,51 @@ func TestSendVoiceNote(t *testing.T) {
 		t.Fatalf("an audio went as a voice note: %v", b)
 	}
 }
+
+func TestQuotesAndMentions(t *testing.T) {
+	s, dev := paired(t)
+	_ = s.PutLIDMapping(context.Background(), types.NewJID("777", types.HiddenUserServer), types.NewJID("56922222222", types.DefaultUserServer))
+	pn := types.NewJID("56912345678", types.DefaultUserServer)
+	group := types.MessageInfo{MessageSource: types.MessageSource{Sender: pn, Chat: types.NewJID("120363", types.GroupServer), IsGroup: true}}
+	msg := func(m *waE2E.Message) whatsapp.Event {
+		return translate(s, dev, &events.Message{Info: group, Message: m})[0]
+	}
+	// A reply to someone who comes as a LID, with an @mention of them and of another number.
+	ev := msg(&waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String("@777 y @56933333333 ¿y eso?"),
+		ContextInfo: &waE2E.ContextInfo{StanzaID: proto.String("q1"), Participant: proto.String("777@lid"),
+			QuotedMessage: &waE2E.Message{Conversation: proto.String("¿vamos mañana?")},
+			MentionedJID:  []string{"777@lid", "56933333333@s.whatsapp.net", "555@lid"}}}})
+	if ev.Quote == nil || ev.Quote.From != "56922222222" || ev.Quote.Text != "¿vamos mañana?" {
+		t.Fatalf("quote = %+v", ev.Quote)
+	}
+	if len(ev.Mentions) != 2 || ev.Mentions["777"] != "56922222222" || ev.Mentions["56933333333"] != "56933333333" {
+		t.Fatalf("mentions = %v", ev.Mentions)
+	}
+	// A reply to the kitty's own picture: its LID is this number.
+	own := msg(&waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String("linda"),
+		ContextInfo: &waE2E.ContextInfo{StanzaID: proto.String("q2"), Participant: proto.String("999@lid"),
+			QuotedMessage: &waE2E.Message{ImageMessage: &waE2E.ImageMessage{}}}}})
+	if own.Quote == nil || own.Quote.From != "15550001" || own.Quote.Text != "(picture)" || !own.Mentioned {
+		t.Fatalf("own = %+v", own.Quote)
+	}
+	for m, want := range map[*waE2E.Message]string{
+		{VideoMessage: &waE2E.VideoMessage{}}:                                      "(video)",
+		{AudioMessage: &waE2E.AudioMessage{}}:                                      "(audio)",
+		{DocumentMessage: &waE2E.DocumentMessage{FileName: proto.String("a.pdf")}}: "(document) a.pdf",
+		{StickerMessage: &waE2E.StickerMessage{Emojis: proto.String("😀")}}:         "(sticker) 😀",
+	} {
+		e := msg(&waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String("x"),
+			ContextInfo: &waE2E.ContextInfo{StanzaID: proto.String("q"), QuotedMessage: m}}})
+		if e.Quote == nil || e.Quote.Text != want || e.Quote.From != "" {
+			t.Errorf("quoted %v = %+v", m, e.Quote)
+		}
+	}
+	// A message that answers nothing has no quote nor mentions.
+	if plain := msg(&waE2E.Message{Conversation: proto.String("hola")}); plain.Quote != nil || plain.Mentions != nil {
+		t.Fatalf("plain = %+v", plain)
+	}
+	if mentioned := msg(&waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String("@1"),
+		ContextInfo: &waE2E.ContextInfo{MentionedJID: []string{"1@s.whatsapp.net"}}}}); mentioned.Quote != nil {
+		t.Fatalf("a mention is not a reply: %+v", mentioned.Quote)
+	}
+}

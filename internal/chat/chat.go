@@ -62,7 +62,11 @@ type Turn struct {
 	From string    `json:"from"` // "user", a kitty's name, or "system" for connector results
 	// Kitty is the kitty id when From is a kitty.
 	Kitty string `json:"kitty,omitempty"`
-	Text  string `json:"text"`
+	// Sender names who wrote a "user" turn that is not the person: a WhatsApp contact as
+	// "Ana (+56912345678)". The kitty reads it as the turn's author, so the people of a chat are
+	// not all taken for the person.
+	Sender string `json:"sender,omitempty"`
+	Text   string `json:"text"`
 	// Calls are the connectors the kitty used in this turn, if any.
 	Calls []connector.Result `json:"calls,omitempty"`
 	Usage provider.Usage     `json:"usage,omitempty"`
@@ -894,6 +898,12 @@ func (s *Service) SendFiles(ctx context.Context, id, text string, files []attach
 	return s.sendWith(ctx, id, "user", "", text, files)
 }
 
+// SendAs posts a message of someone who is not the person (a WhatsApp contact), named by sender,
+// with the files they sent: the kitty reads it as theirs.
+func (s *Service) SendAs(ctx context.Context, id, sender, text string, files []attach.Upload) ([]Turn, error) {
+	return s.sendFrom(ctx, id, "user", "", sender, text, files)
+}
+
 // send posts a message from someone (the person, the scheduler, or a kitty delegating) and has
 // the kitties answer it.
 func (s *Service) send(ctx context.Context, id, from, fromID, text string) ([]Turn, error) {
@@ -902,6 +912,11 @@ func (s *Service) send(ctx context.Context, id, from, fromID, text string) ([]Tu
 
 // sendWith is send with the files the person attached.
 func (s *Service) sendWith(ctx context.Context, id, from, fromID, text string, files []attach.Upload) ([]Turn, error) {
+	return s.sendFrom(ctx, id, from, fromID, "", text, files)
+}
+
+// sendFrom is sendWith with the name of who wrote, when it is not the person (Turn.Sender).
+func (s *Service) sendFrom(ctx context.Context, id, from, fromID, sender, text string, files []attach.Upload) ([]Turn, error) {
 	text = strings.TrimSpace(text)
 	if text == "" && len(files) == 0 {
 		return nil, errors.New("the message is empty")
@@ -937,7 +952,7 @@ func (s *Service) sendWith(ctx context.Context, id, from, fromID, text string, f
 		s.mu.Unlock()
 		return nil, err
 	}
-	sess.Turns = append(sess.Turns, Turn{At: s.now(), From: from, Kitty: fromID, Text: text, Attachments: metas})
+	sess.Turns = append(sess.Turns, Turn{At: s.now(), From: from, Kitty: fromID, Sender: sender, Text: text, Attachments: metas})
 	sess.UpdatedAt = s.now()
 	members := append([]string(nil), sess.Members...)
 	goal := sess.Goal
@@ -1194,7 +1209,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	}
 	system += s.memoryPrompt(k, sess)
 	system += s.limitPrompt(allowed)
-	system += descriptionPrompt(sess) + proposePrompt(sess)
+	system += descriptionPrompt(sess) + s.sendersPrompt(sess) + proposePrompt(sess)
 	window := sess.Turns[min(sess.SummaryUpTo, len(sess.Turns)):]
 	if from := s.goldfishFrom(sess, k); from >= 0 {
 		// A task from the lead is all the kitty needs: it starts from it, without the earlier ones.
@@ -1953,7 +1968,10 @@ func (s *Service) transcriptFor(id string, brain provider.Client, paths map[stri
 			continue
 		}
 		label := t.From
-		if t.From == "user" {
+		switch {
+		case t.From == "user" && t.Sender != "":
+			label = t.Sender
+		case t.From == "user":
 			label = s.user
 			if label == "" {
 				label = "User"

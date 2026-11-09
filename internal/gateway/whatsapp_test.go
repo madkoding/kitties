@@ -25,6 +25,7 @@ type fakeWhatsApp struct {
 	cleared   int
 	resendErr error
 	resent    string
+	contacts  []whatsapp.Contact
 }
 
 func (f *fakeWhatsApp) Status() whatsapp.Status { return f.st }
@@ -59,12 +60,66 @@ func (f *fakeWhatsApp) Test(_ context.Context, to string) error {
 	return f.testErr
 }
 
+func (f *fakeWhatsApp) Contacts() []whatsapp.Contact { return f.contacts }
+func (f *fakeWhatsApp) NameContact(number, name string) (whatsapp.Contact, error) {
+	n, err := whatsapp.Normalize(number)
+	if err != nil {
+		return whatsapp.Contact{}, err
+	}
+	for i, c := range f.contacts {
+		if c.Number == n {
+			f.contacts[i].Name = name
+			return f.contacts[i], nil
+		}
+	}
+	return whatsapp.Contact{}, whatsapp.ErrNoContact
+}
+func (f *fakeWhatsApp) ForgetContact(number string) error {
+	for i, c := range f.contacts {
+		if c.Number == number {
+			f.contacts = append(f.contacts[:i], f.contacts[i+1:]...)
+			return nil
+		}
+	}
+	return whatsapp.ErrNoContact
+}
+
+func TestWhatsAppContactRoutes(t *testing.T) {
+	fleet := &fakeFleet{kitties: map[string]*kitty.Kitty{}}
+	chats := &fakeChats{sessions: map[string]*chat.Session{}}
+	f := &fakeWhatsApp{contacts: []whatsapp.Contact{{Number: "56911111111", PushName: "Ana"}}}
+	srv := httptest.NewServer(New(fleet, chats, "tok", "test").WithWhatsApp(f))
+	defer srv.Close()
+	if code, _, _ := call(t, srv, "GET", "/v1/whatsapp/contacts", "", nil); code != 401 {
+		t.Fatalf("without a token = %d", code)
+	}
+	code, body, _ := call(t, srv, "GET", "/v1/whatsapp/contacts", "tok", nil)
+	if list, _ := body["contacts"].([]any); code != 200 || len(list) != 1 || list[0].(map[string]any)["push_name"] != "Ana" {
+		t.Fatalf("list = %d %v", code, body)
+	}
+	if code, body, _ := call(t, srv, "PUT", "/v1/whatsapp/contacts/56911111111", "tok", map[string]any{"name": "Ana Pérez"}); code != 200 || body["name"] != "Ana Pérez" {
+		t.Fatalf("name = %d %v", code, body)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/whatsapp/contacts/56900000000", "tok", map[string]any{"name": "x"}); code != 404 {
+		t.Fatalf("name an unknown one = %d", code)
+	}
+	if code, _, _ := call(t, srv, "PUT", "/v1/whatsapp/contacts/abc", "tok", map[string]any{"name": "x"}); code != 400 {
+		t.Fatalf("bad number = %d", code)
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/whatsapp/contacts/56911111111", "tok", nil); code != 204 || len(f.contacts) != 0 {
+		t.Fatalf("forget = %d %v", code, f.contacts)
+	}
+	if code, _, _ := call(t, srv, "DELETE", "/v1/whatsapp/contacts/56911111111", "tok", nil); code != 404 {
+		t.Fatalf("forget again = %d", code)
+	}
+}
+
 func TestWhatsAppRoutes(t *testing.T) {
 	fleet := &fakeFleet{kitties: map[string]*kitty.Kitty{}}
 	chats := &fakeChats{sessions: map[string]*chat.Session{}}
 	plain := httptest.NewServer(New(fleet, chats, "tok", "test"))
 	defer plain.Close()
-	for _, r := range [][2]string{{"GET", "/v1/whatsapp"}, {"PUT", "/v1/whatsapp"}, {"POST", "/v1/whatsapp/link"}, {"POST", "/v1/whatsapp/reconnect"}, {"POST", "/v1/whatsapp/unlink"}, {"POST", "/v1/whatsapp/test"}, {"DELETE", "/v1/whatsapp/held"}, {"POST", "/v1/whatsapp/held/x/resend"}} {
+	for _, r := range [][2]string{{"GET", "/v1/whatsapp"}, {"PUT", "/v1/whatsapp"}, {"POST", "/v1/whatsapp/link"}, {"POST", "/v1/whatsapp/reconnect"}, {"POST", "/v1/whatsapp/unlink"}, {"POST", "/v1/whatsapp/test"}, {"DELETE", "/v1/whatsapp/held"}, {"POST", "/v1/whatsapp/held/x/resend"}, {"GET", "/v1/whatsapp/contacts"}, {"PUT", "/v1/whatsapp/contacts/569"}, {"DELETE", "/v1/whatsapp/contacts/569"}} {
 		if code, _, _ := call(t, plain, r[0], r[1], "tok", map[string]any{}); code != 404 {
 			t.Errorf("%s %s without WhatsApp = %d", r[0], r[1], code)
 		}

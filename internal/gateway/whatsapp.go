@@ -19,6 +19,9 @@ type WhatsApp interface {
 	Reconnect() error
 	Unlink(ctx context.Context) error
 	Test(ctx context.Context, to string) error
+	Contacts() []whatsapp.Contact
+	NameContact(number, name string) (whatsapp.Contact, error)
+	ForgetContact(number string) error
 }
 
 // WithWhatsApp lets Settings link a WhatsApp number and choose who may write.
@@ -36,6 +39,9 @@ func (s *Server) whatsappRoutes() {
 	s.mux.Handle("POST /v1/whatsapp/test", s.auth(s.handleWhatsAppTest))
 	s.mux.Handle("DELETE /v1/whatsapp/held", s.auth(s.handleWhatsAppClearHeld))
 	s.mux.Handle("POST /v1/whatsapp/held/{id}/resend", s.auth(s.handleWhatsAppResend))
+	s.mux.Handle("GET /v1/whatsapp/contacts", s.auth(s.handleWhatsAppContacts))
+	s.mux.Handle("PUT /v1/whatsapp/contacts/{number}", s.auth(s.handleWhatsAppNameContact))
+	s.mux.Handle("DELETE /v1/whatsapp/contacts/{number}", s.auth(s.handleWhatsAppForgetContact))
 }
 
 var errNoWhatsApp = errors.New("this gateway has no WhatsApp link")
@@ -157,5 +163,56 @@ func (s *Server) handleWhatsAppResend(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 	default:
 		reply(w, http.StatusOK, s.whatsapp.Status())
+	}
+}
+
+// handleWhatsAppContacts are the people who wrote, with the names the kitty reads them by.
+func (s *Server) handleWhatsAppContacts(w http.ResponseWriter, _ *http.Request) {
+	if s.whatsapp == nil {
+		fail(w, http.StatusNotFound, errNoWhatsApp)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	reply(w, http.StatusOK, map[string]any{"contacts": s.whatsapp.Contacts()})
+}
+
+// handleWhatsAppNameContact sets what the person calls a number ({"name": ""} goes back to the
+// name the contact gives itself).
+func (s *Server) handleWhatsAppNameContact(w http.ResponseWriter, r *http.Request) {
+	if s.whatsapp == nil {
+		fail(w, http.StatusNotFound, errNoWhatsApp)
+		return
+	}
+	var in struct {
+		Name string `json:"name"`
+	}
+	if err := decode(r, &in); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	c, err := s.whatsapp.NameContact(r.PathValue("number"), in.Name)
+	switch {
+	case errors.Is(err, whatsapp.ErrNoContact):
+		fail(w, http.StatusNotFound, err)
+	case err != nil:
+		fail(w, http.StatusBadRequest, err)
+	default:
+		reply(w, http.StatusOK, c)
+	}
+}
+
+// handleWhatsAppForgetContact removes a contact.
+func (s *Server) handleWhatsAppForgetContact(w http.ResponseWriter, r *http.Request) {
+	if s.whatsapp == nil {
+		fail(w, http.StatusNotFound, errNoWhatsApp)
+		return
+	}
+	switch err := s.whatsapp.ForgetContact(r.PathValue("number")); {
+	case errors.Is(err, whatsapp.ErrNoContact):
+		fail(w, http.StatusNotFound, err)
+	case err != nil:
+		fail(w, http.StatusBadRequest, err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
 	}
 }
