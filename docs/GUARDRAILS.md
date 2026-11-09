@@ -38,6 +38,13 @@ Your own chats in the app are not exposed and keep working as before.
 
 What it asks for and does not get is refused, recorded, and the kitty is told to answer in words.
 
+**A kitty that works on its own** (the WhatsApp kitty, [WHATSAPP.md](WHATSAPP.md)) keeps, in exposed
+chats, **its own computer**: it browses the internet and uses its own files and commands there,
+since nothing of yours is on it. Still never the vault (`type_secret`), never asking you to take
+control (`ask_help`), never other kitties; its notes there are only its notes about people, its
+library only its own files, and everything it says, including the progress lines and the end of a
+task on its computer, goes through the same filter.
+
 ## What the kitty is told
 
 On top of its soul, an exposed kitty reads rules nothing in the chat can change: what third parties

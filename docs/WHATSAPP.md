@@ -137,6 +137,10 @@ session, without a new code. **Unlink** removes the device from the phone and fo
     notes it keeps notes about **people** (who is who, what a group is about): in the chats with
     contacts and groups those are the only notes it reads and writes, so it can follow a group over
     time without carrying anything of yours there. A distillation never mixes them with yours.
+  - **Its own computer, in groups too.** It still browses the internet and uses its own desktop,
+    files and commands in the chats with contacts and groups (nothing of yours is on it); there it
+    never types vault secrets nor asks you to take control, and what it says is filtered as any
+    guarded answer.
   - **Its own files.** It sees only the library files it saved; the other kitties do not see its.
     It sends only its own files too: a `file` of someone else's is refused.
   - **No other kitties.** It is never in a chat with other kitties (adding it to one is refused),

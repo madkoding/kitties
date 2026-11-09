@@ -1196,10 +1196,16 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	if err != nil {
 		return Turn{}, nil, err
 	}
-	if s.guardedID(id) {
+	// Where someone else writes, a kitty answers with the guard's rules; one that works on its own
+	// keeps its own computer there (a browser, its files and commands: nothing of the person's).
+	exposed := s.guardedID(id)
+	if exposed && !s.independent(k) {
 		return s.answerExposed(ctx, id, k, members, brain)
 	}
 	allowed := s.fleet.Connectors().Descriptions(k.Connectors)
+	if exposed {
+		allowed = s.guard.Connectors(allowed)
+	}
 	var group []string
 	for _, m := range members {
 		if m.ID != k.ID {
@@ -1217,9 +1223,12 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		sc.AskLead = s.canAskLead(k, id) != nil
 	}
 	system := k.Soul.SystemPrompt(sc)
+	if exposed {
+		system += s.guard.Prompt(s.user) + s.ownComputerPrompt(k) + s.askFromExposedPrompt(k)
+	}
 	if k.Desktop {
 		system += "\n" + desktop.Catalogue()
-		if s.vault != nil {
+		if s.vault != nil && !exposed {
 			if names := s.vault.Names(k.ID); len(names) > 0 {
 				system += "\nSecrets the person saved for you to type with type_secret (you are never shown them): " + strings.Join(names, ", ") + ".\n"
 			}
@@ -1233,7 +1242,11 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	if err != nil {
 		return Turn{}, nil, err
 	}
-	system += s.memoryPrompt(k, sess)
+	if exposed {
+		system += s.peoplePrompt(k)
+	} else {
+		system += s.memoryPrompt(k, sess)
+	}
 	system += s.limitPrompt(allowed)
 	system += descriptionPrompt(sess) + s.sendersPrompt(sess) + proposePrompt(sess)
 	window := sess.Turns[min(sess.SummaryUpTo, len(sess.Turns)):]
@@ -1249,6 +1262,9 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	var tools []provider.Tool
 	if tc, ok := brain.(provider.ToolClient); ok && s.nativeTools && tc.SupportsTools() {
 		tools = s.toolSet(k, allowed)
+		if exposed {
+			tools = ownComputerTools(tools)
+		}
 		native = len(tools) > 0
 	}
 	turn := Turn{From: k.Name, Kitty: k.ID}
@@ -1291,6 +1307,9 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 			if a.kind == "delegate" && !s.canDelegate(k) {
 				continue
 			}
+			if exposed && !s.ownComputerAllows(id, a, allowed) {
+				continue
+			}
 			kept = append(kept, a)
 		}
 		actions = kept
@@ -1308,7 +1327,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 				}
 			}
 			turn.At = s.now()
-			turn.Text = strings.TrimSpace(strings.Join(parts, "\n\n"))
+			turn.Text = s.filterExposed(id, strings.TrimSpace(strings.Join(parts, "\n\n")))
 			turn.Working = true
 			return turn, &pendingTask{brain: brain, messages: messages, tools: tools, native: native, reply: reply, text: reply.Content, actions: actions, allowed: allowed, pre: pre}, nil
 		}
@@ -1324,6 +1343,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 	if turn.Text == "" {
 		turn.Text = "(" + k.Name + " had nothing to add)"
 	}
+	turn.Text = s.filterExposed(id, turn.Text)
 	return turn, nil, nil
 }
 
@@ -1502,7 +1522,7 @@ func (s *Service) runTask(ctx context.Context, id string, index int, k *kitty.Ki
 			}
 		}
 	}
-	s.closeTask(id, index, k, strings.TrimSpace(strings.Join(st.parts, "\n\n")), needsHelp, result)
+	s.closeTask(id, index, k, s.filterExposed(id, strings.TrimSpace(strings.Join(st.parts, "\n\n"))), needsHelp, result)
 	if st.detail != "" {
 		s.edit(id, index, func(t *Turn) {
 			t.Detail = st.detail
@@ -1573,6 +1593,10 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		// new screenshot is worth its tokens.
 		looked := false
 		for i, a := range st.actions {
+			if !s.ownComputerAllows(id, a, p.allowed) {
+				outs = append(outs, outcome{action: a, err: notHere})
+				continue
+			}
 			if a.kind != "tool" {
 				if o, ok := st.pre[i]; ok {
 					outs = append(outs, o)
@@ -1706,6 +1730,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		if plan, ok := planStep(s.now(), text, st.actions); ok {
 			// The kitty says what it goes on to do: a line the person follows, not the answer,
 			// and, when they chose it, news of a long task on their phone.
+			plan.Result = s.filterExposed(id, plan.Result)
 			s.appendStep(id, index, plan)
 			s.progress(k, plan.Result, id)
 		} else if text = strings.TrimSpace(text); text != "" {

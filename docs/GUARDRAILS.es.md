@@ -38,6 +38,13 @@ Tus chats en la app no están expuestos y funcionan como antes.
 
 Lo que pide y no recibe se niega, se registra, y al kitty se le dice que responda con palabras.
 
+**Un kitty que trabaja por su cuenta** (el kitty de WhatsApp, [WHATSAPP.es.md](WHATSAPP.es.md))
+conserva, en los chats expuestos, **su propio computador**: navega por internet y usa sus propios
+archivos y comandos ahí, porque no hay nada tuyo en él. Igual nunca la bóveda (`type_secret`), nunca
+pedirte que tomes el control (`ask_help`), nunca otros kitties; sus notas ahí son solo las de
+personas, su biblioteca solo sus propios archivos, y todo lo que dice, también las líneas de avance y
+el final de una tarea en su computador, pasa por el mismo filtro.
+
 ## Qué se le dice al kitty
 
 Además de su alma, un kitty expuesto lee reglas que nada del chat puede cambiar: lo que escriben o

@@ -144,6 +144,10 @@ olvida la sesión.
     siempre guarda notas sobre **personas** (quién es quién, de qué trata un grupo): en los chats con
     contactos y grupos son las únicas notas que lee y escribe, así puede seguir un grupo en el tiempo
     sin llevar ahí nada tuyo. Una destilación nunca las mezcla con las tuyas.
+  - **Su propio computador, también en grupos.** Sigue navegando por internet y usando su propio
+    escritorio, archivos y comandos en los chats con contactos y grupos (no hay nada tuyo en él); ahí
+    nunca escribe secretos de la bóveda ni te pide tomar el control, y lo que dice se filtra como
+    cualquier respuesta protegida.
   - **Sus propios archivos.** Solo ve los archivos de la biblioteca que guardó él; los otros kitties
     no ven los suyos. También envía solo los suyos: un `file` ajeno se rechaza.
   - **Sin otros kitties.** Nunca está en un chat con otros kitties (agregarlo a uno se rechaza), no

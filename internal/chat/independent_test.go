@@ -9,6 +9,7 @@ import (
 
 	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
+	"github.com/madkoding/kitties/internal/guard"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/memory"
 	"github.com/madkoding/kitties/internal/soul"
@@ -401,5 +402,43 @@ func TestAlwaysTrustsOneGroupWithTheLeadsAnswers(t *testing.T) {
 	_, _ = s.Send(context.Background(), other.ID, "x?")
 	if len(store.List("pending", 10)) != 1 {
 		t.Errorf("another chat did not ask: %v", store.List("pending", 10))
+	}
+}
+
+func TestIndependentKittyBrowsesOnItsOwnComputerInGroups(t *testing.T) {
+	s, d, sa := deskService(t,
+		"Let me look it up.\n@tool page_goto {\"url\": \"https://example.com/fixtures\"}\n@tool type_secret {\"name\": \"bank\"}",
+		"@tool done {\"summary\": \"The match is on Friday at 8. (key "+leakyKey+")\"}")
+	g := guarded(t, s)
+	alone(s, "a1")
+	id := exposedChat(t, s, "ana")
+	turns, err := s.Send(context.Background(), id, "when is the match?")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turns) != 1 || !turns[0].Working {
+		t.Fatalf("ana did not start on her computer: %+v", turns)
+	}
+	sess := waitDone(t, s, id)
+	system := sa.seen[0][0].Content
+	if !strings.Contains(system, "THIS CHAT IS WITH SOMEONE ELSE") || !strings.Contains(system, "you keep your own computer") || strings.Contains(system, "type_secret (you are never shown") {
+		t.Errorf("exposed prompt = %s", system)
+	}
+	browsed := false
+	for _, e := range d.execs {
+		browsed = browsed || strings.Contains(e, "example.com/fixtures")
+		if strings.Contains(e, "bank") {
+			t.Errorf("a secret was typed: %s", e)
+		}
+	}
+	if !browsed {
+		t.Errorf("ana did not browse: %v", d.execs)
+	}
+	last := sess.Turns[len(sess.Turns)-1]
+	if !strings.Contains(last.Text, "Friday at 8") || strings.Contains(last.Text, leakyKey) {
+		t.Errorf("answer = %q", last.Text)
+	}
+	if g.Status().Counts[guard.KindBlocked] == 0 {
+		t.Errorf("type_secret was not recorded as refused: %v", g.Status().Counts)
 	}
 }
