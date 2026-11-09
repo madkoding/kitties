@@ -408,6 +408,14 @@ const dict: Dictionary = {
   Resend: "Reenviar",
   "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.":
     "No se enviaron: salieron más de {limit} mensajes en una hora. Reenvía uno cuando haya espacio, o sube el límite arriba. La lista queda sellada, así que un reinicio no la pierde.",
+  "Its computer stays off your local network": "Su computador queda fuera de tu red local",
+  "Recommended. It browses the internet, but cannot reach your router, printers, this computer or anything else at home or work. Applies the next time its computer starts.":
+    "Recomendado. Navega por internet, pero no llega a tu router, impresoras, este computador ni nada más de tu casa u oficina. Se aplica la próxima vez que su computador arranque.",
+  "Tasks asked here run for at most": "Las tareas pedidas aquí duran como máximo",
+  minutes: "minutos",
+  "Anyone in a group can put the kitty to work, so tasks from here are short, with no retries. A number or a group can have its own:":
+    "Cualquiera de un grupo puede poner a trabajar al kitty, así que las tareas de aquí son cortas y sin reintentos. Un número o un grupo puede tener su propio tiempo:",
+  "Minutes for {who}": "Minutos para {who}",
   "Works on its own": "Trabaja por su cuenta",
   "Recommended. The WhatsApp kitty keeps its own notes and files, does not see the other kitties' or the shared notes, and talks only with the lead, which hands it nothing secret. So it can take part in groups without mixing what each side knows.":
     "Recomendado. El kitty de WhatsApp guarda sus propias notas y archivos, no ve los de los otros kitties ni las notas compartidas, y solo habla con el principal, que no le pasa nada secreto. Así puede participar en grupos sin mezclar lo que sabe cada lado.",

@@ -1726,3 +1726,37 @@ func TestRelaySaysTextInTheChatsWhatsApp(t *testing.T) {
 		t.Fatal("a chat that is not WhatsApp's was relayed")
 	}
 }
+
+func TestOffLANAndTaskMinutes(t *testing.T) {
+	r := newRig(t)
+	set := Settings{Kitty: "mimi", TaskMinutes: 10, TaskMinutesFor: map[string]int{"+56912345678": 2, "123@g.us": 30, "56900000000": 0}}
+	if err := r.b.Apply(set, false); err != nil {
+		t.Fatal(err)
+	}
+	if !r.b.OffLAN("k1") || r.b.OffLAN("k3") {
+		t.Fatal("the kitty that works on its own stays off the local network, the others do not")
+	}
+	got := r.b.Status().TaskMinutesFor
+	if len(got) != 2 || got["56912345678"] != 2 || got["123@g.us"] != 30 {
+		t.Fatalf("minutes kept = %v", got)
+	}
+	r.b.mu.Lock()
+	r.b.chats["56912345678"], r.b.chats["g:123@g.us"], r.b.chats["56977777777"] = "c1", "c2", "c3"
+	r.b.mu.Unlock()
+	if r.b.TaskMinutes("c1") != 2 || r.b.TaskMinutes("c2") != 30 || r.b.TaskMinutes("c3") != 10 || r.b.TaskMinutes("other") != 0 {
+		t.Fatalf("minutes = %d %d %d %d", r.b.TaskMinutes("c1"), r.b.TaskMinutes("c2"), r.b.TaskMinutes("c3"), r.b.TaskMinutes("other"))
+	}
+	set.TaskMinutes = 0
+	set.LocalNetwork = true
+	if err := r.b.Apply(set, false); err != nil {
+		t.Fatal(err)
+	}
+	if r.b.OffLAN("k1") || r.b.TaskMinutes("c3") != DefaultTaskMinutes {
+		t.Fatal("local_network lets it reach the local network; no minutes is the default")
+	}
+	for _, bad := range []Settings{{TaskMinutes: 61}, {TaskMinutes: -1}, {TaskMinutesFor: map[string]int{"123@g.us": 99}}} {
+		if err := r.b.Apply(bad, false); err == nil {
+			t.Errorf("%+v was taken", bad)
+		}
+	}
+}

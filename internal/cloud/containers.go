@@ -343,6 +343,20 @@ func (r *Router) ImageStale(ctx context.Context, name, image string) (bool, erro
 	return r.Local.ImageStale(ctx, name, image)
 }
 
+// LANStale concerns the local desktops; a machine in the cloud is left as it is.
+func (r *Router) LANStale(ctx context.Context, name string, noLAN bool) (bool, error) {
+	if r.IsCloud != nil && r.IsCloud(name) || r.Local == nil {
+		return false, nil
+	}
+	l, ok := r.Local.(interface {
+		LANStale(ctx context.Context, name string, noLAN bool) (bool, error)
+	})
+	if !ok {
+		return false, nil
+	}
+	return l.LANStale(ctx, name, noLAN)
+}
+
 // ZoneStale concerns the local desktops, which take the host's time zone; a machine in the cloud
 // is left as it is.
 func (r *Router) ZoneStale(ctx context.Context, name, zone string) (bool, error) {

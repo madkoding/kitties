@@ -11,25 +11,37 @@ import (
 
 // Anyone in a WhatsApp group (or a contact) can put the kitty to work, so a task asked there gets
 // a short leash: these caps apply over the kitty's own limits and the defaults, never above them.
+// The default is 5 minutes; Settings › WhatsApp may give a chat more or less (SetExposedMinutes),
+// and the rounds and tokens follow the minutes.
 const (
-	ExposedMaxSeconds = 300
-	ExposedMaxRounds  = 30
-	ExposedMaxTokens  = 200_000
+	ExposedMaxSeconds      = 300
+	ExposedMaxRounds       = 30
+	ExposedMaxTokens       = 200_000
+	exposedRoundsPerMinute = ExposedMaxRounds * 60 / ExposedMaxSeconds
+	exposedTokensPerMinute = ExposedMaxTokens * 60 / ExposedMaxSeconds
 )
 
-// exposedLimits caps l for a task asked in a chat with people who are not the kitty's person: a few
-// minutes and rounds at most, no retries, and it stops at the end of its rounds instead of going on
-// by itself through more windows.
-func exposedLimits(l kitty.Limits) kitty.Limits {
+// SetExposedMinutes tells how long a task asked in a chat with people who are not the kitty's
+// person may run, in minutes (whatsapp.Bridge.TaskMinutes); 0 takes the default.
+func (s *Service) SetExposedMinutes(f func(chatID string) int) { s.exposedMinutes = f }
+
+// exposedLimits caps l for a task asked in a chat with people who are not the kitty's person:
+// minutes (0: the default 5) with rounds and tokens to match, no retries, and it stops at the end
+// of its rounds instead of going on by itself through more windows.
+func exposedLimits(l kitty.Limits, minutes int) kitty.Limits {
 	capAt := func(v, most int) int {
 		if v <= 0 || v > most {
 			return most
 		}
 		return v
 	}
-	l.MaxSeconds = capAt(l.MaxSeconds, ExposedMaxSeconds)
-	l.MaxRounds = capAt(l.MaxRounds, ExposedMaxRounds)
-	l.MaxTokens = capAt(l.MaxTokens, ExposedMaxTokens)
+	seconds, rounds, tokens := ExposedMaxSeconds, ExposedMaxRounds, ExposedMaxTokens
+	if minutes > 0 {
+		seconds, rounds, tokens = minutes*60, min(minutes*exposedRoundsPerMinute, kitty.MaxRoundsCap), min(minutes*exposedTokensPerMinute, kitty.MaxTokensCap)
+	}
+	l.MaxSeconds = capAt(l.MaxSeconds, seconds)
+	l.MaxRounds = capAt(l.MaxRounds, rounds)
+	l.MaxTokens = capAt(l.MaxTokens, tokens)
 	l.Retries = 0
 	l.Attended = true
 	return l

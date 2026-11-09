@@ -470,7 +470,10 @@ func TestLinkProblem(t *testing.T) {
 }
 
 func TestExposedLimitsCapTasksFromGroups(t *testing.T) {
-	l := exposedLimits(kitty.Limits{MaxSeconds: 3600, MaxRounds: 0, MaxTokens: 100_000, Retries: 3})
+	if l := exposedLimits(kitty.Limits{}, 20); l.MaxSeconds != 1200 || l.MaxRounds != 120 || l.MaxTokens != 800_000 {
+		t.Errorf("20 minutes = %+v", l)
+	}
+	l := exposedLimits(kitty.Limits{MaxSeconds: 3600, MaxRounds: 0, MaxTokens: 100_000, Retries: 3}, 0)
 	if l.MaxSeconds != ExposedMaxSeconds || l.MaxRounds != ExposedMaxRounds || l.MaxTokens != 100_000 || l.Retries != 0 || !l.Attended {
 		t.Errorf("exposed limits = %+v", l)
 	}
@@ -481,6 +484,15 @@ func TestExposedLimitsCapTasksFromGroups(t *testing.T) {
 	k, _ := s.fleet.Get("a1")
 	if got := s.limitsFor(k, id); got.MaxSeconds > ExposedMaxSeconds || got.Retries != 0 || !got.Attended {
 		t.Errorf("limits in a group = %+v", got)
+	}
+	s.SetExposedMinutes(func(chatID string) int {
+		if chatID == id {
+			return 2
+		}
+		return 0
+	})
+	if got := s.limitsFor(k, id); got.MaxSeconds != 120 || got.MaxRounds != 12 {
+		t.Errorf("limits with 2 minutes for the group = %+v", got)
 	}
 	own, err := s.Create("ana", []string{"a1"})
 	if err != nil {

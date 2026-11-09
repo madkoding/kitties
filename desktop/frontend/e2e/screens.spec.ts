@@ -3692,6 +3692,9 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
   await box.getByTestId("whatsapp-voice").locator("select").selectOption("mirror");
   // The WhatsApp kitty works on its own unless the person says otherwise.
   await expect(box.getByTestId("whatsapp-independent").locator("input")).toBeChecked();
+  // Its computer stays off the local network, and tasks from the group get 10 minutes.
+  await expect(box.getByTestId("whatsapp-lan").locator("input")).toBeChecked();
+  await box.getByTestId("whatsapp-task-minutes-row").nth(1).fill("10");
   // Turning it on the first time shows the welcome: cancelling it leaves it off.
   await box.getByTestId("whatsapp-enabled").click();
   const welcome = page.getByTestId("whatsapp-welcome");
@@ -3723,6 +3726,9 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
       quiet_to: "08:00",
       voice: "mirror",
       share_with_team: false,
+      local_network: false,
+      task_minutes: 0,
+      task_minutes_for: { "120363012345678901@g.us": 10 },
       accept_risk: true,
     },
   ]);

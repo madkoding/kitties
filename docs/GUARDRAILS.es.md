@@ -43,8 +43,9 @@ conserva, en los chats expuestos, **su propio computador**: navega por internet 
 archivos y comandos ahí, porque no hay nada tuyo en él. Igual nunca la bóveda (`type_secret`), nunca
 pedirte que tomes el control (`ask_help`), nunca otros kitties; sus notas ahí son solo las de
 personas, su biblioteca solo sus propios archivos, y todo lo que dice, también las líneas de avance y
-el final de una tarea en su computador, pasa por el mismo filtro. Las tareas ahí son cortas (5
-minutos, 30 rondas, 200k tokens, sin reintentos) y los enlaces solo se abren si son páginas web
+el final de una tarea en su computador, pasa por el mismo filtro. Su computador queda fuera de tu
+red local (reglas de firewall en su escritorio, sin `sudo` para quitarlas). Las tareas ahí son
+cortas (5 minutos por defecto, ajustables por grupo en Ajustes › WhatsApp; sin reintentos) y los enlaces solo se abren si son páginas web
 públicas (nada interno, ni `nombre@` antes del sitio, ni descargas de programas); un enlace
 rechazado queda registrado como bloqueado.
 

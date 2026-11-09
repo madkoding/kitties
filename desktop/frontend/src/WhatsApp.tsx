@@ -37,6 +37,9 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     quiet_to: s.quiet_to || "",
     voice: s.voice || "",
     share_with_team: !!s.share_with_team,
+    local_network: !!s.local_network,
+    task_minutes: s.task_minutes || 0,
+    task_minutes_for: { ...(s.task_minutes_for || {}) },
   };
 }
 
@@ -52,12 +55,15 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     (a.quiet_to || "") === (b.quiet_to || "") &&
     (a.voice || "") === (b.voice || "") &&
     !!a.share_with_team === !!b.share_with_team &&
+    !!a.local_network === !!b.local_network &&
+    (a.task_minutes || 0) === (b.task_minutes || 0) &&
+    pairs(a.task_minutes_for) === pairs(b.task_minutes_for) &&
     pairs(a.kitties) === pairs(b.kitties)
   );
 }
 
 // pairs is a kitty map as one string, to compare two of them.
-function pairs(m?: Record<string, string>): string {
+function pairs(m?: Record<string, string | number>): string {
   return Object.entries(m || {})
     .filter(([, v]) => v)
     .sort()
@@ -332,6 +338,14 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           }
         />
       </label>
+      <TaskMinutes
+        want={want}
+        seen={cur.seen_groups || []}
+        disabled={disabled}
+        onChange={(task_minutes, task_minutes_for) =>
+          setWant({ ...want, task_minutes, task_minutes_for })
+        }
+      />
       <div class="flex flex-wrap items-center gap-2 mt-3 text-sm" data-testid="whatsapp-quiet">
         {t("Quiet hours")}
         <input
@@ -407,6 +421,27 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           )}
         </span>
       </label>
+      {!want.share_with_team && (
+        <label class="flex items-start gap-2 mt-2 ml-6 text-sm" data-testid="whatsapp-lan">
+          <input
+            type="checkbox"
+            class="mt-1"
+            checked={!want.local_network}
+            disabled={disabled}
+            onChange={(e) =>
+              setWant({ ...want, local_network: !(e.target as HTMLInputElement).checked })
+            }
+          />
+          <span>
+            <span class="font-semibold">{t("Its computer stays off your local network")}</span>
+            <span class="block text-xs text-[var(--t3)]">
+              {t(
+                "Recommended. It browses the internet, but cannot reach your router, printers, this computer or anything else at home or work. Applies the next time its computer starts.",
+              )}
+            </span>
+          </span>
+        </label>
+      )}
       {!cur.can_change && cur.why && (
         <p class="text-xs text-[var(--t3)] mt-2" data-testid="whatsapp-locked">
           {cur.why}
@@ -664,6 +699,78 @@ function WhoAnswers(props: {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// TaskMinutes is how long a task asked from WhatsApp may run: for every chat, and for each number
+// or group on the list that needs more or less.
+function TaskMinutes(props: {
+  want: WhatsAppSettings;
+  seen: WhatsAppGroup[];
+  disabled: boolean;
+  onChange: (all: number, by: Record<string, number>) => void;
+}) {
+  const rows = [
+    ...props.want.allow.map((n) => ({ id: n, label: "+" + n })),
+    ...(props.want.groups ? props.want.allow_groups : []).map((g) => ({
+      id: g,
+      label: props.seen.find((s) => s.id === g)?.name || g.replace(/@g\.us$/, ""),
+    })),
+  ];
+  const all = props.want.task_minutes || 0;
+  const by = props.want.task_minutes_for || {};
+  const num = (e: Event) =>
+    Math.min(60, Math.max(0, parseInt((e.target as HTMLInputElement).value, 10) || 0));
+  const set = (id: string, n: number) => {
+    const next = { ...by };
+    if (n) next[id] = n;
+    else delete next[id];
+    props.onChange(all, next);
+  };
+  return (
+    <div class="mt-3 text-sm" data-testid="whatsapp-task-minutes">
+      <label class="flex flex-wrap items-center gap-2">
+        {t("Tasks asked here run for at most")}
+        <input
+          type="number"
+          min={0}
+          max={60}
+          class="w-16 px-2 py-1 text-sm"
+          value={all || ""}
+          placeholder="5"
+          disabled={props.disabled}
+          onInput={(e) => props.onChange(num(e), by)}
+          data-testid="whatsapp-task-minutes-all"
+        />
+        {t("minutes")}
+      </label>
+      <span class="block text-xs text-[var(--t3)] mt-1">
+        {t(
+          "Anyone in a group can put the kitty to work, so tasks from here are short, with no retries. A number or a group can have its own:",
+        )}
+      </span>
+      {rows.length > 0 && (
+        <div class="grid gap-1 mt-1" style="grid-template-columns: max-content 5rem">
+          {rows.map((r) => (
+            <div key={r.id} class="contents">
+              <span class="self-center pr-3">{r.label}</span>
+              <input
+                type="number"
+                min={0}
+                max={60}
+                class="px-2 py-1 text-sm"
+                value={by[r.id] || ""}
+                placeholder={String(all || 5)}
+                disabled={props.disabled}
+                aria-label={t("Minutes for {who}", { who: r.label })}
+                onInput={(e) => set(r.id, num(e))}
+                data-testid="whatsapp-task-minutes-row"
+              />
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

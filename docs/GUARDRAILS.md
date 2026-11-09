@@ -43,8 +43,9 @@ chats, **its own computer**: it browses the internet and uses its own files and 
 since nothing of yours is on it. Still never the vault (`type_secret`), never asking you to take
 control (`ask_help`), never other kitties; its notes there are only its notes about people, its
 library only its own files, and everything it says, including the progress lines and the end of a
-task on its computer, goes through the same filter. Tasks there are short (5 minutes, 30 rounds,
-200k tokens, no retries) and links open only when they are public web pages (nothing internal, no
+task on its computer, goes through the same filter. Its computer stays off your local network (firewall
+rules in its desktop, no `sudo` left to undo them). Tasks there are short (5 minutes by default,
+set per group in Settings › WhatsApp; no retries) and links open only when they are public web pages (nothing internal, no
 `name@` before the site, no program downloads); a refused link is recorded as blocked.
 
 ## What the kitty is told

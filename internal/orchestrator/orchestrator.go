@@ -81,6 +81,9 @@ type Manager struct {
 	onPowerOff func(k *kitty.Kitty, idle time.Duration)
 	// desks is the look for a new desktop image and the update of all the desktops (desktops.go).
 	desks deskState
+	// offLAN says which kitties' machines stay off the local network (SetOffLAN), nil none.
+	lanMu  sync.Mutex
+	offLAN func(id string) bool
 
 	mu      sync.RWMutex
 	kitties map[string]*kitty.Kitty
@@ -688,7 +691,8 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	// tell its zone when it made it) is made anew, so its clock shows the host's hour; a running
 	// one only while no one uses it (a gateway that starts finds them all idle).
 	// So is one whose RAM or swap changed while the engine could not change them in place.
-	moved := exists && (m.zoneMoved(ctx, k) || (!running && m.limitsMoved(ctx, k)))
+	// So is one on, or off, the local network otherwise than its kitty now asks (lanMoved).
+	moved := exists && (m.zoneMoved(ctx, k) || m.lanMoved(ctx, k, spec.NoLAN) || (!running && m.limitsMoved(ctx, k)))
 	switch {
 	case running && (!moved || m.Held(k.ID) || m.busy(k.ID)):
 	case exists && !running && !moved && !m.staleForAutoUpdate(ctx, k):
@@ -768,6 +772,39 @@ func (m *Manager) zoneMoved(ctx context.Context, k *kitty.Kitty) bool {
 	}
 	moved, err := z.ZoneStale(ctx, k.Container, container.Spec{Env: m.cfg.Containers.Env}.Zone())
 	return err == nil && moved
+}
+
+// lanChecker is what a runtime answers when it can tell whether a container is off the local network.
+type lanChecker interface {
+	LANStale(ctx context.Context, name string, noLAN bool) (bool, error)
+}
+
+// lanMoved tells whether the kitty's container is on, or off, the local network otherwise than
+// noLAN asks. A runtime that cannot tell, or a failed look, is taken for no move.
+func (m *Manager) lanMoved(ctx context.Context, k *kitty.Kitty, noLAN bool) bool {
+	l, ok := m.ctr().(lanChecker)
+	if !ok {
+		return false
+	}
+	moved, err := l.LANStale(ctx, k.Container, noLAN)
+	return err == nil && moved
+}
+
+// SetOffLAN tells which kitties' machines stay off the local network (the WhatsApp kitty that
+// works on its own, whatsapp.Bridge.OffLAN); the lead's never does. It applies the next time a
+// machine starts.
+func (m *Manager) SetOffLAN(f func(id string) bool) {
+	m.lanMu.Lock()
+	m.offLAN = f
+	m.lanMu.Unlock()
+}
+
+// noLAN reports whether k's machine stays off the local network.
+func (m *Manager) noLAN(k *kitty.Kitty) bool {
+	m.lanMu.Lock()
+	f := m.offLAN
+	m.lanMu.Unlock()
+	return f != nil && !k.Lead && f(k.ID)
 }
 
 // startTimeout is how long a desktop may take to come up in the background: the first start

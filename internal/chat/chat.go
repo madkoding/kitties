@@ -369,6 +369,9 @@ type Service struct {
 	isIndependent func(id string) bool
 	// relay says something in the WhatsApp chat a chat is bound to (independent.go); nil: none.
 	relay func(ctx context.Context, chatID, text string) error
+	// exposedMinutes is how long a task asked in a WhatsApp chat may run (SetExposedMinutes);
+	// nil or 0: ExposedMaxSeconds.
+	exposedMinutes func(chatID string) int
 }
 
 // Reporter hears how a goal's run ended.

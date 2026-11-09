@@ -375,7 +375,11 @@ func (s *Service) limitsFor(k *kitty.Kitty, chatID string) kitty.Limits {
 	}
 	l = l.Or(s.DefaultLimits)
 	if s.guardedID(chatID) {
-		l = exposedLimits(l)
+		minutes := 0
+		if s.exposedMinutes != nil {
+			minutes = s.exposedMinutes(chatID)
+		}
+		l = exposedLimits(l, minutes)
 	}
 	return l
 }
