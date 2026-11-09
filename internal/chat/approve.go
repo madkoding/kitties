@@ -178,6 +178,10 @@ func (s *Service) DecideApproval(ctx context.Context, id string, approve bool, r
 	}
 	k, _ := s.fleet.Get(ap.Kitty)
 	turn := Turn{At: s.now(), From: "approval", Kitty: ""}
+	if ap.Connector == AskLeadConnector && ap.Kind == "ask" {
+		s.decideAskLead(ctx, ap, k, approve)
+		return ap, nil
+	}
 	if approve && ap.Connector == LeadLimitsConnector && ap.Kind == "limits" {
 		// A change of limits the lead asked for: made here, not through a connector.
 		line, err := s.decideLeadLimits(ap)

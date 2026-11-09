@@ -52,9 +52,13 @@ func (s *Service) memoryPrompt(k *kitty.Kitty, sess *Session) string {
 	if sess != nil {
 		project = memory.Slug(sess.Title)
 	}
-	return "\n" + s.memory.Prompt(k.ID, s.userName(), project) +
+	scopes := "user, work, project, or shared when every kitty should know it"
+	if s.independent(k) {
+		scopes = "user, work, project, or people for the contacts and groups you talk with; you work apart from the other kitties, so nothing you note reaches them"
+	}
+	return "\n" + s.memory.PromptView(k.ID, s.userName(), project, s.memoryView(k, false)) +
 		"When you notice something lasting about how this person likes things done, or learn a lesson about the work, keep it with " +
-		"@memory remember {\"text\": \"...\", \"scope\": \"user\"} (user, work, project, or shared when every kitty should know it): short, one thing each, never secrets. " +
+		"@memory remember {\"text\": \"...\", \"scope\": \"user\"} (" + scopes + "): short, one thing each, never secrets. " +
 		"Drop a note that turned out wrong with @memory forget {\"id\": \"...\"}.\n"
 }
 
@@ -82,10 +86,18 @@ func (s *Service) runMemory(id string, a action, k *kitty.Kitty) outcome {
 	if s.memory == nil {
 		return outcome{action: a, err: "there is no memory here"}
 	}
+	view := s.memoryView(k, s.guardedID(id))
 	switch a.name {
 	case "remember", "save", "note":
 		text := argText(a.args, "text", "note", "name")
 		scope := strings.ToLower(argText(a.args, "scope"))
+		if view == memory.ViewPeople {
+			// Where someone else writes, an independent kitty notes only about the people there.
+			scope = memory.ScopePeople
+		}
+		if scope == memory.ScopeShared && view != memory.ViewAll {
+			return outcome{action: a, err: "you work apart from the other kitties: keep it as your own note (user, work, project or people)"}
+		}
 		switch scope {
 		case "", "person", "preference":
 			scope = memory.ScopeUser
@@ -113,12 +125,21 @@ func (s *Service) runMemory(id string, a action, k *kitty.Kitty) outcome {
 		return outcome{action: a, text: fmt.Sprintf("noted (%s, id %s)", n.Scope, n.ID)}
 	case "forget", "drop":
 		nid := argText(a.args, "id", "name")
+		if view == memory.ViewPeople && !hasNote(s.memory.Own(k.ID, memory.ScopePeople), nid) {
+			return outcome{action: a, err: "here you may only drop your notes about people"}
+		}
 		if err := s.memory.Forget(k.ID, nid); err != nil {
 			return outcome{action: a, err: err.Error()}
 		}
 		return outcome{action: a, text: "forgotten"}
 	case "list", "ls":
 		notes := s.memory.Notes(k.ID, "")
+		switch view {
+		case memory.ViewOwn:
+			notes = s.memory.Own(k.ID, "")
+		case memory.ViewPeople:
+			notes = s.memory.Own(k.ID, memory.ScopePeople)
+		}
 		if len(notes) == 0 {
 			return outcome{action: a, text: "(no notes yet)"}
 		}
@@ -129,6 +150,16 @@ func (s *Service) runMemory(id string, a action, k *kitty.Kitty) outcome {
 		return outcome{action: a, text: strings.TrimSpace(b.String())}
 	}
 	return outcome{action: a, err: "unknown memory verb " + a.name + " (remember, forget or list)"}
+}
+
+// hasNote reports whether a note with this id is in the list.
+func hasNote(notes []memory.Note, id string) bool {
+	for _, n := range notes {
+		if n.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // MemoryView is what the page shows of a kitty's memory.
@@ -158,7 +189,11 @@ func (s *Service) MemoryOf(ref string) (*MemoryView, error) {
 		return nil, err
 	}
 	p := s.memory.Profile(k.ID)
-	view := &MemoryView{Notes: s.memory.Notes(k.ID, ""), Profile: p, Level: memory.LevelText(p.Demand), Spent: s.SpentBy(k)}
+	notes := s.memory.Notes(k.ID, "")
+	if s.independent(k) {
+		notes = s.memory.Own(k.ID, "")
+	}
+	view := &MemoryView{Notes: notes, Profile: p, Level: memory.LevelText(p.Demand), Spent: s.SpentBy(k)}
 	if view.Notes == nil {
 		view.Notes = []memory.Note{}
 	}
@@ -391,10 +426,11 @@ func (s *Service) distill(ctx context.Context, k *kitty.Kitty) ([]memory.Note, e
 	}
 	var b strings.Builder
 	b.WriteString("Current notes:\n")
-	// The shared notes are every kitty's: one kitty's distillation does not rework them.
+	// The shared notes are every kitty's: one kitty's distillation does not rework them. The
+	// notes about people are what third parties said: they stay apart from the person's.
 	var notes []memory.Note
 	for _, n := range s.memory.Notes(k.ID, "") {
-		if n.Scope != memory.ScopeShared {
+		if n.Scope != memory.ScopeShared && n.Scope != memory.ScopePeople {
 			notes = append(notes, n)
 		}
 	}

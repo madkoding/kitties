@@ -3690,6 +3690,8 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
   await box.getByLabel("Quiet hours start").fill("22:00");
   await box.getByLabel("Quiet hours end").fill("08:00");
   await box.getByTestId("whatsapp-voice").locator("select").selectOption("mirror");
+  // The WhatsApp kitty works on its own unless the person says otherwise.
+  await expect(box.getByTestId("whatsapp-independent").locator("input")).toBeChecked();
   // Turning it on the first time shows the welcome: cancelling it leaves it off.
   await box.getByTestId("whatsapp-enabled").click();
   const welcome = page.getByTestId("whatsapp-welcome");
@@ -3720,6 +3722,7 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
       quiet_from: "22:00",
       quiet_to: "08:00",
       voice: "mirror",
+      share_with_team: false,
       accept_risk: true,
     },
   ]);
@@ -4453,4 +4456,64 @@ test("Settings: storage shows the disk use and keeps the screenshots by a retent
     headers: { Authorization: "Bearer e2e-token" },
   });
   expect((await r.json()).retention).toMatchObject({ shot_days: 14 });
+});
+
+// The kitty that answers on WhatsApp works on its own: the drawer and the sidebar say so. The demo
+// has no WhatsApp link, so the gateway's list is given the mark here.
+test("the WhatsApp kitty that works on its own is marked in its drawer and the sidebar", async ({
+  page,
+}) => {
+  await page.route("**/v1/kitties", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const res = await route.fetch();
+    const body = await res.json();
+    for (const k of body.kitties || []) if (k.id === ids.tom) k.independent = true;
+    return route.fulfill({ response: res, json: body });
+  });
+  await open(page, `#kitty/${ids.tom}`);
+  const drawer = page.getByRole("dialog").first();
+  await expect(drawer.getByTestId("independent-tag")).toContainText("On its own");
+  await expect(page.locator("aside").getByTestId("independent-badge")).toHaveCount(1);
+  await shot(page, "84-independent-kitty");
+});
+
+// A question to the lead from a WhatsApp group, and then what the kitty would say there with its
+// answer: both wait for a yes, shown with the question, and "always" is for that chat alone.
+test("the lead's answer to a WhatsApp group waits for a yes, with the question it answers", async ({
+  page,
+}) => {
+  const say = {
+    id: "say1",
+    kitty: ids.tom,
+    kitty_name: "tom",
+    connector: "ask-lead",
+    kind: "ask",
+    action: "say:chat1",
+    args: {
+      question: "Is mad coming to the match on Friday?",
+      text: "Yes! mad comes on Friday at 8.",
+    },
+    summary:
+      'say in WhatsApp group: Fútbol (asked: "Is mad coming to the match on Friday?"): Yes! mad comes on Friday at 8.',
+    risk: "ask",
+    chat: "chat1",
+    status: "pending",
+    at: new Date().toISOString(),
+  };
+  const decided: unknown[] = [];
+  await page.route("**/v1/approvals?status=pending", (route) =>
+    route.fulfill({ json: { approvals: decided.length ? [] : [say] } }),
+  );
+  await page.route("**/v1/approvals/say1/approve", (route) => {
+    decided.push(route.request().postDataJSON());
+    return route.fulfill({ json: { approval: { ...say, status: "approved", always: true } } });
+  });
+  await open(page, "#new-approvals");
+  const card = page.getByTestId("ask-lead-approval");
+  await expect(card).toContainText("They asked");
+  await expect(card).toContainText("Is mad coming to the match on Friday?");
+  await expect(card).toContainText("Would say on WhatsApp");
+  await shot(page, "85-ask-lead-approval");
+  await page.getByRole("button", { name: "Approve, always in this chat" }).click();
+  await expect.poll(() => decided).toEqual([{ always: true }]);
 });

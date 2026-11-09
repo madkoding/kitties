@@ -130,6 +130,46 @@ session, without a new code. **Unlink** removes the device from the phone and fo
   Your own number keeps the whole kitty once you add it to Settings › Guardrails › *Your own WhatsApp
   numbers*. Everything the bridge sends leaves without the known secrets. See
   [GUARDRAILS.md](GUARDRAILS.md).
+- **The WhatsApp kitty works on its own.** The kitty that answers here (and each kitty given a
+  number or a group) is, by default, a principal of its own beside the lead, so what it hears in
+  groups and from contacts never mixes with what the other kitties know, and the other way round:
+  - **Its own memory.** It does not see the shared notes and cannot add to them. Besides its usual
+    notes it keeps notes about **people** (who is who, what a group is about): in the chats with
+    contacts and groups those are the only notes it reads and writes, so it can follow a group over
+    time without carrying anything of yours there. A distillation never mixes them with yours.
+  - **Its own files.** It sees only the library files it saved; the other kitties do not see its.
+    It sends only its own files too: a `file` of someone else's is refused.
+  - **No other kitties.** It is never in a chat with other kitties (adding it to one is refused),
+    hands no work to them, and none of them hands it work.
+  - **One channel: the lead.** From its own threads it asks the lead (`ask_lead`); the lead answers
+    it (`answer_kitty`) or hands it what to say or do on WhatsApp (`delegate`). Whatever the lead
+    sends it goes through the guardrails first (no secret the gateway knows reaches it) with a
+    reminder not to repeat anything private in a contact's chat or a group. The lead's roster says
+    the kitty works on its own, and what it has to tell you reaches the lead's Reports as any
+    kitty's does.
+  - **Asking the lead from a group, with your yes.** In a contact's chat or a group, when only the
+    lead knows the answer, the kitty may `ask_lead` too, but the question waits in **Approvals**
+    (*ask the lead, from <chat>: …*) and the kitty says it will check and come back. On your yes the
+    lead is asked, told that its answer will be repeated there; the kitty answers the people with it
+    (filtered by the guardrails as any answer there), and that answer waits in **Approvals** too
+    (*say in <chat>: …*), a second look before it leaves: on your yes it goes back to WhatsApp,
+    within the list, the quiet hours and the hourly limit; on a no it stays in the chat. A no to
+    the question leaves the lead out. The card shows the question and what would be said, apart.
+    **Approve, always in this chat** trusts that one chat (a group you trust) for good: its next
+    questions go to the lead, or its next answers go out, without asking; every other chat still
+    asks. The limits list shows it, and *remove* takes it back.
+
+    ![A question to the lead from a group, with what would be said](screenshots/85-ask-lead-approval.png) Kitties that do not
+    work on their own never ask the lead from those chats.
+  - **Shown as such.** The kitty's drawer shows **On its own** and the sidebar a shield next to
+    its name (`independent: true` in `GET /v1/kitties`).
+
+    ![The WhatsApp kitty's drawer: On its own](screenshots/84-independent-kitty.png)
+
+  Settings › Connections › WhatsApp › **Works on its own** (on by default; `share_with_team: true`
+  in the file turns it off). **The lead never works on its own**: it leads the others. With no
+  kitty chosen the lead answers, guarded as any exposed chat, and Settings suggests choosing a kitty
+  of its own for WhatsApp.
 - **The kitties write with the connector.** While the link is connected, `whatsapp-web` is offered
   to the kitties (those whose connections list is empty or names it):
 
@@ -166,6 +206,7 @@ whatsapp:
   voice: mirror                  # answer with voice notes: mirror (to voice notes), always, or off (the default)
   speak: ""                      # the openai profile that reads answers aloud; empty: the first; off: none
   speak_voice: nova              # its voice (alloy, nova, shimmer, …); empty: alloy
+  share_with_team: false         # true: the WhatsApp kitties work with the others (default: on their own)
 ```
 
 The QR code is still scanned from Settings, or read with `GET /v1/whatsapp` (`qr_png`).

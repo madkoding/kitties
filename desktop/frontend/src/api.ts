@@ -30,6 +30,9 @@ export interface Kitty {
   // lead marks the principal kitty, the orchestrator of the fleet (one at most): it hands the
   // work to the others and their reports reach the person through it.
   lead?: boolean;
+  // independent marks the kitty that answers on WhatsApp working on its own: its own notes and
+  // files, no chats or work with other kitties, only the lead to talk to (the gateway sets it).
+  independent?: boolean;
   // approvals is "ask" (the default: an action that reaches other people waits for a yes until
   // the kitty is trusted with it) or "auto".
   approvals?: "ask" | "auto" | "";
@@ -1659,6 +1662,9 @@ export type WhatsAppSettings = {
   // voice is when the kitties answer with a voice note: "" never, "mirror" a voice note gets
   // one, "always" every answer.
   voice?: "" | "mirror" | "always";
+  // share_with_team lets the WhatsApp kitties work with the others; by default (false) they work
+  // on their own: no shared notes or files, no chats or work with other kitties, only the lead.
+  share_with_team?: boolean;
 };
 
 // WhatsAppHeld is a message the hourly limit did not send: to is a number (digits) or a group
@@ -1687,6 +1693,8 @@ export type WhatsAppGroup = { id: string; name?: string };
 // WhatsAppStatus is the link: qr_png is the code to scan while state is "qr".
 export type WhatsAppStatus = WhatsAppSettings & {
   kitty_name?: string;
+  // lead_answers is true when the lead answers: it cannot work on its own.
+  lead_answers?: boolean;
   state:
     | "off"
     | "starting"

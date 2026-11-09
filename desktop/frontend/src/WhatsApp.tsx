@@ -36,6 +36,7 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     quiet_from: s.quiet_from || "",
     quiet_to: s.quiet_to || "",
     voice: s.voice || "",
+    share_with_team: !!s.share_with_team,
   };
 }
 
@@ -50,6 +51,7 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     (a.quiet_from || "") === (b.quiet_from || "") &&
     (a.quiet_to || "") === (b.quiet_to || "") &&
     (a.voice || "") === (b.voice || "") &&
+    !!a.share_with_team === !!b.share_with_team &&
     pairs(a.kitties) === pairs(b.kitties)
   );
 }
@@ -374,6 +376,35 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           {cur.can_speak
             ? t("Short answers are read aloud; long ones and code still go as text.")
             : t("Needs an OpenAI profile with a key, for its speech.")}
+        </span>
+      </label>
+      <label class="flex items-start gap-2 mt-3 text-sm" data-testid="whatsapp-independent">
+        <input
+          type="checkbox"
+          class="mt-1"
+          checked={!want.share_with_team}
+          disabled={disabled}
+          onChange={(e) =>
+            setWant({ ...want, share_with_team: !(e.target as HTMLInputElement).checked })
+          }
+        />
+        <span>
+          <span class="font-semibold">{t("Works on its own")}</span>
+          <span class="block text-xs text-[var(--t3)]">
+            {t(
+              "Recommended. The WhatsApp kitty keeps its own notes and files, does not see the other kitties' or the shared notes, and talks only with the lead, which hands it nothing secret. So it can take part in groups without mixing what each side knows.",
+            )}
+          </span>
+          {!want.share_with_team && cur.lead_answers && (
+            <span
+              class="block text-xs text-[var(--warn,#b45309)] mt-1"
+              data-testid="whatsapp-lead-answers"
+            >
+              {t(
+                "The lead answers now, and the lead cannot work on its own: choose a kitty of its own for WhatsApp.",
+              )}
+            </span>
+          )}
         </span>
       </label>
       {!cur.can_change && cur.why && (

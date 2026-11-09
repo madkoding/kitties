@@ -286,6 +286,10 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 				out = append(out, outcome{action: a, err: "this kitty has no connectors"})
 				continue
 			}
+			if why := s.ownFile(k, a); why != "" {
+				out = append(out, outcome{action: a, err: why})
+				continue
+			}
 			// What reaches other people leaves without the secrets the gateway knows.
 			a = s.scrubOutgoing(a)
 			if held, ok := s.gate(id, k, a, turn); ok {

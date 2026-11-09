@@ -125,7 +125,7 @@ func TestLibraryInChat(t *testing.T) {
 	if !strings.Contains(last[len(last)-1].Content, "no skills library") || !strings.Contains(last[len(last)-1].Content, "no artifacts library") {
 		t.Errorf("no library = %s", last[len(last)-1].Content)
 	}
-	if plain.libraryPrompt() != "" {
+	if plain.libraryPrompt(nil) != "" {
 		t.Error("no library, no prompt")
 	}
 	// Directives in the same reply as desktop actions run before the task.

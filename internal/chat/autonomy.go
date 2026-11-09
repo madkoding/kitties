@@ -199,26 +199,32 @@ func (s *Service) goalChat(g agenda.Goal, k *kitty.Kitty) (string, error) {
 
 // canDelegate reports whether there is another kitty to hand work to and room to do so.
 func (s *Service) canDelegate(k *kitty.Kitty) bool {
-	if s.MaxDepth <= 0 {
+	if s.MaxDepth <= 0 || s.independent(k) {
 		return false
 	}
 	for _, other := range s.fleet.List() {
-		if other.ID != k.ID {
+		if other.ID != k.ID && s.takesFrom(k, other) {
 			return true
 		}
 	}
 	return false
 }
 
+// takesFrom reports whether to may take work from k: a kitty that works on its own takes it only
+// from the lead.
+func (s *Service) takesFrom(k, to *kitty.Kitty) bool {
+	return !s.independent(to) || k.Lead
+}
+
 // peers names the other kitties this one may delegate to in this thread: none when the
 // thread is already as deep in hand-overs as allowed.
 func (s *Service) peers(k *kitty.Kitty, id string) []string {
-	if s.depthOf(id) >= s.MaxDepth {
+	if s.depthOf(id) >= s.MaxDepth || s.independent(k) {
 		return nil
 	}
 	var names []string
 	for _, other := range s.fleet.List() {
-		if other.ID != k.ID {
+		if other.ID != k.ID && s.takesFrom(k, other) {
 			names = append(names, other.Name)
 		}
 	}
@@ -252,6 +258,16 @@ func (s *Service) delegate(ctx context.Context, id string, a action, k *kitty.Ki
 	}
 	if target.ID == k.ID {
 		return outcome{action: a, err: "a kitty cannot delegate to itself"}
+	}
+	if s.independent(k) {
+		return outcome{action: a, err: "you work apart from the other kitties: do it yourself, or ask the lead with ask_lead"}
+	}
+	if !s.takesFrom(k, target) {
+		return outcome{action: a, err: target.Name + " works on its own and takes work only from the lead"}
+	}
+	if s.independent(target) {
+		// The lead's one channel to it: the task goes without the person's secrets.
+		task = s.fromLead(task)
 	}
 	depth := s.depthOf(id)
 	if depth >= s.MaxDepth {

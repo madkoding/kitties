@@ -372,3 +372,28 @@ func TestStale(t *testing.T) {
 		}
 	}
 }
+
+func TestViewsOfAnIndependentKitty(t *testing.T) {
+	s := Open(t.TempDir())
+	_, _ = s.Remember("", ScopeShared, "The team server is 10.0.0.7", "person", true)
+	_, _ = s.Remember("k", ScopeUser, "Answers in Spanish", "person", true)
+	_, _ = s.Remember("k", ScopePeople, "Ana brings the ball", "kitty", false)
+	if len(s.Notes("k", "")) != 3 || len(s.Own("k", "")) != 2 || len(s.Own("k", ScopePeople)) != 1 {
+		t.Fatalf("notes %v own %v", s.Notes("k", ""), s.Own("k", ""))
+	}
+	all := s.PromptView("k", "mad", "", ViewAll)
+	own := s.PromptView("k", "mad", "", ViewOwn)
+	people := s.PromptView("k", "mad", "", ViewPeople)
+	if !strings.Contains(all, "10.0.0.7") || strings.Contains(own, "10.0.0.7") || !strings.Contains(own, "Spanish") || !strings.Contains(own, "Ana brings") {
+		t.Errorf("all = %s\nown = %s", all, own)
+	}
+	if strings.Contains(people, "Spanish") || strings.Contains(people, "10.0.0.7") || strings.Contains(people, "demanding") || !strings.Contains(people, "Ana brings") {
+		t.Errorf("people = %s", people)
+	}
+	// A distillation leaves the notes about people as they are, and adds none.
+	s.Distilled("k", []Note{{Scope: ScopeUser, Text: "Short answers"}, {Scope: ScopePeople, Text: "mad's address is Calle 1"}})
+	got := s.Own("k", ScopePeople)
+	if len(got) != 1 || got[0].Text != "Ana brings the ball" {
+		t.Errorf("people after distilling = %+v", got)
+	}
+}

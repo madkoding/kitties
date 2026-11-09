@@ -199,6 +199,10 @@ type Settings struct {
 	// Voice is when the kitties answer with a voice note: VoiceOff (never), VoiceMirror (a voice
 	// note gets one) or VoiceAlways. It needs a speech service (Options.Speak).
 	Voice string `json:"voice,omitempty"`
+	// ShareWithTeam lets the kitties that answer here work with the others as any kitty does. By
+	// default (false) they work on their own: no shared notes, no other kitty's files, no chats or
+	// work with other kitties, and only the lead to talk to (chat.Service.SetIndependent).
+	ShareWithTeam bool `json:"share_with_team,omitempty"`
 }
 
 // DefaultPerHour is the hourly limit of messages when Settings sets none.
@@ -221,7 +225,10 @@ type Status struct {
 	Settings
 	// KittyName is the name of the kitty that answers.
 	KittyName string `json:"kitty_name,omitempty"`
-	State     string `json:"state"`
+	// LeadAnswers is true when the lead answers here: it cannot work on its own (it leads the
+	// others), so Settings suggests a kitty of its own for WhatsApp.
+	LeadAnswers bool   `json:"lead_answers,omitempty"`
+	State       string `json:"state"`
 	// QR is the code to scan while State is "qr", and QRImage the same as a PNG data URL.
 	QR      string `json:"qr,omitempty"`
 	QRImage string `json:"qr_png,omitempty"`
@@ -514,6 +521,7 @@ func (b *Bridge) Status() Status {
 	if ref := b.kittyRefLocked(""); ref != "" && b.opt.Kitty != nil {
 		if k, err := b.opt.Kitty(ref); err == nil {
 			st.KittyName = k.Name
+			st.LeadAnswers = k.Lead
 		}
 	}
 	_, err := os.Stat(b.sessionPath())
@@ -560,7 +568,7 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 	if len(s.Allow) > MaxAllow {
 		return Settings{}, fmt.Errorf("the allow list holds at most %d numbers", MaxAllow)
 	}
-	out := Settings{Enabled: s.Enabled, Kitty: strings.TrimSpace(s.Kitty), Groups: s.Groups, Allow: []string{}}
+	out := Settings{Enabled: s.Enabled, Kitty: strings.TrimSpace(s.Kitty), Groups: s.Groups, Allow: []string{}, ShareWithTeam: s.ShareWithTeam}
 	groups, err := groupList(s.AllowGroups)
 	if err != nil {
 		return Settings{}, err
@@ -1388,6 +1396,35 @@ func (b *Bridge) kittyRefLocked(who string) string {
 	return b.leadID()
 }
 
+// Independent reports whether the kitty with this id answers here and so works on its own, apart
+// from the other kitties (Settings.ShareWithTeam turns it off). The lead never does: it leads the
+// others, so when it answers here it does with the guard of the exposed chats only.
+func (b *Bridge) Independent(id string) bool {
+	b.mu.Lock()
+	refs := make([]string, 0, len(b.set.Kitties)+1)
+	if !b.set.ShareWithTeam {
+		if b.set.Kitty != "" {
+			refs = append(refs, b.set.Kitty)
+		}
+		for _, ref := range b.set.Kitties {
+			refs = append(refs, ref)
+		}
+	}
+	b.mu.Unlock()
+	if id == "" || len(refs) == 0 || b.opt.Kitty == nil {
+		return false
+	}
+	for _, ref := range refs {
+		if ref == id {
+			return true
+		}
+		if k, err := b.opt.Kitty(ref); err == nil && k.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 // leadID is the lead kitty's id, the one that answers when no kitty is chosen; empty when none.
 func (b *Bridge) leadID() string {
 	if b.opt.Lead == nil {
@@ -1924,6 +1961,25 @@ func (b *Bridge) sendFile(ctx context.Context, c Client, to, name, caption strin
 // MaxFile is the largest file the kitties send (WhatsApp takes 100 MB of a document, less of
 // the rest; this keeps it to what a phone downloads without asking).
 const MaxFile = 16 << 20
+
+// Relay says text in the WhatsApp chat or group a chat of the kitties is bound to: what a kitty
+// answers there outside a message (the lead's answer to a question asked from a group). It goes
+// as any send: on the list, connected, out of the quiet hours, within the hourly limit.
+func (b *Bridge) Relay(ctx context.Context, chatID, text string) error {
+	b.mu.Lock()
+	to := ""
+	for key, id := range b.chats {
+		if id == chatID {
+			to = strings.TrimPrefix(key, "g:")
+			break
+		}
+	}
+	b.mu.Unlock()
+	if to == "" {
+		return errors.New("this chat is not a WhatsApp chat")
+	}
+	return b.send(ctx, to, text)
+}
 
 // send is a message the person or a kitty asked for: only to a number or a group on the list,
 // while connected. file is a file of the library to send with text as its caption.

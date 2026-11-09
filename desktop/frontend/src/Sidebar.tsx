@@ -232,6 +232,15 @@ export default function Sidebar(p: Props) {
                     <IconCrown size={12} />
                   </span>
                 )}
+                {k.independent && (
+                  <span
+                    class="text-[var(--t3)]"
+                    title={t("Works on its own (WhatsApp)")}
+                    data-testid="independent-badge"
+                  >
+                    <IconShield size={12} />
+                  </span>
+                )}
                 <span class="text-[0.625rem] font-mono text-[var(--t4)] truncate max-w-[4.375rem]">
                   {k.provider}
                 </span>

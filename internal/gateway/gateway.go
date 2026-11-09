@@ -684,7 +684,26 @@ func (s *Server) handleConnectors(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handleListKitties(w http.ResponseWriter, _ *http.Request) {
-	reply(w, http.StatusOK, map[string]any{"kitties": s.fleet.List()})
+	list := s.fleet.List()
+	out := make([]kittyOut, 0, len(list))
+	for _, k := range list {
+		out = append(out, s.kittyOut(k))
+	}
+	reply(w, http.StatusOK, map[string]any{"kitties": out})
+}
+
+// kittyOut is a kitty as the page gets it: with whether it works on its own (the WhatsApp kitty).
+type kittyOut struct {
+	*kitty.Kitty
+	Independent bool `json:"independent,omitempty"`
+}
+
+func (s *Server) kittyOut(k *kitty.Kitty) kittyOut {
+	out := kittyOut{Kitty: k}
+	if ind, ok := s.whatsapp.(interface{ Independent(string) bool }); ok && k != nil && !k.Lead {
+		out.Independent = ind.Independent(k.ID)
+	}
+	return out
 }
 
 func (s *Server) handleCreateKitty(w http.ResponseWriter, r *http.Request) {
@@ -763,7 +782,7 @@ func (s *Server) handleGetKitty(w http.ResponseWriter, r *http.Request) {
 		fail(w, codeFor(err), err)
 		return
 	}
-	reply(w, http.StatusOK, map[string]any{"kitty": k})
+	reply(w, http.StatusOK, map[string]any{"kitty": s.kittyOut(k)})
 }
 
 func (s *Server) lifecycle(w http.ResponseWriter, r *http.Request, op func(context.Context, string) error) {

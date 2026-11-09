@@ -36,7 +36,8 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 	}
 	if w.Set() {
 		opt.Defaults = &whatsapp.Settings{Enabled: w.Enabled, Allow: w.Allow, Kitty: w.Kitty, Groups: w.Groups, AllowGroups: w.AllowGroups,
-			Kitties: w.Kitties, MaxPerHour: w.MaxPerHour, QuietFrom: w.Quiet.From, QuietTo: w.Quiet.To, Voice: w.Voice}
+			Kitties: w.Kitties, MaxPerHour: w.MaxPerHour, QuietFrom: w.Quiet.From, QuietTo: w.Quiet.To, Voice: w.Voice,
+			ShareWithTeam: w.ShareWithTeam}
 	}
 	if a.arts != nil {
 		opt.File = libraryFile(a.arts.Get)
@@ -51,6 +52,11 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 	if err != nil {
 		fmt.Fprintf(warn, "kitties: WhatsApp stays off: %v\n", err)
 		return nil
+	}
+	// The kitty that answers on WhatsApp works on its own, apart from the others (chat/independent.go).
+	if a.chats != nil {
+		a.chats.SetIndependent(b.Independent)
+		a.chats.SetRelay(b.Relay)
 	}
 	return b
 }

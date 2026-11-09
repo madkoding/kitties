@@ -14,6 +14,9 @@ const dict: Dictionary = {
   "Subtasks per day": "Subtareas por día",
   "Whose hand-overs": "De quién son los encargos",
   "The whole team": "Todo el equipo",
+  "On its own": "Por su cuenta",
+  "Answers on WhatsApp on its own: its own notes and files, no chats or work with other kitties, only the lead to talk to.":
+    "Contesta WhatsApp por su cuenta: sus propias notas y archivos, sin chats ni trabajo con otros kitties, y solo habla con el principal.",
 };
 
 export default dict;

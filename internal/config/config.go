@@ -90,11 +90,14 @@ type WhatsApp struct {
 	// such profile, "off" none. SpeakVoice is its voice (alloy, nova, …; empty: alloy).
 	Speak      string `yaml:"speak"`
 	SpeakVoice string `yaml:"speak_voice"`
+	// ShareWithTeam lets the kitties that answer on WhatsApp work with the others; by default they
+	// work on their own and talk only with the lead.
+	ShareWithTeam bool `yaml:"share_with_team"`
 }
 
 // Set reports whether the file says anything about WhatsApp.
 func (w WhatsApp) Set() bool {
-	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != "" || w.Voice != ""
+	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != "" || w.Voice != "" || w.ShareWithTeam
 }
 
 // Provider is one AI profile.

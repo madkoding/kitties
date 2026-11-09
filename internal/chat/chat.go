@@ -365,6 +365,10 @@ type Service struct {
 	handOverKeep func() time.Duration
 	// guard keeps the exposed chats from giving the person away, nil when there is none.
 	guard Guard
+	// isIndependent says which kitties work on their own (independent.go); nil: none.
+	isIndependent func(id string) bool
+	// relay says something in the WhatsApp chat a chat is bound to (independent.go); nil: none.
+	relay func(ctx context.Context, chatID, text string) error
 }
 
 // Reporter hears how a goal's run ended.
@@ -443,7 +447,7 @@ func (s *Service) SetLibrary(sk *skills.Library, arts *artifacts.Store) {
 }
 
 // libraryPrompt tells a kitty what it can look up and keep.
-func (s *Service) libraryPrompt() string {
+func (s *Service) libraryPrompt(k *kitty.Kitty) string {
 	var b strings.Builder
 	if s.skills != nil {
 		b.WriteString("You have a library of skills (procedures). Read one with a line `@skill read <name>` " +
@@ -454,12 +458,16 @@ func (s *Service) libraryPrompt() string {
 		}
 	}
 	if s.arts != nil {
-		b.WriteString("You have a library of artifacts (files) shared by every kitty. Keep a result for later " +
+		shared := "shared by every kitty"
+		if s.independent(k) {
+			shared = "of your own (you work apart from the other kitties: you see only the files you saved)"
+		}
+		b.WriteString("You have a library of artifacts (files) " + shared + ". Keep a result for later " +
 			"with `@artifact save {\"name\": \"report.md\", \"content\": \"…\"}`, read one with " +
 			"`@artifact read <name>`, list them with `@artifact list`. To point a person at one, link it as " +
 			"`[report.md](/v1/artifacts/report.md)`: the app opens it from that path; never write a host " +
 			"(localhost, wails.localhost) in front of it.\n")
-		if idx := s.arts.Index(12); idx != "" {
+		if idx := s.arts.IndexOf(12, s.artifactKeep(k)); idx != "" {
 			b.WriteString("Artifacts:\n" + idx)
 		}
 	}
@@ -587,6 +595,9 @@ func (s *Service) runDirective(d Directive, k *kitty.Kitty, turn *Turn) string {
 		switch d.Verb {
 		case "save", "write", "put":
 			content := argText(d.Args, "content", "text", "body")
+			if by := s.arts.Owner(name); by != "" && by != k.Name && (s.independent(k) || s.independentNames()[by]) {
+				return "[artifact save] " + name + " is another kitty's file: save yours under another name"
+			}
 			a, err := s.arts.Put(name, []byte(content), k.Name)
 			if err != nil {
 				return "[artifact save] " + err.Error()
@@ -594,6 +605,9 @@ func (s *Service) runDirective(d Directive, k *kitty.Kitty, turn *Turn) string {
 			turn.Artifacts = append(turn.Artifacts, a.Name)
 			return "[artifact " + a.Name + "] saved (" + a.Type + ", " + fmt.Sprint(a.Size) + " bytes)"
 		case "read", "get", "open":
+			if !s.seesArtifact(k, s.arts.Owner(name), s.independentNames()) {
+				return "[artifact " + name + "] no such artifact"
+			}
 			data, err := s.arts.Get(name)
 			if err != nil {
 				return "[artifact " + name + "] " + err.Error()
@@ -604,7 +618,7 @@ func (s *Service) runDirective(d Directive, k *kitty.Kitty, turn *Turn) string {
 			}
 			return "[artifact " + name + "]\n" + text
 		case "list", "ls":
-			idx := s.arts.Index(50)
+			idx := s.arts.IndexOf(50, s.artifactKeep(k))
 			if idx == "" {
 				idx = "(none yet)"
 			}
@@ -705,6 +719,9 @@ func (s *Service) Create(title string, members []string) (*Session, error) {
 		ids = append(ids, k.ID)
 		names = append(names, k.Name)
 	}
+	if err := s.apart(ids); err != nil {
+		return nil, err
+	}
 	if title == "" {
 		title = strings.Join(names, ", ")
 	}
@@ -722,21 +739,30 @@ func (s *Service) Create(title string, members []string) (*Session, error) {
 
 // AddMembers adds kitties to a session.
 func (s *Service) AddMembers(id string, members []string) (*Session, error) {
+	var add []string
+	for _, ref := range members {
+		k, err := s.fleet.Get(ref)
+		if err != nil {
+			return nil, err
+		}
+		add = append(add, k.ID)
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[id]
 	if !ok {
 		return nil, fmt.Errorf("no such chat %q", id)
 	}
-	for _, ref := range members {
-		k, err := s.fleet.Get(ref)
-		if err != nil {
-			return nil, err
-		}
-		if !contains(sess.Members, k.ID) {
-			sess.Members = append(sess.Members, k.ID)
+	all := append([]string(nil), sess.Members...)
+	for _, kid := range add {
+		if !contains(all, kid) {
+			all = append(all, kid)
 		}
 	}
+	if err := s.apart(all); err != nil {
+		return nil, err
+	}
+	sess.Members = all
 	sess.UpdatedAt = s.now()
 	return sess, s.save(sess)
 }
@@ -1199,7 +1225,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 			}
 		}
 	}
-	if lib := s.libraryPrompt(); lib != "" {
+	if lib := s.libraryPrompt(k); lib != "" {
 		system += "\n" + lib
 	}
 	s.compact(ctx, id, brain)

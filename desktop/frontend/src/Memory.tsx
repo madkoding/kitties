@@ -234,6 +234,7 @@ export function MemoryPanel({ kitty }: { kitty: Kitty }) {
           <option value="user">{t("about me")}</option>
           <option value="work">{t("about the work")}</option>
           <option value="shared">{t("for every kitty")}</option>
+          <option value="people">{t("about people and groups (WhatsApp)")}</option>
         </select>
         <input
           class={INPUT}
