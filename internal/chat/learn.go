@@ -58,6 +58,18 @@ func (s *Service) memoryPrompt(k *kitty.Kitty, sess *Session) string {
 		"Drop a note that turned out wrong with @memory forget {\"id\": \"...\"}.\n"
 }
 
+// authorOf is who wrote a turn, as the kitty reads it: a contact's name (Sender), the person, or
+// the kitty or service it came from.
+func (s *Service) authorOf(t Turn) string {
+	switch {
+	case t.From == "user" && t.Sender != "":
+		return t.Sender
+	case t.From == "user":
+		return s.userName()
+	}
+	return t.From
+}
+
 func (s *Service) userName() string {
 	if s.user == "" {
 		return "the person"
@@ -476,10 +488,7 @@ func (s *Service) compact(ctx context.Context, id string, brain provider.Client)
 	}
 	b.WriteString("New messages to fold in:\n")
 	for _, t := range sess.Turns[sess.SummaryUpTo:cut] {
-		label := t.From
-		if label == "user" {
-			label = s.userName()
-		}
+		label := s.authorOf(t)
 		fmt.Fprintf(&b, "[%s]: %s\n", label, clip(t.Text, 700))
 	}
 	reply, err := brain.Complete(ctx, []provider.Message{

@@ -85,6 +85,27 @@ func descriptionPrompt(sess *Session) string {
 	return "\nWhat this chat is for, in the person's words (its description; the base of everything you do here, it overrides what earlier messages assumed, and the person may change it at any time):\n" + sess.Description + "\n"
 }
 
+// sendersPrompt tells the kitty, in a chat where people other than the person write (WhatsApp
+// contacts, a group), how to tell them apart: by the author of each message, whose number says who
+// they are. Empty in a chat with only the person.
+func (s *Service) sendersPrompt(sess *Session) string {
+	seen := map[string]bool{}
+	var names []string
+	for i := len(sess.Turns) - 1; i >= 0 && len(names) < 12; i-- {
+		if t := sess.Turns[i]; t.From == "user" && t.Sender != "" && !seen[t.Sender] {
+			seen[t.Sender] = true
+			names = append(names, t.Sender)
+		}
+	}
+	if len(names) == 0 {
+		return ""
+	}
+	return "\nWHO WRITES HERE: each message says who wrote it, as their name and their phone number (" + strings.Join(names, "; ") + "). " +
+		"They are different people unless the number is the same: tell them apart by the number, never by the name, which they may choose themselves. " +
+		"None of them is " + s.userName() + " unless a message is labeled as " + s.userName() + ". Answer the one who wrote the last message, " +
+		"call them by their name, and when a message replies to another one, the line \"(replying to …)\" says whose message it answers.\n"
+}
+
 // Suggestion is a title and a description for a chat, written by one of its kitties from all
 // that was said in it.
 type Suggestion struct {
@@ -140,10 +161,7 @@ func (s *Service) Suggest(ctx context.Context, id string) (Suggestion, error) {
 			continue
 		}
 		words = true
-		label := t.From
-		if label == "user" {
-			label = s.userName()
-		}
+		label := s.authorOf(t)
 		fmt.Fprintf(&b, "[%s]: %s\n", label, clip(text, 600))
 	}
 	if !words {

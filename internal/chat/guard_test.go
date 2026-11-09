@@ -202,3 +202,46 @@ func TestExposedChatWithGuardOff(t *testing.T) {
 		t.Error("guard off still restricts")
 	}
 }
+
+// Messages of other people (WhatsApp contacts) are read as theirs, not the person's: each with
+// its author, and the kitty is told how to tell them apart.
+func TestSendAsNamesWhoWrote(t *testing.T) {
+	f, sa, _, _ := fleet(t)
+	s := service(t, f)
+	s.SetUser("Pat")
+	guarded(t, s)
+	id := exposedChat(t, s, "ana")
+	sa.replies = []string{"hola Ana", "hola Pedro"}
+	if _, err := s.SendAs(context.Background(), id, "Ana (+56911111111)", "¿hay reunión?", nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.SendAs(context.Background(), id, "Pedro (+56922222222)", "(replying to Ana (+56911111111): \"¿hay reunión?\")\nsí, a las 10", nil); err != nil {
+		t.Fatal(err)
+	}
+	sess, _ := s.Get(id)
+	if sess.Turns[0].From != "user" || sess.Turns[0].Sender != "Ana (+56911111111)" || sess.Turns[2].Sender != "Pedro (+56922222222)" {
+		t.Fatalf("turns = %+v", sess.Turns)
+	}
+	seen := sa.seen[1]
+	system, last := seen[0].Content, seen[len(seen)-1].Content
+	if !strings.Contains(system, "WHO WRITES HERE") || !strings.Contains(system, "Pedro (+56922222222); Ana (+56911111111)") || !strings.Contains(system, "None of them is Pat") {
+		t.Errorf("system = %q", system)
+	}
+	if !strings.Contains(last, `<third_party_message from="Pedro (+56922222222)">`) || strings.Contains(last, `from="Pat"`) {
+		t.Errorf("last = %q", last)
+	}
+	if first := seen[1].Content; !strings.Contains(first, `from="Ana (+56911111111)"`) {
+		t.Errorf("first = %q", first)
+	}
+	// A chat with the person alone gets no such note.
+	own, _ := s.Create("", []string{"ana"})
+	if _, err := s.Send(context.Background(), own.ID, "hola"); err != nil {
+		t.Fatal(err)
+	}
+	if p := sa.seen[2][0].Content; strings.Contains(p, "WHO WRITES HERE") {
+		t.Error("a chat with the person alone was told about other people")
+	}
+	if l := sa.seen[2][len(sa.seen[2])-1].Content; !strings.Contains(l, "[Pat]: hola") {
+		t.Errorf("own = %q", l)
+	}
+}

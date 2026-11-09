@@ -179,6 +179,7 @@ type fakeChats struct {
 	failNew  bool
 	files    []string
 	texts    []string
+	senders  []string
 }
 
 func newChats() *fakeChats {
@@ -232,6 +233,16 @@ func (c *fakeChats) SendFiles(ctx context.Context, id, text string, files []atta
 		c.files = append(c.files, f.Name+"|"+f.MIME+"|"+string(f.Data))
 	}
 	c.mu.Unlock()
+	return c.Send(ctx, id, text)
+}
+
+func (c *fakeChats) SendAs(ctx context.Context, id, sender, text string, files []attach.Upload) ([]chat.Turn, error) {
+	c.mu.Lock()
+	c.senders = append(c.senders, sender)
+	c.mu.Unlock()
+	if len(files) > 0 {
+		return c.SendFiles(ctx, id, text, files)
+	}
 	return c.Send(ctx, id, text)
 }
 
@@ -519,7 +530,8 @@ func TestConversation(t *testing.T) {
 	r.chats.mu.Unlock()
 	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "again"})
 	eventually(t, "the third reply", func() bool { return len(f.messages()) == 3 })
-	if s, err := r.chats.Get("c2"); err != nil || s.Title != "WhatsApp +56912345678" {
+	// The contact's name is remembered, even when a message comes without it.
+	if s, err := r.chats.Get("c2"); err != nil || s.Title != "WhatsApp: Mad" {
 		t.Fatalf("new chat = %+v %v", s, err)
 	}
 }
@@ -935,21 +947,23 @@ func TestGroups(t *testing.T) {
 	r.chats.mu.Lock()
 	texts := append([]string(nil), r.chats.texts...)
 	r.chats.mu.Unlock()
-	if texts[0] != "Mad: ¿Qué opinas, Mimi?" || r.chats.created != 1 {
-		t.Fatalf("texts = %q, chats = %d", texts, r.chats.created)
+	// Who wrote goes with the message (its sender), by name and number: two people with the same
+	// name stay apart.
+	if texts[0] != "¿Qué opinas, Mimi?" || r.chats.senders[0] != "Mad (+56912345678)" || r.chats.senders[1] != "Mad (+4411112222)" || r.chats.created != 1 {
+		t.Fatalf("texts = %q, senders = %q, chats = %d", texts, r.chats.senders, r.chats.created)
 	}
 	s, _ := r.chats.Get("c1")
 	if s.Title != "WhatsApp group: Familia" {
 		t.Fatalf("title = %q", s.Title)
 	}
-	// A group message without a name still says who.
+	// A group message without a name still says who: the name seen before.
 	n := group
 	n.Name, n.Text, n.Mentioned = "", "hey", true
 	f.push(n)
 	eventually(t, "the third reply", func() bool { return len(f.messages()) == 3 })
 	r.chats.mu.Lock()
-	if r.chats.texts[2] != "+56912345678: hey" {
-		t.Fatalf("text = %q", r.chats.texts[2])
+	if r.chats.texts[2] != "hey" || r.chats.senders[2] != "Mad (+56912345678)" {
+		t.Fatalf("text = %q from %q", r.chats.texts[2], r.chats.senders[2])
 	}
 	r.chats.mu.Unlock()
 	// A group without a name has its id in the title.

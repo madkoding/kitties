@@ -1,5 +1,12 @@
 import { useEffect, useLayoutEffect, useState } from "preact/hooks";
-import type { Kitty, WhatsAppGroup, WhatsAppHeld, WhatsAppSettings, WhatsAppStatus } from "./api";
+import type {
+  Kitty,
+  WhatsAppContact,
+  WhatsAppGroup,
+  WhatsAppHeld,
+  WhatsAppSettings,
+  WhatsAppStatus,
+} from "./api";
 import { api, errText } from "./api";
 import { ask } from "./Confirm";
 import ConnectorLogo from "./ConnectorLogo";
@@ -507,6 +514,7 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           )}
         </div>
       )}
+      {cur.linked && <Contacts since={cur.last_message} />}
       {welcome && (
         <Welcome
           onCancel={() => setWelcome(false)}
@@ -798,6 +806,117 @@ function HeldLog(props: {
       >
         {t("Clear the list")}
       </button>
+    </details>
+  );
+}
+
+// Contacts are the people who wrote to the number, with the name the kitty reads each one by:
+// the one the person sets here, else the one they gave themselves on WhatsApp, always with the
+// number, so the people of a chat or a group are not taken for one. since is the last message:
+// a new one may bring a new contact.
+function Contacts({ since }: { since?: string }) {
+  const [list, setList] = useState<WhatsAppContact[]>([]);
+  const [names, setNames] = useState<Record<string, string>>({});
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState("");
+  const load = () =>
+    api
+      .whatsappContacts()
+      .then((l) => {
+        setList(l);
+        setNames(Object.fromEntries(l.map((c) => [c.number, c.name || ""])));
+      })
+      .catch(() => {});
+  useEffect(() => {
+    load();
+  }, [since]);
+  if (list.length === 0) {
+    return null;
+  }
+  const save = async (c: WhatsAppContact) => {
+    const name = (names[c.number] || "").trim();
+    if (name === (c.name || "")) {
+      return;
+    }
+    setBusy(true);
+    setErr("");
+    try {
+      await api.nameWhatsAppContact(c.number, name);
+      await load();
+    } catch (e) {
+      setErr(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const forget = async (c: WhatsAppContact) => {
+    setBusy(true);
+    setErr("");
+    try {
+      await api.forgetWhatsAppContact(c.number);
+      await load();
+    } catch (e) {
+      setErr(errText(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <details class="callout mt-3" data-testid="whatsapp-contacts">
+      <summary class="cursor-pointer text-sm font-semibold">
+        {t("Contacts ({n})", { n: list.length })}
+      </summary>
+      <p class="text-xs text-[var(--t3)] mt-1">
+        {t(
+          "The kitty reads each message with who wrote it, as a name and the number, and whose message a reply answers. The name is the one they gave themselves on WhatsApp until you write yours. Kept sealed.",
+        )}
+      </p>
+      <ul class="mt-2 flex flex-col gap-2">
+        {list.map((c) => (
+          <li
+            key={c.number}
+            class="flex flex-wrap items-center gap-2 text-xs"
+            data-testid="whatsapp-contact"
+          >
+            <input
+              class="px-2 py-1 text-sm w-40"
+              value={names[c.number] || ""}
+              placeholder={c.push_name || t("Name")}
+              maxLength={40}
+              disabled={busy}
+              aria-label={t("Name of +{number}", { number: c.number })}
+              onInput={(e) =>
+                setNames({ ...names, [c.number]: (e.target as HTMLInputElement).value })
+              }
+              onBlur={() => save(c)}
+              // Enter saves by leaving the field, so the name is not sent twice.
+              onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
+              data-testid="whatsapp-contact-name"
+            />
+            <span class="font-semibold">+{c.number}</span>
+            {c.name && c.push_name && c.push_name !== c.name && (
+              <span class="text-[var(--t3)]">
+                {t("calls themselves {name}", { name: c.push_name })}
+              </span>
+            )}
+            <button
+              class="plain ml-auto"
+              disabled={busy}
+              onClick={() => forget(c)}
+              title={t("Forget")}
+              aria-label={t("Forget")}
+              data-testid="whatsapp-contact-forget"
+            >
+              <IconX size={12} />
+            </button>
+          </li>
+        ))}
+      </ul>
+      {err && (
+        <p class="text-sm text-[var(--c-red)] mt-2" role="alert">
+          {err}
+        </p>
+      )}
     </details>
   );
 }

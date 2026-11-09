@@ -156,7 +156,7 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 	if err != nil {
 		return Turn{}, nil, err
 	}
-	system += descriptionPrompt(sess)
+	system += descriptionPrompt(sess) + s.sendersPrompt(sess)
 	if sess.Summary != "" {
 		system += fmt.Sprintf("\nEarlier in this conversation (a summary of its first %d messages):\n%s\n", sess.SummaryUpTo, sess.Summary)
 	}

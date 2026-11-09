@@ -221,8 +221,17 @@ func TestAnswerHelp(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-			if err := s.AnswerHelp(sess.ID, 1, c.answer); err != nil {
-				t.Fatal(err)
+			// The step (with its screenshot) is kept a moment before the kitty starts waiting for
+			// the answer: an answer in between is not taken yet, so it is given again until it is.
+			for {
+				err := s.AnswerHelp(sess.ID, 1, c.answer)
+				if err == nil {
+					break
+				}
+				if !errors.Is(err, ErrNoHelp) || time.Now().After(deadline) {
+					t.Fatal(err)
+				}
+				time.Sleep(time.Millisecond)
 			}
 			got := waitDone(t, s, sess.ID)
 			seen := sa.seen[len(sa.seen)-1]

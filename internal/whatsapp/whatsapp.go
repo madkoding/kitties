@@ -96,6 +96,11 @@ type Event struct {
 	Ref Ref
 	// Files are the pictures, documents and audios of the message (Text is their caption).
 	Files []File
+	// Quote is the message this one answers (a reply), when it answers one.
+	Quote *Quote
+	// Mentions are the @tags of Text (what follows the @, a number or WhatsApp's hidden id) and
+	// the phone number each names, when it is known.
+	Mentions map[string]string
 	// Session is the whole state of the linked device, to keep sealed (EvSession).
 	Session []byte
 	Err     string
@@ -105,6 +110,12 @@ type Event struct {
 // them (opaque to the bridge).
 type Ref struct {
 	Chat, Sender, ID string
+}
+
+// Quote is the message a reply answers: who wrote it (digits, "" when unknown) and its text.
+type Quote struct {
+	From string
+	Text string
 }
 
 // File is a picture, document, video or audio that came in a message.
@@ -151,6 +162,12 @@ type Chats interface {
 	Send(ctx context.Context, id, text string) ([]chat.Turn, error)
 	SendFiles(ctx context.Context, id, text string, files []attach.Upload) ([]chat.Turn, error)
 	Subscribe(id string) (<-chan chat.Event, func())
+}
+
+// senderChats is the part of the chat service that posts a message as someone else's
+// (chat.Service.SendAs), so the kitty reads who wrote it.
+type senderChats interface {
+	SendAs(ctx context.Context, id, sender, text string, files []attach.Upload) ([]chat.Turn, error)
 }
 
 // Registry is where the connector is offered to the kitties while the link is on.
@@ -341,21 +358,23 @@ type Bridge struct {
 	opt Options
 
 	// ops runs one change of the link at a time (stopLocked lets mu go while it waits).
-	ops     sync.Mutex
-	mu      sync.Mutex
-	set     Settings
-	chats   map[string]string // number (or "g:" and a group) -> chat id
-	seen    []Group
-	sent    []time.Time          // when the messages of the last hour went
-	held    []held               // the last ones the limit held, oldest first
-	risk    time.Time            // when the person accepted the risk (zero: not yet)
-	refs    map[string]Ref       // the last message of each chat (by key), to react to
-	noted   map[string]time.Time // the chats told about the quiet hours, until when
-	queue   map[string]pending   // the messages waiting for the quiet hours to end, by id
-	seq     int
-	resumed bool
-	runCtx  context.Context // the connection's, while there is one
-	waiting int
+	ops   sync.Mutex
+	mu    sync.Mutex
+	set   Settings
+	chats map[string]string // number (or "g:" and a group) -> chat id
+	seen  []Group
+	// contacts are the people who wrote, by number (sealed in contacts.bin).
+	contacts map[string]Contact
+	sent     []time.Time          // when the messages of the last hour went
+	held     []held               // the last ones the limit held, oldest first
+	risk     time.Time            // when the person accepted the risk (zero: not yet)
+	refs     map[string]Ref       // the last message of each chat (by key), to react to
+	noted    map[string]time.Time // the chats told about the quiet hours, until when
+	queue    map[string]pending   // the messages waiting for the quiet hours to end, by id
+	seq      int
+	resumed  bool
+	runCtx   context.Context // the connection's, while there is one
+	waiting  int
 	// now and sleep are the clock (a fake one in the tests).
 	now    func() time.Time
 	sleep  func(ctx context.Context, d time.Duration)
@@ -386,7 +405,7 @@ func New(opt Options) (*Bridge, error) {
 	if opt.Log == nil {
 		opt.Log = func(string, ...any) {}
 	}
-	b := &Bridge{opt: opt, chats: map[string]string{}, tails: map[string]chan struct{}{}, refs: map[string]Ref{}, noted: map[string]time.Time{}, queue: map[string]pending{}, wait: 2 * time.Hour,
+	b := &Bridge{opt: opt, chats: map[string]string{}, tails: map[string]chan struct{}{}, refs: map[string]Ref{}, contacts: map[string]Contact{}, noted: map[string]time.Time{}, queue: map[string]pending{}, wait: 2 * time.Hour,
 		now: time.Now, sleep: sleepCtx}
 	data, err := os.ReadFile(b.settingsPath())
 	switch {
@@ -434,6 +453,7 @@ func New(opt Options) (*Bridge, error) {
 	}
 	b.status.State = StateOff
 	b.loadHeld()
+	b.loadContacts()
 	return b, nil
 }
 
@@ -1121,27 +1141,40 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 	}
 	in := inbound{from: ev.From, name: ev.Name, text: text, raw: text, files: ev.Files, key: ev.From, to: ev.From}
 	if ev.Group {
-		// In a group on the list anyone may talk to the kitty, by naming it.
+		// In a group on the list anyone may talk to the kitty, by naming it. Who writes there is
+		// noted even when it is not to the kitty, so a later reply to them says whose words it
+		// quotes.
 		b.sawLocked(ev.Chat, ev.ChatName)
+		allowed := b.groupAllowedLocked(ev.Chat)
+		if allowed {
+			b.metLocked(ev.From, ev.Name)
+		}
 		if !ev.Mentioned && !mentions(text, b.kittyNameLocked(ev.Chat)) {
 			return
 		}
-		if !b.groupAllowedLocked(ev.Chat) {
+		if !allowed {
 			b.status.Ignored++
 			return
 		}
-		who := ev.Name
-		if who == "" {
-			who = "+" + ev.From
-		}
 		in.key, in.to, in.group, in.groupName = "g:"+ev.Chat, ev.Chat, true, ev.ChatName
-		in.text = who + ": " + text
 	} else {
 		if !b.allowedLocked(ev.From) {
 			b.status.Ignored++
 			return
 		}
+		b.metLocked(ev.From, ev.Name)
 		b.last = ev.From
+	}
+	// The kitty reads who wrote each message, and whose words a reply quotes: without it every
+	// message of a chat would be taken for the person's.
+	in.name = b.contacts[ev.From].shortName()
+	in.sender = b.labelLocked(ev.From)
+	if !in.group && b.opt.Guard != nil && b.opt.Guard.Trusted(ev.From) {
+		in.sender = "" // one of the person's own numbers: it is the person
+	}
+	in.text = b.withMentionsLocked(in.text, ev.Mentions, in.to)
+	if q := b.quoteLineLocked(ev.Quote, in.to); q != "" {
+		in.text = q + "\n" + in.text
 	}
 	b.status.LastMessage = time.Now()
 	in.ref, in.who = ev.Ref, in.to
@@ -1201,6 +1234,7 @@ func (b *Bridge) dispatchLocked(c Client, in inbound) {
 type pending struct {
 	From      string `json:"from"`
 	Name      string `json:"name,omitempty"`
+	Sender    string `json:"sender,omitempty"`
 	Text      string `json:"text"`
 	Raw       string `json:"raw"`
 	Files     []File `json:"files,omitempty"`
@@ -1213,12 +1247,12 @@ type pending struct {
 }
 
 func pendingOf(in inbound) pending {
-	return pending{From: in.from, Name: in.name, Text: in.text, Raw: in.raw, Files: in.files, Key: in.key, To: in.to,
+	return pending{From: in.from, Name: in.name, Sender: in.sender, Text: in.text, Raw: in.raw, Files: in.files, Key: in.key, To: in.to,
 		Who: in.who, Group: in.group, GroupName: in.groupName, Ref: in.ref}
 }
 
 func (p pending) inbound(qid string) inbound {
-	return inbound{from: p.From, name: p.Name, text: p.Text, raw: p.Raw, files: p.Files, key: p.Key, to: p.To,
+	return inbound{from: p.From, name: p.Name, sender: p.Sender, text: p.Text, raw: p.Raw, files: p.Files, key: p.Key, to: p.To,
 		who: p.Who, group: p.Group, groupName: p.GroupName, ref: p.Ref, qid: qid}
 }
 
@@ -1294,6 +1328,8 @@ func (b *Bridge) resumeLocked(c Client) {
 // where the answer goes.
 type inbound struct {
 	from, name, text string
+	// sender is how the kitty reads who wrote ("Ana (+56912345678)"); empty for the person.
+	sender string
 	// raw is the text as it came, to quote it.
 	raw       string
 	files     []File
@@ -1522,10 +1558,14 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 	events, unsubscribe := b.opt.Chats.Subscribe(id)
 	defer unsubscribe()
 	var turns []chat.Turn
-	if len(files) > 0 {
-		turns, err = b.opt.Chats.SendFiles(ctx, id, in.text, files)
-	} else {
-		turns, err = b.opt.Chats.Send(ctx, id, in.text)
+	sa, named := b.opt.Chats.(senderChats)
+	switch {
+	case named && in.sender != "":
+		turns, err = sa.SendAs(ctx, id, in.sender, in.text, files)
+	case len(files) > 0:
+		turns, err = b.opt.Chats.SendFiles(ctx, id, b.signed(in), files)
+	default:
+		turns, err = b.opt.Chats.Send(ctx, id, b.signed(in))
 	}
 	stopTyping()
 	if errors.Is(err, chat.ErrBusy) {
@@ -1649,6 +1689,9 @@ func (b *Bridge) expose(id string, in inbound) {
 		return
 	}
 	who := "WhatsApp +" + in.from
+	if in.sender != "" {
+		who = "WhatsApp " + in.sender
+	}
 	if in.group {
 		who = "WhatsApp group " + in.groupName
 		if in.groupName == "" {
@@ -2110,6 +2153,12 @@ func (b *Bridge) destLocked(to string) (string, error) {
 	}
 	if !strings.ContainsFunc(to, unicode.IsLetter) {
 		return "", err
+	}
+	if n, ok := b.contactNamedLocked(to); ok && !strings.HasPrefix(to, "group:") {
+		if !b.allowedLocked(n) {
+			return "", ErrNotAllow
+		}
+		return n, nil
 	}
 	name := strings.ToLower(strings.TrimPrefix(to, "group:"))
 	for _, g := range b.seen {

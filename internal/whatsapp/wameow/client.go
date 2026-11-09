@@ -216,6 +216,8 @@ func translate(st *Store, dev *store.Device, evt any) []whatsapp.Event {
 			ev.Chat = e.Info.Chat.ToNonAD().String()
 			ev.Mentioned = mentioned(dev, m)
 		}
+		ev.Quote = quoteOf(st, dev, m)
+		ev.Mentions = mentionsOf(st, dev, m)
 		return []whatsapp.Event{ev}
 	}
 	return nil
@@ -304,6 +306,67 @@ func contextOf(m *waE2E.Message) *waE2E.ContextInfo {
 		}
 	}
 	return nil
+}
+
+// quoteOf is the message m answers, with the number of who wrote it (this device's own number when
+// it answers one of the kitty's), or nil.
+func quoteOf(st *Store, dev *store.Device, m *waE2E.Message) *whatsapp.Quote {
+	c := contextOf(m)
+	if c == nil || (c.GetStanzaID() == "" && c.GetQuotedMessage() == nil) {
+		return nil
+	}
+	q := &whatsapp.Quote{}
+	if qm := c.GetQuotedMessage(); qm != nil {
+		q.Text = firstOf(qm.GetConversation(), qm.GetExtendedTextMessage().GetText(), qm.GetImageMessage().GetCaption(),
+			qm.GetVideoMessage().GetCaption(), qm.GetDocumentMessage().GetCaption(), described(qm))
+		if q.Text == "" {
+			switch {
+			case qm.GetImageMessage() != nil:
+				q.Text = "(picture)"
+			case qm.GetVideoMessage() != nil:
+				q.Text = "(video)"
+			case qm.GetAudioMessage() != nil:
+				q.Text = "(audio)"
+			case qm.GetDocumentMessage() != nil:
+				q.Text = "(document) " + qm.GetDocumentMessage().GetFileName()
+			}
+		}
+	}
+	if j, err := types.ParseJID(c.GetParticipant()); err == nil && c.GetParticipant() != "" {
+		q.From = numberOf(st, dev, j)
+	}
+	return q
+}
+
+// mentionsOf maps the @tags of m (the user part of each mentioned JID, as the text writes it) to
+// their phone numbers.
+func mentionsOf(st *Store, dev *store.Device, m *waE2E.Message) map[string]string {
+	c := contextOf(m)
+	if c == nil {
+		return nil
+	}
+	var out map[string]string
+	for _, s := range c.GetMentionedJID() {
+		j, err := types.ParseJID(s)
+		if err != nil || j.User == "" {
+			continue
+		}
+		if n := numberOf(st, dev, j); n != "" {
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[j.User] = n
+		}
+	}
+	return out
+}
+
+// numberOf is the phone number of a JID (a LID is looked up; this device's LID is its number).
+func numberOf(st *Store, dev *store.Device, j types.JID) string {
+	if own := dev.GetLID(); own.User != "" && j.User == own.User && j.Server == types.HiddenUserServer {
+		return dev.GetJID().User
+	}
+	return phoneOf(st, j, types.JID{})
 }
 
 // mentioned reports whether a message @mentions this number or answers one of its messages.
