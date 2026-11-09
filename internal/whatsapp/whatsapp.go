@@ -203,6 +203,12 @@ type Settings struct {
 	// default (false) they work on their own: no shared notes, no other kitty's files, no chats or
 	// work with other kitties, and only the lead to talk to (chat.Service.SetIndependent).
 	ShareWithTeam bool `json:"share_with_team,omitempty"`
+	// MentionAll is when a kitty may @mention every member of a group: MentionAllNeeded (only
+	// when all of it must see a message, the default) or MentionAllOff (never).
+	MentionAll string `json:"mention_all,omitempty"`
+	// MentionAllHours is the least time between two mentions of everyone in a group (0 is
+	// DefaultMentionAllHours).
+	MentionAllHours int `json:"mention_all_hours,omitempty"`
 	// LocalNetwork lets the computer of a kitty that works on its own reach the local network
 	// (the person's router, printers, the host). By default (false) it reaches only the internet
 	// (orchestrator.Manager.SetOffLAN ← OffLAN).
@@ -406,6 +412,7 @@ type Bridge struct {
 	refs     map[string]Ref       // the last message of each chat (by key), to react to
 	noted    map[string]time.Time // the chats told about the quiet hours, until when
 	queue    map[string]pending   // the messages waiting for the quiet hours to end, by id
+	everyone map[string]time.Time // when a kitty last mentioned every member of a group
 	seq      int
 	resumed  bool
 	runCtx   context.Context // the connection's, while there is one
@@ -440,7 +447,7 @@ func New(opt Options) (*Bridge, error) {
 	if opt.Log == nil {
 		opt.Log = func(string, ...any) {}
 	}
-	b := &Bridge{opt: opt, chats: map[string]string{}, tails: map[string]chan struct{}{}, refs: map[string]Ref{}, contacts: map[string]Contact{}, noted: map[string]time.Time{}, queue: map[string]pending{}, wait: 2 * time.Hour,
+	b := &Bridge{opt: opt, chats: map[string]string{}, tails: map[string]chan struct{}{}, refs: map[string]Ref{}, contacts: map[string]Contact{}, noted: map[string]time.Time{}, queue: map[string]pending{}, everyone: map[string]time.Time{}, wait: 2 * time.Hour,
 		now: time.Now, sleep: sleepCtx}
 	data, err := os.ReadFile(b.settingsPath())
 	switch {
@@ -465,6 +472,12 @@ func New(opt Options) (*Bridge, error) {
 				return nil, err
 			}
 			if b.set.Voice, err = voiceMode(opt.Defaults.Voice); err != nil {
+				return nil, err
+			}
+			if b.set.MentionAll, err = mentionAllMode(opt.Defaults.MentionAll); err != nil {
+				return nil, err
+			}
+			if b.set.MentionAllHours, err = mentionAllHours(opt.Defaults.MentionAllHours); err != nil {
 				return nil, err
 			}
 			if b.set.Enabled && !b.usable() {
@@ -617,6 +630,12 @@ func (b *Bridge) check(s Settings) (Settings, error) {
 	}
 	out.MaxPerHour = s.MaxPerHour
 	if out.Voice, err = voiceMode(s.Voice); err != nil {
+		return Settings{}, err
+	}
+	if out.MentionAll, err = mentionAllMode(s.MentionAll); err != nil {
+		return Settings{}, err
+	}
+	if out.MentionAllHours, err = mentionAllHours(s.MentionAllHours); err != nil {
 		return Settings{}, err
 	}
 	if out.QuietFrom, out.QuietTo, err = quietHours(s.QuietFrom, s.QuietTo); err != nil {
@@ -1228,6 +1247,7 @@ func (b *Bridge) receiveLocked(c Client, ev Event) {
 		allowed := b.groupAllowedLocked(ev.Chat)
 		if allowed {
 			b.metLocked(ev.From, ev.Name)
+			b.inGroupLocked(ev.From, ev.Chat)
 		}
 		if !ev.Mentioned && !mentions(text, b.kittyNameLocked(ev.Chat)) {
 			return
@@ -1655,6 +1675,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 		return
 	}
 	b.expose(id, in)
+	b.teach(id, in)
 	if in.ref.ID != "" {
 		if err := c.MarkRead(ctx, in.ref); err != nil {
 			b.opt.Log("whatsapp: mark read: %v", err)
@@ -1727,7 +1748,9 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 				continue
 			}
 			delete(working, ev.Index)
-			b.say(ctx, c, in.to, in.who, nil, strings.TrimSpace(strings.TrimPrefix(ev.Turn.Text, sent)), voice)
+			// The answer of a long task quotes the message it answers too: in a group, newer messages
+			// came meanwhile, and the quote says (and notifies) whom it is for.
+			b.say(ctx, c, in.to, in.who, &in, strings.TrimSpace(strings.TrimPrefix(ev.Turn.Text, sent)), voice)
 			b.replyFiles(ctx, c, in.to, ev.Turn.Artifacts)
 		}
 	}
@@ -1899,18 +1922,22 @@ func (b *Bridge) replyTo(ctx context.Context, c Client, to string, in *inbound, 
 		}
 		return
 	}
-	for i, part := range Split(Plain(text), maxPart) {
+	b.mu.Lock()
+	text, m, note := b.prepareLocked(to, Plain(text))
+	b.mu.Unlock()
+	if note != "" {
+		b.opt.Log("whatsapp: @all in %s not mentioned: %s", to, note)
+	}
+	quoted := ""
+	if in != nil {
+		quoted = in.raw
+	}
+	for i, part := range Split(text, maxPart) {
 		if err := b.take(to, "text", part, Ref{}); err != nil {
 			b.opt.Log("whatsapp: reply to %s: %v", to, err)
 			return
 		}
-		var err error
-		if i == 0 && quote {
-			err = c.SendReply(ctx, to, part, ref, in.raw)
-		} else {
-			err = c.Send(ctx, to, part)
-		}
-		if err != nil {
+		if err := sendText(ctx, c, to, part, mentionPart(part, m, m.All), i == 0 && quote, ref, quoted); err != nil {
 			b.opt.Log("whatsapp: reply to +%s: %v", to, err)
 			return
 		}
@@ -2100,35 +2127,40 @@ func (b *Bridge) Relay(ctx context.Context, chatID, text string) error {
 // send is a message the person or a kitty asked for: only to a number or a group on the list,
 // while connected. file is a file of the library to send with text as its caption.
 func (b *Bridge) send(ctx context.Context, to, text string) error {
-	return b.sendWith(ctx, to, text, "")
+	_, err := b.sendWith(ctx, to, text, "")
+	return err
 }
 
-func (b *Bridge) sendWith(ctx context.Context, to, text, file string) error {
+// sendWith is send with a file; note says why an "@all" of the text did not mention everyone.
+func (b *Bridge) sendWith(ctx context.Context, to, text, file string) (note string, err error) {
 	c, n, err := b.ready(ctx, to)
 	if err != nil {
-		return err
+		return "", err
 	}
 	text = strings.TrimSpace(b.outbound(n, text))
 	if text == "" && file == "" {
-		return errors.New("the message is empty")
+		return "", errors.New("the message is empty")
 	}
-	parts := Split(Plain(text), maxPart)
+	b.mu.Lock()
+	text, m, note := b.prepareLocked(n, Plain(text))
+	b.mu.Unlock()
+	parts := Split(text, maxPart)
 	caption := ""
-	if file != "" && len(parts) == 1 && len(parts[0]) <= maxCaption {
+	if file != "" && len(parts) == 1 && len(parts[0]) <= maxCaption && !m.All && len(m.Numbers) == 0 {
 		caption, parts = parts[0], nil
 	}
 	for _, part := range parts {
 		if err := b.take(n, "text", part, Ref{}); err != nil {
-			return err
+			return note, err
 		}
-		if err := c.Send(ctx, n, part); err != nil {
-			return err
+		if err := sendText(ctx, c, n, part, mentionPart(part, m, m.All), false, Ref{}, ""); err != nil {
+			return note, err
 		}
 	}
 	if file != "" {
-		return b.sendFile(ctx, c, n, file, caption)
+		return note, b.sendFile(ctx, c, n, file, caption)
 	}
-	return nil
+	return note, nil
 }
 
 // ready is the connection and where a message the person or a kitty asked for goes: a number or
@@ -2438,6 +2470,7 @@ func (c connectorOf) Describe() string {
 		`writes to a number or a group on the allow list (` + allow + `; "to" left out writes to whoever wrote last). ` +
 		`Add "file": "<name of a file in the library>" to send a picture, video, audio or document, with "text" as its caption. ` +
 		`Files you save to the library while answering someone on WhatsApp are sent to them by themselves. ` +
+		`In a group, "@Name" (someone who wrote there) or "@+56912345678" mentions them, and "@all" every member, only when all of them must see it (at most once every few hours a group). ` +
 		`{"action": "react", "to": "+56912345678", "emoji": "👍"} puts an emoji on the last message of that chat ("to" left out: whoever wrote last); ` +
 		`an answer that is only an emoji goes as a reaction too. ` + voice +
 		`{"action": "status"} says whether it is connected. The people on the list also write to you here.`
@@ -2471,8 +2504,12 @@ func (c connectorOf) Call(ctx context.Context, args map[string]any) (string, err
 	str := func(k string) string { s, _ := args[k].(string); return s }
 	switch action := strings.ToLower(str("action")); action {
 	case "", "send":
-		if err := c.b.sendWith(ctx, str("to"), str("text"), str("file")); err != nil {
+		note, err := c.b.sendWith(ctx, str("to"), str("text"), str("file"))
+		if err != nil {
 			return "", err
+		}
+		if note != "" {
+			return "sent, but @all went as plain text (" + note + ")", nil
 		}
 		return "sent", nil
 	case "react":

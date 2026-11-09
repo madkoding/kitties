@@ -37,7 +37,8 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 	if w.Set() {
 		opt.Defaults = &whatsapp.Settings{Enabled: w.Enabled, Allow: w.Allow, Kitty: w.Kitty, Groups: w.Groups, AllowGroups: w.AllowGroups,
 			Kitties: w.Kitties, MaxPerHour: w.MaxPerHour, QuietFrom: w.Quiet.From, QuietTo: w.Quiet.To, Voice: w.Voice,
-			ShareWithTeam: w.ShareWithTeam, LocalNetwork: w.LocalNetwork, TaskMinutes: w.TaskMinutes, TaskMinutesFor: w.TaskMinutesFor,
+			ShareWithTeam: w.ShareWithTeam, MentionAll: w.MentionAll, MentionAllHours: w.MentionAllHours,
+			LocalNetwork: w.LocalNetwork, TaskMinutes: w.TaskMinutes, TaskMinutesFor: w.TaskMinutesFor,
 			TasksPerDay: w.TasksPerDay, TasksPerDayFor: w.TasksPerDayFor}
 	}
 	if a.arts != nil {

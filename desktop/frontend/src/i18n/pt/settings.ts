@@ -408,6 +408,13 @@ const dict: Dictionary = {
   Resend: "Reenviar",
   "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.":
     "Não foram enviadas: saíram mais de {limit} mensagens em uma hora. Reenvie uma quando houver espaço, ou aumente o limite acima. A lista fica selada, então um reinício não a perde.",
+  "Mention everyone (@all)": "Mencionar todos (@todos)",
+  "Only when all must see it": "Só quando todos precisam ver",
+  "at most once every": "no máximo uma vez a cada",
+  "hours per group": "horas por grupo",
+  "Hours between two mentions of everyone": "Horas entre duas menções a todos",
+  "The kitty answers by quoting the message it answers, which notifies its author, and mentions others by name. It mentions everyone only for a change of plans, an urgent notice or an announcement someone asked for; past the limit, @all goes as plain text.":
+    "O kitty responde citando a mensagem que responde, o que notifica o autor, e menciona os outros pelo nome. Menciona todos só numa mudança de planos, num aviso urgente ou num anúncio que alguém pediu; passado o limite, @todos vai como texto normal.",
   "Its computer stays off your local network": "O computador dele fica fora da sua rede local",
   "Recommended. It browses the internet, but cannot reach your router, printers, this computer or anything else at home or work. Applies the next time its computer starts.":
     "Recomendado. Navega na internet, mas não alcança o seu roteador, impressoras, este computador nem mais nada de casa ou do trabalho. Vale a partir da próxima vez que o computador dele iniciar.",

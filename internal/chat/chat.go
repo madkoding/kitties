@@ -213,6 +213,10 @@ type Session struct {
 	// public chat): the guardrails apply (guard.go). Audience says who writes there.
 	Exposed  bool   `json:"exposed,omitempty"`
 	Audience string `json:"audience,omitempty"`
+	// Etiquette is how to write in this chat, as the channel it is bound to says (a WhatsApp
+	// group: whom an answer reaches, how to @mention someone and when everyone): a line of the
+	// kitties' prompt.
+	Etiquette string `json:"etiquette,omitempty"`
 	// Delegates are the kitties that took part through a hand-over without being members (they
 	// do not answer what the person writes), and Kitties every kitty of the chat: members,
 	// owner and delegates (crew.go). More than one makes the chat a group of kitties.
@@ -1255,7 +1259,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		system += s.memoryPrompt(k, sess)
 	}
 	system += s.limitPrompt(allowed)
-	system += descriptionPrompt(sess) + s.sendersPrompt(sess) + proposePrompt(sess)
+	system += descriptionPrompt(sess) + s.sendersPrompt(sess) + etiquettePrompt(sess) + proposePrompt(sess)
 	window := sess.Turns[min(sess.SummaryUpTo, len(sess.Turns)):]
 	if from := s.goldfishFrom(sess, k); from >= 0 {
 		// A task from the lead is all the kitty needs: it starts from it, without the earlier ones.

@@ -39,6 +39,7 @@ type fakeConn struct {
 	upErr      error
 	uploads    []whatsmeow.MediaType
 	groups     map[string]string
+	members    map[string][]types.GroupParticipant
 	groupAsks  int
 	msgs       []*waE2E.Message
 	reads      []string
@@ -112,7 +113,7 @@ func (f *fakeConn) GetGroupInfo(_ context.Context, jid types.JID) (*types.GroupI
 	if !ok {
 		return nil, errors.New("not a member")
 	}
-	return &types.GroupInfo{GroupName: types.GroupName{Name: name}}, nil
+	return &types.GroupInfo{GroupName: types.GroupName{Name: name}, Participants: f.members[jid.String()]}, nil
 }
 
 func (f *fakeConn) MarkRead(_ context.Context, ids []types.MessageID, _ time.Time, chat, sender types.JID, _ ...types.ReceiptType) error {

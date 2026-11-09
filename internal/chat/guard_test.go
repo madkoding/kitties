@@ -245,3 +245,31 @@ func TestSendAsNamesWhoWrote(t *testing.T) {
 		t.Errorf("own = %q", l)
 	}
 }
+
+// The channel of a chat (a WhatsApp group) says how to write there: a line of the prompt.
+func TestEtiquetteInPrompt(t *testing.T) {
+	f, sa, _, _ := fleet(t)
+	s := service(t, f)
+	guarded(t, s)
+	id := exposedChat(t, s, "ana")
+	if err := s.SetEtiquette("nope", "x"); err == nil {
+		t.Fatal("set on a chat that is not there")
+	}
+	if err := s.SetEtiquette(id, "  Write @all only when everyone must see it.  "); err != nil {
+		t.Fatal(err)
+	}
+	sa.replies = []string{"ok", "ok"}
+	if _, err := s.SendAs(context.Background(), id, "Ana (+56911111111)", "hola", nil); err != nil {
+		t.Fatal(err)
+	}
+	if p := sa.seen[0][0].Content; !strings.Contains(p, "HOW TO WRITE HERE: Write @all only when everyone must see it.\n") {
+		t.Errorf("system = %q", p)
+	}
+	_ = s.SetEtiquette(id, "")
+	if _, err := s.SendAs(context.Background(), id, "Ana (+56911111111)", "hola", nil); err != nil {
+		t.Fatal(err)
+	}
+	if p := sa.seen[1][0].Content; strings.Contains(p, "HOW TO WRITE HERE") {
+		t.Errorf("cleared = %q", p)
+	}
+}

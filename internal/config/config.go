@@ -93,6 +93,11 @@ type WhatsApp struct {
 	// ShareWithTeam lets the kitties that answer on WhatsApp work with the others; by default they
 	// work on their own and talk only with the lead.
 	ShareWithTeam bool `yaml:"share_with_team"`
+	// MentionAll is when a kitty may @mention every member of a group: needed (only when all of
+	// it must see a message, the default) or off. MentionAllHours is the least time between two
+	// such mentions in a group (0: 4).
+	MentionAll      string `yaml:"mention_all"`
+	MentionAllHours int    `yaml:"mention_all_hours"`
 	// LocalNetwork lets the computer of a kitty that works on its own reach the local network;
 	// by default it reaches only the internet.
 	LocalNetwork bool `yaml:"local_network"`
@@ -109,6 +114,7 @@ type WhatsApp struct {
 // Set reports whether the file says anything about WhatsApp.
 func (w WhatsApp) Set() bool {
 	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != "" || w.Voice != "" || w.ShareWithTeam ||
+		w.MentionAll != "" || w.MentionAllHours != 0 ||
 		w.LocalNetwork || w.TaskMinutes != 0 || len(w.TaskMinutesFor) > 0 ||
 		w.TasksPerDay != 0 || len(w.TasksPerDayFor) > 0
 }

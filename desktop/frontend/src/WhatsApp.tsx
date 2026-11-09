@@ -37,6 +37,8 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     quiet_to: s.quiet_to || "",
     voice: s.voice || "",
     share_with_team: !!s.share_with_team,
+    mention_all: s.mention_all === "off" ? "off" : "needed",
+    mention_all_hours: s.mention_all_hours || 0,
     local_network: !!s.local_network,
     task_minutes: s.task_minutes || 0,
     task_minutes_for: { ...(s.task_minutes_for || {}) },
@@ -57,6 +59,8 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     (a.quiet_to || "") === (b.quiet_to || "") &&
     (a.voice || "") === (b.voice || "") &&
     !!a.share_with_team === !!b.share_with_team &&
+    (a.mention_all || "needed") === (b.mention_all || "needed") &&
+    (a.mention_all_hours || 0) === (b.mention_all_hours || 0) &&
     !!a.local_network === !!b.local_network &&
     (a.task_minutes || 0) === (b.task_minutes || 0) &&
     pairs(a.task_minutes_for) === pairs(b.task_minutes_for) &&
@@ -316,6 +320,59 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           disabled={disabled}
           onChange={(allow_groups) => setWant({ ...want, allow_groups })}
         />
+      )}
+      {want.groups && (
+        <div
+          class="flex flex-wrap items-center gap-2 mt-3 text-sm"
+          data-testid="whatsapp-mention-all"
+        >
+          {t("Mention everyone (@all)")}
+          <select
+            class="px-2 py-1 text-sm"
+            value={want.mention_all || "needed"}
+            disabled={disabled}
+            onChange={(e) =>
+              setWant({
+                ...want,
+                mention_all: (e.target as HTMLSelectElement)
+                  .value as WhatsAppSettings["mention_all"],
+              })
+            }
+          >
+            <option value="needed">{t("Only when all must see it")}</option>
+            <option value="off">{t("Never")}</option>
+          </select>
+          {want.mention_all !== "off" && (
+            <label class="flex items-center gap-2">
+              {t("at most once every")}
+              <input
+                type="number"
+                min={0}
+                max={168}
+                class="w-16 px-2 py-1 text-sm"
+                value={want.mention_all_hours || ""}
+                placeholder="4"
+                disabled={disabled}
+                aria-label={t("Hours between two mentions of everyone")}
+                onInput={(e) =>
+                  setWant({
+                    ...want,
+                    mention_all_hours: Math.max(
+                      0,
+                      Math.min(168, parseInt((e.target as HTMLInputElement).value, 10) || 0),
+                    ),
+                  })
+                }
+              />
+              {t("hours per group")}
+            </label>
+          )}
+          <span class="block w-full text-xs text-[var(--t3)]">
+            {t(
+              "The kitty answers by quoting the message it answers, which notifies its author, and mentions others by name. It mentions everyone only for a change of plans, an urgent notice or an announcement someone asked for; past the limit, @all goes as plain text.",
+            )}
+          </span>
+        </div>
       )}
       <WhoAnswers
         want={want}
