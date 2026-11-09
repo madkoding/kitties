@@ -413,9 +413,19 @@ const dict: Dictionary = {
     "Recomendado. Navega por internet, pero no llega a tu router, impresoras, este computador ni nada más de tu casa u oficina. Se aplica la próxima vez que su computador arranque.",
   "Tasks asked here run for at most": "Las tareas pedidas aquí duran como máximo",
   minutes: "minutos",
-  "Anyone in a group can put the kitty to work, so tasks from here are short, with no retries. A number or a group can have its own:":
-    "Cualquiera de un grupo puede poner a trabajar al kitty, así que las tareas de aquí son cortas y sin reintentos. Un número o un grupo puede tener su propio tiempo:",
   "Minutes for {who}": "Minutos para {who}",
+  "Its computer reaches the internet, not your local network.":
+    "Su computador llega a internet, no a tu red local.",
+  "Its computer could not close your local network: update its desktop in Settings › Machines. Until then it can reach your router, printers and this computer.":
+    "Su computador no pudo cerrar tu red local: actualiza su escritorio en Ajustes › Máquinas. Mientras tanto puede llegar a tu router, impresoras y este computador.",
+  "No local network": "Sin red local",
+  "Local network open": "Red local abierta",
+  "a day per chat": "al día por chat",
+  "Anyone in a group can put the kitty to work, so tasks from here are short, few, and never retried; past the day's tasks it answers in words. A number or a group can have its own:":
+    "Cualquiera de un grupo puede poner a trabajar al kitty, así que las tareas de aquí son cortas, pocas y sin reintentos; pasadas las del día responde solo con palabras. Un número o un grupo puede tener las suyas:",
+  Minutes: "Minutos",
+  "A day": "Al día",
+  "Tasks a day for {who}": "Tareas al día para {who}",
   "Works on its own": "Trabaja por su cuenta",
   "Recommended. The WhatsApp kitty keeps its own notes and files, does not see the other kitties' or the shared notes, and talks only with the lead, which hands it nothing secret. So it can take part in groups without mixing what each side knows.":
     "Recomendado. El kitty de WhatsApp guarda sus propias notas y archivos, no ve los de los otros kitties ni las notas compartidas, y solo habla con el principal, que no le pasa nada secreto. Así puede participar en grupos sin mezclar lo que sabe cada lado.",

@@ -372,6 +372,10 @@ type Service struct {
 	// exposedMinutes is how long a task asked in a WhatsApp chat may run (SetExposedMinutes);
 	// nil or 0: ExposedMaxSeconds.
 	exposedMinutes func(chatID string) int
+	// exposedTasks is how many tasks on its computer a WhatsApp chat may ask for in a day
+	// (SetExposedTasks), nil or 0: no daily limit; exposedDay counts them per chat, for the day.
+	exposedTasks func(chatID string) int
+	exposedDay   map[string]dayCount
 }
 
 // Reporter hears how a goal's run ended.
@@ -1279,6 +1283,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 			rounds = math.MaxInt
 		}
 	}
+	refusedTasks := 0 // turns of this answer whose task was refused (no tasks left today)
 	for round := 0; round < rounds; round++ {
 		capped = round == rounds-1
 		if err := s.overTokens(k); err != nil {
@@ -1319,6 +1324,26 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		if len(actions) == 0 {
 			capped = false
 			break
+		}
+		if hasDesktopAction(actions) && exposed && refusedTasks >= 2 {
+			// Told twice already: it stops here rather than ask again.
+			parts = append(parts, "("+k.Name+" has no more tasks on its computer for this chat today)")
+			capped = false
+			break
+		}
+		if hasDesktopAction(actions) && exposed && !s.takeExposedTask(id) {
+			refusedTasks++
+			// The chat used its tasks for today: the computer is refused, words still answer.
+			outs, why := make([]outcome, 0, len(actions)), s.noTasksLeft(id)
+			for _, a := range actions {
+				if a.kind == "tool" {
+					outs = append(outs, outcome{action: a, err: why})
+					continue
+				}
+				outs = append(outs, s.runNonDesktop(ctx, id, []action{a}, k, allowed, &turn)...)
+			}
+			messages = append(messages, feedback(native, reply, reply.Content, outs, nil)...)
+			continue
 		}
 		if hasDesktopAction(actions) {
 			// Connector and library actions run first, in this call; the display's go on in

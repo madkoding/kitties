@@ -100,12 +100,17 @@ type WhatsApp struct {
 	// changes it for a number or a group.
 	TaskMinutes    int            `yaml:"task_minutes"`
 	TaskMinutesFor map[string]int `yaml:"task_minutes_for"`
+	// TasksPerDay is how many tasks each WhatsApp chat may ask for in a day (0: 10);
+	// TasksPerDayFor changes it for a number or a group.
+	TasksPerDay    int            `yaml:"tasks_per_day"`
+	TasksPerDayFor map[string]int `yaml:"tasks_per_day_for"`
 }
 
 // Set reports whether the file says anything about WhatsApp.
 func (w WhatsApp) Set() bool {
 	return w.Enabled || w.Kitty != "" || w.Groups || len(w.Allow) > 0 || len(w.AllowGroups) > 0 || len(w.Kitties) > 0 || w.MaxPerHour != 0 || w.Quiet.From != "" || w.Voice != "" || w.ShareWithTeam ||
-		w.LocalNetwork || w.TaskMinutes != 0 || len(w.TaskMinutesFor) > 0
+		w.LocalNetwork || w.TaskMinutes != 0 || len(w.TaskMinutesFor) > 0 ||
+		w.TasksPerDay != 0 || len(w.TasksPerDayFor) > 0
 }
 
 // Provider is one AI profile.

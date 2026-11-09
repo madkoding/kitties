@@ -717,6 +717,8 @@ func (m *Manager) Start(ctx context.Context, ref string) error {
 	// An older desktop's home, copied out when it was removed, goes into the new one.
 	m.finishMove(ctx, k, spec)
 	m.applyTheme(ctx, k, false)
+	// Whether the local network really is closed, as the desktop wrote it (kitty-nolan).
+	_ = m.setLocalNetwork(k.ID, m.lanState(ctx, k, spec.NoLAN))
 	// A running desktop kept as it was may still wait for its new limits.
 	_ = m.setMemoryPending(k.ID, running && m.limitsMoved(ctx, k))
 	// A machine just turned on has not been idle yet, and its desktop is still coming up.
@@ -788,6 +790,38 @@ func (m *Manager) lanMoved(ctx context.Context, k *kitty.Kitty, noLAN bool) bool
 	}
 	moved, err := l.LANStale(ctx, k.Container, noLAN)
 	return err == nil && moved
+}
+
+// lanStatePath is where kitty-nolan writes, as root, whether it closed the local network.
+const lanStatePath = "/var/lib/kitty-nolan/state"
+
+// lanState is what k's machine says of its local network when it should be off it: LANClosed, or
+// LANFailed when the desktop did not close it (or cannot tell). Empty when it need not be.
+func (m *Manager) lanState(ctx context.Context, k *kitty.Kitty, noLAN bool) string {
+	if !noLAN {
+		return ""
+	}
+	// The desktop closes it first thing; a start that came this far has run it.
+	out, err := m.ctr().Exec(ctx, k.Container, "cat", lanStatePath)
+	if err == nil && strings.TrimSpace(out) == kitty.LANClosed {
+		return kitty.LANClosed
+	}
+	return kitty.LANFailed
+}
+
+// setLocalNetwork keeps how k's machine stands with the local network.
+func (m *Manager) setLocalNetwork(id, state string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	k, ok := m.kitties[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if k.LocalNetwork == state {
+		return nil
+	}
+	k.LocalNetwork = state
+	return m.saveLocked()
 }
 
 // SetOffLAN tells which kitties' machines stay off the local network (the WhatsApp kitty that
