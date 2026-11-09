@@ -49,8 +49,8 @@ func (m *Manager) staleForAutoUpdate(ctx context.Context, k *kitty.Kitty) bool {
 }
 
 // WatchUpdates keeps the desktops on the newest image until ctx ends: shortly after the start and
-// then every `every`, it looks for a newer image (a pull), and makes the desktop of each idle kitty
-// anew. updated hears about each one; warn about each one that could not be updated.
+// then every `every`, it looks for a newer image (a pull), and (with containers.auto_update) makes
+// the desktop of each idle kitty anew. updated hears about each one; warn about each one that could not be updated.
 func (m *Manager) WatchUpdates(ctx context.Context, first, every time.Duration, updated func(k *kitty.Kitty), warn func(format string, args ...any)) {
 	wait := first
 	for {
@@ -68,13 +68,25 @@ func (m *Manager) WatchUpdates(ctx context.Context, first, every time.Duration, 
 // holds, is left for the next round; one whose desktop is stopped is made anew when it is started.
 func (m *Manager) CheckUpdates(ctx context.Context, updated func(k *kitty.Kitty), warn func(format string, args ...any)) {
 	c := m.ctr()
-	if c == nil || !m.cfg.Containers.AutoUpdate {
+	if c == nil {
 		return
 	}
 	// A reference that is only built here has nothing to pull: what is on this machine is the news.
-	_ = c.Pull(ctx, m.cfg.Containers.Image)
-	// Outside the window the image is looked for, but no desktop is restarted.
+	// The image is looked for even when the desktops are not updated by themselves: the page tells
+	// the person, who updates them all, or some, from there (desktops.go).
+	m.lookedForImage(c.Pull(ctx, m.cfg.Containers.Image))
+	if !m.cfg.Containers.AutoUpdate {
+		return
+	}
+	// Outside the window the image is looked for, but no desktop is restarted; nor while the
+	// person updates them.
 	if w, err := config.ParseWindow(m.cfg.Updates.Window); err != nil || !w.Contains(m.now()) {
+		return
+	}
+	m.desks.mu.Lock()
+	running := m.desks.running()
+	m.desks.mu.Unlock()
+	if running {
 		return
 	}
 	renewed := 0
