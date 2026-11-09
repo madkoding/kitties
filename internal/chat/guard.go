@@ -92,7 +92,7 @@ func exposedView(k *kitty.Kitty) *kitty.Kitty {
 // exposedAllows reports whether an exposed kitty may run an action: only the connections it kept,
 // and its notes about people when it works on its own (people: runMemory keeps it to them).
 func exposedAllows(a action, allowed map[string]string, people bool) bool {
-	if a.kind == "memory" {
+	if a.kind == "memory" || a.kind == "ask_lead" {
 		return people
 	}
 	if a.kind != "connector" {
@@ -157,9 +157,14 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 	system := k.Soul.SystemPrompt(soul.Context{KittyName: k.Name, Group: group, Connectors: allowed, User: s.user}) + s.guard.Prompt(s.user)
 	// A kitty that works on its own keeps its notes about the people here: nothing of the person
 	// or of the other kitties is in them.
-	people := s.independent(k) && s.memory != nil
+	people := s.independent(k)
 	if people {
 		system += s.peoplePrompt(k)
+	}
+	asks := people && s.asksFromExposed(k)
+	if asks {
+		system += "\nIf only " + s.leadFor(k).Name + " (the lead kitty) knows what they ask, you may ask it with @ask_lead {\"question\": \"...\"}: " +
+			s.userName() + " decides first, so say you will check and come back. Never ask it for anything private of " + s.userName() + ".\n"
 	}
 	s.compact(ctx, id, brain)
 	sess, err := s.Get(id)
@@ -177,7 +182,7 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 	var tools []provider.Tool
 	if tc, ok := brain.(provider.ToolClient); ok && s.nativeTools && tc.SupportsTools() {
 		for _, t := range s.toolSet(view, allowed) {
-			if strings.HasPrefix(t.Name, prefixConnector) || (people && strings.HasPrefix(t.Name, "memory_")) {
+			if strings.HasPrefix(t.Name, prefixConnector) || (people && s.memory != nil && strings.HasPrefix(t.Name, "memory_")) || (asks && t.Name == "ask_lead") {
 				tools = append(tools, t)
 			}
 		}

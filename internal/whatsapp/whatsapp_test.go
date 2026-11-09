@@ -1704,3 +1704,25 @@ func TestStatusSaysWhenTheLeadAnswers(t *testing.T) {
 		t.Fatalf("status = %+v", st)
 	}
 }
+
+func TestRelaySaysTextInTheChatsWhatsApp(t *testing.T) {
+	r := newRig(t)
+	f := r.linked(t)
+	f.push(Event{Kind: EvMessage, From: "56912345678", Text: "hola"})
+	eventually(t, "the answer", func() bool { return len(f.messages()) == 1 })
+	r.chats.mu.Lock()
+	var id string
+	for _, s := range r.chats.sessions {
+		id = s.ID
+	}
+	r.chats.mu.Unlock()
+	if err := r.b.Relay(context.Background(), id, "The lead says yes."); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.messages(); len(got) != 2 || !strings.Contains(got[1], "The lead says yes.") {
+		t.Fatalf("sent = %v", got)
+	}
+	if err := r.b.Relay(context.Background(), "nope", "x"); err == nil {
+		t.Fatal("a chat that is not WhatsApp's was relayed")
+	}
+}

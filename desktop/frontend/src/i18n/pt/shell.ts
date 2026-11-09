@@ -236,6 +236,7 @@ const dict: Dictionary = {
   "{working} working, {waiting} waiting their turn":
     "{working} trabalhando, {waiting} esperando a vez",
   "{name} waits its turn…": "{name} espera a vez…",
+  "Works on its own (WhatsApp)": "Trabalha por conta própria (WhatsApp)",
 };
 
 export default dict;

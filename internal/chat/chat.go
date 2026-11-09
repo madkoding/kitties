@@ -367,6 +367,8 @@ type Service struct {
 	guard Guard
 	// isIndependent says which kitties work on their own (independent.go); nil: none.
 	isIndependent func(id string) bool
+	// relay says something in the WhatsApp chat a chat is bound to (independent.go); nil: none.
+	relay func(ctx context.Context, chatID, text string) error
 }
 
 // Reporter hears how a goal's run ended.

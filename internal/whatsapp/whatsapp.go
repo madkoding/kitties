@@ -1962,6 +1962,25 @@ func (b *Bridge) sendFile(ctx context.Context, c Client, to, name, caption strin
 // the rest; this keeps it to what a phone downloads without asking).
 const MaxFile = 16 << 20
 
+// Relay says text in the WhatsApp chat or group a chat of the kitties is bound to: what a kitty
+// answers there outside a message (the lead's answer to a question asked from a group). It goes
+// as any send: on the list, connected, out of the quiet hours, within the hourly limit.
+func (b *Bridge) Relay(ctx context.Context, chatID, text string) error {
+	b.mu.Lock()
+	to := ""
+	for key, id := range b.chats {
+		if id == chatID {
+			to = strings.TrimPrefix(key, "g:")
+			break
+		}
+	}
+	b.mu.Unlock()
+	if to == "" {
+		return errors.New("this chat is not a WhatsApp chat")
+	}
+	return b.send(ctx, to, text)
+}
+
 // send is a message the person or a kitty asked for: only to a number or a group on the list,
 // while connected. file is a file of the library to send with text as its caption.
 func (b *Bridge) send(ctx context.Context, to, text string) error {

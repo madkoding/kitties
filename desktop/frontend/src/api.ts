@@ -30,6 +30,9 @@ export interface Kitty {
   // lead marks the principal kitty, the orchestrator of the fleet (one at most): it hands the
   // work to the others and their reports reach the person through it.
   lead?: boolean;
+  // independent marks the kitty that answers on WhatsApp working on its own: its own notes and
+  // files, no chats or work with other kitties, only the lead to talk to (the gateway sets it).
+  independent?: boolean;
   // approvals is "ask" (the default: an action that reaches other people waits for a yes until
   // the kitty is trusted with it) or "auto".
   approvals?: "ask" | "auto" | "";

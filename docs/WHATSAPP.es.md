@@ -145,7 +145,7 @@ olvida la sesión.
     contactos y grupos son las únicas notas que lee y escribe, así puede seguir un grupo en el tiempo
     sin llevar ahí nada tuyo. Una destilación nunca las mezcla con las tuyas.
   - **Sus propios archivos.** Solo ve los archivos de la biblioteca que guardó él; los otros kitties
-    no ven los suyos.
+    no ven los suyos. También envía solo los suyos: un `file` ajeno se rechaza.
   - **Sin otros kitties.** Nunca está en un chat con otros kitties (agregarlo a uno se rechaza), no
     les pasa trabajo y ninguno le pasa trabajo a él.
   - **Un solo canal: el principal.** Desde sus propios hilos le pregunta al principal
@@ -154,6 +154,16 @@ olvida la sesión.
     ningún secreto que conozca el gateway), con el recordatorio de no repetir nada privado en el
     chat de un contacto o en un grupo. La lista del equipo del principal dice que trabaja por su
     cuenta, y lo que tenga que contarte llega a los Reportes del principal como el de cualquier kitty.
+  - **Preguntarle al principal desde un grupo, con tu sí.** En el chat de un contacto o en un grupo,
+    cuando solo el principal sabe la respuesta, el kitty también puede usar `ask_lead`, pero la
+    pregunta espera en **Aprobaciones** (*ask the lead, from <chat>: …*) y el kitty dice que va a
+    averiguar y vuelve. Con tu sí se le pregunta al principal, avisándole que su respuesta se va a
+    repetir ahí; el kitty les responde con ella (filtrada por las protecciones como cualquier
+    respuesta ahí) y esa respuesta vuelve a WhatsApp, dentro de la lista, el horario de silencio y el
+    límite por hora. Un no deja fuera al principal. Los kitties que no trabajan por su cuenta nunca le
+    preguntan al principal desde esos chats.
+  - **Se nota.** El cajón del kitty muestra **Por su cuenta** y la barra lateral un escudo junto a
+    su nombre (`independent: true` en `GET /v1/kitties`).
 
   Ajustes › Conexiones › WhatsApp › **Trabaja por su cuenta** (activado por defecto;
   `share_with_team: true` en el archivo lo desactiva). **El principal nunca trabaja por su cuenta**:

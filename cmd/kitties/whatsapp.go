@@ -56,6 +56,7 @@ func (a *app) whatsappBridge(warn io.Writer, logf func(string, ...any)) *whatsap
 	// The kitty that answers on WhatsApp works on its own, apart from the others (chat/independent.go).
 	if a.chats != nil {
 		a.chats.SetIndependent(b.Independent)
+		a.chats.SetRelay(b.Relay)
 	}
 	return b
 }

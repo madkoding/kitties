@@ -44,11 +44,19 @@ type LeadAsk struct {
 	At       time.Time `json:"at"`
 	// Answered is when the lead passed an answer on; zero while it is open.
 	Answered time.Time `json:"answered,omitempty"`
+	// Exposed is a question an independent kitty asked from a chat with other people (a WhatsApp
+	// group or contact), once the person allowed it: the answer is said there.
+	Exposed bool `json:"exposed,omitempty"`
 }
 
 // canAskLead is the lead k may ask from a thread: nil when there is none, k is it, or the
 // thread is a hand-over, an exposed chat, the Reports thread, or has asked enough already.
 func (s *Service) canAskLead(k *kitty.Kitty, id string) *kitty.Kitty {
+	return s.canAskLeadFrom(k, id, false)
+}
+
+// canAskLeadFrom is canAskLead; approved lets an exposed chat ask, once the person said yes.
+func (s *Service) canAskLeadFrom(k *kitty.Kitty, id string, approved bool) *kitty.Kitty {
 	lead := s.leadFor(k)
 	if lead == nil {
 		return nil
@@ -56,7 +64,7 @@ func (s *Service) canAskLead(k *kitty.Kitty, id string) *kitty.Kitty {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	sess, ok := s.sessions[id]
-	if !ok || sess.Owner != "" || sess.Exposed || sess.Reports {
+	if !ok || sess.Owner != "" || (sess.Exposed && !approved) || sess.Reports {
 		return nil
 	}
 	asked := 0
@@ -78,8 +86,13 @@ func (s *Service) canAskLead(k *kitty.Kitty, id string) *kitty.Kitty {
 // askLead puts k's question to the lead and wakes it in its Reports thread, in the background.
 // It returns whether the question went to the lead (false: nobody to ask, or asked enough).
 func (s *Service) askLead(k *kitty.Kitty, id, question string) (*kitty.Kitty, bool) {
+	return s.askLeadFrom(k, id, question, false)
+}
+
+// askLeadFrom is askLead; exposed is a question from a chat with other people the person allowed.
+func (s *Service) askLeadFrom(k *kitty.Kitty, id, question string, exposed bool) (*kitty.Kitty, bool) {
 	question = strings.TrimSpace(question)
-	lead := s.canAskLead(k, id)
+	lead := s.canAskLeadFrom(k, id, exposed)
 	if lead == nil || question == "" {
 		return nil, false
 	}
@@ -93,7 +106,7 @@ func (s *Service) askLead(k *kitty.Kitty, id, question string) (*kitty.Kitty, bo
 	}
 	s.mu.Lock()
 	if sess, ok := s.sessions[reports]; ok {
-		sess.Asks = append(sess.Asks, LeadAsk{Kitty: k.ID, Name: k.Name, Chat: id, Question: clip(question, 2000), At: s.now()})
+		sess.Asks = append(sess.Asks, LeadAsk{Kitty: k.ID, Name: k.Name, Chat: id, Question: clip(question, 2000), At: s.now(), Exposed: exposed})
 		if len(sess.Asks) > 50 {
 			sess.Asks = sess.Asks[len(sess.Asks)-50:]
 		}
@@ -103,6 +116,10 @@ func (s *Service) askLead(k *kitty.Kitty, id, question string) (*kitty.Kitty, bo
 	text := fmt.Sprintf("Question from %s%s: %s\n\nIf you know, answer it: @answer_kitty %s {\"text\": \"...\"} "+
 		"(it goes back to %s, who carries on). If only the person can decide, ask them in one short message; "+
 		"once they answer, pass it on the same way.", k.Name, about, question, k.Name, k.Name)
+	if exposed {
+		text += "\n\nThis question comes from a WhatsApp chat with other people (" + s.userName() + " allowed asking you): " +
+			k.Name + " repeats your answer there, so say only what may be said to them, never anything private or secret."
+	}
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()
@@ -204,6 +221,10 @@ func (s *Service) runAskLead(id string, a action, k *kitty.Kitty, turn *Turn) ou
 	if question == "" {
 		return outcome{action: a, err: "say what you ask: @ask_lead {\"question\": \"...\"}"}
 	}
+	if s.guardedID(id) {
+		// From a chat with other people only an independent kitty asks, and only with the person's yes.
+		return s.holdAskLead(id, a, k, question, turn)
+	}
 	lead, ok := s.askLead(k, id, question)
 	if !ok {
 		return outcome{action: a, err: "there is no lead to ask here (or you asked it enough already): ask the person in your answer"}
@@ -261,6 +282,15 @@ func (s *Service) runAnswerKitty(a action, lead *kitty.Kitty) outcome {
 		text = s.fromLead(text)
 	}
 	msg := fmt.Sprintf("%s answers your question (%s):\n%s\n\nGo on with the task from here.", lead.Name, clip(ask.Question, 300), text)
+	if ask.Exposed {
+		msg = fmt.Sprintf("%s answers your question (%s):\n%s\n\nTell the people here what of it answers them, in your own words.", lead.Name, clip(ask.Question, 300), text)
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			s.answerExposedAsk(lead, target, ask.Chat, msg)
+		}()
+		return outcome{action: a, text: "sent to " + target.Name + ", who answers the people in that chat"}
+	}
 	s.wg.Add(1)
 	go func() {
 		defer s.wg.Done()

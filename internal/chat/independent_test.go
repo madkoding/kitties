@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/memory"
@@ -220,5 +221,104 @@ func TestTheLeadIsNeverIndependent(t *testing.T) {
 	}
 	if _, err := s.Create("", []string{"cy", "ana"}); err != nil {
 		t.Error(err)
+	}
+}
+
+func TestIndependentKittySendsOnlyItsOwnFiles(t *testing.T) {
+	f, sa, _, echo := fleet(t)
+	s := service(t, f)
+	arts := artifacts.New(filepath.Join(t.TempDir(), "artifacts"))
+	s.SetLibrary(nil, arts)
+	alone(s, "a1")
+	_, _ = arts.Put("team.pdf", []byte("team"), "bo")
+	_, _ = arts.Put("mine.pdf", []byte("mine"), "ana")
+	sess, _ := s.Create("", []string{"ana"})
+	sa.replies = []string{"@connector echo {\"text\": \"here\", \"file\": \"team.pdf\"}\n@connector echo {\"text\": \"here\", \"file\": \"mine.pdf\"}", "ok"}
+	if _, err := s.Send(context.Background(), sess.ID, "send it"); err != nil {
+		t.Fatal(err)
+	}
+	if len(echo.calls) != 1 || echo.calls[0]["file"] != "mine.pdf" {
+		t.Errorf("calls = %v", echo.calls)
+	}
+	if fed := sa.seen[1][len(sa.seen[1])-1].Content; !strings.Contains(fed, "team.pdf is not a file you saved") {
+		t.Errorf("feedback = %s", fed)
+	}
+}
+
+func TestIndependentKittyAsksTheLeadFromAGroupWithThePersonsYes(t *testing.T) {
+	f, _, sb, _ := fleet(t)
+	sc := withLead(f)
+	s := service(t, f)
+	s.HandOverWait = 0
+	guarded(t, s, "pato-azul-77")
+	store, err := approvals.Open(filepath.Join(t.TempDir(), "approvals.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.SetApprovals(store)
+	alone(s, "b1")
+	var relayed []string
+	s.SetRelay(func(_ context.Context, chatID, text string) error {
+		relayed = append(relayed, chatID+": "+text)
+		return nil
+	})
+	id := exposedChat(t, s, "bo")
+	sb.replies = []string{"@ask_lead {\"question\": \"Is mad free on Friday for the match?\"}", "Let me check and come back."}
+	if _, err := s.Send(context.Background(), id, "is mad coming on Friday?"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(sb.seen[0][0].Content, "@ask_lead") {
+		t.Errorf("bo was not told it may ask the lead: %s", sb.seen[0][0].Content)
+	}
+	pending := store.List("pending", 10)
+	if len(pending) != 1 || pending[0].Connector != AskLeadConnector || len(sc.seen) != 0 {
+		t.Fatalf("pending = %+v, lead asked %d times", pending, len(sc.seen))
+	}
+	// The person says yes: the lead hears it, answers, and bo says it in the group.
+	sc.replies = []string{"@answer_kitty bo {\"text\": \"Yes, he comes; the wifi is pato-azul-77\"}", "Told bo."}
+	sb.replies = []string{"Yes, mad comes on Friday!"}
+	if _, err := s.DecideApproval(context.Background(), pending[0].ID, true, "", false); err != nil {
+		t.Fatal(err)
+	}
+	s.Wait()
+	if len(sc.seen) == 0 || !strings.Contains(sc.seen[0][len(sc.seen[0])-1].Content, "repeats your answer there") {
+		t.Fatalf("the lead was not told where its answer goes")
+	}
+	if len(relayed) != 1 || !strings.Contains(relayed[0], id+": Yes, mad comes on Friday!") {
+		t.Errorf("relayed = %v", relayed)
+	}
+	for _, m := range sb.seen[len(sb.seen)-1] {
+		if strings.Contains(m.Content, "pato-azul-77") {
+			t.Errorf("the lead's secret reached bo: %s", m.Content)
+		}
+	}
+	// A no leaves the lead out.
+	sb.replies = []string{"@ask_lead {\"question\": \"again?\"}", "I will check."}
+	_, _ = s.Send(context.Background(), id, "and Saturday?")
+	pending = store.List("pending", 10)
+	asked := len(sc.seen)
+	if _, err := s.DecideApproval(context.Background(), pending[0].ID, false, "", false); err != nil {
+		t.Fatal(err)
+	}
+	s.Wait()
+	if len(sc.seen) != asked {
+		t.Error("the lead was asked after a no")
+	}
+}
+
+func TestOtherKittiesDoNotAskTheLeadFromGroups(t *testing.T) {
+	f, _, sb, _ := fleet(t)
+	withLead(f)
+	s := service(t, f)
+	guarded(t, s)
+	store, _ := approvals.Open(filepath.Join(t.TempDir(), "approvals.json"))
+	s.SetApprovals(store)
+	id := exposedChat(t, s, "bo")
+	sb.replies = []string{"@ask_lead {\"question\": \"x?\"}", "ok"}
+	if _, err := s.Send(context.Background(), id, "hola"); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(sb.seen[0][0].Content, "@ask_lead") || len(store.List("pending", 10)) != 0 {
+		t.Error("a kitty that is not independent may ask the lead from a group")
 	}
 }

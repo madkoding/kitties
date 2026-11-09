@@ -138,6 +138,7 @@ session, without a new code. **Unlink** removes the device from the phone and fo
     contacts and groups those are the only notes it reads and writes, so it can follow a group over
     time without carrying anything of yours there. A distillation never mixes them with yours.
   - **Its own files.** It sees only the library files it saved; the other kitties do not see its.
+    It sends only its own files too: a `file` of someone else's is refused.
   - **No other kitties.** It is never in a chat with other kitties (adding it to one is refused),
     hands no work to them, and none of them hands it work.
   - **One channel: the lead.** From its own threads it asks the lead (`ask_lead`); the lead answers
@@ -146,6 +147,15 @@ session, without a new code. **Unlink** removes the device from the phone and fo
     reminder not to repeat anything private in a contact's chat or a group. The lead's roster says
     the kitty works on its own, and what it has to tell you reaches the lead's Reports as any
     kitty's does.
+  - **Asking the lead from a group, with your yes.** In a contact's chat or a group, when only the
+    lead knows the answer, the kitty may `ask_lead` too, but the question waits in **Approvals**
+    (*ask the lead, from <chat>: …*) and the kitty says it will check and come back. On your yes the
+    lead is asked, told that its answer will be repeated there; the kitty answers the people with it
+    (filtered by the guardrails as any answer there) and that answer goes back to WhatsApp, within
+    the list, the quiet hours and the hourly limit. A no leaves the lead out. Kitties that do not
+    work on their own never ask the lead from those chats.
+  - **Shown as such.** The kitty's drawer shows **On its own** and the sidebar a shield next to
+    its name (`independent: true` in `GET /v1/kitties`).
 
   Settings › Connections › WhatsApp › **Works on its own** (on by default; `share_with_team: true`
   in the file turns it off). **The lead never works on its own**: it leads the others. With no

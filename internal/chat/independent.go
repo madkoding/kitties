@@ -1,13 +1,18 @@
 package chat
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/madkoding/kitties/internal/agenda"
+	"github.com/madkoding/kitties/internal/approvals"
 	"github.com/madkoding/kitties/internal/artifacts"
 	"github.com/madkoding/kitties/internal/kitty"
 	"github.com/madkoding/kitties/internal/memory"
+	"github.com/madkoding/kitties/internal/notify"
 )
 
 // INDEPENDENT KITTIES.
@@ -24,7 +29,10 @@ import (
 //     them hands it work, except the lead.
 //   - The one channel is the lead: it asks the lead (ask_lead) from its own threads, the lead
 //     answers it (answer_kitty) or hands it a task (delegate), and what the lead sends it goes
-//     through the guard first, so no secret of the person travels to it.
+//     through the guard first, so no secret of the person travels to it. From a chat with other
+//     people it may ask the lead too, but the question waits for the person's yes (Approvals), and
+//     the lead is told its answer will be repeated there; that answer goes back to WhatsApp
+//     (SetRelay).
 
 // ErrIndependent is a chat or a hand-over that would mix an independent kitty with the others.
 var ErrIndependent = errors.New("works on its own: it does not share chats or work with other kitties")
@@ -119,4 +127,110 @@ func (s *Service) fromLead(text string) string {
 	}
 	return strings.TrimSpace(text) + "\n\n(From the lead. You work apart from the other kitties: use only what this message needs, " +
 		"and never repeat to a contact or a group anything private of " + s.userName() + ".)"
+}
+
+// AskLeadConnector names, in the approvals, a question an independent kitty wants to put to the
+// lead from a chat with other people.
+const AskLeadConnector = "ask-lead"
+
+// SetRelay gives the chats a way to say something in the WhatsApp chat (or group) a chat is
+// bound to, outside an answer to a message: the lead's answer to a question asked from there.
+func (s *Service) SetRelay(f func(ctx context.Context, chatID, text string) error) { s.relay = f }
+
+// asksFromExposed reports whether k may ask the lead from an exposed chat (with the person's yes).
+func (s *Service) asksFromExposed(k *kitty.Kitty) bool {
+	return s.independent(k) && s.approvals != nil && s.leadFor(k) != nil
+}
+
+// holdAskLead is ask_lead from a chat with other people: the question waits for the person's yes.
+func (s *Service) holdAskLead(id string, a action, k *kitty.Kitty, question string, turn *Turn) outcome {
+	if !s.asksFromExposed(k) || s.canAskLeadFrom(k, id, true) == nil {
+		return outcome{action: a, err: "you cannot ask the lead from this chat: answer in words, or say " + s.userName() + " will answer it"}
+	}
+	lead := s.leadFor(k)
+	where := id
+	if sess, err := s.Get(id); err == nil && sess.Title != "" {
+		where = sess.Title
+	}
+	summary := clip(fmt.Sprintf("ask %s, from %s: %s", lead.Name, where, question), 300)
+	ap, err := s.approvals.Request(approvals.Approval{Kitty: k.ID, KittyName: k.Name, Connector: AskLeadConnector, Kind: "ask", Action: "ask",
+		Args: map[string]any{"question": clip(question, 2000)}, Summary: summary, Risk: "ask", Chat: id})
+	if err != nil {
+		return outcome{action: a, err: "could not hold the question: " + err.Error()}
+	}
+	turn.Approvals = append(turn.Approvals, ApprovalRef{ID: ap.ID, Connector: AskLeadConnector, Action: "ask", Summary: summary})
+	s.note(k, agenda.KindApproval, "", id, "waiting for approval: "+summary)
+	s.tell(notify.Approval, k, "wants to ask "+lead.Name+" from a WhatsApp chat", summary, id)
+	return outcome{action: a, text: "held: " + s.userName() + " decides first whether " + lead.Name + " is asked. Say here, in one line, that you will check and come back, and stop."}
+}
+
+// decideAskLead is the person's answer to such a question: a yes puts it to the lead.
+func (s *Service) decideAskLead(ap *approvals.Approval, k *kitty.Kitty, approve bool) {
+	question, _ := ap.Args["question"].(string)
+	turn := Turn{At: s.now(), From: "approval"}
+	switch {
+	case !approve:
+		turn.Text = "Rejected: " + ap.Summary
+		s.approvals.Done(ap.ID, "", "")
+	case k == nil:
+		turn.Text = "Approved, but the kitty is gone: " + ap.Summary
+		s.approvals.Done(ap.ID, "", "no such kitty")
+	default:
+		if lead, ok := s.askLeadFrom(k, ap.Chat, question, true); ok {
+			turn.Text = "Approved: " + lead.Name + " was asked. Its answer comes back here."
+			s.approvals.Done(ap.ID, "asked "+lead.Name, "")
+		} else {
+			turn.Text = "Approved, but there is no lead to ask now: " + ap.Summary
+			s.approvals.Done(ap.ID, "", "no lead to ask")
+		}
+	}
+	ap.Result = turn.Text
+	s.appendTurn(ap.Chat, turn)
+}
+
+// answerExposedAsk passes the lead's answer to a chat with other people: the independent kitty
+// answers them there, through the guard as any answer of that chat, and what it says goes back to
+// WhatsApp.
+func (s *Service) answerExposedAsk(lead, k *kitty.Kitty, chatID, msg string) {
+	deadline := time.Now().Add(leadAnswerWait)
+	var turns []Turn
+	var err error
+	for {
+		turns, err = s.send(context.Background(), chatID, lead.Name, lead.ID, msg)
+		if !errors.Is(err, ErrBusy) || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(s.pollEvery)
+	}
+	if err != nil {
+		s.note(lead, agenda.KindBlocked, "", chatID, "could not pass the answer to "+k.Name+": "+err.Error())
+		return
+	}
+	if s.relay == nil {
+		return
+	}
+	for _, t := range turns {
+		if t.Kitty != k.ID || strings.TrimSpace(t.Text) == "" {
+			continue
+		}
+		if err := s.relay(context.Background(), chatID, t.Text); err != nil {
+			s.note(k, agenda.KindBlocked, "", chatID, "could not say the lead's answer on WhatsApp: "+err.Error())
+		}
+	}
+}
+
+// ownFile refuses a connector call of an independent kitty that would send a file of the library
+// it did not save (WhatsApp's file, any connection's "file").
+func (s *Service) ownFile(k *kitty.Kitty, a action) string {
+	if s.arts == nil || a.kind != "connector" || !s.independent(k) {
+		return ""
+	}
+	name, _ := a.args["file"].(string)
+	if name = strings.TrimSpace(name); name == "" {
+		return ""
+	}
+	if s.arts.Owner(name) != k.Name {
+		return name + " is not a file you saved: you work apart from the other kitties and send only your own files"
+	}
+	return ""
 }

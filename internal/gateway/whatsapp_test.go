@@ -26,7 +26,10 @@ type fakeWhatsApp struct {
 	resendErr error
 	resent    string
 	contacts  []whatsapp.Contact
+	alone     string
 }
+
+func (f *fakeWhatsApp) Independent(id string) bool { return id != "" && id == f.alone }
 
 func (f *fakeWhatsApp) Status() whatsapp.Status { return f.st }
 func (f *fakeWhatsApp) Apply(s whatsapp.Settings, acceptRisk bool) error {
@@ -203,5 +206,28 @@ func TestWhatsAppRoutes(t *testing.T) {
 	}
 	if code, _, _ := call(t, srv, "POST", "/v1/whatsapp/test", "tok", "{"); code != 400 {
 		t.Fatalf("test bad body = %d", code)
+	}
+}
+
+func TestKittiesSayWhichWorksOnItsOwn(t *testing.T) {
+	fleet := &fakeFleet{kitties: map[string]*kitty.Kitty{
+		"a1": {ID: "a1", Name: "ana"}, "b1": {ID: "b1", Name: "bo", Lead: true}, "c1": {ID: "c1", Name: "cy"}}}
+	chats := &fakeChats{sessions: map[string]*chat.Session{}}
+	srv := httptest.NewServer(New(fleet, chats, "tok", "test").WithWhatsApp(&fakeWhatsApp{alone: "a1"}))
+	defer srv.Close()
+	code, body, _ := call(t, srv, "GET", "/v1/kitties", "tok", nil)
+	if code != 200 {
+		t.Fatalf("list = %d", code)
+	}
+	got := map[string]bool{}
+	for _, k := range body["kitties"].([]any) {
+		m := k.(map[string]any)
+		got[m["name"].(string)] = m["independent"] == true
+	}
+	if !got["ana"] || got["bo"] || got["cy"] {
+		t.Errorf("independent = %v", got)
+	}
+	if _, body, _ := call(t, srv, "GET", "/v1/kitties/ana", "tok", nil); body["kitty"].(map[string]any)["independent"] != true {
+		t.Errorf("one kitty = %v", body)
 	}
 }

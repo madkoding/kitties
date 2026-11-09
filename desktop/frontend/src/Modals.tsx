@@ -16,7 +16,7 @@ import { ask } from "./Confirm";
 import { Modal } from "./Modal";
 import { NONE, mayUse, providerLabel, usesAll, withConnection } from "./friendly";
 import { ProviderLogo } from "./ConnectorLogo";
-import { IconCrown, IconPlay, IconStop, IconTrash } from "./icons";
+import { IconCrown, IconPlay, IconShield, IconStop, IconTrash } from "./icons";
 import DesktopCare from "./DesktopCare";
 import MachinePower from "./MachinePower";
 import LiveDesktop from "./LiveDesktop";
@@ -1094,6 +1094,17 @@ export function KittyDrawer({
             {kitty.lead && (
               <span class="tag tag-accent flex items-center gap-1" data-testid="lead-tag">
                 <IconCrown size={11} /> {t("Lead")}
+              </span>
+            )}
+            {kitty.independent && (
+              <span
+                class="tag flex items-center gap-1"
+                title={t(
+                  "Answers on WhatsApp on its own: its own notes and files, no chats or work with other kitties, only the lead to talk to.",
+                )}
+                data-testid="independent-tag"
+              >
+                <IconShield size={11} /> {t("On its own")}
               </span>
             )}
             <span class="tag tag-accent max-w-full min-w-0">
