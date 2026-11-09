@@ -264,6 +264,17 @@ kitty is not in the middle of a task and you do not hold its desktop. Either way
 browser in an orderly way (`kitty-page quit`, so everything is written to disk), backs up, makes the
 container anew and puts the backup back. The work, home and Shared folders are on your computer and are never touched (see below).
 
+**Every kitty at once.** When a new image is out, the sidebar shows **New desktop** with how many
+kitties can have it (those with a container computer on this machine; a desktop in the cloud has no
+image here). Its window, also in Settings › Preferences › Updates, lists the desktops; **Look for a
+new desktop** pulls the image now, and **Update all** (or the ones you tick) updates them one after
+the other, with a progress bar and how each one went: updated, at its next start (a stopped one: its
+old container is removed and it is not turned on now), later (working, or you hold its desktop) or
+failed, with the reason. Its home, programs, browser profile (its volume) and Shared folder stay;
+the old image is deleted at the end. The gateway looks for a new image every
+`containers.update_check_hours` even with `auto_update: false`, so it can tell you and you decide
+when to update.
+
 What the kitty's browser knows (cookies, saved passwords, local storage) lives in a **Docker
 volume of its own**, `kitties-browser-<container>`, mounted at `/var/lib/kitty-browser`: it is on
 the container engine's Linux disk and outlives restarts, updates and a container made anew. It is
