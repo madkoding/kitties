@@ -58,6 +58,29 @@ olvida la sesión.
   `_cursiva_`). Una tarea en el escritorio se sigue: las primeras palabras van al tiro, luego
   cada frase en que el kitty dice lo que va a hacer (`⏳ …`, con un minuto entre una y otra como
   mínimo, la más nueva si llegaron varias) y el resultado cuando termina.
+- **Quién es quién.** Cada mensaje llega al kitty con **quién lo escribió**, como nombre y número
+  (`Ana (+56911111111)`), así que las personas de un grupo, o de chats distintos, nunca se confunden
+  entre sí ni contigo. Una **respuesta** dice de quién es el mensaje que cita y qué decía
+  (`(replying to Pedro (+56922222222): "¿vamos mañana?")`, o *your own message* cuando responde al
+  kitty), y una **@mención** se lee como el nombre de a quién nombra. Al kitty se le pide distinguir
+  a las personas **por el número**, nunca por el nombre, que cualquiera puede elegir. El nombre es el
+  que **tú** pones en Ajustes › Conexiones › WhatsApp › **Contactos**; mientras no pongas uno, el
+  que la persona se puso en WhatsApp (el *push name*); sin ninguno, solo el número. Un mensaje de
+  uno de **tus propios números** (Ajustes › Protecciones) se lee como tuyo. La página muestra el
+  autor sobre cada mensaje, y la cita de una respuesta sobre su texto.
+
+  ![Contactos en Ajustes: el nombre con que el kitty lee a cada uno](screenshots/67-whatsapp-contacts.png)
+
+  ![Un chat de grupo: cada mensaje con quién lo escribió, y el mensaje que responde una respuesta](screenshots/68-whatsapp-group-senders.png)
+
+  Los contactos se anotan cuando le escriben al kitty, o en un grupo de la lista (aunque no sea al
+  kitty, para que una respuesta posterior diga de quién son las palabras que cita); los extraños no.
+  Se guardan hasta 1000, sellados con la llave del vault (`contacts.bin`); pasado eso se van los que
+  no se ven hace más tiempo, nunca uno al que pusiste nombre. Un nombre es una línea de 40 caracteres
+  como máximo, sin corchetes, paréntesis, comillas ni etiquetas. Renombrar un contacto cambia cómo
+  el kitty lee sus próximos mensajes; los anteriores conservan el nombre con que llegaron (el número
+  no cambia). Los kitties también pueden escribir a un contacto de la lista por su nombre
+  (`"to": "Ana"`), cuando solo uno lo tiene.
 - **Leído y reacciones.** Un mensaje se marca como leído (ticks azules) cuando el kitty lo toma. Una
   respuesta que es solo un emoji va como reacción al mensaje, y los kitties pueden reaccionar con
   el conector.
@@ -86,7 +109,7 @@ olvida la sesión.
 - **Grupos con su propia lista.** Con grupos activado, el kitty responde solo en los grupos que
   elegiste, y ahí cualquiera le habla mencionando con @ al número de los kitties, respondiendo a uno
   de sus mensajes o nombrando al kitty. Cada grupo tiene su chat (`WhatsApp group: <nombre>`), con
-  cada línea firmada por quien la escribió; la respuesta va al grupo. Una mención en un grupo que no
+  cada mensaje bajo el nombre y número de quien lo escribió; la respuesta va al grupo. Una mención en un grupo que no
   está en la lista se ignora y se cuenta.
 - **Fotos, videos, documentos y audios.** Le llegan al kitty como archivos del chat (hasta 25 MB
   cada uno), con su pie de foto como texto. Una **nota de voz** se pasa a texto con la API de voz
@@ -124,7 +147,7 @@ olvida la sesión.
   @connector whatsapp-web {"action": "status"}
   ```
 
-  `to` es un número o un grupo de la lista (su nombre o su id); `file` es un archivo de la
+  `to` es un número o un grupo de la lista (su nombre o su id), o un contacto de la lista por su nombre; `file` es un archivo de la
   biblioteca, que va con `text` como pie; `voice` manda `text` leído en voz alta como nota de voz
   (se ofrece solo si hay servicio de voz). Sin `to` escribe a quien escribió último (o al único número de la lista). Un envío llega a otras
   personas, así que como todo `send` **queda retenido para tu aprobación** hasta que confíes en el
@@ -162,6 +185,7 @@ El código QR se sigue escaneando desde Ajustes, o se lee con `GET /v1/whatsapp`
 | Encendido o no, la lista, el kitty, el chat de cada número | `<data>/whatsapp/settings.json` | modo 0600, sin secretos |
 | Los mensajes que esperan el fin del silencio | `<data>/whatsapp/queue.bin` | **sellados** como la sesión; se borran al responderlos |
 | Los mensajes retenidos por el límite por hora (los últimos 50) | `<data>/whatsapp/held.bin` | **sellados** como la sesión; se borran al reenviarlos o vaciar la lista |
+| Los contactos (número, tu nombre para ellos, su push name, cuándo se vieron) | `<data>/whatsapp/contacts.bin` | **sellados** como la sesión; 1000 como máximo |
 | La sesión del dispositivo vinculado (sus llaves, las sesiones Signal, los contactos) | `<data>/whatsapp/session.bin` | **sellada** con la llave del vault (AES-256-GCM, atada a su uso); nunca en claro |
 
 La sesión es el estado de la librería guardado en memoria y sellado entero: el gateway no usa un
@@ -182,6 +206,9 @@ el teléfono de nuevo con otro código.
 | `POST /v1/whatsapp/test` | `{"to": "+56912345678"}` manda un mensaje corto a un número de la lista |
 | `DELETE /v1/whatsapp/held` | Vacía la lista de mensajes retenidos |
 | `POST /v1/whatsapp/held/{id}/resend` | Manda de nuevo un mensaje retenido (404 si ya no está en la lista, 429 mientras el límite está lleno) |
+| `GET /v1/whatsapp/contacts` | `{"contacts": [{"number", "name", "push_name", "seen"}]}`, los vistos último primero |
+| `PUT /v1/whatsapp/contacts/{number}` | `{"name": "Ana"}` pone el nombre con que el kitty lo lee (`""` vuelve al push name); un número que nunca escribió puede nombrarse antes (404 al vaciar uno desconocido) |
+| `DELETE /v1/whatsapp/contacts/{number}` | Olvida un contacto (vuelve con su push name cuando escriba de nuevo) |
 
 ## Por dentro
 
