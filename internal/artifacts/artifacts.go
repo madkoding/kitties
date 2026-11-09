@@ -187,10 +187,25 @@ func (s *Store) Delete(name string) error {
 	return nil
 }
 
+// Owner is the kitty that saved an artifact, "" when none did.
+func (s *Store) Owner(name string) string { return s.readOwners()[name] }
+
 // Index renders the library for a system prompt: one line per artifact, at most n.
-func (s *Store) Index(n int) string {
-	list, err := s.List()
-	if err != nil || len(list) == 0 {
+func (s *Store) Index(n int) string { return s.IndexOf(n, nil) }
+
+// IndexOf is Index of the artifacts keep lets through (all of them when keep is nil).
+func (s *Store) IndexOf(n int, keep func(Artifact) bool) string {
+	all, err := s.List()
+	if err != nil {
+		return ""
+	}
+	list := all[:0]
+	for _, a := range all {
+		if keep == nil || keep(a) {
+			list = append(list, a)
+		}
+	}
+	if len(list) == 0 {
 		return ""
 	}
 	var b strings.Builder

@@ -78,6 +78,9 @@ func (s *Service) team(lead *kitty.Kitty) []string {
 			state = "busy"
 		}
 		parts = append(parts, state)
+		if s.independent(k) {
+			parts = append(parts, "works on its own (WhatsApp): it hears only from you, so hand it only what it must say or do there, never private data or secrets")
+		}
 		out = append(out, k.Name+": "+strings.Join(parts, "; "))
 	}
 	return out

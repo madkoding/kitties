@@ -257,6 +257,9 @@ func (s *Service) runAnswerKitty(a action, lead *kitty.Kitty) outcome {
 	if ask == nil {
 		return outcome{action: a, err: target.Name + " has no question waiting for you; to give it work, use delegate"}
 	}
+	if s.independent(target) {
+		text = s.fromLead(text)
+	}
 	msg := fmt.Sprintf("%s answers your question (%s):\n%s\n\nGo on with the task from here.", lead.Name, clip(ask.Question, 300), text)
 	s.wg.Add(1)
 	go func() {

@@ -235,6 +235,7 @@ const dict: Dictionary = {
   "about me": "sobre mim",
   "about the work": "sobre o trabalho",
   shared: "compartilhada",
+  "about people and groups (WhatsApp)": "sobre pessoas e grupos (WhatsApp)",
   "for every kitty": "para todos os kitties",
   "Every kitty knows it": "Todos os kitties a conhecem",
   "Always answer in Spanish": "Responda sempre em português",

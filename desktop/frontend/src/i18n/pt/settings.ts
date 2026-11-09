@@ -408,6 +408,11 @@ const dict: Dictionary = {
   Resend: "Reenviar",
   "These were not sent: more than {limit} messages went in an hour. Resend one when there is room, or raise the limit above. The list is kept sealed, so a restart does not lose it.":
     "Não foram enviadas: saíram mais de {limit} mensagens em uma hora. Reenvie uma quando houver espaço, ou aumente o limite acima. A lista fica selada, então um reinício não a perde.",
+  "Works on its own": "Trabalha por conta própria",
+  "Recommended. The WhatsApp kitty keeps its own notes and files, does not see the other kitties' or the shared notes, and talks only with the lead, which hands it nothing secret. So it can take part in groups without mixing what each side knows.":
+    "Recomendado. O kitty do WhatsApp guarda as suas próprias notas e arquivos, não vê os dos outros kitties nem as notas compartilhadas, e só fala com o principal, que não lhe passa nada secreto. Assim pode participar de grupos sem misturar o que cada lado sabe.",
+  "The lead answers now, and the lead cannot work on its own: choose a kitty of its own for WhatsApp.":
+    "Agora responde o principal, e o principal não pode trabalhar por conta própria: escolha um kitty próprio para o WhatsApp.",
   "Voice notes": "Mensagens de voz",
   "Never: the kitties write": "Nunca: os kitties escrevem",
   "Answer a voice note with one": "Responder uma mensagem de voz com outra",

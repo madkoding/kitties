@@ -1662,3 +1662,45 @@ func TestTheLeadAnswersWhenNoKittyIsChosen(t *testing.T) {
 		t.Fatalf("chat = %+v", s)
 	}
 }
+
+func TestKittiesThatAnswerWorkOnTheirOwn(t *testing.T) {
+	r := newRig(t)
+	if r.b.Independent("k1") {
+		t.Fatal("with no kitty chosen, nobody works on its own")
+	}
+	set := Settings{Kitty: "mimi", Kitties: map[string]string{"+56912345678": "luna"}}
+	if err := r.b.Apply(set, false); err != nil {
+		t.Fatal(err)
+	}
+	if !r.b.Independent("k1") || !r.b.Independent("k2") || r.b.Independent("k3") || r.b.Independent("") {
+		t.Fatal("the kitties that answer on WhatsApp work on their own")
+	}
+	set.ShareWithTeam = true
+	if err := r.b.Apply(set, false); err != nil {
+		t.Fatal(err)
+	}
+	if r.b.Independent("k1") || r.b.Independent("k2") || !r.b.Status().ShareWithTeam {
+		t.Fatal("share_with_team lets them work with the others")
+	}
+}
+
+func TestStatusSaysWhenTheLeadAnswers(t *testing.T) {
+	r := newRig(t)
+	lead := &kitty.Kitty{ID: "k1", Name: "mimi", Lead: true}
+	r.b.opt.Lead = func() *kitty.Kitty { return lead }
+	r.b.opt.Kitty = func(ref string) (*kitty.Kitty, error) {
+		if ref == "k1" || ref == "mimi" {
+			return lead, nil
+		}
+		return kittyOf(ref)
+	}
+	if st := r.b.Status(); !st.LeadAnswers || st.KittyName != "mimi" {
+		t.Fatalf("status = %+v", st)
+	}
+	if err := r.b.Apply(Settings{Kitty: "luna"}, false); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.b.Status(); st.LeadAnswers || st.KittyName != "luna" {
+		t.Fatalf("status = %+v", st)
+	}
+}
