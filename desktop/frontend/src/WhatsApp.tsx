@@ -37,7 +37,7 @@ function pick(s: WhatsAppStatus): WhatsAppSettings {
     quiet_to: s.quiet_to || "",
     voice: s.voice || "",
     share_with_team: !!s.share_with_team,
-    mention_all: s.mention_all === "off" ? "off" : "needed",
+    mention_all: s.mention_all === "asked" ? "asked" : "off",
     mention_all_hours: s.mention_all_hours || 0,
     local_network: !!s.local_network,
     task_minutes: s.task_minutes || 0,
@@ -59,7 +59,7 @@ function same(a: WhatsAppSettings, b: WhatsAppSettings): boolean {
     (a.quiet_to || "") === (b.quiet_to || "") &&
     (a.voice || "") === (b.voice || "") &&
     !!a.share_with_team === !!b.share_with_team &&
-    (a.mention_all || "needed") === (b.mention_all || "needed") &&
+    (a.mention_all || "off") === (b.mention_all || "off") &&
     (a.mention_all_hours || 0) === (b.mention_all_hours || 0) &&
     !!a.local_network === !!b.local_network &&
     (a.task_minutes || 0) === (b.task_minutes || 0) &&
@@ -326,10 +326,10 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
           class="flex flex-wrap items-center gap-2 mt-3 text-sm"
           data-testid="whatsapp-mention-all"
         >
-          {t("Mention everyone (@all)")}
+          <span class="font-semibold">{t("Mention everyone (@all)")}</span>
           <select
             class="px-2 py-1 text-sm"
-            value={want.mention_all || "needed"}
+            value={want.mention_all || "off"}
             disabled={disabled}
             onChange={(e) =>
               setWant({
@@ -339,19 +339,24 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
               })
             }
           >
-            <option value="needed">{t("Only when all must see it")}</option>
-            <option value="off">{t("Never")}</option>
+            <option value="off">{t("Never (recommended)")}</option>
+            <option value="asked">{t("Only when you ask for it, from your own number")}</option>
           </select>
-          {want.mention_all !== "off" && (
-            <label class="flex items-center gap-2">
-              {t("at most once every")}
+          {want.mention_all === "asked" && (
+            <div
+              class="w-full flex flex-wrap items-center gap-2 text-xs text-[var(--warn,#b45309)]"
+              data-testid="whatsapp-mention-all-warning"
+            >
+              {t(
+                "Every member of the group is notified, even those who muted it. Only you can ask for it, writing from one of your own numbers (Settings › Guardrails); nobody else in the group can, and the kitty never does it on its own. At most once per group every:",
+              )}
               <input
                 type="number"
-                min={0}
+                min={12}
                 max={168}
                 class="w-16 px-2 py-1 text-sm"
                 value={want.mention_all_hours || ""}
-                placeholder="4"
+                placeholder="24"
                 disabled={disabled}
                 aria-label={t("Hours between two mentions of everyone")}
                 onInput={(e) =>
@@ -364,12 +369,12 @@ export default function WhatsAppLink({ kitties }: { kitties: Kitty[] }) {
                   })
                 }
               />
-              {t("hours per group")}
-            </label>
+              {t("hours")}
+            </div>
           )}
           <span class="block w-full text-xs text-[var(--t3)]">
             {t(
-              "The kitty answers by quoting the message it answers, which notifies its author, and mentions others by name. It mentions everyone only for a change of plans, an urgent notice or an announcement someone asked for; past the limit, @all goes as plain text.",
+              "The kitty answers by quoting the message it answers, which notifies its author, and tags only the people that message names. With Never, @all goes as plain text and nobody is notified.",
             )}
           </span>
         </div>

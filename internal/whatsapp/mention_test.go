@@ -75,34 +75,47 @@ func (r *rig) ask(t *testing.T, f *fakeClient, id, text string, n int) string {
 // A kitty's answer in a group @mentions the members it names (by name or number) so WhatsApp
 // notifies them, and everyone only when it writes @all and the limit lets it.
 func TestGroupMentions(t *testing.T) {
-	r, f := groupRig(t, Settings{})
+	r, f := groupRig(t, Settings{MentionAll: MentionAllAsked})
 	clock := time.Date(2026, 11, 9, 12, 0, 0, 0, time.UTC)
 	r.b.mu.Lock()
+	r.b.opt.Guard = fakeGuard{trusted: "56911111111"} // Ana is the person
 	r.b.now = func() time.Time { return clock }
 	r.b.mu.Unlock()
 	answer := "@Pedro (+56922222222), Ana pregunta por ti. @Luis no está. Llama al @+56933333333."
 	r.chats.reply = func(string) ([]chat.Turn, error) { return []chat.Turn{{From: "mimi", Text: answer}}, nil }
 
 	got := r.ask(t, f, "a1", "Mimi, avísale a Pedro", 1)
-	want := familia + ": @[56922222222,56933333333] > a1 Mimi, avísale a Pedro | @56922222222, Ana pregunta por ti. @Luis no está. Llama al @56933333333."
+	// Pedro is named by the message: mentioned. Luis is nobody known, and the number was not in the
+	// message: both go as plain names, not as tags.
+	want := familia + ": @[56922222222] > a1 Mimi, avísale a Pedro | @56922222222, Ana pregunta por ti. Luis no está. Llama al +56933333333."
 	if got != want {
 		t.Fatalf("answer =\n%q\nwant\n%q", got, want)
 	}
 
 	// @all mentions everyone once; again within the gap it goes as text only.
 	answer = "@todos mañana no hay clases"
-	if got := r.ask(t, f, "a2", "Mimi avisa a todos", 2); !strings.Contains(got, "@[+all]") {
+	// Pedro is not the person: his ask never mentions everyone.
+	f.push(Event{Kind: EvMessage, Group: true, Chat: familia, From: "56922222222", Name: "Pedro", Text: "Mimi avisa a todos", Mentioned: true,
+		Ref: Ref{Chat: familia, ID: "p2"}})
+	eventually(t, "Pedro's answer", func() bool { return len(f.messages()) == 2 })
+	if got := f.messages()[1]; got != familia+": > p2 Mimi avisa a todos | @todos mañana no hay clases" {
+		t.Fatalf("Pedro's @all = %q", got)
+	}
+	if !strings.Contains(r.logString(), "only an answer to one of the person's own numbers") {
+		t.Fatalf("logs = %s", r.logString())
+	}
+	if got := r.ask(t, f, "a2", "Mimi avisa a todos", 3); !strings.Contains(got, "@[+all]") {
 		t.Fatalf("first @all = %q", got)
 	}
 	clock = clock.Add(time.Hour)
-	if got := r.ask(t, f, "a3", "Mimi avisa a todos otra vez", 3); got != familia+": > a3 Mimi avisa a todos otra vez | @todos mañana no hay clases" {
+	if got := r.ask(t, f, "a3", "Mimi avisa a todos otra vez", 4); got != familia+": > a3 Mimi avisa a todos otra vez | @todos mañana no hay clases" {
 		t.Fatalf("second @all = %q", got)
 	}
-	if !strings.Contains(r.logString(), "less than 4 hours ago") {
+	if !strings.Contains(r.logString(), "less than 24 hours ago") {
 		t.Fatalf("logs = %s", r.logString())
 	}
-	clock = clock.Add(4 * time.Hour)
-	if got := r.ask(t, f, "a4", "Mimi, de nuevo", 4); !strings.Contains(got, "@[+all]") {
+	clock = clock.Add(24 * time.Hour)
+	if got := r.ask(t, f, "a4", "Mimi, avisa a todos de nuevo", 5); !strings.Contains(got, "@[+all]") {
 		t.Fatalf("@all after the gap = %q", got)
 	}
 }
@@ -129,7 +142,7 @@ func TestGroupMentionAmbiguousName(t *testing.T) {
 	f.push(Event{Kind: EvMessage, Group: true, Chat: familia, From: "56944444444", Name: "Pedro", Text: "yo también"})
 	eventually(t, "the second Pedro", func() bool { return len(r.b.Contacts()) == 2 })
 	r.chats.reply = func(string) ([]chat.Turn, error) { return []chat.Turn{{From: "mimi", Text: "@Pedro hola"}}, nil }
-	if got := r.ask(t, f, "a1", "Mimi saluda", 1); got != familia+": > a1 Mimi saluda | @Pedro hola" {
+	if got := r.ask(t, f, "a1", "Mimi saluda a Pedro", 1); got != familia+": > a1 Mimi saluda a Pedro | Pedro hola" {
 		t.Fatalf("answer = %q", got)
 	}
 }
@@ -152,7 +165,7 @@ func TestGroupEtiquette(t *testing.T) {
 	ec := &etiquetteChats{fakeChats: r.chats, manners: map[string]string{}}
 	r.b.opt.Chats = ec
 	r.b.Start(context.Background())
-	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Groups: true, AllowGroups: []string{familia}, MentionAllHours: 6}, true); err != nil {
+	if err := r.b.Apply(Settings{Enabled: true, Kitty: "mimi", Groups: true, AllowGroups: []string{familia}, MentionAll: MentionAllAsked, MentionAllHours: 12}, true); err != nil {
 		t.Fatal(err)
 	}
 	f := r.next(t)
@@ -160,7 +173,7 @@ func TestGroupEtiquette(t *testing.T) {
 	f.push(Event{Kind: EvMessage, Group: true, Chat: familia, From: "56911111111", Name: "Ana", Text: "Mimi hola", Mentioned: true})
 	eventually(t, "the answer", func() bool { return len(f.messages()) == 1 })
 	m := ec.manner("c1")
-	for _, w := range []string{"Ana (+56911111111)", "@all only when every member must see", "once every 6 hours", "reply to the message you answer"} {
+	for _, w := range []string{"never @mention them", "unless the message you answer asks you to call", "@all only when the person you work for", "once every 12 hours"} {
 		if !strings.Contains(m, w) {
 			t.Fatalf("etiquette lacks %q: %s", w, m)
 		}
@@ -175,16 +188,26 @@ func TestMentionSettings(t *testing.T) {
 	if err := r.b.Apply(Settings{Kitty: "mimi", MentionAllHours: MaxMentionAllHours + 1}, true); err == nil {
 		t.Fatal("a gap too long was taken")
 	}
-	if err := r.b.Apply(Settings{Kitty: "mimi", MentionAll: "Never"}, true); err != nil {
+	if err := r.b.Apply(Settings{Kitty: "mimi", MentionAllHours: MinMentionAllHours - 1}, true); err == nil {
+		t.Fatal("a gap too short was taken")
+	}
+	if err := r.b.Apply(Settings{Kitty: "mimi", MentionAll: "Asked"}, true); err != nil {
+		t.Fatal(err)
+	}
+	if st := r.b.Status(); st.MentionAll != MentionAllAsked {
+		t.Fatalf("mode = %q", st.MentionAll)
+	}
+	// The first version's "needed" reads as off.
+	if err := r.b.Apply(Settings{Kitty: "mimi", MentionAll: "needed"}, true); err != nil {
 		t.Fatal(err)
 	}
 	if st := r.b.Status(); st.MentionAll != MentionAllOff {
-		t.Fatalf("mode = %q", st.MentionAll)
+		t.Fatalf("legacy mode = %q", st.MentionAll)
 	}
 	if err := r.b.Apply(Settings{Kitty: "mimi"}, true); err != nil {
 		t.Fatal(err)
 	}
-	if st := r.b.Status(); st.MentionAll != MentionAllNeeded {
+	if st := r.b.Status(); st.MentionAll != MentionAllOff {
 		t.Fatalf("default mode = %q", st.MentionAll)
 	}
 }
@@ -208,7 +231,7 @@ func TestLabelTagNeedsTheName(t *testing.T) {
 	r.b.mu.Lock()
 	defer r.b.mu.Unlock()
 	r.b.contacts["56922222222"] = Contact{Number: "56922222222", PushName: "Pedro", Groups: []string{familia}}
-	text, m := r.b.mentionsLocked(familia, "@Pedro, llama a (+56922222222)")
+	text, m := r.b.mentionsLocked(familia, "@Pedro, llama a (+56922222222)", nil)
 	if text != "@56922222222, llama a (+56922222222)" || len(m.Numbers) != 1 {
 		t.Fatalf("text = %q, %+v", text, m)
 	}
@@ -219,5 +242,53 @@ func TestMentionPart(t *testing.T) {
 	got := mentionPart("hola @56912345678 y todos", m, true)
 	if len(got.Numbers) != 1 || got.Numbers[0] != "56912345678" || got.All {
 		t.Fatalf("part = %+v", got)
+	}
+}
+
+// An answer tags nobody it is not for: not its author (the quote notifies them), not someone the
+// message did not name, and never everyone unless the message asked to tell the group.
+func TestAnswerTagsOnlyWhoItIsFor(t *testing.T) {
+	r, f := groupRig(t, Settings{})
+	f.push(Event{Kind: EvMessage, Group: true, Chat: familia, From: "56933333333", Name: "Luis", Text: "hola"})
+	eventually(t, "Luis", func() bool { return len(r.b.Contacts()) == 2 })
+	r.chats.reply = func(string) ([]chat.Turn, error) {
+		return []chat.Turn{{From: "mimi", Text: "@Ana (+56911111111) claro. @Pedro y @Luis también. @todos ojo."}}, nil
+	}
+	got := r.ask(t, f, "a1", "Mimi, ¿vamos el sábado?", 1)
+	if got != familia+": > a1 Mimi, ¿vamos el sábado? | Ana claro. Pedro y Luis también. @todos ojo." {
+		t.Fatalf("answer = %q", got)
+	}
+	if !strings.Contains(r.logString(), "off in Settings") {
+		t.Fatalf("logs = %s", r.logString())
+	}
+	// The message @mentions Luis: the answer may mention him back, and its quote shows names.
+	f.push(Event{Kind: EvMessage, Group: true, Chat: familia, From: "56911111111", Name: "Ana", Text: "Mimi pregúntale a @222 si viene",
+		Mentioned: true, Mentions: map[string]string{"222": "56933333333"}, Ref: Ref{Chat: familia, ID: "a2"}})
+	eventually(t, "the second answer", func() bool { return len(f.messages()) == 2 })
+	if got := f.messages()[1]; got != familia+": @[56933333333] > a2 Mimi pregúntale a Luis si viene | Ana claro. Pedro y @56933333333 también. @todos ojo." {
+		t.Fatalf("second = %q", got)
+	}
+}
+
+// A message a kitty sends on its own (the connector) may mention any member.
+func TestConnectorMentionsAnyMember(t *testing.T) {
+	r, f := groupRig(t, Settings{})
+	if _, err := (connectorOf{r.b}).Call(context.Background(), map[string]any{"to": familia, "text": "@Pedro te espero"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.messages()[0]; got != familia+": @[56922222222] @56922222222 te espero" {
+		t.Fatalf("sent = %q", got)
+	}
+}
+
+// A kitty never mentions everyone on its own, even with it allowed in Settings.
+func TestConnectorNeverMentionsEveryone(t *testing.T) {
+	r, f := groupRig(t, Settings{MentionAll: MentionAllAsked})
+	out, err := (connectorOf{r.b}).Call(context.Background(), map[string]any{"to": familia, "text": "@todos hola"})
+	if err != nil || !strings.Contains(out, "own numbers") {
+		t.Fatalf("connector = %q, %v", out, err)
+	}
+	if got := f.messages()[0]; got != familia+": @todos hola" {
+		t.Fatalf("sent = %q", got)
 	}
 }

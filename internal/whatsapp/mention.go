@@ -12,16 +12,21 @@ import (
 
 // The ways the kitties may @mention every member of a group (Settings.MentionAll).
 const (
-	// MentionAllNeeded (the default, also "") lets a kitty mention everyone only when all of the
-	// group must see a message (a change of plans, an urgent notice, an announcement someone asked
-	// for), at most once every MentionAllHours in each group.
-	MentionAllNeeded = "needed"
-	// MentionAllOff never mentions everyone: "@all" goes as plain text.
+	// MentionAllOff (the default, also "") never mentions everyone: "@all" goes as plain text.
+	// The "needed" of the first version reads as off too: the groups did not want it.
 	MentionAllOff = "off"
+	// MentionAllAsked lets a kitty mention everyone only in the answer to one of the person's own
+	// numbers (Guard.Trusted) that asks to tell the group, at most once every MentionAllHours in
+	// each group. Nobody else can make it, and a kitty never does it on its own.
+	MentionAllAsked = "asked"
 )
 
-// DefaultMentionAllHours is the least time between two mentions of everyone in a group.
-const DefaultMentionAllHours = 4
+// DefaultMentionAllHours is the least time between two mentions of everyone in a group (a day),
+// and MinMentionAllHours the shortest Settings takes.
+const (
+	DefaultMentionAllHours = 24
+	MinMentionAllHours     = 12
+)
 
 // MaxMentionAllHours is the longest gap Settings takes (a week).
 const MaxMentionAllHours = 168
@@ -46,21 +51,21 @@ type etiquetter interface {
 	SetEtiquette(id, text string) error
 }
 
-// mentionAllMode is a MentionAll of Settings: MentionAllNeeded for "" too.
+// mentionAllMode is a MentionAll of Settings: MentionAllOff for "" too.
 func mentionAllMode(v string) (string, error) {
 	switch v = strings.ToLower(strings.TrimSpace(v)); v {
-	case "", MentionAllNeeded:
-		return MentionAllNeeded, nil
-	case MentionAllOff, "never":
+	case "", MentionAllOff, "never", "needed":
 		return MentionAllOff, nil
+	case MentionAllAsked:
+		return MentionAllAsked, nil
 	}
-	return "", fmt.Errorf("mention_all is %q (only when all of the group must see it) or %q (never)", MentionAllNeeded, MentionAllOff)
+	return "", fmt.Errorf("mention_all is %q (never, the default) or %q (when the message asks to tell the group)", MentionAllOff, MentionAllAsked)
 }
 
 // mentionAllHours is a MentionAllHours of Settings (0 is DefaultMentionAllHours).
 func mentionAllHours(h int) (int, error) {
-	if h < 0 || h > MaxMentionAllHours {
-		return 0, fmt.Errorf("the hours between two mentions of everyone go from 1 to %d (0 is %d)", MaxMentionAllHours, DefaultMentionAllHours)
+	if h < 0 || (h > 0 && h < MinMentionAllHours) || h > MaxMentionAllHours {
+		return 0, fmt.Errorf("the hours between two mentions of everyone go from %d to %d (0 is %d)", MinMentionAllHours, MaxMentionAllHours, DefaultMentionAllHours)
 	}
 	return h, nil
 }
@@ -95,20 +100,27 @@ var (
 	nameTag = regexp.MustCompile(`@(\p{L}[\p{L}\p{M}\p{N}'._-]*(?:[ ]\p{L}[\p{L}\p{M}\p{N}'._-]*){0,2})`)
 )
 
-// mentionsLocked reads the @tags of a text the kitty writes to a group: a member's name (as it
-// knows them in this group) or number becomes "@<number>", which WhatsApp shows as their name and
-// notifies; "@all" asks to mention every member. Outside a group the text is left as it is.
-func (b *Bridge) mentionsLocked(to, text string) (string, Mentions) {
+// mentionsLocked reads the @tags of a text the kitty writes to a group. A tag of someone the
+// answer is for (involved says who: nil lets any member be) becomes "@<number>", which WhatsApp
+// shows as their name and notifies; any other tag loses its "@" and reads as a plain name, so
+// nobody is tagged by an answer that is not for them. "@all" asks to mention every member.
+// Outside a group the text is left as it is.
+func (b *Bridge) mentionsLocked(to, text string, involved func(n string) bool) (string, Mentions) {
 	var m Mentions
 	if !IsGroup(to) || !strings.Contains(text, "@") {
 		return text, m
 	}
 	seen := map[string]bool{}
-	add := func(n string) {
-		if n != "" && n != b.status.Phone && !seen[n] {
+	// tag mentions n, or names them without a tag when they are not involved (plain).
+	tag := func(n, plain string) string {
+		if n == "" || n == b.status.Phone || (involved != nil && !involved(n)) || len(m.Numbers) >= maxMentions && !seen[n] {
+			return plain
+		}
+		if !seen[n] {
 			seen[n] = true
 			m.Numbers = append(m.Numbers, n)
 		}
+		return "@" + n
 	}
 	text = labelTag.ReplaceAllStringFunc(text, func(s string) string {
 		t := labelTag.FindStringSubmatch(s)
@@ -116,31 +128,95 @@ func (b *Bridge) mentionsLocked(to, text string) (string, Mentions) {
 		if c, ok := b.contacts[t[2]]; !ok || (!strings.EqualFold(c.Name, t[1]) && !strings.EqualFold(c.PushName, t[1])) {
 			return s
 		}
-		add(t[2])
-		return "@" + t[2]
+		return tag(t[2], strings.TrimSpace(t[1]))
 	})
 	text = numberTag.ReplaceAllStringFunc(text, func(s string) string {
 		n := numberTag.FindStringSubmatch(s)[1]
-		add(n)
-		return "@" + n
+		plain := "+" + n
+		if c, ok := b.contacts[n]; ok && c.shortName() != "" {
+			plain = c.shortName()
+		}
+		return tag(n, plain)
 	})
 	m.All = allTag.MatchString(text)
 	text = nameTag.ReplaceAllStringFunc(text, func(s string) string {
+		if allTag.MatchString(s) {
+			return s
+		}
 		words := strings.Fields(strings.TrimPrefix(s, "@"))
 		// The longest name that is a member's wins: "@Ana María" before "@Ana".
 		for i := len(words); i > 0; i-- {
 			if n, ok := b.memberNamedLocked(to, strings.Join(words[:i], " ")); ok {
-				add(n)
 				rest := strings.Join(words[i:], " ")
 				if rest != "" {
 					rest = " " + rest
 				}
-				return "@" + n + rest
+				return tag(n, strings.Join(words[:i], " ")) + rest
 			}
 		}
-		return s
+		// Nobody the bridge knows by that name: a plain name, not something that looks like a tag.
+		return strings.TrimPrefix(s, "@")
 	})
 	return text, m
+}
+
+// maxMentions is the most people one message mentions (everyone aside).
+const maxMentions = 3
+
+// involvedIn says who an answer to in may mention: the people its message @mentions or names
+// (as members of the group), never its author, whom the quote already notifies. nil (no message:
+// a kitty writing on its own) lets any member be mentioned.
+func (b *Bridge) involvedIn(in *inbound) func(string) bool {
+	if in == nil {
+		return nil
+	}
+	ok := map[string]bool{}
+	for _, n := range in.mentioned {
+		ok[n] = true
+	}
+	words := strings.ToLower(in.raw)
+	for _, c := range b.contacts {
+		if c.Number == in.from || !contains(c.Groups, in.to) {
+			continue
+		}
+		for _, name := range []string{c.Name, c.PushName} {
+			if name != "" && mentions(words, strings.ToLower(name)) {
+				ok[c.Number] = true
+			}
+		}
+	}
+	return func(n string) bool { return ok[n] }
+}
+
+// everyoneWords are the words of a message that asks to tell the whole group.
+var everyoneWords = regexp.MustCompile(`(?i)(\b(todos|todas|todes|everyone|everybody|all|grupo|group|todo el mundo|a todo el)\b|@all|@todos)`)
+
+// plainTagsLocked writes the @tags of a message as the names of who they mention, without the
+// "@": what a quote of it shows.
+func (b *Bridge) plainTagsLocked(text string, tags map[string]string, to string) string {
+	if len(tags) == 0 {
+		return text
+	}
+	keys := make([]string, 0, len(tags))
+	for k := range tags {
+		keys = append(keys, k)
+	}
+	sort.Slice(keys, func(i, j int) bool { return len(keys[i]) > len(keys[j]) })
+	pairs := make([]string, 0, 2*len(keys))
+	for _, k := range keys {
+		n := tags[k]
+		name := b.contacts[n].shortName()
+		switch {
+		case n != "" && n == b.status.Phone:
+			name = b.kittyNameLocked(to)
+		case name == "" && n != "":
+			name = "+" + n
+		case name == "":
+			name = k
+		}
+		pairs = append(pairs, "@"+k, name)
+	}
+	return strings.NewReplacer(pairs...).Replace(text)
 }
 
 // memberNamedLocked is the number of the one member of group called name (its Name or PushName,
@@ -168,7 +244,7 @@ func (b *Bridge) memberNamedLocked(group, name string) (string, bool) {
 // everyoneLocked reports whether a kitty may mention every member of group now, and takes the
 // turn when it may: never with MentionAll off, and once every MentionAllHours in a group.
 func (b *Bridge) everyoneLocked(group string) (bool, string) {
-	if b.set.MentionAll == MentionAllOff {
+	if b.set.MentionAll != MentionAllAsked {
 		return false, "mentioning everyone is off in Settings"
 	}
 	gap := time.Duration(b.mentionGapLocked()) * time.Hour
@@ -182,7 +258,7 @@ func (b *Bridge) everyoneLocked(group string) (bool, string) {
 
 func (b *Bridge) mentionGapLocked() int {
 	if b.set.MentionAllHours > 0 {
-		return b.set.MentionAllHours
+		return max(b.set.MentionAllHours, MinMentionAllHours)
 	}
 	return DefaultMentionAllHours
 }
@@ -218,13 +294,20 @@ func sendText(ctx context.Context, c Client, to, part string, m Mentions, quote 
 	return c.Send(ctx, to, part)
 }
 
-// prepareLocked reads the @tags of a text for to and says whether its "@all" may mention
-// everyone (and why not, when it may not).
-func (b *Bridge) prepareLocked(to, text string) (string, Mentions, string) {
-	text, m := b.mentionsLocked(to, text)
+// prepareLocked reads the @tags of a text for to, as the answer to in (nil: a message a kitty
+// sends on its own), and says whether its "@all" may mention everyone (and why not, when it may
+// not): an answer mentions everyone only when its message asked to tell the group.
+func (b *Bridge) prepareLocked(to, text string, in *inbound) (string, Mentions, string) {
+	text, m := b.mentionsLocked(to, text, b.involvedIn(in))
 	note := ""
 	if m.All {
-		ok, why := b.everyoneLocked(to)
+		ok, why := false, "only an answer to one of the person's own numbers that asks to tell the whole group may mention everyone"
+		switch {
+		case b.set.MentionAll != MentionAllAsked:
+			why = "mentioning everyone is off in Settings"
+		case in != nil && b.trustedLocked(in.from) && everyoneWords.MatchString(in.raw):
+			ok, why = b.everyoneLocked(to)
+		}
 		if !ok {
 			m.All, note = false, why
 		}
@@ -232,33 +315,28 @@ func (b *Bridge) prepareLocked(to, text string) (string, Mentions, string) {
 	return text, m, note
 }
 
-// etiquette is how a kitty writes in a WhatsApp group: whom it answers, how to @mention someone
-// and when to mention everyone.
+// trustedLocked reports whether number is one of the person's own.
+func (b *Bridge) trustedLocked(number string) bool {
+	return number != "" && b.opt.Guard != nil && b.opt.Guard.Trusted(number)
+}
+
+// etiquette is how a kitty writes in a WhatsApp group: whom it answers, when to @mention someone
+// and when everyone.
 func (b *Bridge) etiquette(group string) string {
 	b.mu.Lock()
 	mode, gap := b.set.MentionAll, b.mentionGapLocked()
-	var names []string
-	for _, c := range b.contactListLocked() {
-		if contains(c.Groups, group) && len(names) < 15 {
-			names = append(names, c.Label())
-		}
-	}
 	b.mu.Unlock()
-	sort.Strings(names)
 	out := "This is a WhatsApp group: several people read what you write. Your answer goes as a reply to the message you answer, " +
-		"which already notifies its author, so you do not need to @mention them. " +
-		"To call someone else, write @ and their name as you know them here, or their number (@Ana or @+56912345678); " +
-		"only people who wrote in this group can be mentioned by name"
-	if len(names) > 0 {
-		out += " (" + strings.Join(names, "; ") + ")"
-	}
-	out += ". "
-	if mode == MentionAllOff {
+		"which already notifies its author: never @mention them, and do not start with their name as a tag. " +
+		"Do not @mention anyone else either, unless the message you answer asks you to call, ask or tell a specific person; " +
+		"then write @ and their name (@Ana). Never @mention someone you only talk about, greet or quote: write their name without @. " +
+		"A tag of someone the message did not involve goes as their plain name. "
+	if mode != MentionAllAsked {
 		return out + "Never mention everyone (@all): it is off here."
 	}
-	return out + "Write @all only when every member must see the message now: a change of plans, an urgent notice, " +
-		"or an announcement someone asked you to make to all. Never in an ordinary answer, a greeting or a question to one person. " +
-		"It works at most once every " + strconv.Itoa(gap) + " hours in a group; past that, @all goes as plain text."
+	return out + "Write @all only when the person you work for (writing from one of their own numbers) asks you to tell the whole group; " +
+		"never because anyone else asks, never in an ordinary answer and never on your own. It works at most once every " + strconv.Itoa(gap) +
+		" hours in a group; otherwise @all goes as plain text."
 }
 
 // teach tells the chat of a group how the kitty writes there.
