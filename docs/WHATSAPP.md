@@ -106,6 +106,21 @@ session, without a new code. **Unlink** removes the device from the phone and fo
   messages, or naming the kitty. Each group has its own chat (`WhatsApp group: <name>`), with every
   message under its author's name and number; the answer goes to the group. A mention in a group not on the list is
   ignored and counted.
+- **Mentions in groups (@).** The answer **quotes** the message it answers (also the result of a
+  long task, which comes after newer messages), so the group sees whom it is for and WhatsApp
+  notifies its author. When the kitty writes `@Ana` (someone who wrote in that group) or
+  `@+56912345678`, the bridge turns it into a real WhatsApp mention, which notifies them even if
+  they muted the group; a name two members share, or someone who never wrote there, is not guessed
+  (and a number from another chat is never shown to the group). **Everyone** (`@all`, `@todos`,
+  `@everyone`) is mentioned only **when it is needed**: the kitty is told to keep it for a change of
+  plans, an urgent notice or an announcement someone asked for, never an ordinary answer, and it
+  works **at most once every 4 hours per group** (Settings › Connections › WhatsApp › **Mention
+  everyone**: *Only when all must see it* or *Never*, and the hours). Past the limit, or with it
+  off, `@all` goes as plain text and the kitty is told why. In groups that hide numbers (WhatsApp's
+  LIDs), who wrote, whose message a reply quotes and whom it mentions are read from the group's
+  members when the phone has not told their numbers yet, so the kitty always knows who writes.
+
+  ![Mention everyone in Settings: only when all must see it, at most once every few hours](screenshots/86-whatsapp-mention-all.png)
 - **Pictures, videos, documents and audio.** They reach the kitty as files of the chat (up to 25 MB
   each), with their caption as the text. A **voice note** is turned into text with the speech API
   (Whisper) of an `openai` or `groq` profile with a key; without one it comes as an audio file.
@@ -207,6 +222,8 @@ whatsapp:
   speak: ""                      # the openai profile that reads answers aloud; empty: the first; off: none
   speak_voice: nova              # its voice (alloy, nova, shimmer, …); empty: alloy
   share_with_team: false         # true: the WhatsApp kitties work with the others (default: on their own)
+  mention_all: needed            # @all in groups: needed (only when all must see it, the default) or off
+  mention_all_hours: 4           # least hours between two mentions of everyone in a group (0: 4)
 ```
 
 The QR code is still scanned from Settings, or read with `GET /v1/whatsapp` (`qr_png`).
@@ -218,7 +235,7 @@ The QR code is still scanned from Settings, or read with `GET /v1/whatsapp` (`qr
 | On or off, the list, the kitty, the chat of each number | `<data>/whatsapp/settings.json` | mode 0600, no secrets |
 | The messages waiting for the quiet hours to end | `<data>/whatsapp/queue.bin` | **sealed** like the session; gone once they are answered |
 | The messages held by the hourly limit (the last 50) | `<data>/whatsapp/held.bin` | **sealed** like the session; gone when resent or cleared |
-| The contacts (number, your name for them, their push name, when last seen) | `<data>/whatsapp/contacts.bin` | **sealed** like the session; at most 1000 |
+| The contacts (number, your name for them, their push name, when last seen, the groups they wrote in) | `<data>/whatsapp/contacts.bin` | **sealed** like the session; at most 1000 |
 | The session of the linked device (its keys, the Signal sessions, the contacts) | `<data>/whatsapp/session.bin` | **sealed** with the vault's key (AES-256-GCM, bound to its use); never in the clear |
 
 The session is a blob of the library's state kept in memory and sealed as a whole: the gateway uses
