@@ -66,6 +66,22 @@ func (s *Service) Expose(id, who string, on bool) error {
 	return s.save(sess)
 }
 
+// SetEtiquette sets how to write in a chat, as the channel it is bound to says ("" clears it).
+func (s *Service) SetEtiquette(id, text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	if !ok {
+		return fmt.Errorf("%w %q", ErrNotFound, id)
+	}
+	text = strings.TrimSpace(text)
+	if sess.Etiquette == text {
+		return nil
+	}
+	sess.Etiquette = text
+	return s.save(sess)
+}
+
 // guarded reports whether a chat is exposed and the guard is on for it.
 func (s *Service) guarded(sess *Session) bool {
 	return sess != nil && sess.Exposed && s.guard != nil && s.guard.On()
@@ -171,7 +187,7 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 	if err != nil {
 		return Turn{}, nil, err
 	}
-	system += descriptionPrompt(sess) + s.sendersPrompt(sess)
+	system += descriptionPrompt(sess) + s.sendersPrompt(sess) + etiquettePrompt(sess)
 	if sess.Summary != "" {
 		system += fmt.Sprintf("\nEarlier in this conversation (a summary of its first %d messages):\n%s\n", sess.SummaryUpTo, sess.Summary)
 	}

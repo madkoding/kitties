@@ -85,6 +85,14 @@ func descriptionPrompt(sess *Session) string {
 	return "\nWhat this chat is for, in the person's words (its description; the base of everything you do here, it overrides what earlier messages assumed, and the person may change it at any time):\n" + sess.Description + "\n"
 }
 
+// etiquettePrompt is how to write in the chat, as its channel says (empty when it says nothing).
+func etiquettePrompt(sess *Session) string {
+	if sess.Etiquette == "" {
+		return ""
+	}
+	return "\nHOW TO WRITE HERE: " + sess.Etiquette + "\n"
+}
+
 // sendersPrompt tells the kitty, in a chat where people other than the person write (WhatsApp
 // contacts, a group), how to tell them apart: by the author of each message, whose number says who
 // they are. Empty in a chat with only the person.
