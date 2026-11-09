@@ -136,6 +136,29 @@ olvida la sesión.
   dice. Tu propio número conserva el kitty completo cuando lo agregas en Ajustes › Protecciones ›
   *Tus propios números de WhatsApp*. Todo lo que envía el puente sale sin los secretos conocidos.
   Ver [GUARDRAILS.es.md](GUARDRAILS.es.md).
+- **El kitty de WhatsApp trabaja por su cuenta.** El kitty que contesta aquí (y cada kitty que
+  tenga un número o un grupo propio) es, por defecto, un principal propio junto al kitty principal,
+  así lo que oye en grupos y de contactos nunca se mezcla con lo que saben los otros kitties, ni al
+  revés:
+  - **Su propia memoria.** No ve las notas compartidas ni puede agregarles. Además de sus notas de
+    siempre guarda notas sobre **personas** (quién es quién, de qué trata un grupo): en los chats con
+    contactos y grupos son las únicas notas que lee y escribe, así puede seguir un grupo en el tiempo
+    sin llevar ahí nada tuyo. Una destilación nunca las mezcla con las tuyas.
+  - **Sus propios archivos.** Solo ve los archivos de la biblioteca que guardó él; los otros kitties
+    no ven los suyos.
+  - **Sin otros kitties.** Nunca está en un chat con otros kitties (agregarlo a uno se rechaza), no
+    les pasa trabajo y ninguno le pasa trabajo a él.
+  - **Un solo canal: el principal.** Desde sus propios hilos le pregunta al principal
+    (`ask_lead`); el principal le responde (`answer_kitty`) o le pasa qué decir o hacer en WhatsApp
+    (`delegate`). Todo lo que el principal le manda pasa antes por las protecciones (no le llega
+    ningún secreto que conozca el gateway), con el recordatorio de no repetir nada privado en el
+    chat de un contacto o en un grupo. La lista del equipo del principal dice que trabaja por su
+    cuenta, y lo que tenga que contarte llega a los Reportes del principal como el de cualquier kitty.
+
+  Ajustes › Conexiones › WhatsApp › **Trabaja por su cuenta** (activado por defecto;
+  `share_with_team: true` en el archivo lo desactiva). **El principal nunca trabaja por su cuenta**:
+  dirige a los demás. Sin kitty elegido contesta el principal, protegido como cualquier chat
+  expuesto, y Ajustes sugiere elegir un kitty propio para WhatsApp.
 - **Los kitties escriben con el conector.** Mientras el vínculo está conectado, `whatsapp-web` se
   ofrece a los kitties (los que tienen su lista de conexiones vacía o lo nombran):
 
@@ -174,6 +197,7 @@ whatsapp:
   voice: mirror                  # responder con notas de voz: mirror (a notas de voz), always, u off (por defecto)
   speak: ""                      # el perfil openai que lee las respuestas; vacío: el primero; off: ninguno
   speak_voice: nova              # su voz (alloy, nova, shimmer, …); vacío: alloy
+  share_with_team: false         # true: los kitties de WhatsApp trabajan con los demás (por defecto: por su cuenta)
 ```
 
 El código QR se sigue escaneando desde Ajustes, o se lee con `GET /v1/whatsapp` (`qr_png`).

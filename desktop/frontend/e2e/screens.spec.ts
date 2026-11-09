@@ -3690,6 +3690,8 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
   await box.getByLabel("Quiet hours start").fill("22:00");
   await box.getByLabel("Quiet hours end").fill("08:00");
   await box.getByTestId("whatsapp-voice").locator("select").selectOption("mirror");
+  // The WhatsApp kitty works on its own unless the person says otherwise.
+  await expect(box.getByTestId("whatsapp-independent").locator("input")).toBeChecked();
   // Turning it on the first time shows the welcome: cancelling it leaves it off.
   await box.getByTestId("whatsapp-enabled").click();
   const welcome = page.getByTestId("whatsapp-welcome");
@@ -3720,6 +3722,7 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
       quiet_from: "22:00",
       quiet_to: "08:00",
       voice: "mirror",
+      share_with_team: false,
       accept_risk: true,
     },
   ]);

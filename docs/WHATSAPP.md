@@ -130,6 +130,27 @@ session, without a new code. **Unlink** removes the device from the phone and fo
   Your own number keeps the whole kitty once you add it to Settings › Guardrails › *Your own WhatsApp
   numbers*. Everything the bridge sends leaves without the known secrets. See
   [GUARDRAILS.md](GUARDRAILS.md).
+- **The WhatsApp kitty works on its own.** The kitty that answers here (and each kitty given a
+  number or a group) is, by default, a principal of its own beside the lead, so what it hears in
+  groups and from contacts never mixes with what the other kitties know, and the other way round:
+  - **Its own memory.** It does not see the shared notes and cannot add to them. Besides its usual
+    notes it keeps notes about **people** (who is who, what a group is about): in the chats with
+    contacts and groups those are the only notes it reads and writes, so it can follow a group over
+    time without carrying anything of yours there. A distillation never mixes them with yours.
+  - **Its own files.** It sees only the library files it saved; the other kitties do not see its.
+  - **No other kitties.** It is never in a chat with other kitties (adding it to one is refused),
+    hands no work to them, and none of them hands it work.
+  - **One channel: the lead.** From its own threads it asks the lead (`ask_lead`); the lead answers
+    it (`answer_kitty`) or hands it what to say or do on WhatsApp (`delegate`). Whatever the lead
+    sends it goes through the guardrails first (no secret the gateway knows reaches it) with a
+    reminder not to repeat anything private in a contact's chat or a group. The lead's roster says
+    the kitty works on its own, and what it has to tell you reaches the lead's Reports as any
+    kitty's does.
+
+  Settings › Connections › WhatsApp › **Works on its own** (on by default; `share_with_team: true`
+  in the file turns it off). **The lead never works on its own**: it leads the others. With no
+  kitty chosen the lead answers, guarded as any exposed chat, and Settings suggests choosing a kitty
+  of its own for WhatsApp.
 - **The kitties write with the connector.** While the link is connected, `whatsapp-web` is offered
   to the kitties (those whose connections list is empty or names it):
 
@@ -166,6 +187,7 @@ whatsapp:
   voice: mirror                  # answer with voice notes: mirror (to voice notes), always, or off (the default)
   speak: ""                      # the openai profile that reads answers aloud; empty: the first; off: none
   speak_voice: nova              # its voice (alloy, nova, shimmer, …); empty: alloy
+  share_with_team: false         # true: the WhatsApp kitties work with the others (default: on their own)
 ```
 
 The QR code is still scanned from Settings, or read with `GET /v1/whatsapp` (`qr_png`).
