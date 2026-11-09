@@ -15,11 +15,15 @@ func (c *fakeChats) sent() (texts, senders []string) {
 }
 
 func TestContactLabelAndCleanName(t *testing.T) {
-	for c, want := range map[Contact]string{
-		{Number: "569"}:                               "+569",
-		{Number: "569", PushName: "Ana"}:              "Ana (+569)",
-		{Number: "569", PushName: "Ana", Name: "Tía"}: "Tía (+569)",
+	for _, tc := range []struct {
+		c    Contact
+		want string
+	}{
+		{Contact{Number: "569"}, "+569"},
+		{Contact{Number: "569", PushName: "Ana"}, "Ana (+569)"},
+		{Contact{Number: "569", PushName: "Ana", Name: "Tía"}, "Tía (+569)"},
 	} {
+		c, want := tc.c, tc.want
 		if got := c.Label(); got != want {
 			t.Errorf("%+v = %q, want %q", c, got, want)
 		}

@@ -24,6 +24,9 @@ type Contact struct {
 	PushName string `json:"push_name,omitempty"`
 	// Seen is when they last wrote (in a chat with the kitty or in a group it is in).
 	Seen time.Time `json:"seen,omitzero"`
+	// Groups are the groups (JIDs) they wrote in, the last first: the kitty may @mention them
+	// there by name.
+	Groups []string `json:"groups,omitempty"`
 }
 
 // Label is how the kitty reads a contact: "Ana (+56912345678)". The name is Name, then PushName;
