@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -47,11 +48,16 @@ type Client struct {
 	// flushEvery is how often a changed session is handed out to be kept.
 	flushEvery time.Duration
 
-	mu   sync.Mutex
-	conn conn
+	mu     sync.Mutex
+	conn   conn
+	dev    *store.Device
+	groups *groupCache
 }
 
-var _ whatsapp.Client = (*Client)(nil)
+var (
+	_ whatsapp.Client    = (*Client)(nil)
+	_ whatsapp.Mentioner = (*Client)(nil)
+)
 
 // New is a connection to WhatsApp, for whatsapp.Options.NewClient.
 func New() whatsapp.Client {
@@ -70,8 +76,9 @@ func (c *Client) Run(ctx context.Context, session []byte, emit func(whatsapp.Eve
 		return err
 	}
 	cn := c.newConn(dev)
+	groups := &groupCache{groups: map[types.JID]*groupInfo{}}
 	c.mu.Lock()
-	c.conn = cn
+	c.conn, c.dev, c.groups = cn, dev, groups
 	c.mu.Unlock()
 	defer func() {
 		c.mu.Lock()
@@ -79,13 +86,19 @@ func (c *Client) Run(ctx context.Context, session []byte, emit func(whatsapp.Eve
 		c.mu.Unlock()
 	}()
 	over := make(chan struct{}, 1)
-	names := groupNames{names: map[types.JID]string{}}
 	cn.AddEventHandler(func(evt any) {
 		evs := translate(st, dev, evt)
 		if m, ok := evt.(*events.Message); ok && len(evs) == 1 {
 			evs[0].Files = media(ctx, cn, m.Message)
 			if m.Info.IsGroup {
-				evs[0].ChatName = names.of(ctx, cn, m.Info.Chat.ToNonAD())
+				chat := m.Info.Chat.ToNonAD()
+				evs[0].ChatName = groups.of(ctx, cn, chat, forever).name
+				// Who wrote, whose message it answers and whom it mentions come as WhatsApp's
+				// hidden ids in a group that hides numbers: the members list says their numbers
+				// when the store does not know them yet.
+				if unresolved(&evs[0], m) {
+					fill(&evs[0], m, groups.of(ctx, cn, chat, membersAge))
+				}
 			}
 		}
 		for _, ev := range evs {
@@ -147,28 +160,122 @@ func (c *Client) Run(ctx context.Context, session []byte, emit func(whatsapp.Eve
 	}
 }
 
-// groupNames are the names of the groups that wrote, asked once each.
-type groupNames struct {
-	mu    sync.Mutex
-	names map[types.JID]string
+// forever and membersAge are how old a group's info may be: its name is asked once, its members
+// again after a few minutes (people come and go).
+const (
+	forever    = time.Duration(1<<63 - 1)
+	membersAge = 10 * time.Minute
+)
+
+// groupInfo is what a group says of itself: its name, and the number and JID of each member.
+type groupInfo struct {
+	name string
+	// members maps a member's phone number to the JID to mention them by (their LID in a group
+	// that hides numbers); lids maps a member's hidden id to their number.
+	members map[string]types.JID
+	lids    map[string]string
+	at      time.Time
 }
 
-func (g *groupNames) of(ctx context.Context, cn conn, jid types.JID) string {
+// groupCache keeps the info of the groups that wrote or that a kitty writes to.
+type groupCache struct {
+	mu     sync.Mutex
+	groups map[types.JID]*groupInfo
+}
+
+// of is the info of a group, asked again when it is older than maxAge (an empty one when it cannot
+// be asked).
+func (g *groupCache) of(ctx context.Context, cn conn, jid types.JID, maxAge time.Duration) groupInfo {
 	g.mu.Lock()
-	name, ok := g.names[jid]
+	info, ok := g.groups[jid]
 	g.mu.Unlock()
-	if ok {
-		return name
+	if ok && time.Since(info.at) < maxAge {
+		return *info
 	}
 	gctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	if info, err := cn.GetGroupInfo(gctx, jid); err == nil && info != nil {
-		name = info.Name
+	fresh := &groupInfo{members: map[string]types.JID{}, lids: map[string]string{}, at: time.Now()}
+	if gi, err := cn.GetGroupInfo(gctx, jid); err == nil && gi != nil {
+		fresh.name = gi.Name
+		for _, p := range gi.Participants {
+			phone := p.PhoneNumber.User
+			if phone == "" && p.JID.Server == types.DefaultUserServer {
+				phone = p.JID.User
+			}
+			if phone == "" {
+				continue
+			}
+			fresh.members[phone] = p.JID
+			if lid := p.LID.User; lid != "" {
+				fresh.lids[lid] = phone
+			} else if p.JID.Server == types.HiddenUserServer {
+				fresh.lids[p.JID.User] = phone
+			}
+		}
+	} else if ok {
+		// It could not be asked: the old info stays, asked again next time.
+		return *info
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	g.names[jid] = name
-	return name
+	g.groups[jid] = fresh
+	return *fresh
+}
+
+// unresolved reports whether a group message has a sender, a quoted author or a mention whose
+// number is not known.
+func unresolved(ev *whatsapp.Event, m *events.Message) bool {
+	if ev.From == "" {
+		return true
+	}
+	c := contextOf(m.Message)
+	if c == nil {
+		return false
+	}
+	if c.GetParticipant() != "" && ev.Quote != nil && ev.Quote.From == "" {
+		return true
+	}
+	return len(c.GetMentionedJID()) > len(ev.Mentions)
+}
+
+// fill gives a group message the numbers of its sender, quoted author and mentions from the
+// group's members, where the store did not know them.
+func fill(ev *whatsapp.Event, m *events.Message, info groupInfo) {
+	phone := func(j types.JID) string {
+		if j.Server == types.DefaultUserServer {
+			return j.User
+		}
+		return info.lids[j.User]
+	}
+	if ev.From == "" {
+		for _, j := range []types.JID{m.Info.Sender, m.Info.SenderAlt} {
+			if n := phone(j); n != "" {
+				ev.From = n
+				break
+			}
+		}
+	}
+	c := contextOf(m.Message)
+	if c == nil {
+		return
+	}
+	if ev.Quote != nil && ev.Quote.From == "" {
+		if j, err := types.ParseJID(c.GetParticipant()); err == nil {
+			ev.Quote.From = phone(j)
+		}
+	}
+	for _, s := range c.GetMentionedJID() {
+		j, err := types.ParseJID(s)
+		if err != nil || j.User == "" || ev.Mentions[j.User] != "" {
+			continue
+		}
+		if n := phone(j); n != "" {
+			if ev.Mentions == nil {
+				ev.Mentions = map[string]string{}
+			}
+			ev.Mentions[j.User] = n
+		}
+	}
 }
 
 // flush hands out the session when it changed.
@@ -586,6 +693,101 @@ func (c *Client) SendReply(ctx context.Context, to, text string, ref whatsapp.Re
 	}
 	_, err = cn.SendMessage(ctx, jid, &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ctxInfo}})
 	return err
+}
+
+// SendMentions implements whatsapp.Mentioner: the members m names are mentioned by the JID the
+// group knows them by (their "@<number>" in the text becomes "@<that id>", which WhatsApp shows as
+// their name), and m.All mentions every member but this number, unseen.
+func (c *Client) SendMentions(ctx context.Context, to, text string, m whatsapp.Mentions, ref whatsapp.Ref, quoted string) error {
+	cn, err := c.current()
+	if err != nil {
+		return err
+	}
+	jid, err := jidOf(to)
+	if err != nil {
+		return err
+	}
+	c.mu.Lock()
+	groups, dev := c.groups, c.dev
+	c.mu.Unlock()
+	info := groupInfo{}
+	if groups != nil && jid.Server == types.GroupServer {
+		info = groups.of(ctx, cn, jid, membersAge)
+	}
+	ctxInfo := &waE2E.ContextInfo{}
+	seen := map[string]bool{}
+	mention := func(j types.JID) {
+		if s := j.String(); !seen[s] {
+			seen[s] = true
+			ctxInfo.MentionedJID = append(ctxInfo.MentionedJID, s)
+		}
+	}
+	for _, n := range m.Numbers {
+		member, ok := info.members[n]
+		switch {
+		case len(info.members) == 0:
+			member = types.NewJID(n, types.DefaultUserServer) // the members could not be asked
+		case !ok:
+			continue // not a member: not mentioned (their number stays as text)
+		}
+		if member.User != n {
+			text = replaceTag(text, n, member.User)
+		}
+		mention(member)
+	}
+	if m.All {
+		own := map[string]bool{}
+		if dev != nil {
+			own[dev.GetJID().User], own[dev.GetLID().User] = true, true
+		}
+		phones := make([]string, 0, len(info.members))
+		for n := range info.members {
+			phones = append(phones, n)
+		}
+		sort.Strings(phones)
+		for _, n := range phones {
+			if j := info.members[n]; !own[n] && !own[j.User] {
+				mention(j)
+			}
+		}
+	}
+	if ref.ID != "" {
+		ctxInfo.StanzaID = proto.String(ref.ID)
+		ctxInfo.QuotedMessage = &waE2E.Message{Conversation: proto.String(quoted)}
+		if ref.Sender != "" {
+			ctxInfo.Participant = proto.String(ref.Sender)
+		}
+		if ref.Chat != "" {
+			ctxInfo.RemoteJID = proto.String(ref.Chat)
+		}
+	}
+	if len(ctxInfo.MentionedJID) == 0 && ref.ID == "" {
+		_, err = cn.SendMessage(ctx, jid, &waE2E.Message{Conversation: proto.String(text)})
+		return err
+	}
+	_, err = cn.SendMessage(ctx, jid, &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ctxInfo}})
+	return err
+}
+
+// replaceTag writes "@from" of a text as "@to", only where it is a whole tag.
+func replaceTag(text, from, to string) string {
+	var out strings.Builder
+	tag := "@" + from
+	for {
+		i := strings.Index(text, tag)
+		if i < 0 {
+			out.WriteString(text)
+			return out.String()
+		}
+		end := i + len(tag)
+		out.WriteString(text[:i])
+		if end < len(text) && text[end] >= '0' && text[end] <= '9' {
+			out.WriteString(tag)
+		} else {
+			out.WriteString("@" + to)
+		}
+		text = text[end:]
+	}
 }
 
 // refOf is the chat and the sender of a message the bridge points at.
