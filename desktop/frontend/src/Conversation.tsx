@@ -7,6 +7,7 @@ import { stepArgs, stepSentence, when } from "./format";
 import { actionLabel, plainError } from "./friendly";
 import { gatewayText } from "./gatewayText";
 import { t } from "./i18n";
+import { splitQuote } from "./quote";
 import { useAllSteps, useTechDetails } from "./prefs";
 import PixelCat, { type Mood } from "./PixelCat";
 import ConnectorLogo from "./ConnectorLogo";
@@ -783,10 +784,13 @@ function TurnCard({
   const approval = turn.from === "approval";
   const system = scheduler || approval;
   const tech = useTechDetails();
+  // A contact's reply on WhatsApp starts with the message it answers: "(replying to Ana …)".
+  const [quote, body] = mine && turn.sender ? splitQuote(turn.text) : ["", turn.text];
   return (
     <div
       class={`msg ${mine || system ? "user" : "agent"} ${scheduler ? "scheduler" : ""} ${approval ? "approval-turn" : ""} ${turn.working ? "working" : ""} ${turn.needs_help ? "needs-help" : ""}`}
-      data-who={mine ? user : system ? turn.from : turn.from}
+      // A WhatsApp contact's message says who wrote it, not the person's name.
+      data-who={mine ? turn.sender || user : turn.from}
     >
       {!mine && !system && (
         <span class="msg-cat">
@@ -812,9 +816,14 @@ function TurnCard({
           })}
         </div>
       )}
+      {quote && (
+        <div class="msg-quote" data-testid="msg-quote">
+          {quote}
+        </div>
+      )}
       {turn.text && (
         <Text
-          text={mine ? turn.text : gatewayText(turn.text)}
+          text={mine ? body : gatewayText(turn.text)}
           onOpen={onArtifact}
           rich={!mine && !system}
         />

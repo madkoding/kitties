@@ -3801,6 +3801,128 @@ test("Settings: WhatsApp welcomes with the risk, links with a QR code and keeps 
   await expect(page.getByTestId("whatsapp-welcome")).toHaveCount(0);
 });
 
+test("WhatsApp: contacts are named in Settings, and a group chat says who wrote each message", async ({
+  page,
+}) => {
+  const group = "120363012345678901@g.us";
+  const wa = {
+    enabled: true,
+    allow: ["56911111111"],
+    kitty: ids.mimi,
+    kitty_name: "mimi",
+    groups: true,
+    allow_groups: [group],
+    state: "connected",
+    phone: "15550001234",
+    linked: true,
+    ignored: 0,
+    last_message: "2026-11-09T15:10:00Z",
+    seen_groups: [{ id: group, name: "Familia" }],
+    can_change: true,
+    can_speak: true,
+    risk_accepted: true,
+  };
+  let contacts: { number: string; name?: string; push_name?: string; seen?: string }[] = [
+    { number: "56911111111", push_name: "Ana", seen: "2026-11-09T15:10:00Z" },
+    { number: "56922222222", push_name: "Pedro", seen: "2026-11-09T15:06:00Z" },
+    { number: "56933333333", seen: "2026-11-08T21:00:00Z" },
+  ];
+  const changes: string[] = [];
+  await page.route("**/v1/whatsapp", (route) => route.fulfill({ json: wa }));
+  await page.route("**/v1/whatsapp/contacts", (route) => route.fulfill({ json: { contacts } }));
+  await page.route("**/v1/whatsapp/contacts/*", (route) => {
+    const req = route.request();
+    const number = decodeURIComponent(req.url().split("/").pop() || "");
+    if (req.method() === "DELETE") {
+      changes.push("forget " + number);
+      contacts = contacts.filter((c) => c.number !== number);
+      return route.fulfill({ status: 204, body: "" });
+    }
+    const { name } = req.postDataJSON() as { name: string };
+    changes.push(`name ${number} ${name}`);
+    contacts = contacts.map((c) => (c.number === number ? { ...c, name } : c));
+    return route.fulfill({ json: contacts.find((c) => c.number === number) });
+  });
+  // The group's chat as the bridge leaves it: each message of a contact with who wrote it.
+  await page.route(`**/v1/chats/${ids.single}`, async (route) => {
+    if (route.request().method() !== "GET") {
+      return route.fallback();
+    }
+    const res = await route.fetch();
+    const body = (await res.json()) as { chat: Record<string, unknown> };
+    const at = "2026-11-09T15:00:00Z";
+    body.chat = {
+      ...body.chat,
+      title: "WhatsApp group: Familia",
+      description: "",
+      exposed: true,
+      audience: "WhatsApp group Familia",
+      turns: [
+        { at, from: "user", sender: "Pedro (+56922222222)", text: "¿Vamos mañana a la playa?" },
+        {
+          at,
+          from: "user",
+          sender: "Ana (+56911111111)",
+          text: '(replying to Pedro (+56922222222): "¿Vamos mañana a la playa?")\nMimi, ¿qué tiempo hará mañana?',
+        },
+        {
+          at,
+          from: "mimi",
+          kitty: ids.mimi,
+          text: "Hola Ana 👋 Mañana se espera sol y unos 24 °C: buen día para ir a la playa con Pedro.",
+        },
+        {
+          at,
+          from: "user",
+          sender: "Pedro (+56922222222)",
+          text: '(replying to your own message (mimi): "Hola Ana 👋 Mañana se espera sol…")\n@mimi ¡gracias! ¿Y el viento?',
+        },
+        {
+          at,
+          from: "mimi",
+          kitty: ids.mimi,
+          text: "Poco viento, Pedro: unos 10 km/h por la tarde.",
+        },
+      ],
+    };
+    return route.fulfill({ response: res, json: body });
+  });
+  await open(page, `#chat/${ids.desktop}`);
+  await page.locator("aside").getByRole("button", { name: "Settings" }).click();
+  await page.getByRole("tab", { name: "Connections" }).click();
+  const box = page.getByTestId("whatsapp");
+  const list = box.getByTestId("whatsapp-contacts");
+  await expect(list).toContainText("Contacts (3)");
+  await list.locator("summary").click();
+  const rows = list.getByTestId("whatsapp-contact");
+  await expect(rows).toHaveCount(3);
+  // Without a name of the person's, the one they gave themselves shows as the hint.
+  await expect(rows.nth(1).getByTestId("whatsapp-contact-name")).toHaveAttribute(
+    "placeholder",
+    "Pedro",
+  );
+  await rows.nth(1).getByTestId("whatsapp-contact-name").fill("Tío Pedro");
+  await rows.nth(1).getByTestId("whatsapp-contact-name").press("Enter");
+  await expect(rows.nth(1)).toContainText("calls themselves Pedro");
+  await rows.nth(2).getByTestId("whatsapp-contact-forget").click();
+  await expect(rows).toHaveCount(2);
+  expect(changes).toEqual(["name 56922222222 Tío Pedro", "forget 56933333333"]);
+  await list.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await shot(page, "67-whatsapp-contacts");
+  await page.keyboard.press("Escape");
+  // In the chat each message says who wrote it, not the person's name.
+  await open(page, `#chat/${ids.single}`);
+  const who = page.locator(".msg.user");
+  await expect(who).toHaveCount(3);
+  await expect(who.nth(0)).toHaveAttribute("data-who", "Pedro (+56922222222)");
+  await expect(who.nth(1)).toHaveAttribute("data-who", "Ana (+56911111111)");
+  // A reply shows the message it answers as a quote, with its author.
+  await expect(who.nth(1).getByTestId("msg-quote")).toHaveText(
+    'replying to Pedro (+56922222222): "¿Vamos mañana a la playa?"',
+  );
+  await shot(page, "68-whatsapp-group-senders");
+});
+
 test("Settings: the MCP clients can be revoked and the token is read only on request", async ({
   page,
   context,

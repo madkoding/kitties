@@ -570,6 +570,13 @@ const dict: Dictionary = {
   waiting: "en espera",
   "you have its desktop": "tú tienes su escritorio",
   "{count} left for later.": "{count} quedan para después.",
+  "Contacts ({n})": "Contactos ({n})",
+  "The kitty reads each message with who wrote it, as a name and the number, and whose message a reply answers. The name is the one they gave themselves on WhatsApp until you write yours. Kept sealed.":
+    "El kitty lee cada mensaje con quién lo escribió, como nombre y número, y de quién es el mensaje que una respuesta cita. El nombre es el que se pusieron en WhatsApp hasta que escribas el tuyo. Se guarda sellado.",
+  Name: "Nombre",
+  "Name of +{number}": "Nombre de +{number}",
+  "calls themselves {name}": "se hace llamar {name}",
+  Forget: "Olvidar",
 };
 
 export default dict;

@@ -273,6 +273,9 @@ export interface Turn {
   at: string;
   from: string;
   kitty?: string;
+  // sender names who wrote a "user" turn that is not the person: a WhatsApp contact, as
+  // "Ana (+56912345678)".
+  sender?: string;
   text: string;
   calls?: { name: string; kind?: string; output?: string; error?: string; artifact?: string }[];
   steps?: Step[];
@@ -1017,6 +1020,18 @@ export const api = {
     request<Session>("PUT", `/v1/chats/${encodeURIComponent(id)}/exposed`, { exposed, audience }),
   resendWhatsAppHeld: (id: string) =>
     request<WhatsAppStatus>("POST", `/v1/whatsapp/held/${encodeURIComponent(id)}/resend`),
+  // whatsappContacts are the people who wrote, with the names the kitty reads them by; a name
+  // set here wins over the one they give themselves ("" goes back to it).
+  whatsappContacts: () =>
+    request<{ contacts: WhatsAppContact[] }>("GET", "/v1/whatsapp/contacts").then(
+      (r) => r.contacts || [],
+    ),
+  nameWhatsAppContact: (number: string, name: string) =>
+    request<WhatsAppContact>("PUT", `/v1/whatsapp/contacts/${encodeURIComponent(number)}`, {
+      name,
+    }),
+  forgetWhatsAppContact: (number: string) =>
+    request<void>("DELETE", `/v1/whatsapp/contacts/${encodeURIComponent(number)}`),
   revokeMcpClient: (id: string) =>
     request<{ revoked: string }>("DELETE", `/v1/mcp/clients/${encodeURIComponent(id)}`),
   // desktopInfo says whether a kitty's desktop has a newer image and when its sessions were backed
@@ -1655,6 +1670,15 @@ export type WhatsAppHeld = {
   name?: string;
   kind: "text" | "voice" | "file" | "reaction";
   text?: string;
+};
+
+// WhatsAppContact is someone who wrote to the linked number: name is the person's name for them,
+// push_name the one they gave themselves on WhatsApp. The kitty reads "name (+number)".
+export type WhatsAppContact = {
+  number: string;
+  name?: string;
+  push_name?: string;
+  seen?: string;
 };
 
 // WhatsAppGroup is a group that wrote lately, to put on the list.
