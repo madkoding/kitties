@@ -31,8 +31,8 @@ import (
 //     answers it (answer_kitty) or hands it a task (delegate), and what the lead sends it goes
 //     through the guard first, so no secret of the person travels to it. From a chat with other
 //     people it may ask the lead too, but the question waits for the person's yes (Approvals), and
-//     the lead is told its answer will be repeated there; that answer goes back to WhatsApp
-//     (SetRelay).
+//     the lead is told its answer will be repeated there; what the kitty then says there waits for
+//     the person's yes too (a second look), and only then goes back to WhatsApp (SetRelay).
 
 // ErrIndependent is a chat or a hand-over that would mix an independent kitty with the others.
 var ErrIndependent = errors.New("works on its own: it does not share chats or work with other kitties")
@@ -164,8 +164,13 @@ func (s *Service) holdAskLead(id string, a action, k *kitty.Kitty, question stri
 	return outcome{action: a, text: "held: " + s.userName() + " decides first whether " + lead.Name + " is asked. Say here, in one line, that you will check and come back, and stop."}
 }
 
-// decideAskLead is the person's answer to such a question: a yes puts it to the lead.
-func (s *Service) decideAskLead(ap *approvals.Approval, k *kitty.Kitty, approve bool) {
+// decideAskLead is the person's answer to such a question (a yes puts it to the lead) or to what
+// the kitty would say with the lead's answer (a yes says it on WhatsApp).
+func (s *Service) decideAskLead(ctx context.Context, ap *approvals.Approval, k *kitty.Kitty, approve bool) {
+	if ap.Action == "say" {
+		s.decideSay(ctx, ap, k, approve)
+		return
+	}
 	question, _ := ap.Args["question"].(string)
 	turn := Turn{At: s.now(), From: "approval"}
 	switch {
@@ -206,17 +211,54 @@ func (s *Service) answerExposedAsk(lead, k *kitty.Kitty, chatID, msg string) {
 		s.note(lead, agenda.KindBlocked, "", chatID, "could not pass the answer to "+k.Name+": "+err.Error())
 		return
 	}
-	if s.relay == nil {
+	if s.relay == nil || s.approvals == nil {
 		return
 	}
+	where := chatID
+	if sess, err := s.Get(chatID); err == nil && sess.Title != "" {
+		where = sess.Title
+	}
 	for _, t := range turns {
-		if t.Kitty != k.ID || strings.TrimSpace(t.Text) == "" {
+		text := strings.TrimSpace(t.Text)
+		if t.Kitty != k.ID || text == "" {
 			continue
 		}
-		if err := s.relay(context.Background(), chatID, t.Text); err != nil {
-			s.note(k, agenda.KindBlocked, "", chatID, "could not say the lead's answer on WhatsApp: "+err.Error())
+		// A second look: what the kitty says with the lead's answer waits for the person's yes.
+		summary := clip("say in "+where+": "+text, 300)
+		_, err := s.approvals.Request(approvals.Approval{Kitty: k.ID, KittyName: k.Name, Connector: AskLeadConnector, Kind: "ask", Action: "say",
+			Args: map[string]any{"text": text}, Summary: summary, Risk: "ask", Chat: chatID})
+		if err != nil {
+			s.note(k, agenda.KindBlocked, "", chatID, "could not hold the lead's answer for approval: "+err.Error())
+			continue
+		}
+		s.note(k, agenda.KindApproval, "", chatID, "waiting for approval: "+summary)
+		s.tell(notify.Approval, k, "wants to say "+lead.Name+"'s answer on WhatsApp", summary, chatID)
+	}
+}
+
+// decideSay sends, on a yes, what the kitty would say with the lead's answer.
+func (s *Service) decideSay(ctx context.Context, ap *approvals.Approval, k *kitty.Kitty, approve bool) {
+	text, _ := ap.Args["text"].(string)
+	turn := Turn{At: s.now(), From: "approval"}
+	switch {
+	case !approve:
+		turn.Text = "Rejected, not said on WhatsApp: " + ap.Summary
+		s.approvals.Done(ap.ID, "", "")
+	case s.relay == nil:
+		turn.Text = "Approved, but WhatsApp is not here: " + ap.Summary
+		s.approvals.Done(ap.ID, "", "no WhatsApp")
+	default:
+		if err := s.relay(ctx, ap.Chat, text); err != nil {
+			turn.Text = "Approved, but it failed: " + ap.Summary + "\n" + err.Error()
+			s.approvals.Done(ap.ID, "", err.Error())
+			s.note(k, agenda.KindBlocked, "", ap.Chat, "could not say the lead's answer on WhatsApp: "+err.Error())
+		} else {
+			turn.Text = "Approved and said on WhatsApp."
+			s.approvals.Done(ap.ID, "said", "")
 		}
 	}
+	ap.Result = turn.Text
+	s.appendTurn(ap.Chat, turn)
 }
 
 // ownFile refuses a connector call of an independent kitty that would send a file of the library

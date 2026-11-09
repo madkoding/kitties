@@ -284,6 +284,17 @@ func TestIndependentKittyAsksTheLeadFromAGroupWithThePersonsYes(t *testing.T) {
 	if len(sc.seen) == 0 || !strings.Contains(sc.seen[0][len(sc.seen[0])-1].Content, "repeats your answer there") {
 		t.Fatalf("the lead was not told where its answer goes")
 	}
+	// What bo would say waits for a second look before it reaches the group.
+	if len(relayed) != 0 {
+		t.Fatalf("said before the person looked: %v", relayed)
+	}
+	say := store.List("pending", 10)
+	if len(say) != 1 || say[0].Action != "say" || !strings.Contains(say[0].Summary, "Yes, mad comes on Friday!") {
+		t.Fatalf("pending say = %+v", say)
+	}
+	if _, err := s.DecideApproval(context.Background(), say[0].ID, true, "", false); err != nil {
+		t.Fatal(err)
+	}
 	if len(relayed) != 1 || !strings.Contains(relayed[0], id+": Yes, mad comes on Friday!") {
 		t.Errorf("relayed = %v", relayed)
 	}
@@ -303,6 +314,23 @@ func TestIndependentKittyAsksTheLeadFromAGroupWithThePersonsYes(t *testing.T) {
 	s.Wait()
 	if len(sc.seen) != asked {
 		t.Error("the lead was asked after a no")
+	}
+	// A no to what it would say keeps it off WhatsApp.
+	sc.replies = []string{"@answer_kitty bo {\"text\": \"No\"}", "ok"}
+	sb.replies = []string{"@ask_lead {\"question\": \"Sunday?\"}", "I will check.", "No, sorry."}
+	_, _ = s.Send(context.Background(), id, "and Sunday?")
+	pending = store.List("pending", 10)
+	_, _ = s.DecideApproval(context.Background(), pending[0].ID, true, "", false)
+	s.Wait()
+	pending = store.List("pending", 10)
+	if len(pending) != 1 || pending[0].Action != "say" {
+		t.Fatalf("pending = %+v", pending)
+	}
+	if _, err := s.DecideApproval(context.Background(), pending[0].ID, false, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if len(relayed) != 1 {
+		t.Errorf("a rejected answer was said: %v", relayed)
 	}
 }
 

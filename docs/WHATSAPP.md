@@ -151,11 +151,15 @@ session, without a new code. **Unlink** removes the device from the phone and fo
     lead knows the answer, the kitty may `ask_lead` too, but the question waits in **Approvals**
     (*ask the lead, from <chat>: …*) and the kitty says it will check and come back. On your yes the
     lead is asked, told that its answer will be repeated there; the kitty answers the people with it
-    (filtered by the guardrails as any answer there) and that answer goes back to WhatsApp, within
-    the list, the quiet hours and the hourly limit. A no leaves the lead out. Kitties that do not
+    (filtered by the guardrails as any answer there), and that answer waits in **Approvals** too
+    (*say in <chat>: …*), a second look before it leaves: on your yes it goes back to WhatsApp,
+    within the list, the quiet hours and the hourly limit; on a no it stays in the chat. A no to
+    the question leaves the lead out. Kitties that do not
     work on their own never ask the lead from those chats.
   - **Shown as such.** The kitty's drawer shows **On its own** and the sidebar a shield next to
     its name (`independent: true` in `GET /v1/kitties`).
+
+    ![The WhatsApp kitty's drawer: On its own](screenshots/84-independent-kitty.png)
 
   Settings › Connections › WhatsApp › **Works on its own** (on by default; `share_with_team: true`
   in the file turns it off). **The lead never works on its own**: it leads the others. With no

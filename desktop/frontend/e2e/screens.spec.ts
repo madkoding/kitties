@@ -4457,3 +4457,22 @@ test("Settings: storage shows the disk use and keeps the screenshots by a retent
   });
   expect((await r.json()).retention).toMatchObject({ shot_days: 14 });
 });
+
+// The kitty that answers on WhatsApp works on its own: the drawer and the sidebar say so. The demo
+// has no WhatsApp link, so the gateway's list is given the mark here.
+test("the WhatsApp kitty that works on its own is marked in its drawer and the sidebar", async ({
+  page,
+}) => {
+  await page.route("**/v1/kitties", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const res = await route.fetch();
+    const body = await res.json();
+    for (const k of body.kitties || []) if (k.id === ids.tom) k.independent = true;
+    return route.fulfill({ response: res, json: body });
+  });
+  await open(page, `#kitty/${ids.tom}`);
+  const drawer = page.getByRole("dialog").first();
+  await expect(drawer.getByTestId("independent-tag")).toContainText("On its own");
+  await expect(page.locator("aside").getByTestId("independent-badge")).toHaveCount(1);
+  await shot(page, "84-independent-kitty");
+});

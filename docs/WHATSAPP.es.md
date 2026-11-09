@@ -159,11 +159,15 @@ olvida la sesión.
     pregunta espera en **Aprobaciones** (*ask the lead, from <chat>: …*) y el kitty dice que va a
     averiguar y vuelve. Con tu sí se le pregunta al principal, avisándole que su respuesta se va a
     repetir ahí; el kitty les responde con ella (filtrada por las protecciones como cualquier
-    respuesta ahí) y esa respuesta vuelve a WhatsApp, dentro de la lista, el horario de silencio y el
-    límite por hora. Un no deja fuera al principal. Los kitties que no trabajan por su cuenta nunca le
+    respuesta ahí), y esa respuesta también espera en **Aprobaciones** (*say in <chat>: …*), una
+    segunda revisión antes de salir: con tu sí vuelve a WhatsApp, dentro de la lista, el horario de
+    silencio y el límite por hora; con un no queda solo en el chat. Un no a la pregunta deja fuera al
+    principal. Los kitties que no trabajan por su cuenta nunca le
     preguntan al principal desde esos chats.
   - **Se nota.** El cajón del kitty muestra **Por su cuenta** y la barra lateral un escudo junto a
     su nombre (`independent: true` en `GET /v1/kitties`).
+
+    ![El cajón del kitty de WhatsApp: Por su cuenta](screenshots/84-independent-kitty.png)
 
   Ajustes › Conexiones › WhatsApp › **Trabaja por su cuenta** (activado por defecto;
   `share_with_team: true` en el archivo lo desactiva). **El principal nunca trabaja por su cuenta**:
