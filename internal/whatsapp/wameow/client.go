@@ -684,15 +684,33 @@ func (c *Client) SendReply(ctx context.Context, to, text string, ref whatsapp.Re
 	if err != nil {
 		return err
 	}
-	ctxInfo := &waE2E.ContextInfo{StanzaID: proto.String(ref.ID), QuotedMessage: &waE2E.Message{Conversation: proto.String(quoted)}}
-	if ref.Sender != "" {
-		ctxInfo.Participant = proto.String(ref.Sender)
-	}
-	if ref.Chat != "" {
-		ctxInfo.RemoteJID = proto.String(ref.Chat)
-	}
+	ctxInfo := &waE2E.ContextInfo{}
+	quote(ctxInfo, jid, ref, quoted)
 	_, err = cn.SendMessage(ctx, jid, &waE2E.Message{ExtendedTextMessage: &waE2E.ExtendedTextMessage{Text: proto.String(text), ContextInfo: ctxInfo}})
 	return err
+}
+
+// quote makes ci quote the message ref (its text quoted) in a message sent to the chat to, as
+// WhatsApp's own apps do: the author by their JID without the device (the one WhatsApp shows the
+// quote as theirs), and the chat only when the message is from another one. A chat set on a quote
+// of the same group makes WhatsApp show it as a quote of the whole group, not of the person; a
+// person's chat is never another chat (it goes by their number or their hidden id).
+func quote(ci *waE2E.ContextInfo, to types.JID, ref whatsapp.Ref, quoted string) {
+	ci.StanzaID = proto.String(ref.ID)
+	ci.QuotedMessage = &waE2E.Message{Conversation: proto.String(quoted)}
+	if ref.Sender != "" {
+		sender := ref.Sender
+		if j, err := types.ParseJID(ref.Sender); err == nil && j.User != "" {
+			sender = j.ToNonAD().String()
+		}
+		ci.Participant = proto.String(sender)
+	}
+	if ref.Chat == "" {
+		return
+	}
+	if chat, err := types.ParseJID(ref.Chat); err == nil && chat.Server == types.GroupServer && chat.ToNonAD() != to.ToNonAD() {
+		ci.RemoteJID = proto.String(chat.ToNonAD().String())
+	}
 }
 
 // SendMentions implements whatsapp.Mentioner: the members m names are mentioned by the JID the
@@ -752,14 +770,7 @@ func (c *Client) SendMentions(ctx context.Context, to, text string, m whatsapp.M
 		}
 	}
 	if ref.ID != "" {
-		ctxInfo.StanzaID = proto.String(ref.ID)
-		ctxInfo.QuotedMessage = &waE2E.Message{Conversation: proto.String(quoted)}
-		if ref.Sender != "" {
-			ctxInfo.Participant = proto.String(ref.Sender)
-		}
-		if ref.Chat != "" {
-			ctxInfo.RemoteJID = proto.String(ref.Chat)
-		}
+		quote(ctxInfo, jid, ref, quoted)
 	}
 	if len(ctxInfo.MentionedJID) == 0 && ref.ID == "" {
 		_, err = cn.SendMessage(ctx, jid, &waE2E.Message{Conversation: proto.String(text)})

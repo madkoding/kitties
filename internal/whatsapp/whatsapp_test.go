@@ -1631,9 +1631,10 @@ func TestProgressWaitsItsGap(t *testing.T) {
 	f := r.linked(t)
 	r.chats.sessions["c9"] = &chat.Session{ID: "c9", Turns: []chat.Turn{{Steps: []chat.Step{{Action: chat.StepPlan, Result: "I look."}}}}}
 	st := &progressState{seen: map[int]int{}, last: time.Now()}
-	r.b.progress(context.Background(), f, "56912345678", "", "c9", 0, st)
-	r.b.progress(context.Background(), f, "56912345678", "", "c9", 5, st)
-	r.b.progress(context.Background(), f, "56912345678", "", "gone", 0, st)
+	in := &inbound{from: "56912345678", to: "56912345678", who: "56912345678"}
+	r.b.progress(context.Background(), f, in, "c9", 0, st)
+	r.b.progress(context.Background(), f, in, "c9", 5, st)
+	r.b.progress(context.Background(), f, in, "gone", 0, st)
 	if len(f.messages()) != 0 || st.seen[0] != 0 {
 		t.Fatalf("within the gap nothing goes out: %v %v", f.messages(), st.seen)
 	}

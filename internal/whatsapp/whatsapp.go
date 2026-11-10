@@ -413,10 +413,13 @@ type Bridge struct {
 	noted    map[string]time.Time // the chats told about the quiet hours, until when
 	queue    map[string]pending   // the messages waiting for the quiet hours to end, by id
 	everyone map[string]time.Time // when a kitty last mentioned every member of a group
-	seq      int
-	resumed  bool
-	runCtx   context.Context // the connection's, while there is one
-	waiting  int
+	// answering is the message each group's kitty is answering now (a group answers one at a
+	// time): what the connector sends there meanwhile tags as that answer would.
+	answering map[string]*inbound
+	seq       int
+	resumed   bool
+	runCtx    context.Context // the connection's, while there is one
+	waiting   int
 	// now and sleep are the clock (a fake one in the tests).
 	now    func() time.Time
 	sleep  func(ctx context.Context, d time.Duration)
@@ -447,7 +450,7 @@ func New(opt Options) (*Bridge, error) {
 	if opt.Log == nil {
 		opt.Log = func(string, ...any) {}
 	}
-	b := &Bridge{opt: opt, chats: map[string]string{}, tails: map[string]chan struct{}{}, refs: map[string]Ref{}, contacts: map[string]Contact{}, noted: map[string]time.Time{}, queue: map[string]pending{}, everyone: map[string]time.Time{}, wait: 2 * time.Hour,
+	b := &Bridge{opt: opt, chats: map[string]string{}, tails: map[string]chan struct{}{}, refs: map[string]Ref{}, contacts: map[string]Contact{}, noted: map[string]time.Time{}, queue: map[string]pending{}, everyone: map[string]time.Time{}, answering: map[string]*inbound{}, wait: 2 * time.Hour,
 		now: time.Now, sleep: sleepCtx}
 	data, err := os.ReadFile(b.settingsPath())
 	switch {
@@ -1687,6 +1690,18 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 	}
 	b.expose(id, in)
 	b.teach(id, in)
+	if in.group {
+		b.mu.Lock()
+		b.answering[in.to] = &in
+		b.mu.Unlock()
+		defer func() {
+			b.mu.Lock()
+			if b.answering[in.to] == &in {
+				delete(b.answering, in.to)
+			}
+			b.mu.Unlock()
+		}()
+	}
 	if in.ref.ID != "" {
 		if err := c.MarkRead(ctx, in.ref); err != nil {
 			b.opt.Log("whatsapp: mark read: %v", err)
@@ -1752,7 +1767,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 		case ev := <-events:
 			sent, ok := working[ev.Index]
 			if ok && ev.Type == "update" {
-				b.progress(ctx, c, in.to, in.who, id, ev.Index, plans)
+				b.progress(ctx, c, &in, id, ev.Index, plans)
 				continue
 			}
 			if !ok || ev.Type != "done" || ev.Turn == nil {
@@ -1780,7 +1795,9 @@ type progressState struct {
 // progress sends what the kitty says it goes on to do in a task still at work (its plan lines),
 // so a long task is not silence until its answer: one line at a time, a minute apart at least,
 // the newest when several came meanwhile. The turn is read again (the event's is the live one).
-func (b *Bridge) progress(ctx context.Context, c Client, to, who, id string, index int, st *progressState) {
+// A line quotes nothing, and tags only who the message it answers involves (in a group, a line
+// sent as if on the kitty's own could tag anyone).
+func (b *Bridge) progress(ctx context.Context, c Client, in *inbound, id string, index int, st *progressState) {
 	sess, err := b.opt.Chats.Get(id)
 	if err != nil || index >= len(sess.Turns) {
 		return
@@ -1795,7 +1812,9 @@ func (b *Bridge) progress(ctx context.Context, c Client, to, who, id string, ind
 		return
 	}
 	st.seen[index], st.last = len(lines), time.Now()
-	b.say(ctx, c, to, who, nil, "⏳ "+lines[len(lines)-1], false)
+	line := *in
+	line.ref = Ref{}
+	b.say(ctx, c, in.to, in.who, &line, "⏳ "+lines[len(lines)-1], false)
 }
 
 // busy is what a person who writes while the kitty still works on their last message reads, in
@@ -1935,6 +1954,7 @@ func (b *Bridge) replyTo(ctx context.Context, c Client, to string, in *inbound, 
 	}
 	b.mu.Lock()
 	text, m, note := b.prepareLocked(to, Plain(text), in)
+	b.tagsLogLocked(to, m)
 	b.mu.Unlock()
 	if note != "" {
 		b.opt.Log("whatsapp: @all in %s not mentioned: %s", to, note)
@@ -2153,7 +2173,17 @@ func (b *Bridge) sendWith(ctx context.Context, to, text, file string) (note stri
 		return "", errors.New("the message is empty")
 	}
 	b.mu.Lock()
-	text, m, note := b.prepareLocked(n, Plain(text), nil)
+	// While the kitty answers a message of this group, what it sends there through the connector
+	// is part of that answer: it tags only who the message involves. It never tags everyone (no
+	// author: the connector does not answer anyone's ask), as on its own.
+	var in *inbound
+	if a := b.answering[n]; a != nil {
+		cp := *a
+		cp.from = ""
+		in = &cp
+	}
+	text, m, note := b.prepareLocked(n, Plain(text), in)
+	b.tagsLogLocked(n, m)
 	b.mu.Unlock()
 	parts := Split(text, maxPart)
 	caption := ""

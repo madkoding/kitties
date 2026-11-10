@@ -719,7 +719,8 @@ func TestSendReply(t *testing.T) {
 	blob, _ := s.Export()
 	f := &fakeConn{}
 	c := clientWith(f)
-	ref := whatsapp.Ref{Chat: "120363@g.us", Sender: "56912345678@s.whatsapp.net", ID: "m1"}
+	// The author writes from a linked device (":7"): the quote names the person, not the device.
+	ref := whatsapp.Ref{Chat: "120363@g.us", Sender: "56912345678:7@s.whatsapp.net", ID: "m1"}
 	if err := c.SendReply(context.Background(), "120363@g.us", "sí", ref, "¿vienes?"); !errors.Is(err, ErrNotConnected) {
 		t.Fatalf("before = %v", err)
 	}
@@ -733,6 +734,11 @@ func TestSendReply(t *testing.T) {
 	if err := c.SendReply(context.Background(), "56912345678", "ok", whatsapp.Ref{ID: "m2"}, "x"); err != nil {
 		t.Fatal(err)
 	}
+	// A message of another group is quoted with the group it comes from.
+	other := whatsapp.Ref{Chat: "120999@g.us", Sender: "56912345678@s.whatsapp.net", ID: "m3"}
+	if err := c.SendReply(context.Background(), "120363@g.us", "eso", other, "y"); err != nil {
+		t.Fatal(err)
+	}
 	if err := c.SendReply(context.Background(), "a:x@s.whatsapp.net", "x", ref, "x"); err == nil {
 		t.Fatal("sent to a bad JID")
 	}
@@ -740,11 +746,16 @@ func TestSendReply(t *testing.T) {
 	<-done
 	e := f.msgs[0].GetExtendedTextMessage()
 	ci := e.GetContextInfo()
-	if e.GetText() != "sí" || ci.GetStanzaID() != "m1" || ci.GetParticipant() != ref.Sender || ci.GetRemoteJID() != "120363@g.us" || ci.GetQuotedMessage().GetConversation() != "¿vienes?" {
+	// A quote in the same group carries no chat: with one, WhatsApp shows it as a quote of the
+	// whole group instead of the person's message.
+	if e.GetText() != "sí" || ci.GetStanzaID() != "m1" || ci.GetParticipant() != "56912345678@s.whatsapp.net" || ci.RemoteJID != nil || ci.GetQuotedMessage().GetConversation() != "¿vienes?" {
 		t.Fatalf("reply = %v", f.msgs[0])
 	}
 	if ci := f.msgs[1].GetExtendedTextMessage().GetContextInfo(); ci.Participant != nil || ci.RemoteJID != nil {
 		t.Fatalf("direct = %v", ci)
+	}
+	if ci := f.msgs[2].GetExtendedTextMessage().GetContextInfo(); ci.GetRemoteJID() != "120999@g.us" || ci.GetParticipant() != other.Sender {
+		t.Fatalf("other group = %v", ci)
 	}
 }
 
