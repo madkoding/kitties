@@ -2,7 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { Kitty, Memory, Power } from "./api";
 import { api, errText } from "./api";
 import { t } from "./i18n";
-import MachineMemory from "./MachineMemory";
+import MachineMemory, { REFRESH_CHOICES, withValue } from "./MachineMemory";
 
 // THE KITTY'S MACHINE.
 //
@@ -96,19 +96,26 @@ export default function MachinePower({
   if (!power) {
     return null;
   }
-  const choose = async (value: string) => {
+  const patch = async (u: Parameters<typeof api.editKitty>[1]) => {
     setErr("");
     try {
-      await api.editKitty(
-        kitty.id,
-        value === "default" ? { auto_off_default: true } : { auto_off_minutes: Number(value) },
-      );
+      await api.editKitty(kitty.id, u);
       await load();
       onChanged();
     } catch (e) {
       setErr(errText(e));
     }
   };
+  const choose = (value: string) =>
+    patch(value === "default" ? { auto_off_default: true } : { auto_off_minutes: Number(value) });
+  const chooseRefresh = (value: string) =>
+    patch(
+      value === "default"
+        ? { browser_refresh_default: true }
+        : { browser_refresh_minutes: Number(value) },
+    );
+  const refresh = power.browser_refresh_minutes;
+  const refreshText = (n: number) => (n === 0 ? t("Never") : t("Every {n} minutes", { n }));
   const choices = IDLE_CHOICES.includes(power.auto_off_minutes)
     ? IDLE_CHOICES
     : [...IDLE_CHOICES, power.auto_off_minutes].sort((a, b) => (a || 1e9) - (b || 1e9));
@@ -138,6 +145,28 @@ export default function MachinePower({
             ))}
           </select>
         </label>
+        {refresh !== undefined && (
+          <label class="flex items-center gap-2 text-xs text-[var(--t3)]">
+            {t("Visit the open tabs again")}
+            <select
+              class="field !py-1 !text-xs"
+              value={power.browser_refresh_custom ? String(refresh) : "default"}
+              onChange={(e) => void chooseRefresh((e.target as HTMLSelectElement).value)}
+              data-testid="browser-refresh"
+            >
+              <option value="default">
+                {power.browser_refresh_custom
+                  ? t("Default")
+                  : t("Default ({time})", { time: refreshText(refresh) })}
+              </option>
+              {withValue(REFRESH_CHOICES, refresh).map((n) => (
+                <option key={n} value={String(n)}>
+                  {refreshText(n)}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       <MachineMemory
         kitty={kitty}

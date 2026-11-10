@@ -38,7 +38,8 @@ turns itself off (15 by default, `0` never, at most a week). Each kitty can have
 `containers.browser_refresh_minutes` is how often the browser of each desktop visits its open tabs
 again so sites that end idle sessions (Gmail, banks) keep the kitty logged in (20 by default, `0`
 never, at most 1440). Tabs someone is using are only visited quietly, never reloaded. **Settings ›
-Machines** changes it (kept in `settings.json`) and the desktops that are on get it at once. See
+Machines** changes it (kept in `settings.json`) and the desktops that are on get it at once; each
+kitty can have its own (its window, Desktop). See
 [the browser's profile](DESKTOP.md#updating-a-desktop-without-losing-what-it-knows).
 
 `containers.memory_mb` and `containers.swap_mb` are the RAM and the swap of each kitty's machine

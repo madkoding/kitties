@@ -57,6 +57,10 @@ export interface Power {
   off_reason?: "idle" | "manual" | "kitty" | "";
   auto_off_minutes: number;
   auto_off_custom: boolean;
+  // browser_refresh_minutes is how often its browser visits its open tabs again (0 is never);
+  // browser_refresh_custom whether that is its own and not the default for every kitty.
+  browser_refresh_minutes?: number;
+  browser_refresh_custom?: boolean;
   // memory_mb and swap_mb are the RAM and swap the machine is given (0 RAM: the engine's own);
   // memory_custom is whether they are the kitty's own, memory_pending whether they wait for the
   // next start; memory_local is false in the cloud, where the machine's size is the provider's.
@@ -937,6 +941,8 @@ export const api = {
       memory_mb?: number;
       swap_mb?: number;
       memory_default?: boolean;
+      browser_refresh_minutes?: number;
+      browser_refresh_default?: boolean;
     },
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
   // lead is the fleet's lead kitty and its Reports thread; setLead makes another the lead

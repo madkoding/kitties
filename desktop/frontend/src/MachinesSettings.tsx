@@ -2,7 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { Kitty, Machines, Memory, Power } from "./api";
 import { api, errText } from "./api";
 import { t } from "./i18n";
-import MachineMemory, { MemorySelects, mbText, withValue } from "./MachineMemory";
+import MachineMemory, { MemorySelects, REFRESH_CHOICES, mbText, withValue } from "./MachineMemory";
 
 // SETTINGS › MACHINES.
 //
@@ -41,10 +41,6 @@ function KittyMachine({ kitty }: { kitty: Kitty }) {
     </div>
   );
 }
-
-// How often the browser visits its open tabs again, so sites that end idle sessions keep the
-// kitty logged in; tabs someone is using are only visited quietly, never reloaded.
-const REFRESH_CHOICES = [0, 10, 20, 30, 60, 120];
 
 export default function MachinesSettings({ kitties }: { kitties: Kitty[] }) {
   const [view, setView] = useState<Machines | null>(null);

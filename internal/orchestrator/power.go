@@ -181,7 +181,8 @@ func (m *Manager) Power(ref string) (kitty.Power, error) {
 	if !k.Desktop {
 		return kitty.Power{}, kitty.ErrNoMachine
 	}
-	p := kitty.Power{AutoOffMinutes: m.AutoOffMinutes(k), AutoOffCustom: k.AutoOff != nil}
+	p := kitty.Power{AutoOffMinutes: m.AutoOffMinutes(k), AutoOffCustom: k.AutoOff != nil,
+		BrowserRefreshMinutes: m.BrowserRefreshMinutes(k), BrowserRefreshCustom: k.BrowserRefresh != nil}
 	p.MemoryMB, p.SwapMB, p.MemoryCustom = m.MemoryLimits(k)
 	p.MemoryPending, p.MemoryLocal = k.MemoryPending, !m.cfg.IsCloudContainer(k.Container)
 	switch k.Status {

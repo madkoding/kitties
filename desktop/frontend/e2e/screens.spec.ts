@@ -4111,6 +4111,18 @@ test("a kitty's machine is turned on and off and has its own idle time", async (
   await expect.poll(async () => (await idle()).auto_off_minutes).toBe(30);
   await power.getByTestId("auto-off").selectOption("default");
   await expect.poll(async () => (await idle()).auto_off_custom).toBe(false);
+  // How often its browser visits its tabs again: the default for every kitty, or its own.
+  const refresh = power.getByTestId("browser-refresh");
+  await expect(refresh).toHaveValue("default");
+  expect(await idle()).toMatchObject({
+    browser_refresh_minutes: 20,
+    browser_refresh_custom: false,
+  });
+  await refresh.selectOption("60");
+  await expect.poll(async () => (await idle()).browser_refresh_minutes).toBe(60);
+  expect(await idle()).toMatchObject({ browser_refresh_custom: true });
+  await refresh.selectOption("default");
+  await expect.poll(async () => (await idle()).browser_refresh_custom).toBe(false);
   // Off (forced: the drawer may be showing its desktop live, which counts as use).
   const off = await page.request.post(`${GATEWAY}/v1/kitties/tom/power`, {
     headers,

@@ -41,6 +41,21 @@ const DefaultAutoOffMinutes = 15
 // MaxAutoOffMinutes is the longest idle time that can be set (a week); more is "never" (0).
 const MaxAutoOffMinutes = 7 * 24 * 60
 
+// DefaultBrowserRefreshMinutes is how often the browser visits its tabs again when nothing says
+// otherwise, and MaxBrowserRefreshMinutes the longest (a day); 0 is never.
+const (
+	DefaultBrowserRefreshMinutes = 20
+	MaxBrowserRefreshMinutes     = 24 * 60
+)
+
+// ValidBrowserRefresh checks how often the browser visits its tabs again: 0 is never.
+func ValidBrowserRefresh(minutes int) error {
+	if minutes < 0 || minutes > MaxBrowserRefreshMinutes {
+		return fmt.Errorf("browser_refresh_minutes is between 0 (never) and %d", MaxBrowserRefreshMinutes)
+	}
+	return nil
+}
+
 // ValidAutoOff checks an idle time: 0 is never, up to a week otherwise.
 func ValidAutoOff(minutes int) error {
 	if minutes < 0 || minutes > MaxAutoOffMinutes {
@@ -65,6 +80,10 @@ type Power struct {
 	// whether the kitty has a value of its own (otherwise it is the gateway's default).
 	AutoOffMinutes int  `json:"auto_off_minutes"`
 	AutoOffCustom  bool `json:"auto_off_custom"`
+	// BrowserRefreshMinutes is how often its browser visits its open tabs again (0 is never);
+	// BrowserRefreshCustom is whether that is its own and not the default for every kitty.
+	BrowserRefreshMinutes int  `json:"browser_refresh_minutes"`
+	BrowserRefreshCustom  bool `json:"browser_refresh_custom"`
 	// MemoryMB and SwapMB are the RAM and swap the machine is given (0 RAM is no limit: the
 	// engine's own); MemoryCustom is whether the kitty has values of its own, MemoryPending
 	// whether they wait for the machine to be turned on again. MemoryLocal is false for a

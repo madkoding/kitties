@@ -192,6 +192,41 @@ func TestBrowserRefreshDefault(t *testing.T) {
 			t.Errorf("%d accepted", bad)
 		}
 	}
+	// A kitty of its own keeps it when the default moves, and is told at once.
+	own := 90
+	f.execs = nil
+	if _, err := m.Edit(solo.ID, Update{BrowserRefresh: &own}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := m.Power(solo.ID); p.BrowserRefreshMinutes != 90 || !p.BrowserRefreshCustom {
+		t.Errorf("own = %+v", p)
+	}
+	if got := strings.Join(f.execs, "\n"); !strings.Contains(got, "90") {
+		t.Errorf("told at once: %q", got)
+	}
+	f.execs = nil
+	ten := 10
+	if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 3072, SwapMB: 1024, BrowserRefreshMinutes: &ten}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := m.Power(solo.ID); p.BrowserRefreshMinutes != 90 || strings.Contains(strings.Join(f.execs, "\n"), BrowserRefreshFile) {
+		t.Errorf("the default moved a kitty with its own: %+v %v", p, f.execs)
+	}
+	bad := -5
+	if _, err := m.Edit(solo.ID, Update{BrowserRefresh: &bad}); err == nil {
+		t.Error("-5 accepted")
+	}
+	yes := true
+	if _, err := m.Edit(solo.ID, Update{BrowserRefreshDefault: &yes}); err != nil {
+		t.Fatal(err)
+	}
+	if p, _ := m.Power(solo.ID); p.BrowserRefreshMinutes != 10 || p.BrowserRefreshCustom {
+		t.Errorf("back to the default = %+v", p)
+	}
+	back := 45
+	if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 3072, SwapMB: 1024, BrowserRefreshMinutes: &back}); err != nil {
+		t.Fatal(err)
+	}
 	again, err := New(m.cfg, WithContainers(newFake(), nil))
 	if err != nil {
 		t.Fatal(err)

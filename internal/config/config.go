@@ -273,16 +273,8 @@ type Containers struct {
 	BrowserRefreshMinutes int `yaml:"browser_refresh_minutes"`
 }
 
-// MaxBrowserRefreshMinutes is the longest browser_refresh_minutes: a day.
-const MaxBrowserRefreshMinutes = 24 * 60
-
-// ValidBrowserRefresh checks a browser_refresh_minutes.
-func ValidBrowserRefresh(n int) error {
-	if n < 0 || n > MaxBrowserRefreshMinutes {
-		return fmt.Errorf("browser_refresh_minutes is between 0 (never) and %d", MaxBrowserRefreshMinutes)
-	}
-	return nil
-}
+// ValidBrowserRefresh checks a browser_refresh_minutes (kitty.ValidBrowserRefresh).
+func ValidBrowserRefresh(n int) error { return kitty.ValidBrowserRefresh(n) }
 
 // Gateway is the HTTP API block. On a server it is also the web interface: the same address
 // serves the page and the API.
@@ -505,7 +497,7 @@ func Defaults() Config {
 		Containers: Containers{
 			Runtime: "auto", Image: "ghcr.io/madkoding/kitty-desktop:latest",
 			MemoryMB: 2048, SwapMB: kitty.DefaultSwapMB, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6, AutoOffMinutes: kitty.DefaultAutoOffMinutes,
-			BrowserRefreshMinutes: 20,
+			BrowserRefreshMinutes: kitty.DefaultBrowserRefreshMinutes,
 		},
 		Cloud:      Cloud{MaxRunning: 5, IdleMinutes: 15, Size: "small", APIKeyEnv: "BOAT_API_KEY"},
 		Gateway:    Gateway{Listen: DefaultListen, MCP: MCP{Enabled: true}},

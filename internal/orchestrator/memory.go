@@ -151,7 +151,7 @@ func (m *Manager) SetMachineDefaults(ctx context.Context, d MachineDefaults) err
 		if (memoryMoved || !refreshMoved) && k.Desktop && k.MemoryMB == nil && k.SwapMB == nil {
 			m.applyLimits(ctx, k)
 		}
-		if refreshMoved {
+		if refreshMoved && k.BrowserRefresh == nil {
 			m.applyBrowserRefresh(ctx, k)
 		}
 	}
@@ -165,8 +165,17 @@ func (m *Manager) applyBrowserRefresh(ctx context.Context, k *kitty.Kitty) {
 	if !k.Desktop || k.Container == "" || k.Status != kitty.StatusRunning {
 		return
 	}
-	n := strconv.Itoa(*m.MachineDefaults().BrowserRefreshMinutes)
+	n := strconv.Itoa(m.BrowserRefreshMinutes(k))
 	_, _ = m.ctr().Exec(ctx, k.Container, "sh", "-c", "printf '%s\\n' \"$1\" > "+BrowserRefreshFile, "sh", n)
+}
+
+// BrowserRefreshMinutes is how often a kitty's browser visits its tabs again: its own, or the
+// default for every kitty. 0 is never.
+func (m *Manager) BrowserRefreshMinutes(k *kitty.Kitty) int {
+	if k.BrowserRefresh != nil {
+		return *k.BrowserRefresh
+	}
+	return *m.MachineDefaults().BrowserRefreshMinutes
 }
 
 // BrowserRefreshFile is where a desktop that is on learns a new interval (kitty-refresh).
