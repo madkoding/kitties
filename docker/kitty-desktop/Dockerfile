@@ -125,7 +125,7 @@ RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgra
         xterm sudo playerctl dbus-x11 pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
         libglib2.0-0 libxml2 libpango-1.0-0 libpangocairo-1.0-0 libpangoxft-1.0-0 libcairo2 libxft2 libxrandr2 libxinerama1 \
         libxcursor1 libxi6 libsm6 librsvg2-2 libimlib2 libxkbcommon0 libxau6 \
-        chromium fonts-dejavu fonts-noto-color-emoji \
+        chromium chromium-l10n fonts-dejavu fonts-noto-color-emoji \
         ca-certificates curl git jq python3 python3-websocket openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
         inkscape imagemagick mtpaint mousepad \
