@@ -3,3 +3,4 @@ f0d60fd09af8dfc496dcec82aa06e248bdbd06c0:.github/workflows/ci.yml:curl-auth-user
 5a428674ab35ce6114121226e647f63a4eab16d6:desktop/frontend/e2e/screens.spec.ts:generic-api-key:2247
 11e3000e22f392e4e0bfdf4322b1539a3e6dfee7:internal/guard/guard_test.go:aws-access-token:16
 11e3000e22f392e4e0bfdf4322b1539a3e6dfee7:internal/guard/guard_test.go:jwt:18
+501512eb92657ca6394a8d0c11ee579ae1f59762:desktop/frontend/e2e/screens.spec.ts:generic-api-key:2443
