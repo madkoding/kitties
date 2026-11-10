@@ -1071,6 +1071,26 @@ select:focus {
     }
   }
 }
+/* The live desktop's key bar: rows that scroll sideways on a phone, modifiers that stay held. */
+.key-row {
+  scrollbar-width: thin;
+  padding-bottom: 0.125rem;
+}
+.key-btn {
+  min-height: 1.875rem;
+}
+.key-btn.is-held {
+  background: rgb(var(--accent-rgb) / 0.2);
+  border-color: rgb(var(--accent-rgb) / 0.55);
+  color: var(--color-accent);
+}
+.key-sep {
+  width: 1px;
+  align-self: stretch;
+  margin: 0.25rem 0.125rem;
+  background: rgb(var(--ov-rgb) / 0.12);
+  flex-shrink: 0;
+}
 /* One line that says what the person's input is doing: ready, being sent, or waiting. */
 .live-activity {
   display: flex;

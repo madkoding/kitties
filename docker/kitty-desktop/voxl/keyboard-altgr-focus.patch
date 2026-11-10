@@ -1,0 +1,77 @@
+diff --git a/web/src/client/keyboard.ts b/web/src/client/keyboard.ts
+index 4d091e7..78eb848 100644
+--- a/web/src/client/keyboard.ts
++++ b/web/src/client/keyboard.ts
+@@ -93,6 +93,35 @@ export function setupKeyboard(
+ 		return charKeysym(k.codePointAt(0)!);
+ 	}
+ 
++	// What each physical key types with no modifier, in the viewer's own layout, when the
++	// browser tells (Chromium's Keyboard Map); else letters and digits by their code.
++	let layout: Map<string, string> | null = null;
++	navigator.keyboard
++		?.getLayoutMap?.()
++		.then((m) => (layout = m))
++		.catch(() => undefined);
++	const baseOf = (code: string): string | undefined => {
++		const known = layout?.get(code);
++		if (known) return known;
++		const m = /^(?:Key([A-Z])|Digit(\d))$/.exec(code);
++		return m ? (m[1] ?? m[2]).toLowerCase() : undefined;
++	};
++	// A character made with AltGr (Windows reports it as Control+Alt) or with Option on a Mac,
++	// such as @ on Spanish and Latin American keyboards: the modifiers only chose the
++	// character, so it is typed as itself, without Control or Alt held on the desktop
++	// (Ctrl+Alt+@ would be a shortcut there, not an @).
++	function composed(e: KeyboardEvent): boolean {
++		if (!e.ctrlKey && !e.altKey) return false;
++		if ([...e.key].length !== 1 || e.key === ' ') return false;
++		if (e.getModifierState?.('AltGraph')) return true;
++		if (!e.altKey || e.metaKey || (e.ctrlKey && isMac)) return false;
++		if (!isMac && !e.ctrlKey) return false;
++		const base = baseOf(e.code);
++		if (base === undefined) return !/^[a-z0-9]$/i.test(e.key);
++		return e.key.toLowerCase() !== base.toLowerCase() && !e.shiftKey;
++	}
++	const LIFTED = /^(Control|Alt)/;
++
+ 	const down = new Map<string, number>(); // code -> keysym
+ 	let pendingPaste: {
+ 		code: string;
+@@ -138,6 +167,10 @@ export function setupKeyboard(
+ 			return;
+ 		}
+ 		e.preventDefault();
++		if (composed(e)) {
++			// Let go of Control, Alt and AltGr on the desktop; the keysym carries the character.
++			for (const code of [...down.keys()]) if (LIFTED.test(code)) release(code);
++		}
+ 		const held = down.get(e.code);
+ 		if (e.repeat && held !== undefined) {
+ 			send(cmd.key(held, true));
+@@ -215,6 +248,12 @@ export function setupKeyboard(
+ 		kbd.value = '';
+ 	});
+ 	window.addEventListener('blur', releaseAll);
++	// Framed, the page that frames voxl hands it the keyboard by focusing its window: the
++	// keys then go to the textarea that sends them (and takes pastes), not to the body.
++	window.addEventListener('focus', () => {
++		if (app.inIframe && document.activeElement === document.body)
++			kbd.focus({ preventScroll: true });
++	});
+ 	surface.addEventListener('focus', () => kbd.focus({ preventScroll: true }));
+ 	if (!app.inIframe) kbd.focus({ preventScroll: true });
+ 
+diff --git a/web/src/types/dom-extra.d.ts b/web/src/types/dom-extra.d.ts
+index e605a17..0131671 100644
+--- a/web/src/types/dom-extra.d.ts
++++ b/web/src/types/dom-extra.d.ts
+@@ -13,6 +13,8 @@ declare var MediaStreamTrackGenerator: {
+ interface Keyboard {
+ 	lock(keyCodes?: string[]): Promise<void>;
+ 	unlock(): void;
++	/** Keyboard Map (Chromium): what each physical key types with no modifier. */
++	getLayoutMap?(): Promise<Map<string, string>>;
+ }
+ interface Navigator {
+ 	readonly keyboard?: Keyboard;

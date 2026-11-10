@@ -165,6 +165,29 @@ picture carrying only what changed), served at `/v1/chats/{id}/turns/{n}/replay.
 
 <img src="screenshots/49-live-desktop-control.png" alt="Taking control of a kitty's desktop: a command typed in its terminal" width="100%">
 
+## Your keyboard, the clipboard and the key bar
+
+With the controls, the keys go to the desktop as the characters your own layout types, whatever
+the desktop's: `@` with AltGr on a Spanish (AltGr+2) or Latin American (AltGr+Q) keyboard, `€`,
+`\`, `ñ` or a dead-key `á`. Windows reports AltGr as Control and Alt held, and a Mac's Option is
+Alt, so a character they make is typed as itself instead of reaching the desktop as a Ctrl+Alt
+shortcut (the image patches voxl's viewer for this, `docker/kitty-desktop/voxl/*.patch`, and the
+fallback view does the same in `keys.ts`). The viewer also takes the keys as soon as you take the
+controls, without a first click inside the picture.
+
+**Ctrl+C** and **Ctrl+V** work as on your computer: what you copy on the desktop reaches your
+clipboard, and Ctrl+V pastes yours there (the whole text at once, line breaks and all). Under the
+picture a **key bar** (Lucide icons) has what your keyboard or your phone cannot press there:
+Esc, Tab, Enter, Backspace, **Alt+Tab**, **Ctrl+Alt+Del** (a task list, `top` in a terminal),
+the **apps menu** (Alt+F1), **Copy** and **Paste** between the two clipboards, `@`, and **Ctrl**,
+**Alt**, **Shift** and **Super** held for the next key; the keyboard button adds F1 to F12, the
+arrows, Home/End/PgUp/PgDn, Ctrl+Z/A/X/S/F/L, Alt+F4 and the characters other layouts hide.
+On a phone its rows scroll sideways. The field under it still sends text to the kitty's clipboard
+and brings its clipboard back, for a browser that does not let the page read yours. While you
+only watch, **Copy from** brings the kitty's clipboard to yours without taking the controls.
+
+<img src="screenshots/82-live-keys.png" alt="The live desktop with the key bar open: Esc, Tab, Alt+Tab, Ctrl+Alt+Del, copy and paste, held modifiers, F keys and symbols" width="100%">
+
 ## The chat beside the live desktop
 
 The window of a kitty's live desktop carries the kitty's chat as a sidebar, so you can write to it

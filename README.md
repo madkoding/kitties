@@ -29,7 +29,9 @@ a desktop app and an Android app.
   runs several page steps in one go, which a goal can replay with no model) and by screenshots only where
   text cannot tell, which spends far fewer tokens (each message counts them), while the chat shows a short line of what it is about to
   do, with the actions folded under how many they were (a tap opens them) and the view following the
-  latest. You can watch it live and **take control** for what it cannot do alone (a password, a captcha).
+  latest. You can watch it live and **take control** for what it cannot do alone (a password, a captcha),
+  typing in your own keyboard layout, with copy and paste both ways and a key bar for the keys you
+  cannot press there (Ctrl+Alt+Del, Alt+Tab, F keys, `@`; see [the desktop](docs/DESKTOP.md#your-keyboard-the-clipboard-and-the-key-bar)).
 - **Files in the chat.** Attach pictures, PDFs, Office documents and text with the paperclip, by dragging
   them onto the page, by pasting, or with `/attach` in the CLI. The model sees pictures and PDFs where its provider reads
   them, gets the text of the rest, and a kitty with a machine finds the file in

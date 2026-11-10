@@ -2409,6 +2409,47 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await live.getByRole("button", { name: "Alt+Tab" }).click();
   await expect.poll(() => inputs).toEqual(["click", "type", "key", "key"]);
   await expect(live.getByTestId("live-activity")).toContainText("Ready", { timeout: 8000 });
+  // AltGr characters are typed in the person's own layout, not sent as shortcuts: on Windows
+  // AltGr+2 (@ on a Spanish keyboard) comes as Control and Alt held.
+  const sent: { action: string; args: Record<string, unknown> }[] = [];
+  page.on("request", (r) => {
+    if (r.url().includes("/input")) {
+      sent.push(JSON.parse(r.postData() || "{}"));
+    }
+  });
+  await live.locator(".live-surface").focus();
+  const cdp = await page.context().newCDPSession(page);
+  const altgr = { windowsVirtualKeyCode: 18, location: 2, code: "AltRight", key: "AltGraph" };
+  const ctrl = { windowsVirtualKeyCode: 17, code: "ControlLeft", key: "Control" };
+  await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", modifiers: 2, ...ctrl });
+  await cdp.send("Input.dispatchKeyEvent", { type: "rawKeyDown", modifiers: 3, ...altgr });
+  const at = { key: "@", code: "Digit2", windowsVirtualKeyCode: 50, modifiers: 3 };
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", text: "@", ...at });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", ...at });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", modifiers: 2, ...altgr });
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", modifiers: 0, ...ctrl });
+  await expect.poll(() => sent).toContainEqual({ action: "type", args: { text: "@" } });
+  // The key bar: the keys a computer or a phone cannot press there, with Ctrl, Alt, Shift and
+  // Super held for the next one, F keys, arrows and the characters other layouts hide.
+  const bar = live.getByTestId("quick-keys");
+  await bar.getByRole("button", { name: "Ctrl+Alt+Delete" }).click();
+  await expect
+    .poll(() => sent)
+    .toContainEqual({ action: "key", args: { keys: "ctrl+alt+Delete" } });
+  await bar.getByTestId("key-mod-ctrl").click();
+  await bar.getByTestId("key-mod-shift").click();
+  await expect(bar.getByTestId("key-mod-ctrl")).toHaveAttribute("aria-pressed", "true");
+  await bar.getByRole("button", { name: "Tab", exact: true }).click();
+  await expect.poll(() => sent).toContainEqual({ action: "key", args: { keys: "ctrl+shift+Tab" } });
+  await expect(bar.getByTestId("key-mod-ctrl")).toHaveAttribute("aria-pressed", "false");
+  await bar.getByTestId("key-more").click();
+  await expect(bar.getByTestId("key-more-keys")).toBeVisible();
+  await bar.getByRole("button", { name: "F5", exact: true }).click();
+  await bar.getByTestId("key-symbols").getByRole("button", { name: "\\", exact: true }).click();
+  await expect.poll(() => sent).toContainEqual({ action: "key", args: { keys: "F5" } });
+  await expect.poll(() => sent).toContainEqual({ action: "type", args: { text: "\\" } });
+  await shot(page, "82-live-keys");
+  await bar.getByTestId("key-more").click();
   // A drag shows what is being dragged while the button is down, and is sent when it is let go.
   const box = (await frame.boundingBox())!;
   await page.mouse.move(box.x + 40, box.y + 40);
@@ -2438,11 +2479,21 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await clipboard.getByRole("textbox").fill("");
   await clipboard.getByRole("button", { name: "Copy from tom" }).click();
   await expect(clipboard.getByRole("textbox")).toHaveValue("my coupon code");
+  // Copy on the bar copies what is selected there (Ctrl+C) and brings it over.
+  await clipboard.getByRole("textbox").fill("");
+  await bar.getByTestId("key-copy").click();
+  await expect.poll(() => sent).toContainEqual({ action: "key", args: { keys: "ctrl+c" } });
+  await expect(clipboard.getByRole("textbox")).toHaveValue("my coupon code");
   // Escape is a key of the display while the person has it, not a way out.
   await page.keyboard.press("Escape");
   await expect(live).toBeVisible();
   await live.getByTestId("give-back").click();
   await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  // Only watching, the kitty's clipboard can still be brought over, with nothing pressed there.
+  const before = sent.length;
+  await live.getByTestId("watch-copy").click();
+  await expect(live.getByTestId("clip-note")).toContainText("tom's clipboard");
+  expect(sent.length).toBe(before);
   await page.keyboard.press("Escape");
   await expect(live).toHaveCount(0);
 });

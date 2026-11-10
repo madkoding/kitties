@@ -341,6 +341,17 @@
     <action name="ShowMenu"><menu>client-menu</menu></action>
   </keybind>
 
+  <!-- The live view's key bar: Alt+F1 opens the apps menu, Ctrl+Alt+Delete the running
+       processes (top, in a terminal), like a task manager. -->
+  <keybind key="A-F1">
+    <action name="ShowMenu"><menu>root-menu</menu></action>
+  </keybind>
+  <keybind key="C-A-Delete">
+    <action name="Execute">
+      <command>xterm -title Tasks -geometry 110x32 -e top</command>
+    </action>
+  </keybind>
+
   <!-- Keybindings for window switching -->
   <keybind key="A-Tab">
     <action name="NextWindow">
