@@ -4111,6 +4111,10 @@ test("a kitty's machine is turned on and off and has its own idle time", async (
   await expect.poll(async () => (await idle()).auto_off_minutes).toBe(30);
   await power.getByTestId("auto-off").selectOption("default");
   await expect.poll(async () => (await idle()).auto_off_custom).toBe(false);
+  // When its browser last visited its tabs again, and what it did.
+  await expect(power.getByTestId("browser-visits")).toContainText(
+    "4 min ago: 2 reloaded, 1 visited quietly",
+  );
   // How often its browser visits its tabs again: the default for every kitty, or its own.
   const refresh = power.getByTestId("browser-refresh");
   await expect(refresh).toHaveValue("default");

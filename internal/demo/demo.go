@@ -351,6 +351,12 @@ func (d *Desktop) Exec(_ context.Context, name string, argv ...string) (string, 
 			return "set", nil
 		}
 		return d.clip[name], nil
+	case "cat":
+		if len(argv) == 2 && argv[1] == kitty.BrowserVisitsFile {
+			// A drawn browser whose tabs were visited a few minutes ago.
+			return fmt.Sprintf(`{"at": %d, "tabs": 3, "reloaded": 2, "quiet": 1, "kept": 0, "skipped": 0}`, time.Now().Add(-4*time.Minute).Unix()), nil
+		}
+		return "(demo) " + strings.Join(argv, " ") + "\n", nil
 	case "kitty-theme":
 		return "theme " + strings.Join(argv[1:], " "), nil
 	case "sh":

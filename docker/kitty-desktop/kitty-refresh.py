@@ -38,6 +38,8 @@ BUSY_SECONDS = 120
 CONF = os.path.expanduser("~/.config/kitties/browser-refresh")
 LIVE = "/dev/shm/kitty-browser-refresh"  # the gateway writes it when Settings › Machines changes
 LOG = "/tmp/kitty-refresh.log"
+# What the last pass did, in counts (no address): the gateway shows it in the kitty's window.
+SUMMARY = "/dev/shm/kitty-refresh.json"
 
 # What the page is doing right now, without its text: whether it is on screen and whether a person
 # has something in it that a reload would lose.
@@ -165,7 +167,10 @@ class Tab:
 
 def one_pass():
     found = tabs()
+    if found is None:
+        return []  # no browser open
     if not found:
+        summarize([])
         return []
     idle = idle_ms()
     quiet_for = minutes("KITTY_BROWSER_IDLE", 5) * 60000
@@ -199,7 +204,23 @@ def one_pass():
         url = t.get("url", "").split("?")[0].split("#")[0][:120]
         done.append((url, what))
         note("%s: %s" % (url, what))
+    summarize(done)
     return done
+
+
+def summarize(done):
+    """Writes the counts of a pass for the gateway; a failed write only loses the summary."""
+    counts = {"at": time.time(), "tabs": len(done), "reloaded": 0, "quiet": 0, "kept": 0, "skipped": 0}
+    for _, what in done:
+        key = what.split(" ")[0]
+        counts[{"reloaded": "reloaded", "visited": "quiet", "kept": "kept"}.get(key, "skipped")] += 1
+    try:
+        tmp = SUMMARY + ".new"
+        with open(tmp, "w") as f:
+            json.dump(counts, f)
+        os.replace(tmp, SUMMARY)
+    except OSError:
+        pass
 
 
 def main():

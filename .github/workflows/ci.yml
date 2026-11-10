@@ -358,6 +358,7 @@ jobs:
           docker exec kitty-login sh -c 'kitty-open http://127.0.0.1:8765/form >/dev/null && sleep 2 && kitty-page read >/dev/null && kitty-page type --ref 1 -- hola >/dev/null && rm -f /tmp/kitty-page.busy && KITTY_BROWSER_IDLE=0 kitty-refresh --once' | tee refresh.txt
           grep -q "8765/form: visited quietly (something is being typed" refresh.txt
           grep -q "8765/again: reloaded" refresh.txt
+          docker exec kitty-login cat /dev/shm/kitty-refresh.json | grep -q '"reloaded": [1-9]'
           docker exec kitty-login kitty-page read | grep -q "value=hola"
           # Signing in to the browser itself is off (it signed Google accounts out of the web).
           docker exec kitty-login sh -c 'kitty-page quit >/dev/null && python3 -c "import json; assert json.load(open(\"/var/lib/kitty-browser/Default/Preferences\"))[\"signin\"][\"allowed\"] is False"'

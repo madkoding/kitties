@@ -85,6 +85,17 @@ export interface Memory {
   top?: { name: string; mb: number; count: number }[];
 }
 
+// BrowserVisits is the last pass over the open tabs of a machine's browser, which keeps their
+// sessions alive: when, and how many it reloaded, visited quietly, kept or skipped.
+export interface BrowserVisits {
+  at: string;
+  tabs: number;
+  reloaded: number;
+  quiet: number;
+  kept: number;
+  skipped: number;
+}
+
 // Machines are the RAM and swap of every machine without values of its own, and what the
 // container engine has (engine_mb, absent when it cannot tell).
 export interface Machines {
@@ -962,7 +973,10 @@ export const api = {
     request<{ power: Power }>("GET", `/v1/kitties/${ref}/power`).then((r) => r.power),
   // machine is the power and, when it is on, the memory of a kitty's machine.
   machine: (ref: string) =>
-    request<{ power: Power; memory?: Memory }>("GET", `/v1/kitties/${ref}/power`),
+    request<{ power: Power; memory?: Memory; browser_visits?: BrowserVisits }>(
+      "GET",
+      `/v1/kitties/${ref}/power`,
+    ),
   // machines are the RAM and swap of the machines without values of their own.
   machines: () => request<Machines>("GET", "/v1/settings/machines"),
   setMachines: (m: { memory_mb: number; swap_mb: number; browser_refresh_minutes?: number }) =>

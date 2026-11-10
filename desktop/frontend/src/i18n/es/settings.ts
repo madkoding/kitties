@@ -535,6 +535,11 @@ const dict: Dictionary = {
   "Browser sessions": "Sesiones del navegador",
   Never: "Nunca",
   "Visit the open tabs again": "Volver a visitar las pestañas abiertas",
+  "just now": "recién",
+  "{n} min ago": "hace {n} min",
+  "Tabs visited again {when}: none open.": "Pestañas visitadas de nuevo {when}: ninguna abierta.",
+  "Tabs visited again {when}: {reloaded} reloaded, {quiet} visited quietly.":
+    "Pestañas visitadas de nuevo {when}: {reloaded} recargadas, {quiet} visitadas en silencio.",
   "Every {n} minutes": "Cada {n} minutos",
   "Sites like Gmail end a session that sits idle. The browser of each kitty visits its tabs again: it reloads only the ones nobody is using and visits the rest quietly, so nothing typed is lost and the screen does not change.":
     "Sitios como Gmail cierran una sesión inactiva. El navegador de cada kitty vuelve a visitar sus pestañas: recarga solo las que nadie usa y visita las demás en silencio, así no se pierde nada escrito y la pantalla no cambia.",

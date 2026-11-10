@@ -45,6 +45,11 @@ type MemoryReader interface {
 	Memory(ctx context.Context, ref string) (kitty.Memory, error)
 }
 
+// VisitReader is what the last pass over a machine's browser tabs did (kitty-refresh).
+type VisitReader interface {
+	BrowserVisits(ctx context.Context, ref string) (kitty.BrowserVisits, bool)
+}
+
 // Machiner is the RAM and swap every kitty's machine gets unless it has its own.
 type Machiner interface {
 	Machines() orchestrator.MachinesView
@@ -142,6 +147,11 @@ func (s *Server) handlePower(w http.ResponseWriter, r *http.Request) {
 	out := map[string]any{"power": power}
 	if m := s.memoryOf(r.Context(), r.PathValue("ref"), power); m != nil {
 		out["memory"] = m
+	}
+	if v, ok := s.fleet.(VisitReader); ok && power.State == kitty.PowerOn {
+		if visits, found := v.BrowserVisits(r.Context(), r.PathValue("ref")); found {
+			out["browser_visits"] = visits
+		}
 	}
 	reply(w, http.StatusOK, out)
 }

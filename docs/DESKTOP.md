@@ -319,7 +319,8 @@ its place. How often: **Settings › Machines › Browser sessions** (never, or 
 Each kitty can have its own (its window, Desktop, "Visit the open tabs again", or
 `PATCH /v1/kitties/{ref}` `{browser_refresh_minutes}`), and a kitty can keep one in
 `~/.config/kitties/browser-refresh` (a number of minutes, read on every pass); `KITTY_BROWSER_IDLE`
-sets the 5 minutes. `kitty-refresh --once` runs a pass by hand; the log is `/tmp/kitty-refresh.log`
+sets the 5 minutes. The kitty's window (Desktop) says when the tabs were last visited and how many
+were reloaded or visited quietly (`/dev/shm/kitty-refresh.json`, counts only). `kitty-refresh --once` runs a pass by hand; the log is `/tmp/kitty-refresh.log`
 (addresses only, never what a page says).
 
 **Pages in the host's language.** The gateway passes the host's language (`$LANG`, Windows' or
@@ -327,7 +328,9 @@ macOS' own) to the desktop as `KITTY_LANG`, like its time zone, and the browser 
 (`Accept-Language`: `es-CL,es,en-US,en`): Google or a bank sees the usual language from the usual
 place and asks less often whether it is a new device. A language chosen in the browser's own
 settings is kept. The browser's own menus are in that language too (the image brings
-`chromium-l10n`). `containers.env` can set `KITTY_LANG` for every desktop.
+`chromium-l10n`, trimmed to English, Spanish, Portuguese, French, German and Italian; the build
+argument `CHROMIUM_LOCALES` picks others, `all` keeps every one; another language shows the menus in
+English, the pages still in it). `containers.env` can set `KITTY_LANG` for every desktop.
 
 The **backup** (`kitty-backup`) adds a copy away from the container: the browser's cookies, sessions,
 saved passwords, local storage and preferences, and `~/.ssh`, `~/.gitconfig`, `~/.git-credentials`,

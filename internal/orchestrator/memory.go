@@ -264,6 +264,23 @@ func (m *Manager) Memory(ctx context.Context, ref string) (kitty.Memory, error) 
 	return mem, nil
 }
 
+// BrowserVisits is what the last pass of kitty-refresh over the open tabs of a kitty's browser
+// did. It is read inside the machine, which must be on, and does not count as a use of it; ok is
+// false when no pass has run yet (or the image is older than kitty-refresh).
+func (m *Manager) BrowserVisits(ctx context.Context, ref string) (kitty.BrowserVisits, bool) {
+	k, err := m.Get(ref)
+	if err != nil || !k.Desktop || k.Status != kitty.StatusRunning {
+		return kitty.BrowserVisits{}, false
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	out, err := m.ctr().Exec(ctx, k.Container, kitty.BrowserVisitsArgv...)
+	if err != nil {
+		return kitty.BrowserVisits{}, false
+	}
+	return kitty.ParseBrowserVisits(out)
+}
+
 // forgetMemory drops the last reading of a machine, after something changed it.
 func (m *Manager) forgetMemory(id string) {
 	m.mem.mu.Lock()

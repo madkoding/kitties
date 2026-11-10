@@ -1,5 +1,5 @@
 import { useEffect, useState } from "preact/hooks";
-import type { Kitty, Memory, Power } from "./api";
+import type { BrowserVisits, Kitty, Memory, Power } from "./api";
 import { api, errText } from "./api";
 import { t } from "./i18n";
 import MachineMemory, { REFRESH_CHOICES, withValue } from "./MachineMemory";
@@ -67,6 +67,20 @@ function stateText(p: Power): string {
   return t("On");
 }
 
+// visitsText says when the browser last visited its tabs again and what it did.
+export function visitsText(v: BrowserVisits, now = Date.now()): string {
+  const mins = Math.max(0, Math.round((now - Date.parse(v.at)) / 60000));
+  const when = mins < 1 ? t("just now") : t("{n} min ago", { n: mins });
+  if (v.tabs === 0) {
+    return t("Tabs visited again {when}: none open.", { when });
+  }
+  return t("Tabs visited again {when}: {reloaded} reloaded, {quiet} visited quietly.", {
+    when,
+    reloaded: v.reloaded,
+    quiet: v.quiet + v.kept,
+  });
+}
+
 export default function MachinePower({
   kitty,
   onChanged,
@@ -76,6 +90,7 @@ export default function MachinePower({
 }) {
   const [power, setPower] = useState<Power | null>(null);
   const [memory, setMemory] = useState<Memory | undefined>(undefined);
+  const [visits, setVisits] = useState<BrowserVisits | undefined>(undefined);
   const [err, setErr] = useState("");
   const load = () =>
     api
@@ -83,6 +98,7 @@ export default function MachinePower({
       .then((r) => {
         setPower(r.power);
         setMemory(r.memory);
+        setVisits(r.browser_visits);
       })
       // A gateway without power control (an older one) shows nothing.
       .catch(() => setPower(null));
@@ -168,6 +184,11 @@ export default function MachinePower({
           </label>
         )}
       </div>
+      {visits && refresh !== 0 && (
+        <p class="text-xs text-[var(--t4)]" data-testid="browser-visits">
+          {visitsText(visits)}
+        </p>
+      )}
       <MachineMemory
         kitty={kitty}
         power={power}

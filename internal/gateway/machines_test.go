@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/madkoding/kitties/internal/chat"
 	"github.com/madkoding/kitties/internal/kitty"
@@ -21,6 +22,10 @@ type memoryFleet struct {
 
 func (m *memoryFleet) Memory(context.Context, string) (kitty.Memory, error) {
 	return kitty.Memory{TotalMB: 2048, UsedMB: 512, AvailableMB: 1536}, m.memErr
+}
+
+func (m *memoryFleet) BrowserVisits(context.Context, string) (kitty.BrowserVisits, bool) {
+	return kitty.BrowserVisits{At: time.Unix(1794000000, 0).UTC(), Tabs: 2, Reloaded: 1, Quiet: 1}, true
 }
 
 func (m *memoryFleet) Machines() orchestrator.MachinesView {
@@ -53,6 +58,9 @@ func TestMachinesAndMemory(t *testing.T) {
 	code, got, _ := call(t, srv, "GET", "/v1/kitties/ana/power", "tok", nil)
 	if mem, _ := got["memory"].(map[string]any); code != 200 || mem["available_mb"] != float64(1536) {
 		t.Errorf("power with memory = %d %v", code, got)
+	}
+	if v, _ := got["browser_visits"].(map[string]any); v["tabs"] != float64(2) || v["reloaded"] != float64(1) {
+		t.Errorf("power with the last visit to its tabs: %v", got)
 	}
 	m.memErr = errors.New("cannot tell")
 	if _, got, _ = call(t, srv, "GET", "/v1/kitties/ana/power", "tok", nil); got["memory"] != nil {

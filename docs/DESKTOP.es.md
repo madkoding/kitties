@@ -337,7 +337,8 @@ Máquinas › Sesiones del navegador** (nunca, o cada 10 a 120 minutos; `contain
 en el archivo), que llega al instante a los escritorios encendidos. Cada kitty puede tener el suyo (su ventana, Escritorio, «Volver a visitar las pestañas abiertas», o
 `PATCH /v1/kitties/{ref}` `{browser_refresh_minutes}`), y un kitty puede guardar uno en
 `~/.config/kitties/browser-refresh` (minutos, se lee en cada pasada); `KITTY_BROWSER_IDLE` cambia
-los 5 minutos.
+los 5 minutos. La ventana del kitty (Escritorio) dice cuándo se visitaron las pestañas por última vez
+y cuántas se recargaron o se visitaron en silencio (`/dev/shm/kitty-refresh.json`, solo cuentas).
 `kitty-refresh --once` hace una pasada a mano; el registro es `/tmp/kitty-refresh.log` (solo
 direcciones, nunca lo que dice una página).
 
@@ -346,7 +347,9 @@ Windows o el de macOS) como `KITTY_LANG`, igual que su zona horaria, y el navega
 en él (`Accept-Language`: `es-CL,es,en-US,en`): Google o un banco ven el idioma de siempre desde el
 lugar de siempre y preguntan menos si es un dispositivo nuevo. Un idioma elegido en los ajustes del
 navegador se respeta. Los menús del navegador también salen en ese idioma (la imagen trae
-`chromium-l10n`). `containers.env` puede fijar `KITTY_LANG` para todos los escritorios.
+`chromium-l10n`, recortado a inglés, español, portugués, francés, alemán e italiano; el argumento de
+construcción `CHROMIUM_LOCALES` elige otros, `all` los deja todos; con otro idioma los menús salen en
+inglés y las páginas siguen en él). `containers.env` puede fijar `KITTY_LANG` para todos los escritorios.
 
 El **respaldo** (`kitty-backup`) añade una copia fuera del contenedor: cookies, sesiones, contraseñas
 guardadas, almacenamiento local y preferencias del navegador, y `~/.ssh`, `~/.gitconfig`,
