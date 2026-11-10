@@ -338,7 +338,9 @@ en el archivo), que llega al instante a los escritorios encendidos. Cada kitty p
 `PATCH /v1/kitties/{ref}` `{browser_refresh_minutes}`), y un kitty puede guardar uno en
 `~/.config/kitties/browser-refresh` (minutos, se lee en cada pasada); `KITTY_BROWSER_IDLE` cambia
 los 5 minutos. La ventana del kitty (Escritorio) dice cuándo se visitaron las pestañas por última vez
-y cuántas se recargaron o se visitaron en silencio (`/dev/shm/kitty-refresh.json`, solo cuentas).
+y cuántas se recargaron o se visitaron en silencio (`/dev/shm/kitty-refresh.json`, solo cuentas), y
+**Visitar ahora** hace una pasada al instante (`POST /v1/kitties/{ref}/browser/visit`), con el mismo
+cuidado.
 `kitty-refresh --once` hace una pasada a mano; el registro es `/tmp/kitty-refresh.log` (solo
 direcciones, nunca lo que dice una página).
 

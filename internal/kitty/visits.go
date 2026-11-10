@@ -9,6 +9,9 @@ import (
 // counts only, never an address or what a page says.
 const BrowserVisitsFile = "/dev/shm/kitty-refresh.json"
 
+// VisitNowArgv visits the open tabs again now, with the same care as the timed passes.
+var VisitNowArgv = []string{"kitty-refresh", "--once"}
+
 // BrowserVisitsArgv prints it (nothing when no pass has run yet).
 var BrowserVisitsArgv = []string{"cat", BrowserVisitsFile}
 

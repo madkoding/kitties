@@ -276,12 +276,13 @@ type Desktop struct {
 	running map[string]bool
 	opened  map[string]string
 	clicks  map[string]int
-	clip    map[string]string // the clipboard of each display
+	clip    map[string]string    // the clipboard of each display
+	visited map[string]time.Time // when kitty-refresh last visited the tabs, by display
 }
 
 // NewDesktop creates the demo runtime.
 func NewDesktop() *Desktop {
-	return &Desktop{running: map[string]bool{}, opened: map[string]string{}, clicks: map[string]int{}, clip: map[string]string{}}
+	return &Desktop{running: map[string]bool{}, opened: map[string]string{}, clicks: map[string]int{}, clip: map[string]string{}, visited: map[string]time.Time{}}
 }
 
 // Up implements orchestrator.Containers.
@@ -353,10 +354,16 @@ func (d *Desktop) Exec(_ context.Context, name string, argv ...string) (string, 
 		return d.clip[name], nil
 	case "cat":
 		if len(argv) == 2 && argv[1] == kitty.BrowserVisitsFile {
-			// A drawn browser whose tabs were visited a few minutes ago.
+			// A drawn browser whose tabs were visited a few minutes ago, or just now when asked.
+			if at, ok := d.visited[name]; ok {
+				return fmt.Sprintf(`{"at": %d, "tabs": 3, "reloaded": 3, "quiet": 0, "kept": 0, "skipped": 0}`, at.Unix()), nil
+			}
 			return fmt.Sprintf(`{"at": %d, "tabs": 3, "reloaded": 2, "quiet": 1, "kept": 0, "skipped": 0}`, time.Now().Add(-4*time.Minute).Unix()), nil
 		}
 		return "(demo) " + strings.Join(argv, " ") + "\n", nil
+	case "kitty-refresh":
+		d.visited[name] = time.Now()
+		return "(demo) the tabs were visited again\n", nil
 	case "kitty-theme":
 		return "theme " + strings.Join(argv[1:], " "), nil
 	case "sh":

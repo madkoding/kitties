@@ -4115,6 +4115,9 @@ test("a kitty's machine is turned on and off and has its own idle time", async (
   await expect(power.getByTestId("browser-visits")).toContainText(
     "4 min ago: 2 reloaded, 1 visited quietly",
   );
+  // Visit now: the tabs are visited again at once.
+  await power.getByTestId("visit-now").click();
+  await expect(power.getByTestId("browser-visits")).toContainText("just now: 3 reloaded");
   // How often its browser visits its tabs again: the default for every kitty, or its own.
   const refresh = power.getByTestId("browser-refresh");
   await expect(refresh).toHaveValue("default");

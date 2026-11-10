@@ -275,3 +275,29 @@ func TestMemoryReading(t *testing.T) {
 		t.Error("a machine that is off")
 	}
 }
+
+func TestVisitBrowserNow(t *testing.T) {
+	m, f, solo := limitManager(t)
+	ctx := context.Background()
+	if _, err := m.VisitBrowserNow(ctx, solo.ID); err == nil {
+		t.Error("a machine that is off visited its tabs")
+	}
+	m.mu.Lock()
+	m.kitties[solo.ID].Status = kitty.StatusRunning
+	m.mu.Unlock()
+	if f.outputs == nil {
+		f.outputs = map[string]string{}
+	}
+	if _, err := m.VisitBrowserNow(ctx, solo.ID); err == nil {
+		t.Error("no summary is an error")
+	}
+	f.outputs["cat"] = `{"at": 1794000000, "tabs": 2, "reloaded": 2}`
+	f.execs = nil
+	v, err := m.VisitBrowserNow(ctx, solo.ID)
+	if err != nil || v.Reloaded != 2 || v.Tabs != 2 {
+		t.Fatalf("visits = %+v %v", v, err)
+	}
+	if got := strings.Join(f.execs, "\n"); !strings.Contains(got, "kitty-refresh --once") || !strings.Contains(got, kitty.BrowserVisitsFile) {
+		t.Errorf("execs = %q", got)
+	}
+}

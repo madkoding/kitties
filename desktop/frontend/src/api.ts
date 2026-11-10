@@ -977,6 +977,9 @@ export const api = {
       "GET",
       `/v1/kitties/${ref}/power`,
     ),
+  // visitBrowser visits the open tabs of a kitty's browser again now (their sessions renewed).
+  visitBrowser: (ref: string) =>
+    request<{ browser_visits: BrowserVisits }>("POST", `/v1/kitties/${ref}/browser/visit`),
   // machines are the RAM and swap of the machines without values of their own.
   machines: () => request<Machines>("GET", "/v1/settings/machines"),
   setMachines: (m: { memory_mb: number; swap_mb: number; browser_refresh_minutes?: number }) =>

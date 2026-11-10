@@ -320,7 +320,8 @@ Each kitty can have its own (its window, Desktop, "Visit the open tabs again", o
 `PATCH /v1/kitties/{ref}` `{browser_refresh_minutes}`), and a kitty can keep one in
 `~/.config/kitties/browser-refresh` (a number of minutes, read on every pass); `KITTY_BROWSER_IDLE`
 sets the 5 minutes. The kitty's window (Desktop) says when the tabs were last visited and how many
-were reloaded or visited quietly (`/dev/shm/kitty-refresh.json`, counts only). `kitty-refresh --once` runs a pass by hand; the log is `/tmp/kitty-refresh.log`
+were reloaded or visited quietly (`/dev/shm/kitty-refresh.json`, counts only), and **Visit now**
+runs a pass at once (`POST /v1/kitties/{ref}/browser/visit`), with the same care. `kitty-refresh --once` runs a pass by hand; the log is `/tmp/kitty-refresh.log`
 (addresses only, never what a page says).
 
 **Pages in the host's language.** The gateway passes the host's language (`$LANG`, Windows' or

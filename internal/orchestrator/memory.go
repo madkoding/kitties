@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"time"
@@ -279,6 +280,32 @@ func (m *Manager) BrowserVisits(ctx context.Context, ref string) (kitty.BrowserV
 		return kitty.BrowserVisits{}, false
 	}
 	return kitty.ParseBrowserVisits(out)
+}
+
+// VisitBrowserNow visits the open tabs of a kitty's browser again now (kitty-refresh --once):
+// the tabs nobody is using are reloaded, the rest visited quietly. The machine must be on; it does
+// not count as a use of it.
+func (m *Manager) VisitBrowserNow(ctx context.Context, ref string) (kitty.BrowserVisits, error) {
+	k, err := m.Get(ref)
+	if err != nil {
+		return kitty.BrowserVisits{}, err
+	}
+	if !k.Desktop {
+		return kitty.BrowserVisits{}, kitty.ErrNoMachine
+	}
+	if k.Status != kitty.StatusRunning {
+		return kitty.BrowserVisits{}, errors.New(k.Name + "'s machine is not on")
+	}
+	run, cancel := context.WithTimeout(ctx, 90*time.Second)
+	defer cancel()
+	if _, err := m.ctr().Exec(run, k.Container, kitty.VisitNowArgv...); err != nil {
+		return kitty.BrowserVisits{}, fmt.Errorf("the tabs could not be visited: %w", err)
+	}
+	v, ok := m.BrowserVisits(ctx, k.ID)
+	if !ok {
+		return kitty.BrowserVisits{}, errors.New("the browser did not say what it visited (is it open?)")
+	}
+	return v, nil
 }
 
 // forgetMemory drops the last reading of a machine, after something changed it.

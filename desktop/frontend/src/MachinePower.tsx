@@ -91,6 +91,7 @@ export default function MachinePower({
   const [power, setPower] = useState<Power | null>(null);
   const [memory, setMemory] = useState<Memory | undefined>(undefined);
   const [visits, setVisits] = useState<BrowserVisits | undefined>(undefined);
+  const [visiting, setVisiting] = useState(false);
   const [err, setErr] = useState("");
   const load = () =>
     api
@@ -131,6 +132,17 @@ export default function MachinePower({
         : { browser_refresh_minutes: Number(value) },
     );
   const refresh = power.browser_refresh_minutes;
+  const visitNow = async () => {
+    setErr("");
+    setVisiting(true);
+    try {
+      setVisits((await api.visitBrowser(kitty.id)).browser_visits);
+    } catch (e) {
+      setErr(errText(e));
+    } finally {
+      setVisiting(false);
+    }
+  };
   const refreshText = (n: number) => (n === 0 ? t("Never") : t("Every {n} minutes", { n }));
   const choices = IDLE_CHOICES.includes(power.auto_off_minutes)
     ? IDLE_CHOICES
@@ -184,10 +196,21 @@ export default function MachinePower({
           </label>
         )}
       </div>
-      {visits && refresh !== 0 && (
-        <p class="text-xs text-[var(--t4)]" data-testid="browser-visits">
-          {visitsText(visits)}
-        </p>
+      {power.state === "on" && refresh !== undefined && (
+        <div class="flex items-center gap-2 flex-wrap text-xs text-[var(--t4)]">
+          <span class="flex-1 min-w-0" data-testid="browser-visits">
+            {visits ? visitsText(visits) : t("The tabs have not been visited again yet.")}
+          </span>
+          <button
+            type="button"
+            class="btn-outline px-2 py-1 text-xs"
+            disabled={visiting}
+            onClick={() => void visitNow()}
+            data-testid="visit-now"
+          >
+            {visiting ? t("Visiting…") : t("Visit now")}
+          </button>
+        </div>
       )}
       <MachineMemory
         kitty={kitty}

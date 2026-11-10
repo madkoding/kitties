@@ -28,6 +28,13 @@ func (m *memoryFleet) BrowserVisits(context.Context, string) (kitty.BrowserVisit
 	return kitty.BrowserVisits{At: time.Unix(1794000000, 0).UTC(), Tabs: 2, Reloaded: 1, Quiet: 1}, true
 }
 
+func (m *memoryFleet) VisitBrowserNow(_ context.Context, ref string) (kitty.BrowserVisits, error) {
+	if ref != "ana" {
+		return kitty.BrowserVisits{}, errors.New("no such kitty")
+	}
+	return kitty.BrowserVisits{At: time.Unix(1794000600, 0).UTC(), Tabs: 2, Reloaded: 2}, nil
+}
+
 func (m *memoryFleet) Machines() orchestrator.MachinesView {
 	return orchestrator.MachinesView{MachineDefaults: m.defaults, EngineMB: 8192}
 }
@@ -61,6 +68,14 @@ func TestMachinesAndMemory(t *testing.T) {
 	}
 	if v, _ := got["browser_visits"].(map[string]any); v["tabs"] != float64(2) || v["reloaded"] != float64(1) {
 		t.Errorf("power with the last visit to its tabs: %v", got)
+	}
+	if code, got, _ := call(t, srv, "POST", "/v1/kitties/ana/browser/visit", "tok", nil); code != 200 {
+		t.Errorf("visit now = %d %v", code, got)
+	} else if v, _ := got["browser_visits"].(map[string]any); v["reloaded"] != float64(2) {
+		t.Errorf("visit now = %v", got)
+	}
+	if code, _, _ := call(t, plain, "POST", "/v1/kitties/ana/browser/visit", "tok", nil); code != 404 {
+		t.Errorf("without a visitor = %d", code)
 	}
 	m.memErr = errors.New("cannot tell")
 	if _, got, _ = call(t, srv, "GET", "/v1/kitties/ana/power", "tok", nil); got["memory"] != nil {

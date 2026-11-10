@@ -36,6 +36,7 @@ func (s *Server) desktopRoutes() {
 	s.mux.Handle("POST /v1/desktops/updates", api(s.handleUpdateDesktops))
 	s.mux.Handle("GET /v1/kitties/{ref}/power", api(s.handlePower))
 	s.mux.Handle("POST /v1/kitties/{ref}/power", api(s.handleSetPower))
+	s.mux.Handle("POST /v1/kitties/{ref}/browser/visit", api(s.handleVisitBrowser))
 	s.mux.Handle("GET /v1/settings/machines", api(s.handleMachines))
 	s.mux.Handle("PUT /v1/settings/machines", api(s.handleSetMachines))
 }
@@ -48,6 +49,27 @@ type MemoryReader interface {
 // VisitReader is what the last pass over a machine's browser tabs did (kitty-refresh).
 type VisitReader interface {
 	BrowserVisits(ctx context.Context, ref string) (kitty.BrowserVisits, bool)
+}
+
+// Visitor visits a machine's browser tabs again now.
+type Visitor interface {
+	VisitBrowserNow(ctx context.Context, ref string) (kitty.BrowserVisits, error)
+}
+
+// handleVisitBrowser visits the open tabs of a kitty's browser again now, so their sessions are
+// renewed: {"browser_visits": {...}} with what it did.
+func (s *Server) handleVisitBrowser(w http.ResponseWriter, r *http.Request) {
+	v, ok := s.fleet.(Visitor)
+	if !ok {
+		fail(w, http.StatusNotFound, errors.New("this gateway cannot visit the browser's tabs"))
+		return
+	}
+	visits, err := v.VisitBrowserNow(r.Context(), r.PathValue("ref"))
+	if err != nil {
+		fail(w, powerCode(err), err)
+		return
+	}
+	reply(w, http.StatusOK, map[string]any{"browser_visits": visits})
 }
 
 // Machiner is the RAM and swap every kitty's machine gets unless it has its own.
