@@ -270,7 +270,7 @@ kitty, Escritorio, muestra los mismos selectores), con lo que cada máquina usa 
 total el motor de contenedores; las máquinas encendidas lo comparten, y un tamaño mayor que el del motor
 se rechaza.
 
-<img src="screenshots/73-settings-machines.png" alt="Ajustes, Máquinas: la RAM y el swap para todos los kitties, y la máquina de cada kitty con la memoria que usa" width="100%">
+<img src="screenshots/73-settings-machines.png" alt="Ajustes, Máquinas: la RAM y el swap para todos los kitties, cada cuánto los navegadores vuelven a visitar sus pestañas, y la máquina de cada kitty con la memoria que usa" width="100%">
 
 **Dónde se aplica un cambio.** En un escritorio local (Docker o Podman) el nuevo tamaño llega a la
 máquina al instante (`docker update`), encendida o no. Cuando el motor no puede (un Podman antiguo, un
@@ -343,6 +343,40 @@ contraseñas y códigos van en la **bóveda** del gateway (Ajustes), cifrada fue
 kitty las escribe con `type_secret` sin leerlas; las contraseñas guardadas antes en el navegador siguen
 funcionando. Un escritorio
 detenido de golpe también vuelve a levantar: al arrancar se borra el candado viejo de la pantalla.
+
+**Iniciar sesión en el navegador mismo está apagado** (políticas `BrowserSignin=0` y `SyncDisabled`),
+no iniciar sesión en las páginas. El Chromium de Debian no tiene claves OAuth de Google que Google
+acepte, así que tras entrar a Gmail el navegador intentaba atarse a la cuenta, fallaba y cerraba la
+sesión de la cuenta también en la web: parecía iniciada y un momento después no lo estaba. Ahora una
+sesión de Google son cookies, como las de cualquier sitio, y se queda en el perfil.
+
+**Las sesiones se mantienen vivas** mientras el navegador está abierto: `kitty-refresh` vuelve a
+visitar sus pestañas cada 20 minutos, así un sitio que cierra sesiones inactivas (Gmail, bancos) ve al
+kitty como presente. Nunca pierde trabajo ni estorba: una pestaña se recarga solo si no es la que está
+en pantalla mientras alguien (la persona en la vista en vivo o los clics del propio kitty) usó el
+escritorio en los últimos 5 minutos, no tiene nada escrito, nada sonando y el kitty no ha manejado el
+navegador (`kitty-page`) en los últimos 2 minutos; las demás solo reciben una visita silenciosa (una
+petición a su propia dirección con sus cookies, desde dentro de la página, sin cambiar nada en
+pantalla), y una página que pregunta antes de salir se queda donde está. Cada cuánto: **Ajustes ›
+Máquinas › Sesiones del navegador** (nunca, o cada 10 a 120 minutos; `containers.browser_refresh_minutes`
+en el archivo), que llega al instante a los escritorios encendidos. Cada kitty puede tener el suyo (su ventana, Escritorio, «Volver a visitar las pestañas abiertas», o
+`PATCH /v1/kitties/{ref}` `{browser_refresh_minutes}`), y un kitty puede guardar uno en
+`~/.config/kitties/browser-refresh` (minutos, se lee en cada pasada); `KITTY_BROWSER_IDLE` cambia
+los 5 minutos. La ventana del kitty (Escritorio) dice cuándo se visitaron las pestañas por última vez
+y cuántas se recargaron o se visitaron en silencio (`/dev/shm/kitty-refresh.json`, solo cuentas), y
+**Visitar ahora** hace una pasada al instante (`POST /v1/kitties/{ref}/browser/visit`), con el mismo
+cuidado.
+`kitty-refresh --once` hace una pasada a mano; el registro es `/tmp/kitty-refresh.log` (solo
+direcciones, nunca lo que dice una página).
+
+**Páginas en el idioma del host.** El gateway pasa al escritorio el idioma del host (`$LANG`, el de
+Windows o el de macOS) como `KITTY_LANG`, igual que su zona horaria, y el navegador pide las páginas
+en él (`Accept-Language`: `es-CL,es,en-US,en`): Google o un banco ven el idioma de siempre desde el
+lugar de siempre y preguntan menos si es un dispositivo nuevo. Un idioma elegido en los ajustes del
+navegador se respeta. Los menús del navegador también salen en ese idioma (la imagen trae
+`chromium-l10n`, recortado a inglés, español, portugués, francés, alemán e italiano; el argumento de
+construcción `CHROMIUM_LOCALES` elige otros, `all` los deja todos; con otro idioma los menús salen en
+inglés y las páginas siguen en él). `containers.env` puede fijar `KITTY_LANG` para todos los escritorios.
 
 El **respaldo** (`kitty-backup`) añade una copia fuera del contenedor: cookies, sesiones, contraseñas
 guardadas, almacenamiento local y preferencias del navegador, y `~/.ssh`, `~/.gitconfig`,

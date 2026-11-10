@@ -23,6 +23,10 @@ export function mbText(n: number): string {
   return t("{n} GB", { n: Number.isInteger(gb) ? String(gb) : gb.toFixed(1) });
 }
 
+// How often the browser visits its open tabs again, in minutes, so sites that end idle sessions
+// keep the kitty logged in; tabs someone is using are only visited quietly, never reloaded.
+export const REFRESH_CHOICES = [0, 10, 20, 30, 60, 120];
+
 // withValue keeps a value that is not among the choices (set in the file, or by the API).
 export function withValue(choices: number[], v: number): number[] {
   return choices.includes(v) ? choices : [...choices, v].sort((a, b) => a - b);

@@ -111,6 +111,8 @@ func (m *Manager) desktopSpec(ctx context.Context, k *kitty.Kitty) (container.Sp
 		env[key] = v
 	}
 	env["KITTY_SHARED_QUOTA_MB"] = strconv.Itoa(m.SharedQuotaMB())
+	// How often the browser visits its tabs again: the kitty's own, or Settings › Machines.
+	env["KITTY_BROWSER_REFRESH"] = strconv.Itoa(m.BrowserRefreshMinutes(k))
 	memoryMB, swapMB, _ := m.MemoryLimits(k)
 	spec := container.Spec{
 		Name: k.Container, KittyName: k.Name, Image: c.Image, MemoryMB: memoryMB, SwapMB: swapMB, CPUs: c.CPUs,

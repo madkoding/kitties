@@ -1077,6 +1077,15 @@ type Update struct {
 	MemoryMB      *int  `json:"memory_mb,omitempty"`
 	SwapMB        *int  `json:"swap_mb,omitempty"`
 	MemoryDefault *bool `json:"memory_default,omitempty"`
+	// BrowserRefresh is how often its browser visits its tabs again, in minutes (0 is never);
+	// BrowserRefreshDefault, when true, goes back to the default for every kitty.
+	BrowserRefresh        *int  `json:"browser_refresh_minutes,omitempty"`
+	BrowserRefreshDefault *bool `json:"browser_refresh_default,omitempty"`
+}
+
+// refreshChange reports whether the update touches how often the browser visits its tabs again.
+func (u Update) refreshChange() bool {
+	return u.BrowserRefresh != nil || (u.BrowserRefreshDefault != nil && *u.BrowserRefreshDefault)
 }
 
 // memoryChange reports whether the update touches the machine's RAM or swap.
@@ -1095,6 +1104,9 @@ func (m *Manager) Edit(ref string, u Update) (*kitty.Kitty, error) {
 	defer cancel()
 	if u.Theme != nil {
 		m.applyTheme(ctx, k, true)
+	}
+	if u.refreshChange() {
+		m.applyBrowserRefresh(ctx, k)
 	}
 	if u.memoryChange() {
 		m.applyLimits(ctx, k)
@@ -1187,6 +1199,16 @@ func (m *Manager) edit(ref string, u Update) (*kitty.Kitty, error) {
 	}
 	if u.MemoryDefault != nil && *u.MemoryDefault {
 		k.MemoryMB, k.SwapMB = nil, nil
+	}
+	if u.BrowserRefresh != nil {
+		if err := kitty.ValidBrowserRefresh(*u.BrowserRefresh); err != nil {
+			return nil, err
+		}
+		minutes := *u.BrowserRefresh
+		k.BrowserRefresh = &minutes
+	}
+	if u.BrowserRefreshDefault != nil && *u.BrowserRefreshDefault {
+		k.BrowserRefresh = nil
 	}
 	if u.Backup != nil {
 		backup := strings.TrimSpace(*u.Backup)

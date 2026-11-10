@@ -284,7 +284,7 @@ jobs:
       - name: shell scripts parse
         run: |
           for f in docker/kitty-desktop/*.sh docker/kitty-desktop/test/*.sh; do sh -n "$f"; done
-          python3 -m py_compile docker/kitty-desktop/kitty-page.py docker/kitty-desktop/kitty-file.py
+          python3 -m py_compile docker/kitty-desktop/kitty-page.py docker/kitty-desktop/kitty-file.py docker/kitty-desktop/kitty-refresh.py
       - name: the desktop's fonts are the app's
         run: for f in docker/kitty-desktop/fonts/*.woff2; do cmp "$f" "desktop/frontend/public/$(basename "$f")"; done
       - name: lumen-wm's main (the image always builds it; the commit is also the cache key)
@@ -341,7 +341,7 @@ jobs:
               def do_GET(s):
                   s.send_response(200)
                   if s.path == "/login": s.send_header("Set-Cookie", "sess=1; Path=/"); s.send_header("Set-Cookie", "kept=1; Path=/; Max-Age=86400")
-                  s.end_headers(); s.wfile.write(b"<title>t</title>" + (s.headers.get("Cookie") or "none").encode())
+                  s.end_headers(); s.wfile.write(b"<title>t</title><input>" + (s.headers.get("Cookie") or "none").encode())
           h.HTTPServer(("127.0.0.1", 8765), H).serve_forever()'; sleep 1; }
           up && ready && serve
           docker exec kitty-login kitty-open http://127.0.0.1:8765/login && sleep 3
@@ -353,6 +353,15 @@ jobs:
           docker rm -f kitty-login && up && ready && serve
           docker exec kitty-login kitty-open http://127.0.0.1:8765/again && sleep 3
           docker exec kitty-login kitty-page read | grep -q "sess=1; kept=1"
+          # kitty-refresh keeps what is typed in a page and reloads a tab nobody uses.
+          docker exec kitty-login sh -c 'pgrep -f kitty-refresh >/dev/null && which xprintidle >/dev/null'
+          docker exec kitty-login sh -c 'kitty-open http://127.0.0.1:8765/form >/dev/null && sleep 2 && kitty-page read >/dev/null && kitty-page type --ref 1 -- hola >/dev/null && rm -f /tmp/kitty-page.busy && KITTY_BROWSER_IDLE=0 kitty-refresh --once' | tee refresh.txt
+          grep -q "8765/form: visited quietly (something is being typed" refresh.txt
+          grep -q "8765/again: reloaded" refresh.txt
+          docker exec kitty-login cat /dev/shm/kitty-refresh.json | grep -q '"reloaded": [1-9]'
+          docker exec kitty-login kitty-page read | grep -q "value=hola"
+          # Signing in to the browser itself is off (it signed Google accounts out of the web).
+          docker exec kitty-login sh -c 'kitty-page quit >/dev/null && python3 -c "import json; assert json.load(open(\"/var/lib/kitty-browser/Default/Preferences\"))[\"signin\"][\"allowed\"] is False"'
           docker rm -f kitty-login && docker volume rm kitty-login-browser
       - name: a desktop on an empty home of the host comes up seeded
         run: |
@@ -373,7 +382,7 @@ jobs:
           docker exec kitty-ci kitty-ocr | awk -F'\t' 'NF && $1 !~ /^[0-9]+,[0-9]+$/ { bad = 1 } END { exit bad }'
           # What a kitty keeps (a key, the browser's profile) is backed up and put back, and the browser
           # closes in an orderly way and keeps its session cookies across a restart.
-          docker exec kitty-ci sh -c 'test -f /etc/chromium/policies/managed/kitties.json && mkdir -p ~/.ssh && echo k > ~/.ssh/id_ci && mkdir -p ~/.config/kitties && echo p > ~/.config/kitties/pins && kitty-backup | base64 -d > /tmp/b.tgz && tar tzf /tmp/b.tgz | grep -q kitties/pins && tar tzf /tmp/b.tgz | grep -q id_ci && rm -rf ~/.ssh ~/.config/kitties && kitty-restore < /tmp/b.tgz && test -f ~/.ssh/id_ci && test -f ~/.config/kitties/pins'
+          docker exec kitty-ci sh -c 'test -f /etc/chromium/policies/managed/kitties.json && test -f /usr/lib/chromium/locales/es-419.pak && mkdir -p ~/.ssh && echo k > ~/.ssh/id_ci && mkdir -p ~/.config/kitties && echo p > ~/.config/kitties/pins && kitty-backup | base64 -d > /tmp/b.tgz && tar tzf /tmp/b.tgz | grep -q kitties/pins && tar tzf /tmp/b.tgz | grep -q id_ci && rm -rf ~/.ssh ~/.config/kitties && kitty-restore < /tmp/b.tgz && test -f ~/.ssh/id_ci && test -f ~/.config/kitties/pins'
           # Text for the keyboard (a secret) goes in on the input and is typed.
           printf 'x' | docker exec -i kitty-ci xdotool type --delay 20 --file -
           # A page is read and acted on from the inside, through the browser's DevTools port.

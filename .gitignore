@@ -38,3 +38,4 @@ internal/web/dist/*
 desktop/frontend/e2e/.hooks.log
 desktop/frontend/test-results/
 desktop/frontend/e2e/.data-login/
+__pycache__/

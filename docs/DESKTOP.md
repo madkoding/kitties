@@ -252,7 +252,7 @@ Each machine has so much **RAM and swap**: 2 GB and 1 GB by default (`containers
 Desktop, shows the same pickers), with what each machine uses now and what the container engine has
 in all; the machines that are on share it, and a size bigger than the engine is refused.
 
-<img src="screenshots/73-settings-machines.png" alt="Settings, Machines: the RAM and swap for every kitty, and each kitty's machine with the memory it uses" width="100%">
+<img src="screenshots/73-settings-machines.png" alt="Settings, Machines: the RAM and swap for every kitty, how often the browsers visit their tabs again, and each kitty's machine with the memory it uses" width="100%">
 
 **Where a change applies.** On a local desktop (Docker or Podman) a new size reaches the machine at
 once (`docker update`), running or not. When the engine cannot (an older Podman, a cgroup without swap
@@ -323,6 +323,38 @@ Passwords and codes go in the gateway's **vault** (Settings), encrypted away fro
 the kitty types them with `type_secret` without reading them; passwords saved in the browser before
 keep working. A desktop stopped hard also comes
 up again: the display's stale lock is removed at the start.
+
+**Signing in to the browser itself is off** (policies `BrowserSignin=0` and `SyncDisabled`), not
+signing in on pages. Debian's Chromium has no Google OAuth keys that Google accepts, so after a login
+on Gmail the browser tried to bind itself to the account, failed, and signed the account out of the
+web too: it looked logged in and was not a moment later. Now a Google login is plain cookies, like any
+other site's, and stays in the profile.
+
+**Logins are kept alive** while the browser is open: `kitty-refresh` visits its tabs again every
+20 minutes, so a site that ends idle sessions (Gmail, banks) sees the kitty as still there. It never
+loses work nor gets in the way: a tab is reloaded only when it is not the one on screen while someone
+(the person in the live view or the kitty's own clicks) used the desktop in the last 5 minutes, it has
+nothing typed in it, nothing playing, and the kitty has not driven the browser (`kitty-page`) in the
+last 2 minutes; any other tab only gets a quiet visit (a request to its own address with its cookies,
+from inside the page, with nothing changing on screen), and a page that asks before it is left keeps
+its place. How often: **Settings › Machines › Browser sessions** (never, or every 10 to 120 minutes;
+`containers.browser_refresh_minutes` in the file), which reaches the desktops that are on at once.
+Each kitty can have its own (its window, Desktop, "Visit the open tabs again", or
+`PATCH /v1/kitties/{ref}` `{browser_refresh_minutes}`), and a kitty can keep one in
+`~/.config/kitties/browser-refresh` (a number of minutes, read on every pass); `KITTY_BROWSER_IDLE`
+sets the 5 minutes. The kitty's window (Desktop) says when the tabs were last visited and how many
+were reloaded or visited quietly (`/dev/shm/kitty-refresh.json`, counts only), and **Visit now**
+runs a pass at once (`POST /v1/kitties/{ref}/browser/visit`), with the same care. `kitty-refresh --once` runs a pass by hand; the log is `/tmp/kitty-refresh.log`
+(addresses only, never what a page says).
+
+**Pages in the host's language.** The gateway passes the host's language (`$LANG`, Windows' or
+macOS' own) to the desktop as `KITTY_LANG`, like its time zone, and the browser asks for pages in it
+(`Accept-Language`: `es-CL,es,en-US,en`): Google or a bank sees the usual language from the usual
+place and asks less often whether it is a new device. A language chosen in the browser's own
+settings is kept. The browser's own menus are in that language too (the image brings
+`chromium-l10n`, trimmed to English, Spanish, Portuguese, French, German and Italian; the build
+argument `CHROMIUM_LOCALES` picks others, `all` keeps every one; another language shows the menus in
+English, the pages still in it). `containers.env` can set `KITTY_LANG` for every desktop.
 
 The **backup** (`kitty-backup`) adds a copy away from the container: the browser's cookies, sessions,
 saved passwords, local storage and preferences, and `~/.ssh`, `~/.gitconfig`, `~/.git-credentials`,
