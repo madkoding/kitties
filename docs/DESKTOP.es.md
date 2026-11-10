@@ -245,7 +245,7 @@ kitty, Escritorio, muestra los mismos selectores), con lo que cada máquina usa 
 total el motor de contenedores; las máquinas encendidas lo comparten, y un tamaño mayor que el del motor
 se rechaza.
 
-<img src="screenshots/73-settings-machines.png" alt="Ajustes, Máquinas: la RAM y el swap para todos los kitties, y la máquina de cada kitty con la memoria que usa" width="100%">
+<img src="screenshots/73-settings-machines.png" alt="Ajustes, Máquinas: la RAM y el swap para todos los kitties, cada cuánto los navegadores vuelven a visitar sus pestañas, y la máquina de cada kitty con la memoria que usa" width="100%">
 
 **Dónde se aplica un cambio.** En un escritorio local (Docker o Podman) el nuevo tamaño llega a la
 máquina al instante (`docker update`), encendida o no. Cuando el motor no puede (un Podman antiguo, un
@@ -332,11 +332,19 @@ en pantalla mientras alguien (la persona en la vista en vivo o los clics del pro
 escritorio en los últimos 5 minutos, no tiene nada escrito, nada sonando y el kitty no ha manejado el
 navegador (`kitty-page`) en los últimos 2 minutos; las demás solo reciben una visita silenciosa (una
 petición a su propia dirección con sus cookies, desde dentro de la página, sin cambiar nada en
-pantalla), y una página que pregunta antes de salir se queda donde está. Cada cuánto:
-`KITTY_BROWSER_REFRESH` (minutos, `0` apaga; va en `containers.env`) o, por kitty y sin reiniciar, un
-número en `~/.config/kitties/browser-refresh`; `KITTY_BROWSER_IDLE` cambia los 5 minutos.
+pantalla), y una página que pregunta antes de salir se queda donde está. Cada cuánto: **Ajustes ›
+Máquinas › Sesiones del navegador** (nunca, o cada 10 a 120 minutos; `containers.browser_refresh_minutes`
+en el archivo), que llega al instante a los escritorios encendidos. Un kitty puede tener el suyo en
+`~/.config/kitties/browser-refresh` (minutos, se lee en cada pasada); `KITTY_BROWSER_IDLE` cambia
+los 5 minutos.
 `kitty-refresh --once` hace una pasada a mano; el registro es `/tmp/kitty-refresh.log` (solo
 direcciones, nunca lo que dice una página).
+
+**Páginas en el idioma del host.** El gateway pasa al escritorio el idioma del host (`$LANG`, el de
+Windows o el de macOS) como `KITTY_LANG`, igual que su zona horaria, y el navegador pide las páginas
+en él (`Accept-Language`: `es-CL,es,en-US,en`): Google o un banco ven el idioma de siempre desde el
+lugar de siempre y preguntan menos si es un dispositivo nuevo. Un idioma elegido en los ajustes del
+navegador se respeta. `containers.env` puede fijar `KITTY_LANG` para todos los escritorios.
 
 El **respaldo** (`kitty-backup`) añade una copia fuera del contenedor: cookies, sesiones, contraseñas
 guardadas, almacenamiento local y preferencias del navegador, y `~/.ssh`, `~/.gitconfig`,

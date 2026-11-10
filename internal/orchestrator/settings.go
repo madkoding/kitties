@@ -90,6 +90,9 @@ func (m *Manager) loadSettings() error {
 	}
 	if s.Machines != nil {
 		m.cfg.Containers.MemoryMB, m.cfg.Containers.SwapMB = s.Machines.MemoryMB, s.Machines.SwapMB
+		if n := s.Machines.BrowserRefreshMinutes; n != nil && config.ValidBrowserRefresh(*n) == nil {
+			m.cfg.Containers.BrowserRefreshMinutes = *n
+		}
 	}
 	if s.Retention != nil {
 		m.cfg.Retention = *s.Retention

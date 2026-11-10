@@ -532,6 +532,12 @@ const dict: Dictionary = {
   "A change reaches a machine at once when the engine can; otherwise the next time it is turned on. A machine in the cloud has the size of its provider.":
     "Un cambio llega a la máquina al instante cuando el motor puede; si no, la próxima vez que se encienda. Una máquina en la nube tiene el tamaño de su proveedor.",
   "Each kitty": "Cada kitty",
+  "Browser sessions": "Sesiones del navegador",
+  Never: "Nunca",
+  "Visit the open tabs again": "Volver a visitar las pestañas abiertas",
+  "Every {n} minutes": "Cada {n} minutos",
+  "Sites like Gmail end a session that sits idle. The browser of each kitty visits its tabs again: it reloads only the ones nobody is using and visits the rest quietly, so nothing typed is lost and the screen does not change.":
+    "Sitios como Gmail cierran una sesión inactiva. El navegador de cada kitty vuelve a visitar sus pestañas: recarga solo las que nadie usa y visita las demás en silencio, así no se pierde nada escrito y la pantalla no cambia.",
 
   // Storage: what the data takes and what is kept
   Storage: "Almacenamiento",

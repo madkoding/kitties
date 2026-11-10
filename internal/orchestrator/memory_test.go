@@ -160,6 +160,51 @@ func TestMachineDefaults(t *testing.T) {
 	}
 }
 
+func TestBrowserRefreshDefault(t *testing.T) {
+	m, f, solo := limitManager(t)
+	if n := *m.Machines().BrowserRefreshMinutes; n != 20 {
+		t.Errorf("default = %d", n)
+	}
+	if f.specs[0].Env["KITTY_BROWSER_REFRESH"] != "20" {
+		t.Errorf("the desktop is made with it: %v", f.specs[0].Env)
+	}
+	ctx := context.Background()
+	m.mu.Lock()
+	m.kitties[solo.ID].Status = kitty.StatusRunning
+	m.mu.Unlock()
+	f.execs = nil
+	n := 45
+	if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 2048, SwapMB: 1024, BrowserRefreshMinutes: &n}); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(f.execs, "\n"); !strings.Contains(got, BrowserRefreshFile) || !strings.Contains(got, "45") {
+		t.Errorf("a desktop that is on is told at once: %q", got)
+	}
+	// A change of the memory alone keeps it.
+	if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 3072, SwapMB: 1024}); err != nil {
+		t.Fatal(err)
+	}
+	if n := *m.Machines().BrowserRefreshMinutes; n != 45 {
+		t.Errorf("kept = %d", n)
+	}
+	for _, bad := range []int{-1, 24*60 + 1} {
+		if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 3072, SwapMB: 1024, BrowserRefreshMinutes: &bad}); err == nil {
+			t.Errorf("%d accepted", bad)
+		}
+	}
+	again, err := New(m.cfg, WithContainers(newFake(), nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := *again.Machines().BrowserRefreshMinutes; n != 45 {
+		t.Errorf("reloaded = %d", n)
+	}
+	data, _ := os.ReadFile(filepath.Join(filepath.Dir(m.path), "settings.json"))
+	if !strings.Contains(string(data), `"browser_refresh_minutes": 45`) {
+		t.Errorf("settings = %s", data)
+	}
+}
+
 func TestMemoryReading(t *testing.T) {
 	m, f, solo := limitManager(t)
 	f.outputs = map[string]string{"sh": "memory.max=2147483648\nmemory.current=1073741824\nMemTotal: 16384000 kB\nMemAvailable: 8192000 kB\n--- ps\n 102400 chromium\n"}

@@ -87,6 +87,8 @@ export interface Machines {
   memory_mb: number;
   swap_mb: number;
   engine_mb?: number;
+  // How often the browser of every desktop visits its open tabs again, in minutes (0: never).
+  browser_refresh_minutes?: number;
 }
 
 // STORAGE is what the gateway's data takes on disk, by area, and how long the screenshots of the
@@ -957,7 +959,7 @@ export const api = {
     request<{ power: Power; memory?: Memory }>("GET", `/v1/kitties/${ref}/power`),
   // machines are the RAM and swap of the machines without values of their own.
   machines: () => request<Machines>("GET", "/v1/settings/machines"),
-  setMachines: (m: { memory_mb: number; swap_mb: number }) =>
+  setMachines: (m: { memory_mb: number; swap_mb: number; browser_refresh_minutes?: number }) =>
     request<Machines>("PUT", "/v1/settings/machines", m),
   // storage is what the data takes on disk; setRetention changes what is kept of the screenshots
   // (and sweeps at once); cleanStorage sweeps now, old desktop images too.

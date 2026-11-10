@@ -7,7 +7,8 @@ site that ends an idle session (Gmail, Google, banks) sees the kitty as still th
 
 How often, first that applies (minutes; 0 turns it off):
   - ~/.config/kitties/browser-refresh, read on every pass: a number on its first line
-  - KITTY_BROWSER_REFRESH (the gateway's containers.env), default 20
+  - /dev/shm/kitty-browser-refresh, which the gateway writes when Settings › Machines changes
+  - KITTY_BROWSER_REFRESH (the gateway sets it from Settings › Machines), default 20
 
 It never loses work nor gets in the way:
   - A tab is reloaded only when nobody is on it: it is not the one on screen while someone
@@ -35,6 +36,7 @@ PORT = 9222
 BUSY_MARK = "/tmp/kitty-page.busy"  # kitty-page touches it on every command
 BUSY_SECONDS = 120
 CONF = os.path.expanduser("~/.config/kitties/browser-refresh")
+LIVE = "/dev/shm/kitty-browser-refresh"  # the gateway writes it when Settings › Machines changes
 LOG = "/tmp/kitty-refresh.log"
 
 # What the page is doing right now, without its text: whether it is on screen and whether a person
@@ -76,12 +78,15 @@ def minutes(name, default):
 
 
 def interval():
-    """Minutes between passes; 0 is off. The file wins over the environment."""
-    try:
-        with open(CONF) as f:
-            return max(0.0, float(f.readline().strip()))
-    except (OSError, ValueError):
-        return minutes("KITTY_BROWSER_REFRESH", 20)
+    """Minutes between passes; 0 is off. The kitty's own file, then what the gateway set while the
+    desktop is on (Settings › Machines), then the environment it was made with."""
+    for path in (CONF, LIVE):
+        try:
+            with open(path) as f:
+                return max(0.0, float(f.readline().strip()))
+        except (OSError, ValueError):
+            continue
+    return minutes("KITTY_BROWSER_REFRESH", 20)
 
 
 def idle_ms():

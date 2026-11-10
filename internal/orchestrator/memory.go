@@ -3,9 +3,11 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
+	"github.com/madkoding/kitties/internal/config"
 	"github.com/madkoding/kitties/internal/kitty"
 )
 
@@ -24,6 +26,9 @@ import (
 type MachineDefaults struct {
 	MemoryMB int `json:"memory_mb"`
 	SwapMB   int `json:"swap_mb"`
+	// BrowserRefreshMinutes is how often the browser of every desktop visits its tabs again (0 is
+	// never); nil in a change keeps it as it is.
+	BrowserRefreshMinutes *int `json:"browser_refresh_minutes,omitempty"`
 }
 
 // MachinesView is the defaults as the settings page shows them, with what the engine has.
@@ -77,7 +82,8 @@ func (m *Manager) MemoryLimits(k *kitty.Kitty) (memoryMB, swapMB int, custom boo
 func (m *Manager) MachineDefaults() MachineDefaults {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
-	return MachineDefaults{MemoryMB: m.cfg.Containers.MemoryMB, SwapMB: m.cfg.Containers.SwapMB}
+	refresh := m.cfg.Containers.BrowserRefreshMinutes
+	return MachineDefaults{MemoryMB: m.cfg.Containers.MemoryMB, SwapMB: m.cfg.Containers.SwapMB, BrowserRefreshMinutes: &refresh}
 }
 
 // Machines is the defaults with the engine's memory, for the settings page.
@@ -121,8 +127,20 @@ func (m *Manager) SetMachineDefaults(ctx context.Context, d MachineDefaults) err
 	if err := m.fitsEngine(d.MemoryMB); err != nil {
 		return err
 	}
+	if d.BrowserRefreshMinutes != nil {
+		if err := config.ValidBrowserRefresh(*d.BrowserRefreshMinutes); err != nil {
+			return err
+		}
+	}
 	m.mu.Lock()
+	refreshMoved := d.BrowserRefreshMinutes != nil && *d.BrowserRefreshMinutes != m.cfg.Containers.BrowserRefreshMinutes
+	if d.BrowserRefreshMinutes == nil {
+		refresh := m.cfg.Containers.BrowserRefreshMinutes
+		d.BrowserRefreshMinutes = &refresh
+	}
+	memoryMoved := d.MemoryMB != m.cfg.Containers.MemoryMB || d.SwapMB != m.cfg.Containers.SwapMB
 	m.cfg.Containers.MemoryMB, m.cfg.Containers.SwapMB = d.MemoryMB, d.SwapMB
+	m.cfg.Containers.BrowserRefreshMinutes = *d.BrowserRefreshMinutes
 	m.overlay.Machines = &d
 	err := m.saveSettings()
 	m.mu.Unlock()
@@ -130,12 +148,29 @@ func (m *Manager) SetMachineDefaults(ctx context.Context, d MachineDefaults) err
 		return err
 	}
 	for _, k := range m.List() {
-		if k.Desktop && k.MemoryMB == nil && k.SwapMB == nil {
+		if (memoryMoved || !refreshMoved) && k.Desktop && k.MemoryMB == nil && k.SwapMB == nil {
 			m.applyLimits(ctx, k)
+		}
+		if refreshMoved {
+			m.applyBrowserRefresh(ctx, k)
 		}
 	}
 	return nil
 }
+
+// applyBrowserRefresh tells a desktop that is on how often its browser visits its tabs again; one
+// that is off gets it in its environment when it is made anew, and from this file when it starts
+// (kitty-refresh reads it on every pass). An older image without kitty-refresh ignores it.
+func (m *Manager) applyBrowserRefresh(ctx context.Context, k *kitty.Kitty) {
+	if !k.Desktop || k.Container == "" || k.Status != kitty.StatusRunning {
+		return
+	}
+	n := strconv.Itoa(*m.MachineDefaults().BrowserRefreshMinutes)
+	_, _ = m.ctr().Exec(ctx, k.Container, "sh", "-c", "printf '%s\\n' \"$1\" > "+BrowserRefreshFile, "sh", n)
+}
+
+// BrowserRefreshFile is where a desktop that is on learns a new interval (kitty-refresh).
+const BrowserRefreshFile = "/dev/shm/kitty-browser-refresh"
 
 // applyLimits gives a kitty's machine its limits now, when it exists and the engine can; when it
 // cannot, the machine is marked to get them the next time it is turned on.

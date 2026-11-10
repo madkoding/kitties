@@ -4161,6 +4161,19 @@ test("Settings: machines have RAM and swap for every kitty and for each one", as
   await expect.poll(async () => (await power()).memory_mb).toBe(3072);
   await defaults.getByTestId("ram").selectOption("2048");
   await expect.poll(async () => (await power()).memory_mb).toBe(2048);
+  // How often the browsers visit their tabs again: 20 minutes by default, kept with the memory.
+  const machines = async () =>
+    (await page.request.get(`${GATEWAY}/v1/settings/machines`, { headers })).json();
+  const refresh = box.getByTestId("browser-refresh");
+  await expect(refresh).toHaveValue("20");
+  await refresh.selectOption("30");
+  await expect.poll(async () => (await machines()).browser_refresh_minutes).toBe(30);
+  await defaults.first().getByTestId("ram").selectOption("3072");
+  await expect.poll(async () => (await machines()).memory_mb).toBe(3072);
+  expect((await machines()).browser_refresh_minutes).toBe(30);
+  await defaults.first().getByTestId("ram").selectOption("2048");
+  await refresh.selectOption("20");
+  await expect.poll(async () => (await machines()).browser_refresh_minutes).toBe(20);
   // The arrow keys move between the tabs.
   await tabs.getByRole("tab", { name: "Machines" }).focus();
   await page.keyboard.press("ArrowRight");

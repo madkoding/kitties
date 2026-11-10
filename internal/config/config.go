@@ -267,6 +267,21 @@ type Containers struct {
 	// AutoOffMinutes is how long a kitty's machine stays on without use before it turns itself
 	// off (15 by default; 0 is never). Each kitty can have a value of its own.
 	AutoOffMinutes int `yaml:"auto_off_minutes"`
+	// BrowserRefreshMinutes is how often the desktop's browser visits its open tabs again, so
+	// sites that end idle sessions (Gmail, banks) keep the kitty logged in (20 by default; 0 is
+	// never). Tabs someone is using are only visited quietly, never reloaded (kitty-refresh).
+	BrowserRefreshMinutes int `yaml:"browser_refresh_minutes"`
+}
+
+// MaxBrowserRefreshMinutes is the longest browser_refresh_minutes: a day.
+const MaxBrowserRefreshMinutes = 24 * 60
+
+// ValidBrowserRefresh checks a browser_refresh_minutes.
+func ValidBrowserRefresh(n int) error {
+	if n < 0 || n > MaxBrowserRefreshMinutes {
+		return fmt.Errorf("browser_refresh_minutes is between 0 (never) and %d", MaxBrowserRefreshMinutes)
+	}
+	return nil
 }
 
 // Gateway is the HTTP API block. On a server it is also the web interface: the same address
@@ -490,6 +505,7 @@ func Defaults() Config {
 		Containers: Containers{
 			Runtime: "auto", Image: "ghcr.io/madkoding/kitty-desktop:latest",
 			MemoryMB: 2048, SwapMB: kitty.DefaultSwapMB, CPUs: 2, AutoUpdate: true, UpdateCheckHours: 6, AutoOffMinutes: kitty.DefaultAutoOffMinutes,
+			BrowserRefreshMinutes: 20,
 		},
 		Cloud:      Cloud{MaxRunning: 5, IdleMinutes: 15, Size: "small", APIKeyEnv: "BOAT_API_KEY"},
 		Gateway:    Gateway{Listen: DefaultListen, MCP: MCP{Enabled: true}},
@@ -626,6 +642,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Updates.validate(); err != nil {
 		return err
+	}
+	if err := ValidBrowserRefresh(c.Containers.BrowserRefreshMinutes); err != nil {
+		return fmt.Errorf("containers.%v", err)
 	}
 	if c.Containers.UpdateCheckHours < 1 || c.Containers.UpdateCheckHours > 24*30 {
 		return errors.New("containers.update_check_hours is between 1 and 720")
