@@ -2,8 +2,7 @@
 # Opens a URL in the browser on the virtual display: kitty-open https://example.com
 #
 # The browser profile is kept where it survives a restart and an update (kitty-profile says
-# where: the kitty's own Docker volume, or its workspace), so logins, cookies, saved passwords and
-# settings stay. KITTY_PROFILE moves it.
+# where: the kitty's own Docker volume, or its workspace), so logins, cookies and settings stay. KITTY_PROFILE moves it.
 set -eu
 : "${DISPLAY:=:99}"
 KITTY_PROFILE="$(kitty-profile)"
@@ -21,8 +20,9 @@ fi
 # --force-dark-mode: Chromium's own face is dark, and pages that offer a dark look show it.
 # --remote-debugging-port: the browser's DevTools on this container's own loopback (nothing
 # outside reaches it), which kitty-page uses to read and act on a page from the inside.
-# --password-store=basic: saved passwords are sealed with a key every container shares, so a
-# profile kept in the workspace opens in a container made anew (no keyring to lose).
+# --password-store=basic: no keyring (there is none to unlock here, and one would be lost with the
+# container); the profile opens in a container made anew. That store is only obfuscated, which is
+# why the browser saves no passwords (chromium-policy.json): they live in the gateway's vault.
 # --disable-gpu and --disable-dev-shm-usage come from the wrapper. The sandbox stays on: `chromium` is the wrapper (chromium-wrapper.sh) that only drops it, loudly,
 # when the container cannot make user namespaces.
 start() {

@@ -31,6 +31,8 @@ p="$(run PATH="$t/fakebin:$PATH")"
 [ "$p" = "$t/local" ] && ok "no links: the local folder" || bad "no links: $p"
 [ "$(cat "$t/local/Default/Cookies" 2>/dev/null)" = cookie ] && ok "it starts as a copy of the workspace's" || bad "not copied"
 [ ! -L "$t/local/SingletonLock" ] && ok "without the old lock" || bad "lock copied"
+[ -e "$t/home/work/.browser/Default/Cookies" ] && ok "the container's own folder is lost with it: the workspace's copy stays" || bad "the workspace's copy went without a volume"
+rm -f "$t/home/work/.browser/SingletonLock"
 grep -q "cannot hold the browser profile" "$t/home/.cache/chromium-launch.log" && ok "the move is logged" || bad "not logged"
 [ "$(stat -c %a "$t/local")" = 700 ] && ok "the profile is the kitty's alone" || bad "mode $(stat -c %a "$t/local")"
 
@@ -39,7 +41,14 @@ echo newer >"$t/local/Default/Cookies"
 run PATH="$t/fakebin:$PATH" >/dev/null
 [ "$(cat "$t/local/Default/Cookies")" = newer ] && ok "a profile there is kept" || bad "overwritten"
 
-# KITTY_PROFILE (the kitty's volume) wins, and a new one is filled from the workspace.
+# KITTY_PROFILE (the kitty's volume) wins, and a new one is filled from the workspace (whose
+# copy then goes: the volume outlives the container).
 p="$(env HOME="$t/home" KITTY_PROFILE="$t/volume" sh "$prog")"
 [ "$p" = "$t/volume" ] && [ "$(cat "$t/volume/Default/Cookies" 2>/dev/null)" = cookie ] && ok "KITTY_PROFILE, filled from the workspace" || bad "volume: $p"
+[ ! -e "$t/home/work/.browser" ] && ok "and the workspace's copy is gone" || bad "workspace copy kept"
+# A leftover copy in the workspace (an older kitty-restore put one there on each update) goes too.
+mkdir -p "$t/home/work/.browser/Default"
+echo stale >"$t/home/work/.browser/Default/Cookies"
+env HOME="$t/home" KITTY_PROFILE="$t/volume" sh "$prog" >/dev/null
+[ ! -e "$t/home/work/.browser" ] && [ "$(cat "$t/volume/Default/Cookies")" = cookie ] && ok "a leftover copy goes, the volume stays" || bad "leftover kept or volume touched"
 exit "$fail"

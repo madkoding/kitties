@@ -277,14 +277,16 @@ when to update.
 
 <img src="screenshots/82-desktops-update.png" alt="The window that updates the desktops: each kitty with a newer desktop, picked, and Update all" width="100%">
 
-What the kitty's browser knows (cookies, saved passwords, local storage) lives in a **Docker
+What the kitty's browser knows (cookies, sessions, local storage) lives in a **Docker
 volume of its own**, `kitties-browser-<container>`, mounted at `/var/lib/kitty-browser`: it is on
 the container engine's Linux disk and outlives restarts, updates and a container made anew. It is
 not in the workspace because Chromium locks its profile with a symbolic link (`SingletonLock`), and
 a folder of a Windows or macOS computer mounted by Docker Desktop cannot hold one: there Chromium
 would not start on it, and the logins went to a temporary profile that every restart lost.
 `kitty-profile` says where the profile is; a profile kept in `~/work/.browser` before is copied into
-the volume the first time (nothing to log in to again), and an older gateway that mounts no volume
+the volume the first time (nothing to log in to again) and then removed from the workspace, so no
+cookies stay on your computer's disk; `kitty-restore` puts a backup's profile straight into the
+volume (only when it is empty), never into the workspace. An older gateway that mounts no volume
 still keeps it in the container when the workspace cannot hold it.
 
 Three more things keep it from being lost: the browser closes in an orderly way before any stop or
@@ -292,8 +294,11 @@ update, and also when the container is stopped from outside (`docker stop`/`rest
 computer shutting down: the desktop closes it first, as it only writes its cookies every half
 minute); it continues where it left off (a Chromium policy), which keeps the **session cookies**
 (logins with no expiry) across a restart; and a slow start is left to finish instead of putting the
-profile aside. Passwords use the browser's `--password-store=basic`, sealed with a key every
-container shares, so a profile opens in a new one with no keyring. A desktop stopped hard also comes
+profile aside. The profile uses the browser's `--password-store=basic` (no keyring to lose), which
+only obfuscates: that is why the browser's own **password manager is off** (a Chromium policy).
+Passwords and codes go in the gateway's **vault** (Settings), encrypted away from the machine, and
+the kitty types them with `type_secret` without reading them; passwords saved in the browser before
+keep working. A desktop stopped hard also comes
 up again: the display's stale lock is removed at the start.
 
 The **backup** (`kitty-backup`) adds a copy away from the container: the browser's cookies, sessions,
@@ -314,7 +319,7 @@ an update, not a stop, not removing the kitty.
 | `<data_dir>/work/<name>` | `~/work` | its files, its theme and the Debian packages it installed |
 | `<data_dir>/homes/<name>` | `/home/kitty` | its settings (`~/.config`), the programs it installed for itself (`~/.local`: pipx, `pip --user`, `npm install -g`; `/opt/kitty-apps`) |
 | `<data_dir>/shared/<name>` | `~/Shared` | what it made for you: the app shows it in **Library > Shared** |
-| volume `kitties-browser-<container>` | `/var/lib/kitty-browser` | the browser's profile: cookies, sessions, saved passwords (see above) |
+| volume `kitties-browser-<container>` | `/var/lib/kitty-browser` | the browser's profile: cookies, sessions, local storage (see above) |
 
 - **Programs.** A Debian package comes back by itself in a desktop made anew, however it was installed
   (`kitty-install`, `sudo apt install`: a dpkg hook remembers it); `kitty-install --remove <package>`

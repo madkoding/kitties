@@ -1,6 +1,8 @@
 {
   "RestoreOnStartup": 1,
-  "PasswordManagerEnabled": true,
+  "PasswordManagerEnabled": false,
+  "PasswordLeakDetectionEnabled": false,
+  "AutofillCreditCardEnabled": false,
   "BackgroundModeEnabled": false,
   "DiskCacheSize": 268435456
 }

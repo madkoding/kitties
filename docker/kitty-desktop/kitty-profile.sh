@@ -1,5 +1,5 @@
 #!/bin/sh
-# Prints the folder of the browser's profile (cookies, sessions, saved passwords, local storage),
+# Prints the folder of the browser's profile (cookies, sessions, local storage),
 # ready to use:   kitty-profile
 #
 # Where it lives, first that applies:
@@ -12,7 +12,8 @@
 #   temporary profile that was lost on every restart. This one survives restarts.
 #
 # A profile that is not in the workspace starts as a copy of the one there, when there is one
-# (a profile kept before, or put back by kitty-restore): nothing is logged out by the move.
+# (a profile kept before, or put back by kitty-restore): nothing is logged out by the move. The
+# workspace's copy is removed then, so no cookies or passwords stay behind on the host's disk.
 set -u
 work="$HOME/work/.browser"
 local_dir="${KITTY_LOCAL_PROFILE:-/var/lib/kitty-browser}"
@@ -45,5 +46,14 @@ if [ "$profile" != "$work" ] && [ ! -e "$profile/Default" ] && [ -d "$work/Defau
         printf '%s kitty-profile: the profile in %s was copied to %s\n' "$(date '+%F %T')" "$work" "$profile" \
             >>"$HOME/.cache/chromium-launch.log" 2>/dev/null || true
     fi
+fi
+# A copy in the workspace (a folder of the host) would keep the cookies and saved passwords
+# readable there for good: once the profile lives in the kitty's volume (which outlives the
+# container), it goes. That is the one copied above, or one an older kitty-restore put there on
+# every update. The container's own folder (no volume) is lost with the container, so there the
+# workspace's copy stays as the way back.
+if [ -n "${KITTY_PROFILE:-}" ] && [ "$profile" != "$work" ] && [ -e "$profile/Default" ] && [ -e "$work" ] && rm -rf "$work" 2>/dev/null; then
+    printf '%s kitty-profile: the old copy in %s was removed (the profile is in %s)\n' "$(date '+%F %T')" "$work" "$profile" \
+        >>"$HOME/.cache/chromium-launch.log" 2>/dev/null || true
 fi
 echo "$profile"

@@ -325,6 +325,8 @@ jobs:
         run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/tidy.sh
       - name: where the browser keeps its profile (kitty-profile)
         run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/profile.sh
+      - name: a backup's browser profile goes to the volume, never to the workspace (kitty-restore)
+        run: docker run --rm --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/restore.sh
       - name: a kitty that works on its own reaches no local network (kitty-nolan)
         run: docker run --rm --cap-add NET_ADMIN --user root --entrypoint sh -v "$PWD/docker/kitty-desktop/test:/test:ro" kitty-desktop:ci /test/nolan.sh
       - name: the browser keeps a login across a hard restart, in the kitty's own volume

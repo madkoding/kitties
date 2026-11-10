@@ -1,0 +1,10 @@
+# Links and web pages that any program opens (xdg-open, PCManFM, LibreOffice, a download opened
+# from the browser) go to kitty-open: the browser already running, on the kitty's own profile.
+# Debian's chromium.desktop would start /usr/bin/chromium on ~/.config/chromium instead, a
+# second profile without the kitty's logins.
+[Default Applications]
+text/html=kitty-browser.desktop
+application/xhtml+xml=kitty-browser.desktop
+application/pdf=kitty-browser.desktop
+x-scheme-handler/http=kitty-browser.desktop
+x-scheme-handler/https=kitty-browser.desktop
