@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
 import { api, type Kitty, rectsDesktop, shotData, streamDesktop, voxlSource } from "./api";
 import { plainError } from "./friendly";
 import { t } from "./i18n";
-import { IconExpand, IconReduce, IconX } from "./icons";
+import { IconCopyFrom, IconExpand, IconReduce, IconX } from "./icons";
 import KeyBar from "./KeyBar";
 import { xKeys } from "./keys";
 import LiveChat, { type LiveChatProps } from "./LiveChat";
@@ -947,12 +947,27 @@ export default function LiveDesktop({
         </p>
       )}
       {!control && (
-        <p class="text-xs text-[var(--t3)] shrink-0">
-          {t(
-            "Take control to click and type in it yourself, for what {name} cannot do alone (a password, a captcha). {name} waits meanwhile.",
-            { name: kitty.name },
+        <div class="flex gap-2 items-center shrink-0">
+          <p class="text-xs text-[var(--t3)] flex-1 min-w-0">
+            {t(
+              "Take control to click and type in it yourself, for what {name} cannot do alone (a password, a captcha). {name} waits meanwhile.",
+              { name: kitty.name },
+            )}
+          </p>
+          {loaded && (
+            // Watching only: bring what the kitty copied to the person's clipboard, without
+            // taking the controls or pressing anything on its desktop.
+            <button
+              class="btn-ghost px-2 py-1 text-xs flex items-center gap-1 shrink-0 whitespace-nowrap"
+              onClick={() => void pullClip()}
+              title={t("Copy {name}'s clipboard to yours", { name: kitty.name })}
+              data-testid="watch-copy"
+            >
+              <IconCopyFrom size={14} />
+              {t("Copy from {name}", { name: kitty.name })}
+            </button>
           )}
-        </p>
+        </div>
       )}
       {err && <p class="text-sm text-[var(--c-red)] shrink-0">{err}</p>}
     </>

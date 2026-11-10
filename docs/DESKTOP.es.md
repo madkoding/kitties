@@ -210,7 +210,8 @@ portapapeles, `@`, y **Ctrl**, **Alt**, **Shift** y **Super** que quedan presion
 siguiente tecla; el botón del teclado suma F1 a F12, las flechas, Inicio/Fin/RePág/AvPág,
 Ctrl+Z/A/X/S/F/L, Alt+F4 y los caracteres que otras distribuciones esconden. En un teléfono sus
 filas se desplazan de lado. El campo de abajo sigue enviando texto al portapapeles del kitty y
-trayendo el suyo, para un navegador que no deja a la página leer el tuyo.
+trayendo el suyo, para un navegador que no deja a la página leer el tuyo. Mientras solo miras,
+**Copiar de** trae el portapapeles del kitty al tuyo sin tomar el control.
 
 <img src="screenshots/82-live-keys.png" alt="El escritorio en vivo con la barra de teclas abierta: Esc, Tab, Alt+Tab, Ctrl+Alt+Supr, copiar y pegar, modificadores, teclas F y símbolos" width="100%">
 

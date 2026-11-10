@@ -183,7 +183,8 @@ the **apps menu** (Alt+F1), **Copy** and **Paste** between the two clipboards, `
 **Alt**, **Shift** and **Super** held for the next key; the keyboard button adds F1 to F12, the
 arrows, Home/End/PgUp/PgDn, Ctrl+Z/A/X/S/F/L, Alt+F4 and the characters other layouts hide.
 On a phone its rows scroll sideways. The field under it still sends text to the kitty's clipboard
-and brings its clipboard back, for a browser that does not let the page read yours.
+and brings its clipboard back, for a browser that does not let the page read yours. While you
+only watch, **Copy from** brings the kitty's clipboard to yours without taking the controls.
 
 <img src="screenshots/82-live-keys.png" alt="The live desktop with the key bar open: Esc, Tab, Alt+Tab, Ctrl+Alt+Del, copy and paste, held modifiers, F keys and symbols" width="100%">
 

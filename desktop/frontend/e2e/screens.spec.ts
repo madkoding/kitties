@@ -2489,6 +2489,11 @@ test("a kitty's desktop opens live from the chat, and the person can take contro
   await expect(live).toBeVisible();
   await live.getByTestId("give-back").click();
   await expect(live.getByTestId("live-state")).toHaveText("Watching live");
+  // Only watching, the kitty's clipboard can still be brought over, with nothing pressed there.
+  const before = sent.length;
+  await live.getByTestId("watch-copy").click();
+  await expect(live.getByTestId("clip-note")).toContainText("tom's clipboard");
+  expect(sent.length).toBe(before);
   await page.keyboard.press("Escape");
   await expect(live).toHaveCount(0);
 });

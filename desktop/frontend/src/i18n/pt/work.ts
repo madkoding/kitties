@@ -679,6 +679,7 @@ const dict: Dictionary = {
   "Paste your text in the field below and send it to {name}.":
     "Cole o seu texto no campo abaixo e envie para {name}.",
   "Pasted on {name}'s desktop.": "Colado na área de trabalho de {name}.",
+  "Copy {name}'s clipboard to yours": "Copiar a área de transferência de {name} para a sua",
 };
 
 export default dict;
