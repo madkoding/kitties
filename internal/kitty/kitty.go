@@ -45,9 +45,6 @@ type Kitty struct {
 	// AutoOff is the minutes its machine may stay on without use before it turns itself off: nil
 	// takes the gateway's default (containers.auto_off_minutes, 15), 0 is never.
 	AutoOff *int `json:"auto_off_minutes,omitempty"`
-	// BrowserRefresh is how often its browser visits its open tabs again, in minutes: nil takes
-	// the default for every kitty (Settings › Machines), 0 is never.
-	BrowserRefresh *int `json:"browser_refresh_minutes,omitempty"`
 	// MemoryMB and SwapMB are the RAM and swap of its machine, in MB: nil takes the gateway's
 	// defaults (containers.memory_mb and swap_mb, or what the settings chose for every kitty).
 	MemoryMB *int `json:"memory_mb,omitempty"`

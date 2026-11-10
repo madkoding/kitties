@@ -35,13 +35,6 @@ turns itself off (15 by default, `0` never, at most a week). Each kitty can have
 (its window, Desktop, "Turn off after", or `PATCH /v1/kitties/{ref}`). See
 [the machine's power](DESKTOP.md#turning-the-machine-on-and-off).
 
-`containers.browser_refresh_minutes` is how often the browser of each desktop visits its open tabs
-again so sites that end idle sessions (Gmail, banks) keep the kitty logged in (20 by default, `0`
-never, at most 1440). Tabs someone is using are only visited quietly, never reloaded. **Settings ›
-Machines** changes it (kept in `settings.json`) and the desktops that are on get it at once; each
-kitty can have its own (its window, Desktop). See
-[the browser's profile](DESKTOP.md#updating-a-desktop-without-losing-what-it-knows).
-
 `containers.memory_mb` and `containers.swap_mb` are the RAM and the swap of each kitty's machine
 (2048 and 1024 MB by default; `memory_mb: 0` leaves the engine's own, `swap_mb: 0` is no swap).
 **Settings › Machines** changes them for every kitty (kept in `settings.json`, over the file) and

@@ -129,15 +129,6 @@ fi
 # Under a session bus: the browser announces what it plays there (MPRIS), and the shelf's player
 # island reads it.
 dbus-launch --exit-with-session openbox-session >>/tmp/lumen.log 2>&1 &
-# The open browser's logins are kept alive: its tabs are visited again every so often
-# (KITTY_BROWSER_REFRESH minutes, default 20, 0 off; ~/.config/kitties/browser-refresh wins), without
-# reloading what someone is using or typing in (kitty-refresh).
-(
-    while :; do
-        kitty-refresh >>/tmp/kitty-refresh.log 2>&1
-        sleep 30
-    done
-) &
 # The programs the kitty installed come back on a container made anew (they are listed in its
 # workspace, which outlives the container).
 if [ -s "$HOME/work/.desktop/packages" ]; then

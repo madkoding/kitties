@@ -4162,25 +4162,6 @@ test("a kitty's machine is turned on and off and has its own idle time", async (
   await expect.poll(async () => (await idle()).auto_off_minutes).toBe(30);
   await power.getByTestId("auto-off").selectOption("default");
   await expect.poll(async () => (await idle()).auto_off_custom).toBe(false);
-  // When its browser last visited its tabs again, and what it did.
-  await expect(power.getByTestId("browser-visits")).toContainText(
-    "4 min ago: 2 reloaded, 1 visited quietly",
-  );
-  // Visit now: the tabs are visited again at once.
-  await power.getByTestId("visit-now").click();
-  await expect(power.getByTestId("browser-visits")).toContainText("just now: 3 reloaded");
-  // How often its browser visits its tabs again: the default for every kitty, or its own.
-  const refresh = power.getByTestId("browser-refresh");
-  await expect(refresh).toHaveValue("default");
-  expect(await idle()).toMatchObject({
-    browser_refresh_minutes: 20,
-    browser_refresh_custom: false,
-  });
-  await refresh.selectOption("60");
-  await expect.poll(async () => (await idle()).browser_refresh_minutes).toBe(60);
-  expect(await idle()).toMatchObject({ browser_refresh_custom: true });
-  await refresh.selectOption("default");
-  await expect.poll(async () => (await idle()).browser_refresh_custom).toBe(false);
   // Off (forced: the drawer may be showing its desktop live, which counts as use).
   const off = await page.request.post(`${GATEWAY}/v1/kitties/tom/power`, {
     headers,
@@ -4231,19 +4212,6 @@ test("Settings: machines have RAM and swap for every kitty and for each one", as
   await expect.poll(async () => (await power()).memory_mb).toBe(3072);
   await defaults.getByTestId("ram").selectOption("2048");
   await expect.poll(async () => (await power()).memory_mb).toBe(2048);
-  // How often the browsers visit their tabs again: 20 minutes by default, kept with the memory.
-  const machines = async () =>
-    (await page.request.get(`${GATEWAY}/v1/settings/machines`, { headers })).json();
-  const refresh = box.getByTestId("browser-refresh");
-  await expect(refresh).toHaveValue("20");
-  await refresh.selectOption("30");
-  await expect.poll(async () => (await machines()).browser_refresh_minutes).toBe(30);
-  await defaults.first().getByTestId("ram").selectOption("3072");
-  await expect.poll(async () => (await machines()).memory_mb).toBe(3072);
-  expect((await machines()).browser_refresh_minutes).toBe(30);
-  await defaults.first().getByTestId("ram").selectOption("2048");
-  await refresh.selectOption("20");
-  await expect.poll(async () => (await machines()).browser_refresh_minutes).toBe(20);
   // The arrow keys move between the tabs.
   await tabs.getByRole("tab", { name: "Machines" }).focus();
   await page.keyboard.press("ArrowRight");

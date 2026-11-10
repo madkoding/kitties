@@ -1,8 +1,6 @@
 {
   "RestoreOnStartup": 1,
   "PasswordManagerEnabled": false,
-  "BrowserSignin": 0,
-  "SyncDisabled": true,
   "PasswordLeakDetectionEnabled": false,
   "AutofillCreditCardEnabled": false,
   "BackgroundModeEnabled": false,

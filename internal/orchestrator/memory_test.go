@@ -160,86 +160,6 @@ func TestMachineDefaults(t *testing.T) {
 	}
 }
 
-func TestBrowserRefreshDefault(t *testing.T) {
-	m, f, solo := limitManager(t)
-	if n := *m.Machines().BrowserRefreshMinutes; n != 20 {
-		t.Errorf("default = %d", n)
-	}
-	if f.specs[0].Env["KITTY_BROWSER_REFRESH"] != "20" {
-		t.Errorf("the desktop is made with it: %v", f.specs[0].Env)
-	}
-	ctx := context.Background()
-	m.mu.Lock()
-	m.kitties[solo.ID].Status = kitty.StatusRunning
-	m.mu.Unlock()
-	f.execs = nil
-	n := 45
-	if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 2048, SwapMB: 1024, BrowserRefreshMinutes: &n}); err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.Join(f.execs, "\n"); !strings.Contains(got, BrowserRefreshFile) || !strings.Contains(got, "45") {
-		t.Errorf("a desktop that is on is told at once: %q", got)
-	}
-	// A change of the memory alone keeps it.
-	if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 3072, SwapMB: 1024}); err != nil {
-		t.Fatal(err)
-	}
-	if n := *m.Machines().BrowserRefreshMinutes; n != 45 {
-		t.Errorf("kept = %d", n)
-	}
-	for _, bad := range []int{-1, 24*60 + 1} {
-		if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 3072, SwapMB: 1024, BrowserRefreshMinutes: &bad}); err == nil {
-			t.Errorf("%d accepted", bad)
-		}
-	}
-	// A kitty of its own keeps it when the default moves, and is told at once.
-	own := 90
-	f.execs = nil
-	if _, err := m.Edit(solo.ID, Update{BrowserRefresh: &own}); err != nil {
-		t.Fatal(err)
-	}
-	if p, _ := m.Power(solo.ID); p.BrowserRefreshMinutes != 90 || !p.BrowserRefreshCustom {
-		t.Errorf("own = %+v", p)
-	}
-	if got := strings.Join(f.execs, "\n"); !strings.Contains(got, "90") {
-		t.Errorf("told at once: %q", got)
-	}
-	f.execs = nil
-	ten := 10
-	if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 3072, SwapMB: 1024, BrowserRefreshMinutes: &ten}); err != nil {
-		t.Fatal(err)
-	}
-	if p, _ := m.Power(solo.ID); p.BrowserRefreshMinutes != 90 || strings.Contains(strings.Join(f.execs, "\n"), BrowserRefreshFile) {
-		t.Errorf("the default moved a kitty with its own: %+v %v", p, f.execs)
-	}
-	bad := -5
-	if _, err := m.Edit(solo.ID, Update{BrowserRefresh: &bad}); err == nil {
-		t.Error("-5 accepted")
-	}
-	yes := true
-	if _, err := m.Edit(solo.ID, Update{BrowserRefreshDefault: &yes}); err != nil {
-		t.Fatal(err)
-	}
-	if p, _ := m.Power(solo.ID); p.BrowserRefreshMinutes != 10 || p.BrowserRefreshCustom {
-		t.Errorf("back to the default = %+v", p)
-	}
-	back := 45
-	if err := m.SetMachineDefaults(ctx, MachineDefaults{MemoryMB: 3072, SwapMB: 1024, BrowserRefreshMinutes: &back}); err != nil {
-		t.Fatal(err)
-	}
-	again, err := New(m.cfg, WithContainers(newFake(), nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if n := *again.Machines().BrowserRefreshMinutes; n != 45 {
-		t.Errorf("reloaded = %d", n)
-	}
-	data, _ := os.ReadFile(filepath.Join(filepath.Dir(m.path), "settings.json"))
-	if !strings.Contains(string(data), `"browser_refresh_minutes": 45`) {
-		t.Errorf("settings = %s", data)
-	}
-}
-
 func TestMemoryReading(t *testing.T) {
 	m, f, solo := limitManager(t)
 	f.outputs = map[string]string{"sh": "memory.max=2147483648\nmemory.current=1073741824\nMemTotal: 16384000 kB\nMemAvailable: 8192000 kB\n--- ps\n 102400 chromium\n"}
@@ -273,31 +193,5 @@ func TestMemoryReading(t *testing.T) {
 	}
 	if _, err := m.Memory(ctx, solo.ID); err == nil {
 		t.Error("a machine that is off")
-	}
-}
-
-func TestVisitBrowserNow(t *testing.T) {
-	m, f, solo := limitManager(t)
-	ctx := context.Background()
-	if _, err := m.VisitBrowserNow(ctx, solo.ID); err == nil {
-		t.Error("a machine that is off visited its tabs")
-	}
-	m.mu.Lock()
-	m.kitties[solo.ID].Status = kitty.StatusRunning
-	m.mu.Unlock()
-	if f.outputs == nil {
-		f.outputs = map[string]string{}
-	}
-	if _, err := m.VisitBrowserNow(ctx, solo.ID); err == nil {
-		t.Error("no summary is an error")
-	}
-	f.outputs["cat"] = `{"at": 1794000000, "tabs": 2, "reloaded": 2}`
-	f.execs = nil
-	v, err := m.VisitBrowserNow(ctx, solo.ID)
-	if err != nil || v.Reloaded != 2 || v.Tabs != 2 {
-		t.Fatalf("visits = %+v %v", v, err)
-	}
-	if got := strings.Join(f.execs, "\n"); !strings.Contains(got, "kitty-refresh --once") || !strings.Contains(got, kitty.BrowserVisitsFile) {
-		t.Errorf("execs = %q", got)
 	}
 }

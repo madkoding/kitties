@@ -2,7 +2,7 @@ import { useEffect, useState } from "preact/hooks";
 import type { Kitty, Machines, Memory, Power } from "./api";
 import { api, errText } from "./api";
 import { t } from "./i18n";
-import MachineMemory, { MemorySelects, REFRESH_CHOICES, mbText, withValue } from "./MachineMemory";
+import MachineMemory, { MemorySelects, mbText } from "./MachineMemory";
 
 // SETTINGS › MACHINES.
 //
@@ -55,9 +55,7 @@ export default function MachinesSettings({ kitties }: { kitties: Kitty[] }) {
       .catch((e) => setErr(errText(e)));
   }, []);
   const desks = kitties.filter((k) => k.desktop);
-  const save = async (
-    v: { memory_mb: number; swap_mb: number; browser_refresh_minutes?: number } | "default",
-  ) => {
+  const save = async (v: { memory_mb: number; swap_mb: number } | "default") => {
     if (v === "default") {
       return;
     }
@@ -110,37 +108,6 @@ export default function MachinesSettings({ kitties }: { kitties: Kitty[] }) {
             )}
           </p>
           {saved && <p class="text-xs text-[var(--c-green)]">{t("Saved.")}</p>}
-        </div>
-      )}
-      {view && (
-        <div class="form-card flex flex-col gap-2" data-testid="browser-refresh-card">
-          <div class="section-title !m-0">{t("Browser sessions")}</div>
-          <label class="mem-select">
-            <span>{t("Visit the open tabs again")}</span>
-            <select
-              class="field !py-1 !text-xs"
-              value={String(view.browser_refresh_minutes ?? 20)}
-              onChange={(e) =>
-                void save({
-                  memory_mb: view.memory_mb,
-                  swap_mb: view.swap_mb,
-                  browser_refresh_minutes: Number((e.target as HTMLSelectElement).value),
-                })
-              }
-              data-testid="browser-refresh"
-            >
-              {withValue(REFRESH_CHOICES, view.browser_refresh_minutes ?? 20).map((n) => (
-                <option key={n} value={String(n)}>
-                  {n === 0 ? t("Never") : t("Every {n} minutes", { n })}
-                </option>
-              ))}
-            </select>
-          </label>
-          <p class="text-xs text-[var(--t4)]">
-            {t(
-              "Sites like Gmail end a session that sits idle. The browser of each kitty visits its tabs again: it reloads only the ones nobody is using and visits the rest quietly, so nothing typed is lost and the screen does not change.",
-            )}
-          </p>
         </div>
       )}
       {err && (

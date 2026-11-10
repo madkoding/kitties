@@ -540,12 +540,6 @@ def main():
     f.add_argument("--list", action="store_true")
     sub.add_parser("quit")
     args = parser.parse_args()
-    # kitty-refresh leaves the browser alone while the kitty drives it.
-    try:
-        with open("/tmp/kitty-page.busy", "a"):
-            os.utime("/tmp/kitty-page.busy")
-    except OSError:
-        pass
     try:
         if args.cmd == "quit":
             quit_browser()

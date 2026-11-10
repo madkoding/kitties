@@ -57,10 +57,6 @@ export interface Power {
   off_reason?: "idle" | "manual" | "kitty" | "";
   auto_off_minutes: number;
   auto_off_custom: boolean;
-  // browser_refresh_minutes is how often its browser visits its open tabs again (0 is never);
-  // browser_refresh_custom whether that is its own and not the default for every kitty.
-  browser_refresh_minutes?: number;
-  browser_refresh_custom?: boolean;
   // memory_mb and swap_mb are the RAM and swap the machine is given (0 RAM: the engine's own);
   // memory_custom is whether they are the kitty's own, memory_pending whether they wait for the
   // next start; memory_local is false in the cloud, where the machine's size is the provider's.
@@ -85,25 +81,12 @@ export interface Memory {
   top?: { name: string; mb: number; count: number }[];
 }
 
-// BrowserVisits is the last pass over the open tabs of a machine's browser, which keeps their
-// sessions alive: when, and how many it reloaded, visited quietly, kept or skipped.
-export interface BrowserVisits {
-  at: string;
-  tabs: number;
-  reloaded: number;
-  quiet: number;
-  kept: number;
-  skipped: number;
-}
-
 // Machines are the RAM and swap of every machine without values of its own, and what the
 // container engine has (engine_mb, absent when it cannot tell).
 export interface Machines {
   memory_mb: number;
   swap_mb: number;
   engine_mb?: number;
-  // How often the browser of every desktop visits its open tabs again, in minutes (0: never).
-  browser_refresh_minutes?: number;
 }
 
 // STORAGE is what the gateway's data takes on disk, by area, and how long the screenshots of the
@@ -952,8 +935,6 @@ export const api = {
       memory_mb?: number;
       swap_mb?: number;
       memory_default?: boolean;
-      browser_refresh_minutes?: number;
-      browser_refresh_default?: boolean;
     },
   ) => request<{ kitty: Kitty }>("PATCH", `/v1/kitties/${ref}`, u).then((r) => r.kitty),
   // lead is the fleet's lead kitty and its Reports thread; setLead makes another the lead
@@ -973,16 +954,10 @@ export const api = {
     request<{ power: Power }>("GET", `/v1/kitties/${ref}/power`).then((r) => r.power),
   // machine is the power and, when it is on, the memory of a kitty's machine.
   machine: (ref: string) =>
-    request<{ power: Power; memory?: Memory; browser_visits?: BrowserVisits }>(
-      "GET",
-      `/v1/kitties/${ref}/power`,
-    ),
-  // visitBrowser visits the open tabs of a kitty's browser again now (their sessions renewed).
-  visitBrowser: (ref: string) =>
-    request<{ browser_visits: BrowserVisits }>("POST", `/v1/kitties/${ref}/browser/visit`),
+    request<{ power: Power; memory?: Memory }>("GET", `/v1/kitties/${ref}/power`),
   // machines are the RAM and swap of the machines without values of their own.
   machines: () => request<Machines>("GET", "/v1/settings/machines"),
-  setMachines: (m: { memory_mb: number; swap_mb: number; browser_refresh_minutes?: number }) =>
+  setMachines: (m: { memory_mb: number; swap_mb: number }) =>
     request<Machines>("PUT", "/v1/settings/machines", m),
   // storage is what the data takes on disk; setRetention changes what is kept of the screenshots
   // (and sweeps at once); cleanStorage sweeps now, old desktop images too.

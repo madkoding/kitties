@@ -1,8 +1,8 @@
 import { useEffect, useState } from "preact/hooks";
-import type { BrowserVisits, Kitty, Memory, Power } from "./api";
+import type { Kitty, Memory, Power } from "./api";
 import { api, errText } from "./api";
 import { t } from "./i18n";
-import MachineMemory, { REFRESH_CHOICES, withValue } from "./MachineMemory";
+import MachineMemory from "./MachineMemory";
 
 // THE KITTY'S MACHINE.
 //
@@ -67,20 +67,6 @@ function stateText(p: Power): string {
   return t("On");
 }
 
-// visitsText says when the browser last visited its tabs again and what it did.
-export function visitsText(v: BrowserVisits, now = Date.now()): string {
-  const mins = Math.max(0, Math.round((now - Date.parse(v.at)) / 60000));
-  const when = mins < 1 ? t("just now") : t("{n} min ago", { n: mins });
-  if (v.tabs === 0) {
-    return t("Tabs visited again {when}: none open.", { when });
-  }
-  return t("Tabs visited again {when}: {reloaded} reloaded, {quiet} visited quietly.", {
-    when,
-    reloaded: v.reloaded,
-    quiet: v.quiet + v.kept,
-  });
-}
-
 export default function MachinePower({
   kitty,
   onChanged,
@@ -90,8 +76,6 @@ export default function MachinePower({
 }) {
   const [power, setPower] = useState<Power | null>(null);
   const [memory, setMemory] = useState<Memory | undefined>(undefined);
-  const [visits, setVisits] = useState<BrowserVisits | undefined>(undefined);
-  const [visiting, setVisiting] = useState(false);
   const [err, setErr] = useState("");
   const load = () =>
     api
@@ -99,7 +83,6 @@ export default function MachinePower({
       .then((r) => {
         setPower(r.power);
         setMemory(r.memory);
-        setVisits(r.browser_visits);
       })
       // A gateway without power control (an older one) shows nothing.
       .catch(() => setPower(null));
@@ -113,37 +96,19 @@ export default function MachinePower({
   if (!power) {
     return null;
   }
-  const patch = async (u: Parameters<typeof api.editKitty>[1]) => {
+  const choose = async (value: string) => {
     setErr("");
     try {
-      await api.editKitty(kitty.id, u);
+      await api.editKitty(
+        kitty.id,
+        value === "default" ? { auto_off_default: true } : { auto_off_minutes: Number(value) },
+      );
       await load();
       onChanged();
     } catch (e) {
       setErr(errText(e));
     }
   };
-  const choose = (value: string) =>
-    patch(value === "default" ? { auto_off_default: true } : { auto_off_minutes: Number(value) });
-  const chooseRefresh = (value: string) =>
-    patch(
-      value === "default"
-        ? { browser_refresh_default: true }
-        : { browser_refresh_minutes: Number(value) },
-    );
-  const refresh = power.browser_refresh_minutes;
-  const visitNow = async () => {
-    setErr("");
-    setVisiting(true);
-    try {
-      setVisits((await api.visitBrowser(kitty.id)).browser_visits);
-    } catch (e) {
-      setErr(errText(e));
-    } finally {
-      setVisiting(false);
-    }
-  };
-  const refreshText = (n: number) => (n === 0 ? t("Never") : t("Every {n} minutes", { n }));
   const choices = IDLE_CHOICES.includes(power.auto_off_minutes)
     ? IDLE_CHOICES
     : [...IDLE_CHOICES, power.auto_off_minutes].sort((a, b) => (a || 1e9) - (b || 1e9));
@@ -173,45 +138,7 @@ export default function MachinePower({
             ))}
           </select>
         </label>
-        {refresh !== undefined && (
-          <label class="flex items-center gap-2 text-xs text-[var(--t3)]">
-            {t("Visit the open tabs again")}
-            <select
-              class="field !py-1 !text-xs"
-              value={power.browser_refresh_custom ? String(refresh) : "default"}
-              onChange={(e) => void chooseRefresh((e.target as HTMLSelectElement).value)}
-              data-testid="browser-refresh"
-            >
-              <option value="default">
-                {power.browser_refresh_custom
-                  ? t("Default")
-                  : t("Default ({time})", { time: refreshText(refresh) })}
-              </option>
-              {withValue(REFRESH_CHOICES, refresh).map((n) => (
-                <option key={n} value={String(n)}>
-                  {refreshText(n)}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
       </div>
-      {power.state === "on" && refresh !== undefined && (
-        <div class="flex items-center gap-2 flex-wrap text-xs text-[var(--t4)]">
-          <span class="flex-1 min-w-0" data-testid="browser-visits">
-            {visits ? visitsText(visits) : t("The tabs have not been visited again yet.")}
-          </span>
-          <button
-            type="button"
-            class="btn-outline px-2 py-1 text-xs"
-            disabled={visiting}
-            onClick={() => void visitNow()}
-            data-testid="visit-now"
-          >
-            {visiting ? t("Visiting…") : t("Visit now")}
-          </button>
-        </div>
-      )}
       <MachineMemory
         kitty={kitty}
         power={power}

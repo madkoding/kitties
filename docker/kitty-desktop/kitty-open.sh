@@ -5,7 +5,6 @@
 # where: the kitty's own Docker volume, or its workspace), so logins, cookies and settings stay. KITTY_PROFILE moves it.
 set -eu
 : "${DISPLAY:=:99}"
-note() { printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$HOME/.cache/chromium-launch.log" 2>/dev/null || true; }
 KITTY_PROFILE="$(kitty-profile)"
 mkdir -p "$KITTY_PROFILE"
 chmod 700 "$KITTY_PROFILE" 2>/dev/null || true
@@ -17,46 +16,6 @@ if ! pgrep -x chromium >/dev/null 2>&1; then
     if [ -f "$KITTY_PROFILE/Default/Preferences" ]; then
         sed -i 's/"exit_type":"Crashed"/"exit_type":"Normal"/' "$KITTY_PROFILE/Default/Preferences" 2>/dev/null || true
     fi
-fi
-# The pages in the host's language (KITTY_LANG, which the gateway sets from the host, like the
-# clock): the browser asks for them in it (Accept-Language), so Google or a bank sees the usual
-# language and takes the kitty for a new device less often. A choice made in the browser's own
-# settings is kept: the language is only written when the profile has none, or the one written
-# here before.
-if [ -n "${KITTY_LANG:-}" ] && ! pgrep -x chromium >/dev/null 2>&1; then
-    mkdir -p "$KITTY_PROFILE/Default"
-    python3 - "$KITTY_PROFILE" "$KITTY_LANG" <<'PY' 2>/dev/null || note "kitty-open: the browser's language could not be set"
-import json, os, sys
-profile, tag = sys.argv[1], sys.argv[2]
-base = tag.split("-")[0]
-langs = [tag] + ([base] if base != tag else []) + (["en-US", "en"] if base != "en" else [])
-want = ",".join(langs)
-prefs_path = os.path.join(profile, "Default", "Preferences")
-mark_path = os.path.join(profile, ".kitty-lang")
-try:
-    with open(prefs_path) as f:
-        prefs = json.load(f)
-except (OSError, ValueError):
-    prefs = {}
-intl = prefs.setdefault("intl", {})
-try:
-    with open(mark_path) as f:
-        mine = f.read().strip()
-except OSError:
-    mine = ""
-now = intl.get("accept_languages", "")
-if now and now != mine:
-    sys.exit(0)  # chosen in the browser: kept
-if now != want:
-    intl["accept_languages"] = want
-    intl["selected_languages"] = want
-    tmp = prefs_path + ".kitty"
-    with open(tmp, "w") as f:
-        json.dump(prefs, f)
-    os.replace(tmp, prefs_path)
-with open(mark_path, "w") as f:
-    f.write(want + "\n")
-PY
 fi
 # --force-dark-mode: Chromium's own face is dark, and pages that offer a dark look show it.
 # --remote-debugging-port: the browser's DevTools on this container's own loopback (nothing
@@ -92,6 +51,7 @@ slow() {
     echo "the browser is still starting on $DISPLAY (profile $KITTY_PROFILE); give it a moment" >&2
     exit 0
 }
+note() { printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$HOME/.cache/chromium-launch.log" 2>/dev/null || true; }
 
 # A profile the kitty cannot write to (a host folder owned by another user) cannot keep a login:
 # say so plainly instead of failing later.

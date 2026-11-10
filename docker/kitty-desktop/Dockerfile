@@ -123,17 +123,13 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # APT_REFRESH (the CI passes the ISO week) makes this layer miss the build cache once a week, so a
 # fix Debian publishes reaches the image even when nothing here changed.
 ARG APT_REFRESH=
-# The languages of Chromium's own menus that the image keeps (chromium-l10n brings ~70, 118 MB):
-# the host's language picks one of them (KITTY_LANG); one not kept shows the menus in English,
-# while pages are still asked for in it. CHROMIUM_LOCALES=all keeps every one.
-ARG CHROMIUM_LOCALES=en-US,en-GB,es,es-419,pt-BR,pt-PT,fr,de,it
 RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
-        xvfb x11-utils x11-xserver-utils xdotool xprintidle scrot wmctrl xclip picom \
+        xvfb x11-utils x11-xserver-utils xdotool scrot wmctrl xclip picom \
         xterm sudo playerctl dbus-x11 pcmanfm gnome-themes-extra gtk2-engines-pixbuf \
         libglib2.0-0 libxml2 libpango-1.0-0 libpangocairo-1.0-0 libpangoxft-1.0-0 libcairo2 libxft2 libxrandr2 libxinerama1 \
         libxcursor1 libxi6 libsm6 librsvg2-2 libimlib2 libxkbcommon0 libxau6 \
-        chromium chromium-l10n fonts-dejavu fonts-noto-color-emoji \
+        chromium fonts-dejavu fonts-noto-color-emoji \
         ca-certificates curl git jq python3 python3-websocket openssh-client \
         libreoffice-writer libreoffice-calc libreoffice-impress libreoffice-gtk3 \
         inkscape imagemagick mtpaint mousepad \
@@ -144,13 +140,6 @@ RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgra
         xdg-utils less nano file wget zip unzip xz-utils bzip2 \
         fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
     && rm -rf /var/lib/apt/lists/* \
-    && if [ "$CHROMIUM_LOCALES" != all ]; then \
-        keep=" $(echo "$CHROMIUM_LOCALES" | tr ',' ' ') "; \
-        for f in /usr/lib/chromium/locales/*.pak; do \
-            n="$(basename "$f" .pak)"; n="${n%%_*}"; \
-            case "$keep" in *" $n "*) ;; *) rm -f "$f" "$f.info" ;; esac; \
-        done; \
-    fi \
     && useradd -m -s /bin/bash kitty \
     && mkdir -p /home/kitty/work && chown -R kitty:kitty /home/kitty \
     && echo 'kitty ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/kitty \
@@ -184,17 +173,12 @@ COPY --chmod=755 kitty-restore.sh /usr/local/bin/kitty-restore
 # Its own password manager is off: passwords live in the gateway's vault (type_secret types them
 # without the kitty reading them), never in the profile, whose store is only obfuscated
 # (--password-store=basic) and goes into backups. Passwords saved before keep working.
-# Signing in to the browser itself (BrowserSignin=0, no sync) is off: Debian's build has no Google
-# OAuth keys that Google accepts, so binding the browser to the account failed and Chromium then
-# signed the account out of the web too (Gmail looked logged in and was not a moment later).
-# Signing in on a page (Gmail, any site) is plain cookies and stays.
 COPY chromium-policy.json /etc/chromium/policies/managed/kitties.json
 # Links any program opens (xdg-open, PCManFM, LibreOffice, a download) go to kitty-open, on the
 # kitty's own profile, not to a second Chromium on ~/.config/chromium without its logins.
 COPY xdg/kitty-browser.desktop /usr/share/applications/kitty-browser.desktop
 COPY xdg/mimeapps.list /etc/xdg/mimeapps.list
 COPY --chmod=755 kitty-page.py /usr/local/bin/kitty-page
-COPY --chmod=755 kitty-refresh.py /usr/local/bin/kitty-refresh
 COPY --chmod=755 kitty-file.py /usr/local/bin/kitty-file
 COPY --chmod=755 chromium-wrapper.sh /usr/local/bin/chromium
 COPY --chmod=755 kitty-open.sh /usr/local/bin/kitty-open

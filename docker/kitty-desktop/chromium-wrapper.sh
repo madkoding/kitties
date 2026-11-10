@@ -32,18 +32,6 @@ elif ! unshare --user --pid --net --fork true >/dev/null 2>&1; then
     echo "kitties: recreate the kitty (restart it from kitties) to get the sandbox back." >&2
     flags="$flags --no-sandbox --test-type"
 fi
-# Its menus and its pages' default language are the host's (KITTY_LANG, which the gateway sets
-# like the clock's zone; the languages come with chromium-l10n). A --lang given here wins.
-if [ -n "${KITTY_LANG:-}" ]; then
-    case " $* " in
-    *" --lang="*) ;;
-    *) flags="$flags --lang=$KITTY_LANG" ;;
-    esac
-    # On Linux the menus follow LANGUAGE, not --lang (es-CL → es_CL:es).
-    base="${KITTY_LANG%%-*}"
-    LANGUAGE="$(printf '%s' "$KITTY_LANG" | tr - _):$base"
-    export LANGUAGE
-fi
 note "launch: chromium $flags $*"
 # shellcheck disable=SC2086 # $flags is a few flags
 exec "$real" $flags "$@"
