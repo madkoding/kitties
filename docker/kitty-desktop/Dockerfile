@@ -82,7 +82,9 @@ RUN gcc -O2 -Wall -Werror -o /kitty-grab /tmp/kitty-grab.c -lX11 -lXext -ljpeg &
 
 # voxl (tembo/voxl, MIT, linking x264 which is GPL-2.0+; this image is GPL then, like Kitties):
 # the live view, the display as H.264 over a WebSocket. Built at a fixed commit, with the web
-# client it embeds (esbuild, at a fixed version).
+# client it embeds (esbuild, at a fixed version) and Kitties' patches to it (voxl/*.patch): the
+# viewer's own layout decides what a key types, AltGr and Option characters (@ on Spanish and
+# Latin American keyboards) included, and a framed viewer takes the keys as soon as it is focused.
 FROM rust:1-trixie AS voxl
 ARG VOXL_COMMIT=f5d6ec93dd2745a680054071eae31aec45049a49
 ARG ESBUILD_VERSION=0.25.10
@@ -93,9 +95,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 # Debian's libyuv ships no pkg-config file, which voxl's build asks for.
 RUN mkdir -p /usr/local/lib/pkgconfig \
     && printf 'Name: libyuv\nDescription: libyuv\nVersion: 0\nLibs: -lyuv\nCflags:\n' > /usr/local/lib/pkgconfig/libyuv.pc
+COPY voxl/ /tmp/voxl-patches/
 RUN curl -fsSL -o /tmp/voxl.tar.gz "https://github.com/tembo/voxl/archive/${VOXL_COMMIT}.tar.gz" \
     && mkdir /tmp/voxl && tar xzf /tmp/voxl.tar.gz -C /tmp/voxl --strip-components=1 \
-    && cd /tmp/voxl && cargo build --release --locked \
+    && cd /tmp/voxl && for p in /tmp/voxl-patches/*.patch; do git apply --verbose "$p"; done \
+    && cargo build --release --locked \
     && strip target/release/voxl && install -D target/release/voxl /out/usr/local/bin/voxl \
     && install -D LICENSE /out/usr/share/doc/voxl/LICENSE
 
