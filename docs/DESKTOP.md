@@ -301,6 +301,24 @@ the kitty types them with `type_secret` without reading them; passwords saved in
 keep working. A desktop stopped hard also comes
 up again: the display's stale lock is removed at the start.
 
+**Signing in to the browser itself is off** (policies `BrowserSignin=0` and `SyncDisabled`), not
+signing in on pages. Debian's Chromium has no Google OAuth keys that Google accepts, so after a login
+on Gmail the browser tried to bind itself to the account, failed, and signed the account out of the
+web too: it looked logged in and was not a moment later. Now a Google login is plain cookies, like any
+other site's, and stays in the profile.
+
+**Logins are kept alive** while the browser is open: `kitty-refresh` visits its tabs again every
+20 minutes, so a site that ends idle sessions (Gmail, banks) sees the kitty as still there. It never
+loses work nor gets in the way: a tab is reloaded only when it is not the one on screen while someone
+(the person in the live view or the kitty's own clicks) used the desktop in the last 5 minutes, it has
+nothing typed in it, nothing playing, and the kitty has not driven the browser (`kitty-page`) in the
+last 2 minutes; any other tab only gets a quiet visit (a request to its own address with its cookies,
+from inside the page, with nothing changing on screen), and a page that asks before it is left keeps
+its place. How often: `KITTY_BROWSER_REFRESH` (minutes, `0` off; set it in `containers.env`) or, per
+kitty and without a restart, a number in `~/.config/kitties/browser-refresh`; `KITTY_BROWSER_IDLE`
+sets the 5 minutes. `kitty-refresh --once` runs a pass by hand; the log is `/tmp/kitty-refresh.log`
+(addresses only, never what a page says).
+
 The **backup** (`kitty-backup`) adds a copy away from the container: the browser's cookies, sessions,
 saved passwords, local storage and preferences, and `~/.ssh`, `~/.gitconfig`, `~/.git-credentials`,
 `~/.netrc`, `~/.config/gh`, `~/.config/git` and the apps pinned to the dock (`~/.config/kitties/pins`). The gateway keeps it sealed (AES-256-GCM, the key of

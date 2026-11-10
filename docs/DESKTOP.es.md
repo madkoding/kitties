@@ -319,6 +319,25 @@ kitty las escribe con `type_secret` sin leerlas; las contraseñas guardadas ante
 funcionando. Un escritorio
 detenido de golpe también vuelve a levantar: al arrancar se borra el candado viejo de la pantalla.
 
+**Iniciar sesión en el navegador mismo está apagado** (políticas `BrowserSignin=0` y `SyncDisabled`),
+no iniciar sesión en las páginas. El Chromium de Debian no tiene claves OAuth de Google que Google
+acepte, así que tras entrar a Gmail el navegador intentaba atarse a la cuenta, fallaba y cerraba la
+sesión de la cuenta también en la web: parecía iniciada y un momento después no lo estaba. Ahora una
+sesión de Google son cookies, como las de cualquier sitio, y se queda en el perfil.
+
+**Las sesiones se mantienen vivas** mientras el navegador está abierto: `kitty-refresh` vuelve a
+visitar sus pestañas cada 20 minutos, así un sitio que cierra sesiones inactivas (Gmail, bancos) ve al
+kitty como presente. Nunca pierde trabajo ni estorba: una pestaña se recarga solo si no es la que está
+en pantalla mientras alguien (la persona en la vista en vivo o los clics del propio kitty) usó el
+escritorio en los últimos 5 minutos, no tiene nada escrito, nada sonando y el kitty no ha manejado el
+navegador (`kitty-page`) en los últimos 2 minutos; las demás solo reciben una visita silenciosa (una
+petición a su propia dirección con sus cookies, desde dentro de la página, sin cambiar nada en
+pantalla), y una página que pregunta antes de salir se queda donde está. Cada cuánto:
+`KITTY_BROWSER_REFRESH` (minutos, `0` apaga; va en `containers.env`) o, por kitty y sin reiniciar, un
+número en `~/.config/kitties/browser-refresh`; `KITTY_BROWSER_IDLE` cambia los 5 minutos.
+`kitty-refresh --once` hace una pasada a mano; el registro es `/tmp/kitty-refresh.log` (solo
+direcciones, nunca lo que dice una página).
+
 El **respaldo** (`kitty-backup`) añade una copia fuera del contenedor: cookies, sesiones, contraseñas
 guardadas, almacenamiento local y preferencias del navegador, y `~/.ssh`, `~/.gitconfig`,
 `~/.git-credentials`, `~/.netrc`, `~/.config/gh`, `~/.config/git` y las apps ancladas a la barra (`~/.config/kitties/pins`). El gateway lo guarda cifrado
