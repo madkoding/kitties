@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Chromium (kitty)
+Comment=The kitty's browser, on its own profile
+Exec=kitty-open %U
+Icon=web-browser
+Terminal=false
+NoDisplay=true
+MimeType=text/html;application/xhtml+xml;application/pdf;x-scheme-handler/http;x-scheme-handler/https;

@@ -110,6 +110,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     DISPLAY=:99 \
     SCREEN=1280x800x24 \
     LANG=C.UTF-8 \
+    BROWSER=kitty-open \
     GTK_THEME=Adwaita:dark \
     SAL_USE_VCLPLUGIN=gtk3
 
@@ -132,6 +133,8 @@ RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgra
         libx11-6 libxext6 libjpeg62-turbo \
         libx264-164 libyuv0 libopus0 libpulse0 pulseaudio pulseaudio-utils socat \
         tini procps tzdata iptables \
+        xdg-utils less nano file wget zip unzip xz-utils bzip2 \
+        fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash kitty \
     && mkdir -p /home/kitty/work && chown -R kitty:kitty /home/kitty \
@@ -163,7 +166,14 @@ COPY --chmod=755 kitty-backup.sh /usr/local/bin/kitty-backup
 COPY --chmod=755 kitty-restore.sh /usr/local/bin/kitty-restore
 # "Continue where you left off": the browser keeps session cookies (logins that have no expiry)
 # across a restart, which an update of the desktop is.
+# Its own password manager is off: passwords live in the gateway's vault (type_secret types them
+# without the kitty reading them), never in the profile, whose store is only obfuscated
+# (--password-store=basic) and goes into backups. Passwords saved before keep working.
 COPY chromium-policy.json /etc/chromium/policies/managed/kitties.json
+# Links any program opens (xdg-open, PCManFM, LibreOffice, a download) go to kitty-open, on the
+# kitty's own profile, not to a second Chromium on ~/.config/chromium without its logins.
+COPY xdg/kitty-browser.desktop /usr/share/applications/kitty-browser.desktop
+COPY xdg/mimeapps.list /etc/xdg/mimeapps.list
 COPY --chmod=755 kitty-page.py /usr/local/bin/kitty-page
 COPY --chmod=755 kitty-file.py /usr/local/bin/kitty-file
 COPY --chmod=755 chromium-wrapper.sh /usr/local/bin/chromium
