@@ -292,6 +292,12 @@ func (s Spec) Args() []string {
 			args = append(args, "-e", "TZ="+tz)
 		}
 	}
+	// And its language (the browser's Accept-Language), unless the spec sets its own.
+	if _, own := s.Env[LangEnv]; !own {
+		if l := HostLanguage(); l != "" {
+			args = append(args, "-e", LangEnv+"="+l)
+		}
+	}
 	args = append(args, "-e", "KITTY_NAME="+s.KittyName, "-e", "DISPLAY="+Display)
 	return append(args, s.Image)
 }
