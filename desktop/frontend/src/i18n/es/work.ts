@@ -672,6 +672,20 @@ const dict: Dictionary = {
     "quiere decir la respuesta del principal en WhatsApp",
   "wants to ask the lead from a WhatsApp chat":
     "quiere preguntarle al principal desde un chat de WhatsApp",
+  "Apps menu": "Menú de apps",
+  "Apps menu (Alt+F1)": "Menú de apps (Alt+F1)",
+  "Copy what is selected on the desktop to your clipboard":
+    "Copia lo seleccionado en el escritorio a tu portapapeles",
+  Paste: "Pegar",
+  "Paste your clipboard on the desktop": "Pega tu portapapeles en el escritorio",
+  "Type {ch}": "Escribir {ch}",
+  "Hold {key} for the next key": "Mantener {key} para la siguiente tecla",
+  "More keys": "Más teclas",
+  "Type and paste on the picture as on your computer.":
+    "Escribe y pega sobre la imagen como en tu equipo.",
+  "Paste your text in the field below and send it to {name}.":
+    "Pega tu texto en el campo de abajo y envíaselo a {name}.",
+  "Pasted on {name}'s desktop.": "Pegado en el escritorio de {name}.",
 };
 
 export default dict;

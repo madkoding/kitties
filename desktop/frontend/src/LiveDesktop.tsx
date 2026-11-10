@@ -3,6 +3,8 @@ import { api, type Kitty, rectsDesktop, shotData, streamDesktop, voxlSource } fr
 import { plainError } from "./friendly";
 import { t } from "./i18n";
 import { IconExpand, IconReduce, IconX } from "./icons";
+import KeyBar from "./KeyBar";
+import { xKeys } from "./keys";
 import LiveChat, { type LiveChatProps } from "./LiveChat";
 
 // LIVE DESKTOP: the kitty's display as it is now, followed while it is open: first as what
@@ -16,49 +18,9 @@ import LiveChat, { type LiveChatProps } from "./LiveChat";
 const WATCH_EVERY = 1000;
 const CONTROL_EVERY = 350;
 
-// keyName is the X name of a key the browser names, or "" for one that is typed as text.
-const NAMED: Record<string, string> = {
-  Enter: "Return",
-  Backspace: "BackSpace",
-  Tab: "Tab",
-  Escape: "Escape",
-  Delete: "Delete",
-  Insert: "Insert",
-  Home: "Home",
-  End: "End",
-  PageUp: "Prior",
-  PageDown: "Next",
-  ArrowUp: "Up",
-  ArrowDown: "Down",
-  ArrowLeft: "Left",
-  ArrowRight: "Right",
-};
-
-// xKeys turns a key press into what xdotool presses, or "" when it is plain text to type.
-export function xKeys(e: {
-  key: string;
-  ctrlKey: boolean;
-  altKey: boolean;
-  metaKey: boolean;
-  shiftKey: boolean;
-}): string {
-  if (["Control", "Alt", "Shift", "Meta", "CapsLock", "Dead", "Unidentified"].includes(e.key)) {
-    return "";
-  }
-  const named = NAMED[e.key] || (/^F\d{1,2}$/.test(e.key) ? e.key : "");
-  const chord = e.ctrlKey || e.altKey || e.metaKey;
-  if (!named && !chord) {
-    return "";
-  }
-  const mods = [
-    e.ctrlKey && "ctrl",
-    e.altKey && "alt",
-    e.metaKey && "super",
-    e.shiftKey && named && "shift",
-  ].filter(Boolean);
-  const key = named || (e.key === " " ? "space" : e.key.length === 1 ? e.key.toLowerCase() : e.key);
-  return [...mods, key].join("+");
-}
+// xKeys (keys.ts) says what a key press is on the display: AltGr and Option characters, such as
+// @ on Spanish and Latin American keyboards, are typed as text in the person's own layout.
+export { xKeys };
 
 // wasEnlarged and rememberEnlarged keep, in this browser, which kitties' desktops the person
 // likes enlarged. A browser that keeps nothing just opens the card.
@@ -95,17 +57,6 @@ async function loadFrame(path: string): Promise<string> {
   });
   return src;
 }
-
-const QUICK: [string, string][] = [
-  ["Enter", "Return"],
-  ["Tab", "Tab"],
-  ["Esc", "Escape"],
-  ["⌫", "BackSpace"],
-  ["Ctrl+C", "ctrl+c"],
-  ["Ctrl+A", "ctrl+a"],
-  ["Alt+Tab", "alt+Tab"],
-  ["Alt+F4", "alt+F4"],
-];
 
 // Gesture is a press or a drag in progress on the display, in the display's own pixels.
 interface Gesture {
@@ -162,6 +113,7 @@ export default function LiveDesktop({
   const [loaded, setLoaded] = useState(false);
   const [clip, setClip] = useState("");
   const [clipNote, setClipNote] = useState("");
+  const clipField = useRef<HTMLInputElement>(null);
   // Whether the person keeps this kitty's desktop enlarged: remembered, per kitty.
   const [expanded, setExpandedNow] = useState(() => !!inline && wasEnlarged(kitty.id));
   const setExpanded = (on: boolean) => {
@@ -432,6 +384,10 @@ export default function LiveDesktop({
     }
   };
 
+  // refocus gives the keyboard back to the display after a button of the bar.
+  const refocus = () =>
+    (mode === "voxl" ? voxlFrame.current?.contentWindow : surface.current)?.focus();
+
   // The clipboard both ways: the person's text to the kitty's, and the kitty's to the person.
   const sendClip = async () => {
     try {
@@ -441,9 +397,14 @@ export default function LiveDesktop({
       setErr(plainError((e as Error).message));
     }
   };
-  const takeClip = async () => {
+  // pullClip brings the kitty's clipboard to the person's (and to the field, where the browser
+  // does not let the page write it); quiet says nothing when it is empty or cannot be had.
+  const pullClip = async (quiet = false) => {
     try {
       const text = await api.clipboard(kitty.id);
+      if (quiet && !text) {
+        return;
+      }
       setClip(text);
       let copied = false;
       try {
@@ -460,8 +421,54 @@ export default function LiveDesktop({
             : t("Here is {name}'s clipboard: copy it from the field.", { name: kitty.name }),
       );
     } catch (e) {
-      setErr(plainError((e as Error).message));
+      if (!quiet) {
+        setErr(plainError((e as Error).message));
+      }
     }
+  };
+  const takeClip = () => pullClip();
+  // copyOut copies what is selected on the display (Ctrl+C there) and brings it over.
+  const copyOut = (keys = "ctrl+c") => {
+    flushTyped();
+    send("key", { keys });
+    queue.current = queue.current.then(() => new Promise((r) => setTimeout(r, 250)));
+    void queue.current.then(() => pullClip(true));
+  };
+  // pasteText puts the person's text on the kitty's clipboard and pastes it there (Ctrl+V): the
+  // whole text at once, line breaks and all, in any layout. Where the clipboard cannot be set
+  // it is typed instead.
+  const pasteText = (text: string) => {
+    flushTyped();
+    setSending((n) => n + 1);
+    queue.current = queue.current.then(() =>
+      api
+        .setClipboard(kitty.id, text)
+        .then(
+          () => api.inputKitty(kitty.id, "key", { keys: "ctrl+v" }),
+          () => api.inputKitty(kitty.id, "type", { text: text.slice(0, 2000) }),
+        )
+        .catch((e) => setErr(plainError((e as Error).message)))
+        .finally(() => setSending((n) => Math.max(0, n - 1))),
+    );
+  };
+  // pasteIn reads the person's clipboard and pastes it on the display; a browser that does not
+  // let the page read it gets the field, to paste into by hand and send.
+  const pasteIn = async () => {
+    let text = "";
+    try {
+      text = await navigator.clipboard.readText();
+    } catch {
+      /* not allowed here */
+    }
+    if (!text) {
+      setClipNote(
+        t("Paste your text in the field below and send it to {name}.", { name: kitty.name }),
+      );
+      clipField.current?.focus();
+      return;
+    }
+    pasteText(text);
+    setClipNote(t("Pasted on {name}'s desktop.", { name: kitty.name }));
   };
 
   // point is where an event falls on the display, in its own pixels.
@@ -585,6 +592,12 @@ export default function LiveDesktop({
       return;
     }
     const keys = xKeys(e);
+    // Ctrl+C and Ctrl+X copy on the display and bring what was copied to the person's clipboard.
+    if (keys === "ctrl+c" || keys === "ctrl+x") {
+      e.preventDefault();
+      copyOut(keys);
+      return;
+    }
     if (keys) {
       e.preventDefault();
       flushTyped();
@@ -608,8 +621,7 @@ export default function LiveDesktop({
     const text = e.clipboardData?.getData("text") || "";
     if (control && text) {
       e.preventDefault();
-      flushTyped();
-      send("type", { text: text.slice(0, 2000) });
+      pasteText(text);
     }
   };
 
@@ -777,7 +789,7 @@ export default function LiveDesktop({
                 border: 0,
                 pointerEvents: control ? "auto" : "none",
               }}
-              allow="clipboard-read; clipboard-write; autoplay"
+              allow="clipboard-read; clipboard-write; autoplay; keyboard-map"
               onLoad={() => {
                 setLoaded(true);
                 seen();
@@ -876,24 +888,32 @@ export default function LiveDesktop({
         </div>
       )}
       {control && (
-        <div class="flex gap-1.5 flex-wrap items-center shrink-0" data-testid="quick-keys">
-          {QUICK.map(([label, keys]) => (
-            <button
-              key={keys}
-              class="btn-ghost px-2 py-1 text-xs font-mono"
-              onClick={() => {
-                flushTyped();
-                send("key", { keys });
-                surface.current?.focus();
-              }}
-            >
-              {label}
-            </button>
-          ))}
-          <span class="text-xs text-[var(--t3)] ml-auto">
-            {t("Click, drag, scroll and type on the picture; Ctrl+V pastes your own text.")}
-          </span>
-        </div>
+        <KeyBar
+          onKeys={(keys) => {
+            if (keys === "ctrl+c" || keys === "ctrl+x") {
+              copyOut(keys);
+            } else {
+              flushTyped();
+              send("key", { keys });
+            }
+            refocus();
+          }}
+          onText={(text) => {
+            flushTyped();
+            send("type", { text });
+            refocus();
+          }}
+          onCopy={() => {
+            copyOut();
+            refocus();
+          }}
+          onPaste={() => void pasteIn()}
+          hint={
+            mode === "voxl"
+              ? t("Type and paste on the picture as on your computer.")
+              : t("Click, drag, scroll and type on the picture; Ctrl+V pastes your own text.")
+          }
+        />
       )}
       {control && (
         <div
@@ -901,6 +921,7 @@ export default function LiveDesktop({
           data-testid="clipboard"
         >
           <input
+            ref={clipField}
             class={INPUT}
             value={clip}
             placeholder={t("Text for {name}'s clipboard", { name: kitty.name })}

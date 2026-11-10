@@ -208,3 +208,70 @@ export const IconSparkles = (p: P) =>
   ]);
 export const IconSearch = (p: P) =>
   svg(p, [<circle cx="11" cy="11" r="7" />, <path d="m20 20-3.5-3.5" />]);
+
+// The live desktop's key bar (Lucide, ISC).
+export const IconKeyboard = (p: P) =>
+  svg(p, [
+    <rect width="20" height="16" x="2" y="4" rx="2" />,
+    <path d="M6 8h.01M10 8h.01M14 8h.01M18 8h.01M8 12h.01M12 12h.01M16 12h.01M7 16h10" />,
+  ]);
+export const IconEnter = (p: P) =>
+  svg(p, [<path d="M20 4v7a4 4 0 0 1-4 4H4" />, <path d="m9 10-5 5 5 5" />]);
+export const IconTab = (p: P) =>
+  svg(p, [<path d="M17 12H3" />, <path d="m11 18 6-6-6-6" />, <path d="M21 5v14" />]);
+export const IconBackspace = (p: P) =>
+  svg(p, [
+    <path d="M10 5a2 2 0 0 0-1.344.519l-6.328 5.74a1 1 0 0 0 0 1.481l6.328 5.741A2 2 0 0 0 10 19h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2z" />,
+    <path d="m12 9 6 6M18 9l-6 6" />,
+  ]);
+export const IconSwitch = (p: P) =>
+  svg(p, [
+    <path d="m16 3 4 4-4 4" />,
+    <path d="M20 7H4" />,
+    <path d="m8 21-4-4 4-4" />,
+    <path d="M4 17h16" />,
+  ]);
+export const IconCloseWindow = (p: P) =>
+  svg(p, [<rect width="18" height="18" x="3" y="3" rx="2" />, <path d="m15 9-6 6M9 9l6 6" />]);
+export const IconActivity = (p: P) =>
+  svg(p, [
+    <path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2" />,
+  ]);
+export const IconGrid = (p: P) =>
+  svg(p, [
+    <rect width="7" height="7" x="3" y="3" rx="1" />,
+    <rect width="7" height="7" x="14" y="3" rx="1" />,
+    <rect width="7" height="7" x="14" y="14" rx="1" />,
+    <rect width="7" height="7" x="3" y="14" rx="1" />,
+  ]);
+export const IconCopyFrom = (p: P) =>
+  svg(p, [
+    <rect width="8" height="4" x="8" y="2" rx="1" />,
+    <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />,
+    <path d="M16 4h2a2 2 0 0 1 2 2v4" />,
+    <path d="M21 14H11" />,
+    <path d="m15 10-4 4 4 4" />,
+  ]);
+export const IconPasteTo = (p: P) =>
+  svg(p, [
+    <path d="M11 14h10" />,
+    <path d="M16 4h2a2 2 0 0 1 2 2v1.344" />,
+    <path d="m17 18 4-4-4-4" />,
+    <path d="M8 4H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 1.793-1.113" />,
+    <rect x="8" y="2" width="8" height="4" rx="1" />,
+  ]);
+export const IconAt = (p: P) =>
+  svg(p, [<circle cx="12" cy="12" r="4" />, <path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8" />]);
+export const IconUndo = (p: P) =>
+  svg(p, [
+    <path d="M9 14 4 9l5-5" />,
+    <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11" />,
+  ]);
+export const IconArrowUp = (p: P) => svg(p, [<path d="m5 12 7-7 7 7" />, <path d="M12 19V5" />]);
+export const IconArrowDown = (p: P) => svg(p, [<path d="M12 5v14" />, <path d="m19 12-7 7-7-7" />]);
+export const IconArrowLeft = (p: P) => svg(p, [<path d="m12 19-7-7 7-7" />, <path d="M19 12H5" />]);
+export const IconArrowRight = (p: P) => svg(p, [<path d="M5 12h14" />, <path d="m12 5 7 7-7 7" />]);
+export const IconShift = (p: P) =>
+  svg(p, [
+    <path d="M9 19a1 1 0 0 0 1 1h4a1 1 0 0 0 1-1v-6a1 1 0 0 1 1-1h3.293a.707.707 0 0 0 .5-1.207l-7.086-7.086a1 1 0 0 0-1.414 0l-7.086 7.086a.707.707 0 0 0 .5 1.207H8a1 1 0 0 1 1 1z" />,
+  ]);
