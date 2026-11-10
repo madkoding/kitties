@@ -190,6 +190,30 @@ cada imagen con solo lo que cambió), servido en `/v1/chats/{id}/turns/{n}/repla
 
 <img src="screenshots/49-live-desktop-control.png" alt="Tomando el control del escritorio de un kitty: un comando escrito en su terminal" width="100%">
 
+## Tu teclado, el portapapeles y la barra de teclas
+
+Con el control, las teclas llegan al escritorio como los caracteres que escribe tu propia
+distribución de teclado, sea cual sea la del escritorio: `@` con AltGr en un teclado español
+(AltGr+2) o latinoamericano (AltGr+Q), `€`, `\`, `ñ` o una `á` con tecla muerta. Windows informa
+AltGr como Control y Alt presionados, y la Option de un Mac es Alt, así que un carácter hecho con
+ellas se escribe tal cual en vez de llegar al escritorio como un atajo Ctrl+Alt (la imagen parcha
+el visor de voxl para esto, `docker/kitty-desktop/voxl/*.patch`, y la vista de respaldo hace lo
+mismo en `keys.ts`). El visor además toma las teclas apenas tomas el control, sin un primer clic
+dentro de la imagen.
+
+**Ctrl+C** y **Ctrl+V** funcionan como en tu equipo: lo que copias en el escritorio llega a tu
+portapapeles, y Ctrl+V pega el tuyo allá (el texto completo de una vez, con sus saltos de línea).
+Bajo la imagen, una **barra de teclas** (iconos Lucide) tiene lo que tu teclado o tu teléfono no
+pueden presionar allá: Esc, Tab, Enter, Retroceso, **Alt+Tab**, **Ctrl+Alt+Supr** (la lista de
+tareas, `top` en una terminal), el **menú de apps** (Alt+F1), **Copiar** y **Pegar** entre los dos
+portapapeles, `@`, y **Ctrl**, **Alt**, **Shift** y **Super** que quedan presionadas para la
+siguiente tecla; el botón del teclado suma F1 a F12, las flechas, Inicio/Fin/RePág/AvPág,
+Ctrl+Z/A/X/S/F/L, Alt+F4 y los caracteres que otras distribuciones esconden. En un teléfono sus
+filas se desplazan de lado. El campo de abajo sigue enviando texto al portapapeles del kitty y
+trayendo el suyo, para un navegador que no deja a la página leer el tuyo.
+
+<img src="screenshots/82-live-keys.png" alt="El escritorio en vivo con la barra de teclas abierta: Esc, Tab, Alt+Tab, Ctrl+Alt+Supr, copiar y pegar, modificadores, teclas F y símbolos" width="100%">
+
 ## El chat junto al escritorio en vivo
 
 La ventana del escritorio en vivo de una kitty lleva su chat como barra lateral: le escribes y
