@@ -292,3 +292,37 @@ func TestConnectorNeverMentionsEveryone(t *testing.T) {
 		t.Fatalf("sent = %q", got)
 	}
 }
+
+// The answer to a message that quotes the kitty's own is for its author alone: it quotes their
+// message (which notifies them) and tags nobody else, not the people the kitty's quoted message
+// named, nor everyone, even when the kitty writes their tags.
+func TestAnswerToAQuoteOfTheKitty(t *testing.T) {
+	r, f := groupRig(t, Settings{MentionAll: MentionAllAsked})
+	r.b.mu.Lock()
+	r.b.opt.Guard = fakeGuard{trusted: "56911111111"} // Ana is the person
+	r.b.mu.Unlock()
+	r.chats.reply = func(string) ([]chat.Turn, error) {
+		return []chat.Turn{{From: "mimi", Text: "@Ana @Pedro @todos es a las 5"}}, nil
+	}
+	f.push(Event{Kind: EvMessage, Group: true, Chat: familia, From: "56911111111", Name: "Ana", Text: "¿a qué hora?", Mentioned: true,
+		Quote: &Quote{From: "15550001", Text: "Pedro y todos vienen mañana"},
+		Ref:   Ref{Chat: familia, Sender: "56911111111@s.whatsapp.net", ID: "a1"}})
+	eventually(t, "the answer", func() bool { return len(f.messages()) == 1 })
+	if got, want := f.messages()[0], familia+": > a1 ¿a qué hora? | Ana Pedro @todos es a las 5"; got != want {
+		t.Fatalf("answer =\n%q\nwant\n%q", got, want)
+	}
+}
+
+// A progress line of a task in a group quotes nothing and tags nobody the message did not involve.
+func TestGroupProgressTagsNobody(t *testing.T) {
+	r, f := groupRig(t, Settings{})
+	r.chats.mu.Lock()
+	r.chats.sessions["c9"] = &chat.Session{ID: "c9", Turns: []chat.Turn{{Steps: []chat.Step{{Action: chat.StepPlan, Result: "Le escribo a @Pedro y a @todos."}}}}}
+	r.chats.mu.Unlock()
+	in := &inbound{from: "56911111111", to: familia, who: familia, group: true, raw: "Mimi, ¿hora?", ref: Ref{Chat: familia, ID: "a1"}}
+	r.b.progress(context.Background(), f, in, "c9", 0, &progressState{seen: map[int]int{}})
+	eventually(t, "the line", func() bool { return len(f.messages()) == 1 })
+	if got := f.messages()[0]; got != familia+": ⏳ Le escribo a Pedro y a @todos." {
+		t.Fatalf("line = %q", got)
+	}
+}

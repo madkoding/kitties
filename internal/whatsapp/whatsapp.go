@@ -1752,7 +1752,7 @@ func (b *Bridge) answer(ctx context.Context, c Client, in inbound) {
 		case ev := <-events:
 			sent, ok := working[ev.Index]
 			if ok && ev.Type == "update" {
-				b.progress(ctx, c, in.to, in.who, id, ev.Index, plans)
+				b.progress(ctx, c, &in, id, ev.Index, plans)
 				continue
 			}
 			if !ok || ev.Type != "done" || ev.Turn == nil {
@@ -1780,7 +1780,9 @@ type progressState struct {
 // progress sends what the kitty says it goes on to do in a task still at work (its plan lines),
 // so a long task is not silence until its answer: one line at a time, a minute apart at least,
 // the newest when several came meanwhile. The turn is read again (the event's is the live one).
-func (b *Bridge) progress(ctx context.Context, c Client, to, who, id string, index int, st *progressState) {
+// A line quotes nothing, and tags only who the message it answers involves (in a group, a line
+// sent as if on the kitty's own could tag anyone).
+func (b *Bridge) progress(ctx context.Context, c Client, in *inbound, id string, index int, st *progressState) {
 	sess, err := b.opt.Chats.Get(id)
 	if err != nil || index >= len(sess.Turns) {
 		return
@@ -1795,7 +1797,9 @@ func (b *Bridge) progress(ctx context.Context, c Client, to, who, id string, ind
 		return
 	}
 	st.seen[index], st.last = len(lines), time.Now()
-	b.say(ctx, c, to, who, nil, "⏳ "+lines[len(lines)-1], false)
+	line := *in
+	line.ref = Ref{}
+	b.say(ctx, c, in.to, in.who, &line, "⏳ "+lines[len(lines)-1], false)
 }
 
 // busy is what a person who writes while the kitty still works on their last message reads, in

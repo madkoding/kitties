@@ -40,7 +40,7 @@ func TestSendMentions(t *testing.T) {
 	f := &fakeConn{groups: map[string]string{lidGroup: "Familia"}, members: map[string][]types.GroupParticipant{lidGroup: lidMembers}}
 	c, stop := running(t, f, func(whatsapp.Event) {})
 	ctx := context.Background()
-	ref := whatsapp.Ref{Chat: lidGroup, Sender: "111@lid", ID: "m1"}
+	ref := whatsapp.Ref{Chat: lidGroup, Sender: "111:3@lid", ID: "m1"}
 	if err := c.SendMentions(ctx, lidGroup, "@56911111111 y @56922222222, @56933333333 no está", whatsapp.Mentions{Numbers: []string{"56911111111", "56922222222", "56933333333"}}, ref, "¿quién viene?"); err != nil {
 		t.Fatal(err)
 	}
@@ -53,7 +53,9 @@ func TestSendMentions(t *testing.T) {
 		t.Fatalf("text = %q", e.GetText())
 	}
 	ci := e.GetContextInfo()
-	if strings.Join(ci.GetMentionedJID(), ",") != "111@lid,56922222222@s.whatsapp.net" || ci.GetStanzaID() != "m1" || ci.GetQuotedMessage().GetConversation() != "¿quién viene?" {
+	if strings.Join(ci.GetMentionedJID(), ",") != "111@lid,56922222222@s.whatsapp.net" || ci.GetStanzaID() != "m1" || ci.GetQuotedMessage().GetConversation() != "¿quién viene?" ||
+		// The quote is the person's message (no device, no chat), not one of the whole group.
+		ci.GetParticipant() != "111@lid" || ci.RemoteJID != nil {
 		t.Fatalf("context = %v", ci)
 	}
 	all := f.msgs[1].GetExtendedTextMessage()
