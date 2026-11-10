@@ -119,6 +119,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # APT_REFRESH (the CI passes the ISO week) makes this layer miss the build cache once a week, so a
 # fix Debian publishes reaches the image even when nothing here changed.
 ARG APT_REFRESH=
+# The languages of Chromium's own menus that the image keeps (chromium-l10n brings ~70, 118 MB):
+# the host's language picks one of them (KITTY_LANG); one not kept shows the menus in English,
+# while pages are still asked for in it. CHROMIUM_LOCALES=all keeps every one.
+ARG CHROMIUM_LOCALES=en-US,en-GB,es,es-419,pt-BR,pt-PT,fr,de,it
 RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends \
         xvfb x11-utils x11-xserver-utils xdotool xprintidle scrot wmctrl xclip picom \
@@ -136,6 +140,13 @@ RUN echo "apt refresh: ${APT_REFRESH:-local}" && apt-get update && apt-get upgra
         xdg-utils less nano file wget zip unzip xz-utils bzip2 \
         fonts-liberation fonts-crosextra-carlito fonts-crosextra-caladea \
     && rm -rf /var/lib/apt/lists/* \
+    && if [ "$CHROMIUM_LOCALES" != all ]; then \
+        keep=" $(echo "$CHROMIUM_LOCALES" | tr ',' ' ') "; \
+        for f in /usr/lib/chromium/locales/*.pak; do \
+            n="$(basename "$f" .pak)"; n="${n%%_*}"; \
+            case "$keep" in *" $n "*) ;; *) rm -f "$f" "$f.info" ;; esac; \
+        done; \
+    fi \
     && useradd -m -s /bin/bash kitty \
     && mkdir -p /home/kitty/work && chown -R kitty:kitty /home/kitty \
     && echo 'kitty ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/kitty \
