@@ -315,6 +315,22 @@ func (b *Bridge) prepareLocked(to, text string, in *inbound) (string, Mentions, 
 	return text, m, note
 }
 
+// tagsLogLocked notes in the log whom a message to a group tags, so who was notified (and why
+// they say so) can be told afterwards.
+func (b *Bridge) tagsLogLocked(to string, m Mentions) {
+	if !m.All && len(m.Numbers) == 0 {
+		return
+	}
+	who := make([]string, 0, len(m.Numbers)+1)
+	if m.All {
+		who = append(who, "everyone")
+	}
+	for _, n := range m.Numbers {
+		who = append(who, b.labelLocked(n))
+	}
+	b.opt.Log("whatsapp: a message to %s tags %s", to, strings.Join(who, ", "))
+}
+
 // trustedLocked reports whether number is one of the person's own.
 func (b *Bridge) trustedLocked(number string) bool {
 	return number != "" && b.opt.Guard != nil && b.opt.Guard.Trusted(number)
