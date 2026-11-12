@@ -5,7 +5,7 @@ go 1.26.10
 require (
 	github.com/google/uuid v1.6.0
 	go.mau.fi/whatsmeow v0.0.0-20261105212532-307a2edf117d
-	golang.org/x/sys v0.49.0
+	golang.org/x/sys v0.50.0
 	google.golang.org/protobuf v1.36.12
 	rsc.io/qr v0.2.0
 )
