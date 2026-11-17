@@ -117,6 +117,24 @@ func (r *Registry) Descriptions(allow []string) map[string]string {
 	return out
 }
 
+// Actions lists what a connector can do, as its kind in the catalogue says (request included for
+// the kinds over an HTTP API); none for a connector of no kind (a fake, a plain webhook).
+func (r *Registry) Actions(name string) []Action {
+	c, ok := r.Get(name)
+	if !ok {
+		return nil
+	}
+	k, ok := c.(Kinder)
+	if !ok {
+		return nil
+	}
+	kind, ok := LookupKind(k.Kind())
+	if !ok {
+		return nil
+	}
+	return append([]Action(nil), kind.Actions...)
+}
+
 func contains(list []string, s string) bool {
 	for _, x := range list {
 		if x == s {

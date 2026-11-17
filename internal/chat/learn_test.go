@@ -140,7 +140,7 @@ func TestMemoryInThePromptAndActions(t *testing.T) {
 	if !names["memory_remember"] || !names["memory_forget"] || !names["memory_list"] {
 		t.Errorf("tools = %v", names)
 	}
-	if a := fromCalls([]provider.ToolCall{{ID: "1", Name: "memory_remember", Args: map[string]any{"text": "x"}}}); a[0].kind != "memory" || a[0].name != "remember" {
+	if a := fromCalls([]provider.ToolCall{{ID: "1", Name: "memory_remember", Args: map[string]any{"text": "x"}}}, nil); a[0].kind != "memory" || a[0].name != "remember" {
 		t.Errorf("native = %+v", a[0])
 	}
 	// Without memory the actions say so and no tools are offered.

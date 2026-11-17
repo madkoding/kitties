@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/madkoding/kitties/internal/connector"
 	"github.com/madkoding/kitties/internal/provider"
 )
 
@@ -74,6 +75,84 @@ func TestNativeBrainWritingALine(t *testing.T) {
 	for _, p := range []string{"action", "text", "method", "path", "query", "body"} {
 		if _, ok := props[p]; !ok {
 			t.Errorf("connector tool lacks %q: %v", p, props)
+		}
+	}
+}
+
+// A connector whose kind lists its actions is offered one tool per action, with that action's
+// arguments, and a call to one runs the connector with the action set.
+func TestActionTools(t *testing.T) {
+	f, _, _, _ := fleet(t)
+	jira, err := connector.Build("jira", connector.Settings{"project": "KIT", "url": "https://acme.atlassian.net", "email": "a@b.c", "token": "t"}, "work tickets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.conns.Add("jira", jira)
+	f.conns.Add("my memory", jira) // a name that is not a tool word, and would clash once cleaned
+	s := service(t, f)
+	allowed := f.conns.Descriptions([]string{"jira", "echo", "my memory"})
+	tools, routes := s.connectorTools(allowed)
+	byName := map[string]provider.Tool{}
+	for _, tl := range tools {
+		byName[tl.Name] = tl
+	}
+	req, ok := byName["jira_request"]
+	if !ok {
+		t.Fatalf("no jira_request tool: %v", routes)
+	}
+	props, _ := req.Parameters["properties"].(map[string]any)
+	if q, _ := props["query"].(map[string]any); q["type"] != "object" {
+		t.Errorf("query is an object: %v", props)
+	}
+	if p, _ := props["path"].(map[string]any); p["type"] != "string" || !strings.Contains(p["description"].(string), "developer.atlassian.com") {
+		t.Errorf("path: %v", props)
+	}
+	if _, ok := props["action"]; ok {
+		t.Error("an action tool has no action argument")
+	}
+	if !strings.Contains(req.Description, "jira connection") || !strings.Contains(req.Description, "work tickets") {
+		t.Errorf("description = %q", req.Description)
+	}
+	if _, ok := byName["jira_create_issue"]; !ok {
+		t.Error("no jira_create_issue tool")
+	}
+	if _, ok := byName["connector_echo"]; !ok {
+		t.Error("a connector without listed actions keeps its one tool")
+	}
+	if _, ok := byName["my_memory_request"]; !ok {
+		t.Errorf("cleaned name: %v", routes)
+	}
+	acts := fromCalls([]provider.ToolCall{
+		{ID: "1", Name: "jira_request", Args: map[string]any{"path": "/rest/api/3/issue/SMDFS-1243", "action": "other"}},
+		{ID: "2", Name: "connector_echo", Args: map[string]any{"text": "hi"}},
+	}, routes)
+	if acts[0].kind != "connector" || acts[0].name != "jira" || acts[0].args["action"] != "request" || acts[0].args["path"] != "/rest/api/3/issue/SMDFS-1243" {
+		t.Errorf("action tool call = %+v", acts[0])
+	}
+	if acts[1].kind != "connector" || acts[1].name != "echo" {
+		t.Errorf("connector tool call = %+v", acts[1])
+	}
+	// A clash with another tool's name moves the action tool aside.
+	if got := actionToolName("memory", "list"); got != "connector_memory__list" {
+		t.Errorf("clash = %q", got)
+	}
+	if got := actionToolName("page", "x"); got != "connector_page__x" {
+		t.Errorf("clash = %q", got)
+	}
+}
+
+// Every tool that is not a connector is reserved, so an action tool never takes its name.
+func TestReservedToolsCoverTheToolSet(t *testing.T) {
+	f, _, _, _ := fleet(t)
+	s := service(t, f)
+	k := f.kitties["a1"]
+	for _, tl := range s.toolSet(k, nil) {
+		reserved := reservedTools[tl.Name]
+		for _, p := range reservedPrefixes {
+			reserved = reserved || strings.HasPrefix(tl.Name, p)
+		}
+		if !reserved {
+			t.Errorf("%s is not reserved", tl.Name)
 		}
 	}
 }

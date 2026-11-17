@@ -1308,7 +1308,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		var actions []action
 		text := reply.Content
 		if native && len(reply.Calls) > 0 {
-			actions = fromCalls(reply.Calls)
+			actions = fromCalls(reply.Calls, s.connectorRoutes(allowed))
 		} else {
 			actions, text = fromText(reply.Content, allowed)
 		}
@@ -1765,7 +1765,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		st.reply, st.replyText = answer, answer.Content
 		var text string
 		if p.native && len(answer.Calls) > 0 {
-			st.actions, text = fromCalls(answer.Calls), answer.Content
+			st.actions, text = fromCalls(answer.Calls, s.connectorRoutes(p.allowed)), answer.Content
 		} else {
 			st.actions, text = fromText(answer.Content, p.allowed)
 		}

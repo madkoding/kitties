@@ -245,9 +245,10 @@ func (s Soul) SystemPrompt(c Context) string {
 		}
 		sort.Strings(names)
 		if c.NativeTools {
-			b.WriteString("You can use these external services through your tools: each is the tool connector_<name>, " +
-				"with the action and its arguments as the tool's arguments. Call the tool: a call written as text " +
-				"in your answer does nothing for you. The result comes back to you:\n")
+			b.WriteString("You can use these external services through your tools: each action of a service is a tool named " +
+				"after both (jira_request, slack_send), and a service whose actions are not tools of their own is the tool " +
+				"connector_<name>, with the action as an argument. Call the tool: a call written as text in your answer " +
+				"does nothing for you. The result comes back to you:\n")
 		} else {
 			fmt.Fprintf(&b, "You can use these external services. To call one, write a line that starts with @connector, then "+
 				"its name and its arguments as one JSON object, for example\n@connector %s {\"action\": \"...\"}\n"+

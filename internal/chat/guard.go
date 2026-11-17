@@ -194,8 +194,9 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 	native := false
 	var tools []provider.Tool
 	if s.speaksTools(brain) {
+		routes := s.connectorRoutes(allowed)
 		for _, t := range s.toolSet(view, allowed) {
-			if strings.HasPrefix(t.Name, prefixConnector) || (people && s.memory != nil && strings.HasPrefix(t.Name, "memory_")) || (asks && t.Name == "ask_lead") {
+			if _, conn := routes[t.Name]; conn || strings.HasPrefix(t.Name, prefixConnector) || (people && s.memory != nil && strings.HasPrefix(t.Name, "memory_")) || (asks && t.Name == "ask_lead") {
 				tools = append(tools, t)
 			}
 		}
@@ -216,7 +217,7 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 		var actions []action
 		text := reply.Content
 		if native && len(reply.Calls) > 0 {
-			actions = fromCalls(reply.Calls)
+			actions = fromCalls(reply.Calls, s.connectorRoutes(allowed))
 		} else {
 			actions, text = fromText(reply.Content, allowed)
 		}
