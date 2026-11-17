@@ -227,6 +227,9 @@ type Session struct {
 	// Helping are the kitties at work on a subtask handed over from this chat right now: the page
 	// shows them working until they answer. Cleared when the gateway starts.
 	Helping []Helper `json:"helping,omitempty"`
+	// Calling are the connector calls running right now for this chat: the page shows "calling
+	// Jira…" until they answer. Cleared when the gateway starts.
+	Calling []Calling `json:"calling,omitempty"`
 	// Kind is what the thread is: a chat, a goal's (a scheduled task's) or a hand-over between
 	// two kitties (kinds.go); worked out from the fields above on every save and load.
 	Kind string `json:"kind"`
@@ -686,7 +689,7 @@ func (s *Service) load() error {
 		refreshKitties(&sess)
 		refreshKind(&sess)
 		sess.ExpiresAt, sess.Shown = time.Time{}, false
-		sess.Helping = nil // nobody is still at work after a restart
+		sess.Helping, sess.Calling = nil, nil // nobody is still at work after a restart
 		s.sessions[sess.ID] = &sess
 	}
 	return nil
@@ -870,6 +873,7 @@ func (s *Service) Get(id string) (*Session, error) {
 	c.Delegates = append([]string(nil), sess.Delegates...)
 	c.Kitties = append([]string(nil), sess.Kitties...)
 	c.Helping = append([]Helper(nil), sess.Helping...)
+	c.Calling = append([]Calling(nil), sess.Calling...)
 	c.Turns = append([]Turn(nil), sess.Turns...)
 	c.Help = sess.NeedsHelp()
 	c.ExpiresAt = s.expiresAt(sess)

@@ -300,7 +300,17 @@ export interface Turn {
   // "Ana (+56912345678)".
   sender?: string;
   text: string;
-  calls?: { name: string; kind?: string; output?: string; error?: string; artifact?: string }[];
+  // calls are the connectors used in the turn: action and detail say what was asked
+  // ("request", "GET /rest/api/3/issue/KIT-1").
+  calls?: {
+    name: string;
+    kind?: string;
+    action?: string;
+    detail?: string;
+    output?: string;
+    error?: string;
+    artifact?: string;
+  }[];
   steps?: Step[];
   artifacts?: string[];
   skills?: string[];
@@ -361,6 +371,8 @@ export interface Session {
   kitties?: string[];
   // helping are the kitties at work right now on a subtask handed over from this chat.
   helping?: Helper[];
+  // calling are the connector calls running right now for this chat ("calling Jira…").
+  calling?: Calling[];
   // dismissed are delegates the person took off the chat.
   dismissed?: string[];
   // kind is what the thread is: a chat, a scheduled task's (goal) or a hand-over between two
@@ -415,6 +427,16 @@ export interface HandOverDay {
 }
 
 // Helper is a kitty at work on a subtask handed over from a chat.
+export interface Calling {
+  kitty: string;
+  kitty_id: string;
+  connector: string;
+  kind?: string;
+  action?: string;
+  detail?: string;
+  since: string;
+}
+
 export interface Helper {
   kitty: string;
   kitty_id: string;

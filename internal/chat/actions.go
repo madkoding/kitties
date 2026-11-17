@@ -306,7 +306,18 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 				out = append(out, held)
 				continue
 			}
+			act, _ := a.args["action"].(string)
+			detail := connector.Detail(a.args)
+			kind := ""
+			if c, ok := s.fleet.Connectors().Get(a.name); ok {
+				if kd, ok := c.(connector.Kinder); ok {
+					kind = kd.Kind()
+				}
+			}
+			done := s.calling(id, Calling{Kitty: k.Name, KittyID: k.ID, Connector: a.name, Kind: kind, Action: act, Detail: detail, Since: s.now()})
 			results := []connector.Result{s.fleet.Connectors().Call(ctx, connector.Call{Name: a.name, Args: a.args, Raw: a.raw}, k.Connectors)}
+			done()
+			results[0].Action, results[0].Detail = act, detail
 			s.keepFiles(results, k, turn)
 			turn.Calls = append(turn.Calls, results[0])
 			out = append(out, outcome{action: a, text: results[0].Output, err: results[0].Err})

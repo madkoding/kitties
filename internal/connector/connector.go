@@ -45,6 +45,27 @@ type Result struct {
 	Artifact string `json:"artifact,omitempty"`
 	// Kind is the connector's kind in the catalogue, for its logo.
 	Kind string `json:"kind,omitempty"`
+	// Action and Detail say what was asked, for the page's card ("request", "GET /rest/…").
+	Action string `json:"action,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// Detail is a short line of what a call asks: the method and path of a request, or the first
+// words of its main argument.
+func Detail(args map[string]any) string {
+	if path, _ := args["path"].(string); path != "" {
+		method, _ := args["method"].(string)
+		if method == "" {
+			method = "GET"
+		}
+		return clip(strings.ToUpper(method)+" "+path, 120)
+	}
+	for _, k := range []string{"summary", "subject", "title", "query", "name", "text", "message", "task", "url", "id"} {
+		if v, ok := args[k].(string); ok && strings.TrimSpace(v) != "" {
+			return clip(strings.Join(strings.Fields(v), " "), 80)
+		}
+	}
+	return ""
 }
 
 // File is a connector's binary answer.

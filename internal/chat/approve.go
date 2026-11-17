@@ -201,6 +201,8 @@ func (s *Service) DecideApproval(ctx context.Context, id string, approve bool, r
 			allow = k.Connectors
 		}
 		res := s.fleet.Connectors().Call(ctx, connector.Call{Name: ap.Connector, Args: ap.Args}, allow)
+		res.Action, _ = ap.Args["action"].(string)
+		res.Detail = connector.Detail(ap.Args)
 		if k != nil {
 			s.spendAction(k)
 			s.keepFiles([]connector.Result{res}, k, &turn)

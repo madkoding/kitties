@@ -156,3 +156,46 @@ func TestReservedToolsCoverTheToolSet(t *testing.T) {
 		}
 	}
 }
+
+// slowConn answers when it is let go, so a test can look at the chat while the call runs.
+type slowConn struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (c *slowConn) Describe() string { return "slow" }
+func (c *slowConn) Kind() string     { return "jira" }
+func (c *slowConn) Call(context.Context, map[string]any) (string, error) {
+	close(c.started)
+	<-c.release
+	return `{"key":"SMDFS-1243"}`, nil
+}
+
+// While a connector runs the chat says so ("calling"), and the turn keeps what was asked.
+func TestCallingWhileTheConnectorRuns(t *testing.T) {
+	f, sa, _, _ := fleet(t)
+	slow := &slowConn{started: make(chan struct{}), release: make(chan struct{})}
+	f.conns.Add("jira", slow)
+	f.kitties["a1"].Connectors = []string{"jira"}
+	s := service(t, f)
+	sess, _ := s.Create("", []string{"ana"})
+	sa.replies = []string{"@jira {\"action\": \"request\", \"path\": \"/rest/api/3/issue/SMDFS-1243\"}", "Está en curso."}
+	done := make(chan []Turn, 1)
+	go func() {
+		replies, _ := s.Send(context.Background(), sess.ID, "mira SMDFS-1243")
+		done <- replies
+	}()
+	<-slow.started
+	got, _ := s.Get(sess.ID)
+	if len(got.Calling) != 1 || got.Calling[0].Connector != "jira" || got.Calling[0].Kind != "jira" || got.Calling[0].Action != "request" || got.Calling[0].Detail != "GET /rest/api/3/issue/SMDFS-1243" || got.Calling[0].Kitty != "ana" {
+		t.Errorf("calling = %+v", got.Calling)
+	}
+	close(slow.release)
+	replies := <-done
+	if len(replies) != 1 || len(replies[0].Calls) != 1 || replies[0].Calls[0].Detail != "GET /rest/api/3/issue/SMDFS-1243" || replies[0].Calls[0].Action != "request" {
+		t.Fatalf("replies = %+v", replies)
+	}
+	if got, _ := s.Get(sess.ID); len(got.Calling) != 0 {
+		t.Errorf("still calling: %+v", got.Calling)
+	}
+}

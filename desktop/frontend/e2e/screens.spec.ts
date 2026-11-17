@@ -742,6 +742,11 @@ test("an action that reaches other people waits for a yes, and runs when it is a
   await expect(turn.locator(".tag-logo svg.logo")).toBeVisible();
   await expect(page.getByTestId("approvals-button")).not.toContainText("waiting");
   await shot(page, "19-connector-call");
+  // The call is a card: what it answered opens under it.
+  const call = turn.getByTestId("call-card");
+  await expect(call).toContainText("Kitties launches next week");
+  await call.locator("summary").click();
+  await expect(call.getByTestId("call-output")).toBeVisible();
 });
 
 test("a no with a reason goes to the kitty, which keeps it as a correction", async ({ page }) => {

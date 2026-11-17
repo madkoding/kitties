@@ -259,3 +259,19 @@ func TestParseShapesModelsWrite(t *testing.T) {
 		t.Errorf("a fence with words stays: %q", rest)
 	}
 }
+
+func TestDetail(t *testing.T) {
+	for _, c := range []struct {
+		args map[string]any
+		want string
+	}{
+		{map[string]any{"action": "request", "path": "/rest/api/3/issue/X-1"}, "GET /rest/api/3/issue/X-1"},
+		{map[string]any{"method": "post", "path": "/x"}, "POST /x"},
+		{map[string]any{"summary": "  Login\nroto "}, "Login roto"},
+		{map[string]any{"n": 1.0}, ""},
+	} {
+		if got := Detail(c.args); got != c.want {
+			t.Errorf("Detail(%v) = %q, want %q", c.args, got, c.want)
+		}
+	}
+}
