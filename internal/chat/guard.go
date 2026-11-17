@@ -170,7 +170,7 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 			group = append(group, m.Name)
 		}
 	}
-	system := k.Soul.SystemPrompt(soul.Context{KittyName: k.Name, Group: group, Connectors: allowed, User: s.user}) + s.guard.Prompt(s.user)
+	system := k.Soul.SystemPrompt(soul.Context{KittyName: k.Name, Group: group, Connectors: allowed, NativeTools: s.speaksTools(brain), User: s.user}) + s.guard.Prompt(s.user)
 	// A kitty that works on its own keeps its notes about the people here: nothing of the person
 	// or of the other kitties is in them.
 	people := s.independent(k)
@@ -193,9 +193,10 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 
 	native := false
 	var tools []provider.Tool
-	if tc, ok := brain.(provider.ToolClient); ok && s.nativeTools && tc.SupportsTools() {
+	if s.speaksTools(brain) {
+		routes := s.connectorRoutes(allowed)
 		for _, t := range s.toolSet(view, allowed) {
-			if strings.HasPrefix(t.Name, prefixConnector) || (people && s.memory != nil && strings.HasPrefix(t.Name, "memory_")) || (asks && t.Name == "ask_lead") {
+			if _, conn := routes[t.Name]; conn || strings.HasPrefix(t.Name, prefixConnector) || (people && s.memory != nil && strings.HasPrefix(t.Name, "memory_")) || (asks && t.Name == "ask_lead") {
 				tools = append(tools, t)
 			}
 		}
@@ -216,9 +217,9 @@ func (s *Service) answerExposed(ctx context.Context, id string, k *kitty.Kitty, 
 		var actions []action
 		text := reply.Content
 		if native && len(reply.Calls) > 0 {
-			actions = fromCalls(reply.Calls)
+			actions = fromCalls(reply.Calls, s.connectorRoutes(allowed))
 		} else {
-			actions, text = fromText(reply.Content)
+			actions, text = fromText(reply.Content, allowed)
 		}
 		if text = strings.TrimSpace(text); text != "" {
 			parts = append(parts, text)

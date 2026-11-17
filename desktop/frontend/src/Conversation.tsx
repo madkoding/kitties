@@ -1,6 +1,6 @@
 import { Fragment } from "preact";
 import { useEffect, useLayoutEffect, useRef, useState } from "preact/hooks";
-import type { Kitty, Session, Step, Turn } from "./api";
+import type { Calling, Kitty, Session, Step, Turn } from "./api";
 import { api, shotData } from "./api";
 import ArtifactReader, { Inlines, Markdown } from "./ArtifactReader";
 import { stepArgs, stepSentence, when } from "./format";
@@ -717,6 +717,47 @@ function Feedback({ chat, index, current }: { chat: string; index: number; curre
   );
 }
 
+type Call = NonNullable<Turn["calls"]>[number];
+
+// CallCard is one connector call of a turn: the service, what was asked and how it went, with
+// what it answered folded under it.
+function CallCard({ call, tech }: { call: Call; tech: boolean }) {
+  const failed = !!call.error;
+  const body = failed
+    ? tech
+      ? call.error
+      : plainError(call.error || "")
+    : call.output || t("done");
+  return (
+    <details class={`call-card${failed ? " failed" : ""}`} data-testid="call-card">
+      <summary>
+        <span class={`tag tag-logo ${failed ? "tag-red" : "tag-accent"}`}>
+          {call.kind && <ConnectorLogo kind={call.kind} size={12} mono />}
+          {call.name}
+        </span>
+        {call.action && <span class="call-action">{call.action}</span>}
+        {call.detail && <code class="call-detail">{call.detail}</code>}
+        <span class="call-state">{failed ? t("it did not work") : t("done")}</span>
+      </summary>
+      <pre class="call-output" data-testid="call-output">
+        {body}
+      </pre>
+    </details>
+  );
+}
+
+// CallingLine is a connector call running now: "calling jira… GET /rest/…".
+function CallingLine({ call }: { call: Calling }) {
+  return (
+    <span class="working-line calling-line !mt-0" data-testid="calling">
+      <span class="spinner" />
+      {call.kind && <ConnectorLogo kind={call.kind} size={12} mono />}
+      {t("{kitty} is calling {connector}…", { kitty: call.kitty, connector: call.connector })}
+      {call.detail && <code class="call-detail">{call.detail}</code>}
+    </span>
+  );
+}
+
 // StepsFold is the steps of a turn under its message, for where there is no desktop column (the
 // chat beside a live desktop, which already is the picture): the plans as lines, the actions
 // folded under their count.
@@ -887,6 +928,13 @@ function TurnCard({
           <span class="spinner" /> {t("working on its computer…")}
         </div>
       )}
+      {turn.calls && turn.calls.length > 0 && (
+        <div class="call-cards">
+          {turn.calls.map((c, i) => (
+            <CallCard key={i} call={c} tech={tech} />
+          ))}
+        </div>
+      )}
       {(turn.calls?.length || turn.usage?.input || turn.artifacts?.length || !mine) && (
         <div class="meta">
           <span
@@ -901,16 +949,6 @@ function TurnCard({
           >
             {when(turn.at)}
           </span>
-          {turn.calls?.map((c, i) => (
-            <span
-              key={i}
-              class={`tag tag-logo ${c.error ? "tag-red" : "tag-accent"}`}
-              title={tech ? c.error || c.output : c.error ? plainError(c.error) : undefined}
-            >
-              {c.kind && <ConnectorLogo kind={c.kind} size={12} mono />}
-              {c.name}
-            </span>
-          ))}
           {tech && turn.usage && (turn.usage.input || turn.usage.output) ? (
             <span data-testid="tokens">
               {t("{input}→{output} tokens", { input: turn.usage.input, output: turn.usage.output })}
@@ -1190,7 +1228,7 @@ export default function Conversation({
           {session.helping && session.helping.length > 0 && (
             <Helping helping={session.helping} kitties={byId} />
           )}
-          {(pending || waiting) && (
+          {(pending || waiting || (session.calling?.length ?? 0) > 0) && (
             <>
               <div class="flex items-end gap-2 px-2 mt-2" data-testid="thinking">
                 {session.members.map((id) => {
@@ -1205,9 +1243,17 @@ export default function Conversation({
                     />
                   ) : null;
                 })}
-                <span class="working-line !mt-0">
-                  <span class="spinner" /> {t("thinking…")}
-                </span>
+                {session.calling && session.calling.length > 0 ? (
+                  <span class="flex flex-col gap-1">
+                    {session.calling.map((c, i) => (
+                      <CallingLine key={i} call={c} />
+                    ))}
+                  </span>
+                ) : (
+                  <span class="working-line !mt-0">
+                    <span class="spinner" /> {t("thinking…")}
+                  </span>
+                )}
               </div>
             </>
           )}

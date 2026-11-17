@@ -128,7 +128,12 @@ func apiRequest(spec apiSpec) actionFn {
 			return request{}, err
 		}
 		q := u.Query()
-		if query, ok := a["query"].(map[string]any); ok {
+		query, _ := a["query"].(map[string]any)
+		if raw, ok := a["query"].(string); ok {
+			// Models sometimes write the query object as a JSON string.
+			_ = json.Unmarshal([]byte(strings.TrimSpace(raw)), &query)
+		}
+		if query != nil {
 			for k, v := range query {
 				q.Set(k, fmt.Sprint(v))
 			}

@@ -1,11 +1,12 @@
 // Package connector lets a kitty reach the outside world: a chat channel, a webhook, a shell
 // command on the host, or a motita gateway that runs a coding task.
 //
-// The model asks for a connector by writing one line of the form
+// The model asks for a connector with a native tool call (connector_<name>) when its provider
+// has tools, or by writing one line of the form
 //
 //	@connector <name> {"text": "..."}
 //
-// in its reply. The chat runtime parses those lines (Parse), runs them (Registry.Call) and
+// in its reply (also read: "@connector_<name> {...}" and "@<name> {...}", see Parse). The chat runtime parses those lines (Parse), runs them (Registry.Call) and
 // feeds the results back as a message, so the kitty sees what happened.
 package connector
 
@@ -44,6 +45,27 @@ type Result struct {
 	Artifact string `json:"artifact,omitempty"`
 	// Kind is the connector's kind in the catalogue, for its logo.
 	Kind string `json:"kind,omitempty"`
+	// Action and Detail say what was asked, for the page's card ("request", "GET /rest/…").
+	Action string `json:"action,omitempty"`
+	Detail string `json:"detail,omitempty"`
+}
+
+// Detail is a short line of what a call asks: the method and path of a request, or the first
+// words of its main argument.
+func Detail(args map[string]any) string {
+	if path, _ := args["path"].(string); path != "" {
+		method, _ := args["method"].(string)
+		if method == "" {
+			method = "GET"
+		}
+		return clip(strings.ToUpper(method)+" "+path, 120)
+	}
+	for _, k := range []string{"summary", "subject", "title", "query", "name", "text", "message", "task", "url", "id"} {
+		if v, ok := args[k].(string); ok && strings.TrimSpace(v) != "" {
+			return clip(strings.Join(strings.Fields(v), " "), 80)
+		}
+	}
+	return ""
 }
 
 // File is a connector's binary answer.
@@ -116,6 +138,24 @@ func (r *Registry) Descriptions(allow []string) map[string]string {
 	return out
 }
 
+// Actions lists what a connector can do, as its kind in the catalogue says (request included for
+// the kinds over an HTTP API); none for a connector of no kind (a fake, a plain webhook).
+func (r *Registry) Actions(name string) []Action {
+	c, ok := r.Get(name)
+	if !ok {
+		return nil
+	}
+	k, ok := c.(Kinder)
+	if !ok {
+		return nil
+	}
+	kind, ok := LookupKind(k.Kind())
+	if !ok {
+		return nil
+	}
+	return append([]Action(nil), kind.Actions...)
+}
+
 func contains(list []string, s string) bool {
 	for _, x := range list {
 		if x == s {
@@ -166,28 +206,117 @@ var callTimeout = 10 * time.Minute
 // Prefix starts a connector line.
 const Prefix = "@connector "
 
+// nativePrefix is the name a connector has as a native tool; a model that writes the call as
+// text sometimes keeps it ("@connector_jira {...}").
+const nativePrefix = "@connector_"
+
 // Parse finds the connector lines in a reply and returns them with the reply's remaining text.
-func Parse(text string) ([]Call, string) {
+//
+// Besides the documented "@connector <name> <json>", it takes the shapes models write when they
+// mean the same thing: the native tool's name ("@connector_<name> <json>") and, for the names
+// given (the connectors the kitty has), the short "@<name> <json>". The short shape needs the
+// arguments to be a JSON object, so "@luna hola" in a group chat stays a mention. An action
+// written before the object ("@jira request {...}") is taken as the action. Lines inside a code
+// fence count too, and a fence left empty is dropped with them.
+func Parse(text string, names ...string) ([]Call, string) {
 	var calls []Call
 	var kept []string
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(line)
-		if !strings.HasPrefix(trimmed, Prefix) {
+		call, ok := parseLine(trimmed, names)
+		if !ok {
 			kept = append(kept, line)
 			continue
 		}
-		rest := strings.TrimSpace(strings.TrimPrefix(trimmed, Prefix))
-		name, argsText, _ := strings.Cut(rest, " ")
-		call := Call{Name: strings.TrimSpace(name), Raw: trimmed, Args: map[string]any{}}
-		argsText = strings.TrimSpace(argsText)
-		if argsText != "" {
-			if err := json.Unmarshal([]byte(argsText), &call.Args); err != nil {
-				call.Args = map[string]any{"text": argsText}
-			}
-		}
 		calls = append(calls, call)
 	}
+	if len(calls) > 0 {
+		kept = dropEmptyFences(kept)
+	}
 	return calls, strings.TrimSpace(strings.Join(kept, "\n"))
+}
+
+// parseLine reads one line as a connector call.
+func parseLine(line string, names []string) (Call, bool) {
+	var name, argsText string
+	switch {
+	case strings.HasPrefix(line, Prefix):
+		rest := strings.TrimSpace(strings.TrimPrefix(line, Prefix))
+		name, argsText, _ = strings.Cut(rest, " ")
+	case strings.HasPrefix(line, nativePrefix):
+		rest := strings.TrimPrefix(line, nativePrefix)
+		name, argsText, _ = strings.Cut(rest, " ")
+	case strings.HasPrefix(line, "@"):
+		rest := strings.TrimPrefix(line, "@")
+		name, argsText, _ = strings.Cut(rest, " ")
+		argsText = strings.TrimSpace(argsText)
+		if !contains(names, name) || !strings.HasSuffix(argsText, "}") || !strings.Contains(argsText, "{") {
+			return Call{}, false
+		}
+	default:
+		return Call{}, false
+	}
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return Call{}, false
+	}
+	call := Call{Name: name, Raw: line, Args: map[string]any{}}
+	argsText = strings.TrimSpace(argsText)
+	if argsText == "" {
+		return call, true
+	}
+	if json.Unmarshal([]byte(argsText), &call.Args) == nil {
+		return call, true
+	}
+	// "request {...}": the action, then its arguments.
+	if verb, obj, ok := strings.Cut(argsText, " "); ok && isWord(verb) {
+		args := map[string]any{}
+		if json.Unmarshal([]byte(strings.TrimSpace(obj)), &args) == nil {
+			if _, set := args["action"]; !set {
+				args["action"] = verb
+			}
+			call.Args = args
+			return call, true
+		}
+	}
+	if !strings.HasPrefix(line, Prefix) && !strings.HasPrefix(line, nativePrefix) {
+		// A short "@name" line whose object does not read is a mention, not a call.
+		return Call{}, false
+	}
+	call.Args = map[string]any{"text": argsText}
+	return call, true
+}
+
+// isWord reports whether s is an action's name (letters, digits, - and _).
+func isWord(s string) bool {
+	if s == "" {
+		return false
+	}
+	for _, r := range s {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-') {
+			return false
+		}
+	}
+	return true
+}
+
+// dropEmptyFences removes the code fences that held only connector lines.
+func dropEmptyFences(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); i++ {
+		if strings.HasPrefix(strings.TrimSpace(lines[i]), "```") {
+			j := i + 1
+			for j < len(lines) && strings.TrimSpace(lines[j]) == "" {
+				j++
+			}
+			if j < len(lines) && strings.TrimSpace(lines[j]) == "```" {
+				i = j
+				continue
+			}
+		}
+		out = append(out, lines[i])
+	}
+	return out
 }
 
 // Format renders results as the message the kitty reads back.

@@ -202,18 +202,19 @@ func peerAsked(system, lower string) string {
 // firstConnector is the service the system prompt lists ("- name: what it does") to post
 // through: one for messages (slack, discord...) when there is one, the first otherwise; "".
 func firstConnector(system string) string {
-	i := strings.Index(system, "@connector <name>")
+	i := strings.Index(system, "You can use these external services")
 	if i < 0 {
 		return ""
 	}
-	first := ""
+	first, listed := "", false
 	for _, line := range strings.Split(system[i:], "\n")[1:] {
 		if !strings.HasPrefix(line, "- ") {
-			if strings.TrimSpace(line) != "" && !strings.Contains(line, "@connector") {
+			if listed && strings.TrimSpace(line) != "" {
 				break
 			}
 			continue
 		}
+		listed = true
 		j := strings.Index(line, ":")
 		if j <= 2 {
 			continue

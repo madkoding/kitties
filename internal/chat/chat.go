@@ -227,6 +227,9 @@ type Session struct {
 	// Helping are the kitties at work on a subtask handed over from this chat right now: the page
 	// shows them working until they answer. Cleared when the gateway starts.
 	Helping []Helper `json:"helping,omitempty"`
+	// Calling are the connector calls running right now for this chat: the page shows "calling
+	// Jira…" until they answer. Cleared when the gateway starts.
+	Calling []Calling `json:"calling,omitempty"`
 	// Kind is what the thread is: a chat, a goal's (a scheduled task's) or a hand-over between
 	// two kitties (kinds.go); worked out from the fields above on every save and load.
 	Kind string `json:"kind"`
@@ -686,7 +689,7 @@ func (s *Service) load() error {
 		refreshKitties(&sess)
 		refreshKind(&sess)
 		sess.ExpiresAt, sess.Shown = time.Time{}, false
-		sess.Helping = nil // nobody is still at work after a restart
+		sess.Helping, sess.Calling = nil, nil // nobody is still at work after a restart
 		s.sessions[sess.ID] = &sess
 	}
 	return nil
@@ -870,6 +873,7 @@ func (s *Service) Get(id string) (*Session, error) {
 	c.Delegates = append([]string(nil), sess.Delegates...)
 	c.Kitties = append([]string(nil), sess.Kitties...)
 	c.Helping = append([]Helper(nil), sess.Helping...)
+	c.Calling = append([]Calling(nil), sess.Calling...)
 	c.Turns = append([]Turn(nil), sess.Turns...)
 	c.Help = sess.NeedsHelp()
 	c.ExpiresAt = s.expiresAt(sess)
@@ -1190,6 +1194,12 @@ type pendingTask struct {
 	pre map[int]outcome
 }
 
+// speaksTools reports whether the kitty's calls go as native tool calls with this brain.
+func (s *Service) speaksTools(brain provider.Client) bool {
+	tc, ok := brain.(provider.ToolClient)
+	return ok && s.nativeTools && tc.SupportsTools()
+}
+
 // ask asks the brain, with the tools when native.
 func ask(ctx context.Context, brain provider.Client, native bool, messages []provider.Message, tools []provider.Tool) (provider.Reply, error) {
 	if native {
@@ -1224,7 +1234,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		}
 	}
 	sc := soul.Context{
-		KittyName: k.Name, Desktop: k.Desktop, Workspace: workspaceOf(k), Group: group, Connectors: allowed, User: s.user,
+		KittyName: k.Name, Desktop: k.Desktop, Workspace: workspaceOf(k), Group: group, Connectors: allowed, NativeTools: s.speaksTools(brain), User: s.user,
 		Peers: s.peers(k, id), Unattended: !k.Limits.Or(s.DefaultLimits).Attended,
 	}
 	if k.Lead {
@@ -1271,7 +1281,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 
 	native := false
 	var tools []provider.Tool
-	if tc, ok := brain.(provider.ToolClient); ok && s.nativeTools && tc.SupportsTools() {
+	if s.speaksTools(brain) {
 		tools = s.toolSet(k, allowed)
 		if exposed {
 			tools = ownComputerTools(tools)
@@ -1302,9 +1312,9 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		var actions []action
 		text := reply.Content
 		if native && len(reply.Calls) > 0 {
-			actions = fromCalls(reply.Calls)
+			actions = fromCalls(reply.Calls, s.connectorRoutes(allowed))
 		} else {
-			actions, text = fromText(reply.Content)
+			actions, text = fromText(reply.Content, allowed)
 		}
 		if text = strings.TrimSpace(text); text != "" {
 			parts = append(parts, text)
@@ -1759,9 +1769,9 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		st.reply, st.replyText = answer, answer.Content
 		var text string
 		if p.native && len(answer.Calls) > 0 {
-			st.actions, text = fromCalls(answer.Calls), answer.Content
+			st.actions, text = fromCalls(answer.Calls, s.connectorRoutes(p.allowed)), answer.Content
 		} else {
-			st.actions, text = fromText(answer.Content)
+			st.actions, text = fromText(answer.Content, p.allowed)
 		}
 		if plan, ok := planStep(s.now(), text, st.actions); ok {
 			// The kitty says what it goes on to do: a line the person follows, not the answer,

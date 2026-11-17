@@ -1451,6 +1451,66 @@ html[data-motion="off"] .cat-spark {
   color: currentColor;
 }
 
+/* A connector call of a turn: the service, what was asked, and its answer folded under it. */
+.call-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+}
+.call-card {
+  border: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+  border-radius: 6px;
+  font-size: 0.75rem;
+  max-width: 100%;
+}
+.call-card > summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  cursor: pointer;
+  list-style: none;
+}
+.call-card > summary::-webkit-details-marker {
+  display: none;
+}
+.call-card > summary::before {
+  content: "▸";
+  opacity: 0.6;
+}
+.call-card[open] > summary::before {
+  content: "▾";
+}
+.call-action {
+  opacity: 0.8;
+}
+.call-detail {
+  opacity: 0.7;
+  overflow-wrap: anywhere;
+}
+.call-state {
+  margin-left: auto;
+  opacity: 0.6;
+}
+.call-card.failed .call-state {
+  color: var(--c-red, #f87171);
+  opacity: 1;
+}
+.call-output {
+  margin: 0;
+  padding: 0.5rem;
+  max-height: 16rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  border-top: 1px solid var(--line, rgba(255, 255, 255, 0.08));
+}
+.calling-line code {
+  font-size: 0.7rem;
+}
+
 /* ─── The agenda: goals, the journal, a kitty asking for help ─────────────────────────────── */
 .goal {
   padding: 0.5rem 0.625rem;

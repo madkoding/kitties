@@ -286,7 +286,7 @@ func TestDelegateAction(t *testing.T) {
 	if !found {
 		t.Error("the delegate tool is offered")
 	}
-	if a := fromCalls([]provider.ToolCall{{ID: "1", Name: "delegate", Args: map[string]any{"kitty": "bo", "task": "x"}}}); a[0].kind != "delegate" || a[0].name != "bo" {
+	if a := fromCalls([]provider.ToolCall{{ID: "1", Name: "delegate", Args: map[string]any{"kitty": "bo", "task": "x"}}}, nil); a[0].kind != "delegate" || a[0].name != "bo" {
 		t.Errorf("native delegate = %+v", a[0])
 	}
 }

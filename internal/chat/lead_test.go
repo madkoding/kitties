@@ -207,7 +207,7 @@ func TestLeadSetsLimits(t *testing.T) {
 	if o := s.runTaskLimits(c.ID, action{kind: "task_limits", name: "ana", args: map[string]any{"max_rounds": "0"}}, bo, &Turn{}); o.err != "" || ana.Limits.MaxRounds != 0 || ana.Limits.MaxTokens != 500000 {
 		t.Errorf("back to the default: %+v %+v", o, ana.Limits)
 	}
-	if a := fromCalls([]provider.ToolCall{{ID: "1", Name: "task_limits", Args: map[string]any{"kitty": "ana", "max_rounds": 30.0}}}); a[0].kind != "task_limits" || a[0].name != "ana" {
+	if a := fromCalls([]provider.ToolCall{{ID: "1", Name: "task_limits", Args: map[string]any{"kitty": "ana", "max_rounds": 30.0}}}, nil); a[0].kind != "task_limits" || a[0].name != "ana" {
 		t.Errorf("native call = %+v", a[0])
 	}
 }

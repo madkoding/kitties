@@ -27,6 +27,8 @@ const dict: Dictionary = {
     "Diga oi para a equipe ou passe uma tarefa. Escreva @nome para escolher quem responde.",
   "Say hello, ask a question, or give it a task to work on.":
     "Diga oi, faça uma pergunta ou passe uma tarefa para ele.",
+  "{kitty} is calling {connector}…": "{kitty} está chamando {connector}…",
+  "it did not work": "não funcionou",
   "thinking…": "pensando…",
   Screenshot: "Captura de tela",
 

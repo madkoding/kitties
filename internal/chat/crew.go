@@ -105,6 +105,53 @@ func (s *Service) helping(id string, h Helper) func() {
 	}
 }
 
+// Calling is one connector call running for a chat.
+type Calling struct {
+	Kitty     string    `json:"kitty"`
+	KittyID   string    `json:"kitty_id"`
+	Connector string    `json:"connector"`
+	Kind      string    `json:"kind,omitempty"`
+	Action    string    `json:"action,omitempty"`
+	Detail    string    `json:"detail,omitempty"`
+	Since     time.Time `json:"since"`
+}
+
+// calling marks a connector call running for a chat, and returns what ends it; the watchers are
+// told both times, as for a helper, so the page shows "calling Jira…" while it runs.
+func (s *Service) calling(id string, c Calling) func() {
+	s.setCalling(id, func(list []Calling) []Calling { return append(list, c) })
+	return func() {
+		s.setCalling(id, func(list []Calling) []Calling {
+			kept := list[:0]
+			removed := false
+			for _, x := range list {
+				if !removed && x == c {
+					removed = true
+					continue
+				}
+				kept = append(kept, x)
+			}
+			if len(kept) == 0 {
+				return nil
+			}
+			return kept
+		})
+	}
+}
+
+// setCalling changes the calls running for a chat without saving it: they live only while
+// they run.
+func (s *Service) setCalling(id string, fn func([]Calling) []Calling) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	sess, ok := s.sessions[id]
+	if !ok {
+		return
+	}
+	sess.Calling = fn(append([]Calling(nil), sess.Calling...))
+	s.emitLocked(Event{Type: "helping", Session: id, Index: -1})
+}
+
 func (s *Service) setHelping(id string, fn func([]Helper) []Helper) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

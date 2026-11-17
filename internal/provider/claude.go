@@ -6,8 +6,9 @@ package provider
 // unmodified `claude` program they signed in to with `claude auth login`. Anthropic only allows a
 // subscription through its own client, so kitties never sees nor keeps those credentials: it
 // starts claude with no tools of its own, hands it the conversation and reads back the answer.
-// The kitty's tools are described in the prompt (text mode), as for any server without native
-// tool calls.
+// The kitty's tools are native all the same: they are described in the system prompt and claude
+// answers in a JSON schema (--json-schema) of text and calls, read back as the reply's calls.
+// With tools: text they are lines in the prompt, as for any server without native calls.
 
 import (
 	"bufio"
@@ -124,8 +125,10 @@ func claudeEnv(bin string, maxTokens int) []string {
 func ClaudeEnv(bin string) []string { return claudeEnv(bin, DefaultMaxTokens) }
 
 // claudeArgs are the flags of one turn: the model, the system prompt from a file, no tools, no
-// settings, no slash commands and nothing kept once it ends.
-func claudeArgs(model, systemFile string) []string {
+// settings, no slash commands and nothing kept once it ends. A schema asks for the answer in that
+// shape; it also puts the model in the mood for tool calls, and kitties reads the first answer,
+// so a call made straight to a kitty tool ends the turn with that call (see claudeStream).
+func claudeArgs(model, systemFile, schema string) []string {
 	args := []string{"-p", "--model", model,
 		"--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
 		"--tools", "", "--setting-sources", "", "--strict-mcp-config", "--disable-slash-commands",
@@ -133,7 +136,140 @@ func claudeArgs(model, systemFile string) []string {
 	if systemFile != "" {
 		args = append(args, "--system-prompt-file", systemFile)
 	}
+	if schema != "" {
+		args = append(args, "--json-schema", schema)
+	}
 	return args
+}
+
+// SupportsTools reports whether the kitty's tools go as calls (all but tools: text).
+func (c *ClaudeClient) SupportsTools() bool { return c.opts.Tools != "text" }
+
+// claudeToolWords tell claude how to call the kitty's tools: through the answer's calls.
+const claudeToolWords = `
+
+# Your tools
+You act through the tools below: call them as tools (or put them in the "calls" of your structured
+answer, each {"name": ..., "args": {...}}), several at once when they do not depend on each other.
+Their results come back to you as "Tool result" messages and you go on from them. When you are done,
+answer with text alone. A call written as text does nothing.
+`
+
+// claudeTools describes the tools in the system prompt and builds the answer's schema.
+func claudeTools(tools []Tool) (string, string, error) {
+	var sb strings.Builder
+	sb.WriteString(claudeToolWords)
+	names := make([]string, 0, len(tools))
+	for _, t := range tools {
+		params, err := json.Marshal(t.Parameters)
+		if err != nil {
+			return "", "", err
+		}
+		fmt.Fprintf(&sb, "\n## %s\n%s\nArguments (JSON Schema): %s\n", t.Name, t.Description, params)
+		names = append(names, t.Name)
+	}
+	schema, err := json.Marshal(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"text": map[string]any{"type": "string", "description": "what you say to the conversation"},
+			"calls": map[string]any{"type": "array", "description": "the tools to run now, empty when done", "items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"name": map[string]any{"type": "string", "enum": names},
+					"args": map[string]any{"type": "object"},
+				},
+				"required": []string{"name", "args"},
+			}},
+		},
+		"required": []string{"text", "calls"},
+	})
+	return sb.String(), string(schema), err
+}
+
+// claudeAnswer is the structured answer of a turn with tools.
+type claudeAnswer struct {
+	Text  string `json:"text"`
+	Calls []struct {
+		Name string         `json:"name"`
+		Args map[string]any `json:"args"`
+	} `json:"calls"`
+}
+
+// claudeBlock is one block of an assistant message in claude's stream.
+type claudeBlock struct {
+	Type  string          `json:"type"`
+	Text  string          `json:"text"`
+	Name  string          `json:"name"`
+	Input json.RawMessage `json:"input"`
+}
+
+// claudeStream reads the answer of a turn with tools from claude's stream: its structured answer
+// (the result's, or the StructuredOutput call it was given in) and the calls it made straight to
+// the kitty's tools; without a structured answer, its text. Calls to tools it was not given are
+// dropped. ok is false when the stream holds no answer at all.
+func claudeStream(stdout []byte, res claudeResult, tools []Tool) (Reply, bool) {
+	known := map[string]bool{}
+	for _, t := range tools {
+		known[t.Name] = true
+	}
+	var reply Reply
+	var texts []string
+	structured := false
+	add := func(name string, args map[string]any) {
+		if !known[name] {
+			return
+		}
+		if args == nil {
+			args = map[string]any{}
+		}
+		reply.Calls = append(reply.Calls, ToolCall{ID: fmt.Sprintf("call_%d", len(reply.Calls)+1), Name: name, Args: args})
+	}
+	answer := func(raw []byte) bool {
+		var ans claudeAnswer
+		if len(raw) == 0 || json.Unmarshal(raw, &ans) != nil || (ans.Text == "" && ans.Calls == nil) {
+			return false
+		}
+		structured = true
+		reply.Content = strings.TrimSpace(ans.Text)
+		for _, c := range ans.Calls {
+			add(c.Name, c.Args)
+		}
+		return true
+	}
+	sc := bufio.NewScanner(bytes.NewReader(stdout))
+	sc.Buffer(make([]byte, 0, 64<<10), 64<<20)
+	for sc.Scan() {
+		var ev struct {
+			Type    string `json:"type"`
+			Message struct {
+				Content []claudeBlock `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal(sc.Bytes(), &ev) != nil || ev.Type != "assistant" {
+			continue
+		}
+		for _, b := range ev.Message.Content {
+			switch {
+			case b.Type == "text" && strings.TrimSpace(b.Text) != "":
+				texts = append(texts, strings.TrimSpace(b.Text))
+			case b.Type == "tool_use" && b.Name == "StructuredOutput":
+				if !structured {
+					answer(b.Input)
+				}
+			case b.Type == "tool_use":
+				var args map[string]any
+				_ = json.Unmarshal(b.Input, &args)
+				add(b.Name, args)
+			}
+		}
+	}
+	if !structured && !answer(res.StructuredOutput) && !answer([]byte(strings.TrimSpace(res.Result))) {
+		reply.Content = strings.Join(texts, "\n\n")
+		if reply.Content == "" && !res.IsError {
+			reply.Content = strings.TrimSpace(res.Result)
+		}
+	}
+	return reply, reply.Content != "" || len(reply.Calls) > 0
 }
 
 // claudeFrame is the one stream-json user message a turn sends: the conversation as text, and the
@@ -165,7 +301,11 @@ func claudeTranscript(rest []Message) string {
 		case "assistant":
 			sb.WriteString("\n### Assistant (you)\n")
 		case "tool":
-			sb.WriteString("\n### Tool result\n")
+			if m.ToolName != "" {
+				fmt.Fprintf(&sb, "\n### Tool result (%s)\n", m.ToolName)
+			} else {
+				sb.WriteString("\n### Tool result\n")
+			}
 		default:
 			sb.WriteString("\n### User\n")
 		}
@@ -187,7 +327,9 @@ type claudeResult struct {
 	Subtype string `json:"subtype"`
 	IsError bool   `json:"is_error"`
 	Result  string `json:"result"`
-	Usage   *struct {
+	// StructuredOutput is the answer in the schema asked for with --json-schema.
+	StructuredOutput json.RawMessage `json:"structured_output"`
+	Usage            *struct {
 		Input      int `json:"input_tokens"`
 		CacheRead  int `json:"cache_read_input_tokens"`
 		CacheWrite int `json:"cache_creation_input_tokens"`
@@ -197,11 +339,25 @@ type claudeResult struct {
 
 // Complete runs one turn of claude.
 func (c *ClaudeClient) Complete(ctx context.Context, messages []Message) (Reply, error) {
+	return c.CompleteTools(ctx, messages, nil)
+}
+
+// CompleteTools runs one turn of claude with the kitty's tools: their calls come back as the
+// reply's calls.
+func (c *ClaudeClient) CompleteTools(ctx context.Context, messages []Message, tools []Tool) (Reply, error) {
 	bin, err := c.find()
 	if err != nil {
 		return Reply{}, err
 	}
 	system, rest := splitSystem(messages)
+	schema := ""
+	if len(tools) > 0 {
+		words, sch, err := claudeTools(tools)
+		if err != nil {
+			return Reply{}, err
+		}
+		system, schema = system+words, sch
+	}
 	frame, err := claudeFrame(rest)
 	if err != nil {
 		return Reply{}, err
@@ -221,8 +377,16 @@ func (c *ClaudeClient) Complete(ctx context.Context, messages []Message) (Reply,
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.opts.Timeout)
 	defer cancel()
-	stdout, stderr, runErr := c.exec(ctx, bin, claudeArgs(c.opts.Model, systemFile), claudeEnv(bin, c.opts.MaxTokens), dir, append(frame, '\n'))
+	stdout, stderr, runErr := c.exec(ctx, bin, claudeArgs(c.opts.Model, systemFile, schema), claudeEnv(bin, c.opts.MaxTokens), dir, append(frame, '\n'))
 	res, found := lastResult(stdout)
+	if schema != "" {
+		// With tools the turn may end on a call claude could not run (max turns): the answer is in
+		// the stream.
+		if reply, ok := claudeStream(stdout, res, tools); ok {
+			reply.Usage = claudeUsage(res)
+			return reply, nil
+		}
+	}
 	switch {
 	case found && res.IsError:
 		return Reply{}, claudeError(res.Result + " " + res.Subtype)
@@ -231,14 +395,20 @@ func (c *ClaudeClient) Complete(ctx context.Context, messages []Message) (Reply,
 	case !found:
 		return Reply{}, errors.New("claude ended without an answer")
 	}
-	reply := Reply{Content: strings.TrimSpace(res.Result)}
-	if u := res.Usage; u != nil {
-		reply.Usage = Usage{Input: u.Input + u.CacheRead + u.CacheWrite, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}
-	}
+	reply := Reply{Content: strings.TrimSpace(res.Result), Usage: claudeUsage(res)}
 	if reply.Content == "" {
 		return Reply{}, errors.New("claude returned an empty answer")
 	}
 	return reply, nil
+}
+
+// claudeUsage is the tokens a turn spent.
+func claudeUsage(res claudeResult) Usage {
+	u := res.Usage
+	if u == nil {
+		return Usage{}
+	}
+	return Usage{Input: u.Input + u.CacheRead + u.CacheWrite, Output: u.Output, CacheRead: u.CacheRead, CacheWrite: u.CacheWrite}
 }
 
 // lastResult finds the result line of claude's output.

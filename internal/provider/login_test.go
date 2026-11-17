@@ -119,8 +119,12 @@ func TestRegistryLogin(t *testing.T) {
 	if _, ok := c.(*ClaudeClient); !ok || c.Describe() != "claude-code/sonnet" {
 		t.Errorf("claude-code = %T %s", c, c.Describe())
 	}
-	if _, ok := c.(ToolClient); ok {
-		t.Error("claude-code takes its tools as text")
+	if tc, ok := c.(ToolClient); !ok || !tc.SupportsTools() {
+		t.Error("claude-code takes its tools natively")
+	}
+	_ = reg.Build("cct", Options{Kind: "claude-code", Tools: "text"})
+	if c, _ := reg.Get("cct"); c.(ToolClient).SupportsTools() {
+		t.Error("tools: text keeps them as lines")
 	}
 }
 
@@ -188,6 +192,42 @@ func TestClaude(t *testing.T) {
 	tool := []Message{{Role: "user", Content: "go"}, {Role: "assistant", ToolCalls: []ToolCall{{Name: "click", Args: map[string]any{"x": 1}}}}, {Role: "tool", Content: "clicked"}}
 	if _, err := c.Complete(context.Background(), tool); err != nil || !strings.Contains(f.stdin, `@tool click {\"x\":1}`) || !strings.Contains(f.stdin, "### Tool result") {
 		t.Errorf("tools = %v %s", err, f.stdin)
+	}
+}
+
+func TestClaudeTools(t *testing.T) {
+	tools := []Tool{{Name: "jira_request", Description: "Call the Jira API", Parameters: map[string]any{"type": "object"}}}
+	// The model calls the kitty's tool straight away: claude cannot run it and stops at its one turn.
+	f := &fakeClaude{out: `{"type":"assistant","message":{"content":[{"type":"text","text":"Lo busco."},{"type":"tool_use","name":"jira_request","input":{"path":"/rest/api/3/issue/SMDFS-1243"}},{"type":"tool_use","name":"Bash","input":{"command":"ls"}}]}}` + "\n" +
+		`{"type":"result","subtype":"error_max_turns","is_error":true,"usage":{"input_tokens":4,"output_tokens":6}}`}
+	c := claudeWith(t, f)
+	reply, err := c.CompleteTools(context.Background(), convo, tools)
+	if err != nil || reply.Content != "Lo busco." || len(reply.Calls) != 1 || reply.Calls[0].Name != "jira_request" || reply.Calls[0].Args["path"] != "/rest/api/3/issue/SMDFS-1243" || reply.Calls[0].ID == "" || reply.Usage.Output != 6 {
+		t.Fatalf("direct call = %+v %v", reply, err)
+	}
+	joined := strings.Join(f.args, " ")
+	if !strings.Contains(joined, "--json-schema") || !strings.Contains(joined, `"enum":["jira_request"]`) || !strings.Contains(f.sys, "## jira_request") || !strings.Contains(f.sys, "Call the Jira API") {
+		t.Errorf("args = %s system = %s", joined, f.sys)
+	}
+	// The structured answer, from the result or from its StructuredOutput call.
+	f.out = `{"type":"result","subtype":"success","structured_output":{"text":"Voy.","calls":[{"name":"jira_request","args":{"path":"/x"}},{"name":"nope","args":{}}]}}`
+	if reply, err := c.CompleteTools(context.Background(), convo, tools); err != nil || reply.Content != "Voy." || len(reply.Calls) != 1 || reply.Calls[0].Args["path"] != "/x" {
+		t.Errorf("structured = %+v %v", reply, err)
+	}
+	f.out = `{"type":"assistant","message":{"content":[{"type":"text","text":"Voy."},{"type":"tool_use","name":"StructuredOutput","input":{"text":"Voy a mirar.","calls":[{"name":"jira_request","args":{"path":"/y"}}]}}]}}` + "\n" +
+		`{"type":"result","subtype":"error_max_turns","is_error":true}`
+	if reply, err := c.CompleteTools(context.Background(), convo, tools); err != nil || reply.Content != "Voy a mirar." || len(reply.Calls) != 1 || reply.Calls[0].Args["path"] != "/y" {
+		t.Errorf("structured call = %+v %v", reply, err)
+	}
+	// Words alone, cut by the one turn before the structured answer: they are the answer.
+	f.out = `{"type":"assistant","message":{"content":[{"type":"text","text":"Hola."}]}}` + "\n" + `{"type":"result","subtype":"error_max_turns","is_error":true}`
+	if reply, err := c.CompleteTools(context.Background(), convo, tools); err != nil || reply.Content != "Hola." || len(reply.Calls) != 0 {
+		t.Errorf("words = %+v %v", reply, err)
+	}
+	// Nothing at all is still an error, and a tool result says whose it is.
+	f.out = `{"type":"result","is_error":true,"result":"overloaded"}`
+	if _, err := c.CompleteTools(context.Background(), []Message{{Role: "user", Content: "go"}, {Role: "assistant", ToolCalls: []ToolCall{{Name: "jira_request"}}}, {Role: "tool", ToolName: "jira_request", Content: "{}"}}, tools); err == nil || !strings.Contains(f.stdin, "### Tool result (jira_request)") {
+		t.Errorf("empty = %v %s", err, f.stdin)
 	}
 }
 

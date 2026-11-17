@@ -88,10 +88,8 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 		)
 		tools = append(tools, provider.Tool{Name: "machine", Description: machineHelp, Parameters: obj(map[string]any{"action": str("status (the default), on or off")})})
 	}
-	for _, name := range sortedKeys(allowed) {
-		tools = append(tools, provider.Tool{Name: prefixConnector + name, Description: allowed[name],
-			Parameters: obj(map[string]any{"action": str("the action to run (the first when empty)"), "text": str("the text, for actions that take one")})})
-	}
+	conn, _ := s.connectorTools(allowed)
+	tools = append(tools, conn...)
 	if s.skills != nil {
 		tools = append(tools,
 			provider.Tool{Name: prefixSkill + "read", Description: "Read a skill (a procedure) of the library before a task it covers.", Parameters: obj(map[string]any{"name": str("the skill's name")}, "name")},
@@ -161,15 +159,26 @@ func sortedKeys(m map[string]string) []string {
 	return out
 }
 
-// fromCalls turns native calls into actions.
-func fromCalls(calls []provider.ToolCall) []action {
+// fromCalls turns native calls into actions. routes are the kitty's connector action tools.
+func fromCalls(calls []provider.ToolCall, routes map[string]connRoute) []action {
 	out := make([]action, 0, len(calls))
 	for _, c := range calls {
 		a := action{args: c.Args, callID: c.ID, raw: c.Name}
 		if a.args == nil {
 			a.args = map[string]any{}
 		}
+		route, routed := routes[c.Name]
 		switch {
+		case routed:
+			// One tool per action: the action is the tool's, whatever the arguments say.
+			args := make(map[string]any, len(a.args)+1)
+			for k, v := range a.args {
+				args[k] = v
+			}
+			if route.action != "" {
+				args["action"] = route.action
+			}
+			a.kind, a.name, a.args = "connector", route.conn, args
 		case strings.HasPrefix(c.Name, prefixConnector):
 			a.kind, a.name = "connector", strings.TrimPrefix(c.Name, prefixConnector)
 		case strings.HasPrefix(c.Name, prefixSkill):
@@ -203,8 +212,9 @@ func fromCalls(calls []provider.ToolCall) []action {
 	return out
 }
 
-// fromText turns the lines of a reply into actions and returns the remaining text.
-func fromText(text string) ([]action, string) {
+// fromText turns the lines of a reply into actions and returns the remaining text. connectors
+// are the kitty's connectors by name: a line "@<name> {...}" for one of them is its call.
+func fromText(text string, connectors map[string]string) ([]action, string) {
 	var out []action
 	tools, rest := desktop.Parse(text)
 	for _, t := range tools {
@@ -218,7 +228,7 @@ func fromText(text string) ([]action, string) {
 	for _, d := range directives {
 		out = append(out, action{kind: d.Kind, name: d.Verb, args: d.Args, raw: d.Raw})
 	}
-	calls, rest := connector.Parse(rest)
+	calls, rest := connector.Parse(rest, sortedKeys(connectors)...)
 	for _, c := range calls {
 		out = append(out, action{kind: "connector", name: c.Name, args: c.Args, raw: c.Raw})
 	}
@@ -296,7 +306,18 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 				out = append(out, held)
 				continue
 			}
+			act, _ := a.args["action"].(string)
+			detail := connector.Detail(a.args)
+			kind := ""
+			if c, ok := s.fleet.Connectors().Get(a.name); ok {
+				if kd, ok := c.(connector.Kinder); ok {
+					kind = kd.Kind()
+				}
+			}
+			done := s.calling(id, Calling{Kitty: k.Name, KittyID: k.ID, Connector: a.name, Kind: kind, Action: act, Detail: detail, Since: s.now()})
 			results := []connector.Result{s.fleet.Connectors().Call(ctx, connector.Call{Name: a.name, Args: a.args, Raw: a.raw}, k.Connectors)}
+			done()
+			results[0].Action, results[0].Detail = act, detail
 			s.keepFiles(results, k, turn)
 			turn.Calls = append(turn.Calls, results[0])
 			out = append(out, outcome{action: a, text: results[0].Output, err: results[0].Err})
@@ -312,11 +333,170 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 	return out
 }
 
+// connRoute is the connector and action a native action tool stands for.
+type connRoute struct{ conn, action string }
+
+// maxActionTools caps the tools made one per action: past it, every connector is one tool with
+// an "action" argument, so a kitty with many services is not handed hundreds of tools.
+const maxActionTools = 60
+
+// connectorTools are a kitty's connectors as native tools: one per action ("jira_request", with
+// the action's own arguments) for a connector whose kind lists them, one per connector
+// ("connector_<name>", with "action") otherwise or past maxActionTools. routes maps each action
+// tool back to its connector and action.
+func (s *Service) connectorTools(allowed map[string]string) ([]provider.Tool, map[string]connRoute) {
+	names := sortedKeys(allowed)
+	actions := map[string][]connector.Action{}
+	count := 0
+	for _, name := range names {
+		acts := s.fleet.Connectors().Actions(name)
+		actions[name] = acts
+		count += len(acts)
+	}
+	perAction := count <= maxActionTools
+	var tools []provider.Tool
+	routes := map[string]connRoute{}
+	for _, name := range names {
+		if !perAction || len(actions[name]) == 0 {
+			tools = append(tools, provider.Tool{Name: prefixConnector + toolWord(name), Description: allowed[name], Parameters: connectorSchema()})
+			if toolWord(name) != name {
+				// A renamed connector_<name> tool: its calls keep their own action.
+				routes[prefixConnector+toolWord(name)] = connRoute{conn: name}
+			}
+			continue
+		}
+		for _, a := range actions[name] {
+			tool := actionToolName(name, a.Name)
+			if _, taken := routes[tool]; taken {
+				continue
+			}
+			routes[tool] = connRoute{conn: name, action: a.Name}
+			tools = append(tools, provider.Tool{Name: tool, Description: actionToolHelp(name, allowed[name], a), Parameters: actionSchema(a)})
+		}
+	}
+	return tools, routes
+}
+
+// connectorRoutes are the action tools of connectorTools, to read the calls back.
+func (s *Service) connectorRoutes(allowed map[string]string) map[string]connRoute {
+	_, routes := s.connectorTools(allowed)
+	return routes
+}
+
+// reservedTools are the names of the tools that are not connectors: an action tool never takes
+// one (it is then called connector_<name>__<action>).
+var reservedTools = map[string]bool{
+	"answer_kitty": true, "ask_help": true, "ask_lead": true, "click": true, "delegate": true, "describe_chat": true,
+	"done": true, "double_click": true, "drag": true, "focus": true, "install": true, "key": true, "launch": true,
+	"limit": true, "machine": true, "move": true, "open": true, "read_screen": true, "run": true, "screenshot": true,
+	"scroll": true, "shell": true, "task_limits": true, "type": true, "type_secret": true, "wait": true, "windows": true,
+}
+
+// reservedPrefixes start the names of tool families that are not connectors.
+var reservedPrefixes = []string{prefixConnector, prefixSkill, prefixArtifact, "memory_", "page_", "file_"}
+
+// actionToolName is the tool of one action of a connector: "<name>_<action>", or
+// "connector_<name>__<action>" when that is another tool's name or too long.
+func actionToolName(conn, act string) string {
+	name := toolWord(conn) + "_" + toolWord(act)
+	clash := reservedTools[name] || len(name) > 64
+	for _, p := range reservedPrefixes {
+		clash = clash || strings.HasPrefix(name, p)
+	}
+	if clash {
+		name = prefixConnector + toolWord(conn) + "__" + toolWord(act)
+	}
+	if len(name) > 64 {
+		name = name[:64]
+	}
+	return name
+}
+
+// toolWord keeps what a tool name may hold (letters, digits, _ and -).
+func toolWord(s string) string {
+	var b strings.Builder
+	for _, r := range s {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '_' || r == '-' {
+			b.WriteRune(r)
+		} else {
+			b.WriteByte('_')
+		}
+	}
+	return b.String()
+}
+
+// actionToolHelp is what an action tool says: the action, its connection and its approval.
+func actionToolHelp(conn, desc string, a connector.Action) string {
+	help := a.Help
+	if help == "" {
+		help = a.Name
+	}
+	text := fmt.Sprintf("%s, through the %s connection", strings.ToUpper(help[:1])+help[1:], conn)
+	if about, _, _ := strings.Cut(desc, " (actions"); about != "" {
+		text += " (" + strings.TrimSpace(about) + ")"
+	}
+	switch a.Risk {
+	case "ask":
+		text += ". The person approves it first"
+	case "always":
+		text += ". It always needs the person's approval"
+	}
+	return text + "."
+}
+
+// actionSchema is the arguments of one action, from how the catalogue writes them: "name" or
+// "name (what it is)"; a list is an array, an object or JSON an object, the rest text.
+func actionSchema(a connector.Action) map[string]any {
+	props := map[string]any{}
+	for _, arg := range a.Args {
+		name, help, _ := strings.Cut(arg, " (")
+		name = strings.TrimSpace(name)
+		if name == "" || toolWord(name) != name {
+			continue
+		}
+		help = strings.TrimSuffix(strings.TrimSpace(help), ")")
+		prop := map[string]any{"type": "string"}
+		low := strings.ToLower(help)
+		switch {
+		case strings.Contains(low, "list") || strings.Contains(low, "array"):
+			prop = map[string]any{"type": "array", "items": map[string]any{"type": "string"}}
+		case strings.Contains(low, "object") || strings.HasPrefix(low, "json"):
+			prop = map[string]any{"type": "object"}
+		}
+		if help != "" {
+			prop["description"] = help
+		}
+		props[name] = prop
+	}
+	return map[string]any{"type": "object", "properties": props}
+}
+
+// connectorSchema is the arguments of a connector tool. Each action takes its own (listed in the
+// tool's description) and the object takes them besides these (no additionalProperties: false,
+// and none named, which Gemini refuses); request's are named, because with only action and text
+// a model sees no way to pass a method, a path and a query, and writes the call as text.
+func connectorSchema() map[string]any {
+	str := func(help string) map[string]any { return map[string]any{"type": "string", "description": help} }
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": str("the action to run (the first when empty)"),
+			"text":   str("the text, for actions that take one"),
+			"method": str("request: GET (default), POST, PUT, PATCH or DELETE"),
+			"path":   str("request: the endpoint, relative to the service's API"),
+			"query":  map[string]any{"type": "object", "description": "request: the query parameters"},
+			"body":   map[string]any{"type": "object", "description": "request: the JSON body"},
+		},
+	}
+}
+
 // feedback builds the messages that answer a batch: tool results for native calls, one user
 // message for text lines. extra is appended as a user message (a screenshot with its words).
 func feedback(native bool, reply provider.Reply, replyText string, outs []outcome, extra *provider.Message) []provider.Message {
 	var msgs []provider.Message
-	if native {
+	// A model offered tools may still write its calls as lines: those are answered as lines, since
+	// a tool result needs the call it answers.
+	if native && len(reply.Calls) > 0 {
 		msgs = append(msgs, provider.Message{Role: "assistant", Content: reply.Content, ToolCalls: reply.Calls})
 		for _, o := range outs {
 			msgs = append(msgs, provider.Message{Role: "tool", ToolCallID: o.action.callID, ToolName: o.action.raw, Content: o.result()})
