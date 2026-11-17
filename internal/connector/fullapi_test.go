@@ -21,6 +21,12 @@ func TestRequestReachesTheWholeAPI(t *testing.T) {
 	if r.Method != "GET" || r.URL.Host != "api.x.com" || r.URL.Path != "/2/users/42/following" || r.URL.Query().Get("max_results") != "5" || r.Header.Get("Authorization") != "Bearer t" {
 		t.Errorf("request = %s %s %s", r.Method, r.URL, r.Header.Get("Authorization"))
 	}
+	// A query written as a JSON string reads as the object.
+	cap = &capture{answer: []string{`{}`}}
+	cap.install(t)
+	if _, err := x.Call(ctx, map[string]any{"action": "request", "path": "/2/tweets", "query": `{"ids": "1,2"}`}); err != nil || cap.reqs[0].URL.Query().Get("ids") != "1,2" {
+		t.Errorf("query as text = %v %v", err, cap.reqs)
+	}
 	// A JSON body, given as an object or as text.
 	cap = &capture{}
 	cap.install(t)
