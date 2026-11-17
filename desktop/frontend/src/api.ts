@@ -528,7 +528,19 @@ export interface ConnectorTest {
   tested: boolean;
   account?: string;
   error?: string;
+  // hint says in words what failed (an English template, translated by the app).
+  hint?: Hint;
+  // via is the way the calls go when there is more than one (Jira: site or gateway).
+  via?: string;
   message?: string;
+}
+
+// Hint is what an error says for a person: a template with its values, and the hint of its
+// cause for {cause}.
+export interface Hint {
+  key: string;
+  args?: Record<string, string>;
+  cause?: Hint;
 }
 
 export interface ChatEvent {

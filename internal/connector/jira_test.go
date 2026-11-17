@@ -65,6 +65,9 @@ func TestJiraCheckTrimsAndNormalizes(t *testing.T) {
 	if (*seen)[0] != "GET https://acme.atlassian.net/rest/api/3/myself" {
 		t.Errorf("asked %v", *seen)
 	}
+	if via := c.(Router).Route(); via != "site" {
+		t.Errorf("route = %q", via)
+	}
 }
 
 func TestJiraScopedTokenGoesThroughGateway(t *testing.T) {
@@ -81,6 +84,9 @@ func TestJiraScopedTokenGoesThroughGateway(t *testing.T) {
 	if strings.Join(*seen, "|") != strings.Join(want, "|") {
 		t.Fatalf("asked %v", *seen)
 	}
+	if via := c.(Router).Route(); via != "gateway" {
+		t.Errorf("route = %q", via)
+	}
 	// The cloud id is kept: the next call goes straight to the gateway.
 	*seen = nil
 	if _, err := c.Call(context.Background(), map[string]any{"summary": "S"}); err != nil {
@@ -96,7 +102,7 @@ func TestJiraErrorsSayWhatFailed(t *testing.T) {
 	c, _ := Build("jira", Settings{"project": "K", "url": "https://acme.atlassian.net", "email": "a@x", "token": "wrong"}, "")
 	_, err := c.(Checker).Check(context.Background())
 	var st *StatusError
-	if err == nil || !errors.As(err, &st) || st.Code != 401 || !strings.Contains(err.Error(), "refused the email and API token") {
+	if err == nil || !errors.As(err, &st) || st.Code != 401 || HintOf(err) == nil || !strings.Contains(HintOf(err).Text(), "refused the email and API token") {
 		t.Errorf("401 = %v", err)
 	}
 
@@ -106,7 +112,7 @@ func TestJiraErrorsSayWhatFailed(t *testing.T) {
 		return nil, &url.Error{Op: "Get", URL: req.URL.String(), Err: &net.DNSError{Err: "no such host", Name: req.URL.Host, IsNotFound: true}}
 	}
 	_, err = c.(Checker).Check(context.Background())
-	if err == nil || !strings.Contains(err.Error(), "cannot find acme.atlassian.net") || !strings.Contains(err.Error(), "Jira at https://acme.atlassian.net") {
+	if err == nil || !strings.Contains(err.Error(), "cannot find acme.atlassian.net") || HintOf(err) == nil || !strings.HasPrefix(HintOf(err).Text(), "Jira at https://acme.atlassian.net: cannot find acme.atlassian.net") {
 		t.Errorf("dns = %v", err)
 	}
 }

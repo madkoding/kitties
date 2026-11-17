@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -116,25 +117,45 @@ func jiraCloudID(ctx context.Context, site string) string {
 
 // jiraError says what a failed Jira call means: the site, the account or its permissions.
 func jiraError(err error, site string, withEmail bool) error {
+	hint := func(key string) error { return &Hinted{Key: key, Args: map[string]string{"site": site}, Err: err} }
 	if site == "" && withEmail {
-		return fmt.Errorf("Jira: the Site is missing (like https://acme.atlassian.net): %w", err)
+		return hint("Jira: the Site is missing (like https://acme.atlassian.net)")
 	}
 	var st *StatusError
 	if !errors.As(err, &st) {
+		var inner *Hinted
+		if errors.As(err, &inner) {
+			return &Hinted{Key: "Jira at {site}: {cause}", Args: map[string]string{"site": site}, Cause: inner, Err: err}
+		}
 		return fmt.Errorf("Jira at %s: %w", site, err)
 	}
 	switch st.Code {
 	case http.StatusUnauthorized:
 		if withEmail {
-			return fmt.Errorf("Jira at %s refused the email and API token (HTTP 401): the email must be the one of the Atlassian account that made the token, and the token a current one from id.atlassian.com/manage-profile/security/api-tokens: %w", site, err)
+			return hint("Jira at {site} refused the email and API token (HTTP 401): the email must be the one of the Atlassian account that made the token, and the token a current one from id.atlassian.com/manage-profile/security/api-tokens")
 		}
-		return fmt.Errorf("Jira at %s refused the token (HTTP 401): on Jira Cloud fill in the account's email too; on Data Center use a current personal access token: %w", site, err)
+		return hint("Jira at {site} refused the token (HTTP 401): on Jira Cloud fill in the account's email too; on Data Center use a current personal access token")
 	case http.StatusForbidden:
-		return fmt.Errorf("Jira at %s: the account may not do that (HTTP 403): check its permissions in the project, or the token's scopes: %w", site, err)
+		return hint("Jira at {site}: the account may not do that (HTTP 403): check its permissions in the project, or the token's scopes")
 	case http.StatusNotFound:
-		return fmt.Errorf("Jira at %s answered 404: check the Site (just the address, like https://acme.atlassian.net) and the project key: %w", site, err)
+		return hint("Jira at {site} answered 404: check the Site (just the address, like https://acme.atlassian.net) and the project key")
 	}
 	return fmt.Errorf("Jira at %s: %w", site, err)
+}
+
+// Route says the way Jira calls go: "gateway" through Atlassian's (a sign-in, or a scoped
+// token once a check found it), "site" straight to the site.
+func (a *api) Route() string {
+	if a.kind.Name != "jira" {
+		return ""
+	}
+	a.mu.Lock()
+	scoped := a.jiraCloud != ""
+	a.mu.Unlock()
+	if root, _ := jiraTarget(a.s); scoped || strings.HasPrefix(root, jiraGateway) {
+		return "gateway"
+	}
+	return "site"
 }
 
 // StatusError is an answer outside 2xx.
@@ -164,17 +185,17 @@ func netError(err error) error {
 	switch {
 	case ue != nil && strings.Contains(ue.Err.Error(), "unsupported protocol scheme"):
 		if ue.URL == "" || strings.HasPrefix(ue.URL, "/") {
-			return fmt.Errorf("the address is missing: %w", err)
+			return &Hinted{Key: "the address is missing", Err: err}
 		}
-		return fmt.Errorf("%q is not a web address (it starts with https://): %w", ue.URL, err)
+		return &Hinted{Key: "{address} is not a web address (it starts with https://)", Args: map[string]string{"address": strconv.Quote(ue.URL)}, Err: err}
 	case errors.As(err, &dns):
-		return fmt.Errorf("cannot find %s (DNS): check the address, or the network or VPN: %w", dns.Name, err)
+		return &Hinted{Key: "cannot find {host} (DNS): check the address, or the network or VPN", Args: map[string]string{"host": dns.Name}, Err: err}
 	case errors.As(err, &unknownCA), errors.As(err, &hostname), errors.As(err, &invalid), errors.As(err, &verify):
-		return fmt.Errorf("the certificate of %s is not trusted (a proxy or a company certificate in between?): %w", host, err)
+		return &Hinted{Key: "the certificate of {host} is not trusted (a proxy or a company certificate in between?)", Args: map[string]string{"host": host}, Err: err}
 	case errors.Is(err, context.DeadlineExceeded), errors.As(err, &ne) && ne.Timeout():
-		return fmt.Errorf("%s did not answer in time (network, proxy or firewall): %w", host, err)
+		return &Hinted{Key: "{host} did not answer in time (network, proxy or firewall)", Args: map[string]string{"host": host}, Err: err}
 	case strings.Contains(err.Error(), "connection refused"):
-		return fmt.Errorf("%s refused the connection: %w", host, err)
+		return &Hinted{Key: "{host} refused the connection", Args: map[string]string{"host": host}, Err: err}
 	}
 	return err
 }

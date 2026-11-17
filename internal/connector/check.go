@@ -175,3 +175,56 @@ func (d described) Check(ctx context.Context) (string, error) {
 	}
 	return "", ErrNoCheck
 }
+
+// Tested is what a check found: the account's name when the service says it, and the way the
+// calls go when a connector can take more than one (Jira: "site" or "gateway").
+type Tested struct {
+	Account string
+	Via     string
+}
+
+// Router is a connector that says the way its calls go, after a check found it.
+type Router interface {
+	Route() string
+}
+
+// Route passes on the way of the connector inside.
+func (d described) Route() string {
+	if r, ok := d.Connector.(Router); ok {
+		return r.Route()
+	}
+	return ""
+}
+
+// Hinted is an error that says in words what failed, besides the cause: Key is an English
+// template the app translates, with {name} filled from Args and {cause} from Cause.
+type Hinted struct {
+	Key   string            `json:"key"`
+	Args  map[string]string `json:"args,omitempty"`
+	Cause *Hinted           `json:"cause,omitempty"`
+	Err   error             `json:"-"`
+}
+
+// Text is the hint in English.
+func (h *Hinted) Text() string {
+	out := h.Key
+	for k, v := range h.Args {
+		out = strings.ReplaceAll(out, "{"+k+"}", v)
+	}
+	if h.Cause != nil {
+		out = strings.ReplaceAll(out, "{cause}", h.Cause.Text())
+	}
+	return out
+}
+
+func (h *Hinted) Error() string { return h.Text() + ": " + h.Err.Error() }
+func (h *Hinted) Unwrap() error { return h.Err }
+
+// HintOf is the outermost hint of an error, nil when it has none.
+func HintOf(err error) *Hinted {
+	var h *Hinted
+	if errors.As(err, &h) {
+		return h
+	}
+	return nil
+}
