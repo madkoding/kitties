@@ -56,7 +56,7 @@ func (l *llm) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case last.Role == "tool":
 		fmt.Fprintf(w, `{"choices":[{"message":{"content":"Done: %s"}}],%s}`, "posted", usage)
 	case strings.Contains(last.Content, "announce"):
-		fmt.Fprintf(w, `{"choices":[{"message":{"content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"connector_hook","arguments":"{\"action\":\"send\",\"text\":\"We ship Friday\"}"}}]}}],%s}`, usage)
+		fmt.Fprintf(w, `{"choices":[{"message":{"content":"","tool_calls":[{"id":"call_1","type":"function","function":{"name":"hook_send","arguments":"{\"text\":\"We ship Friday\"}"}}]}}],%s}`, usage)
 	default:
 		fmt.Fprintf(w, `{"choices":[{"message":{"content":"Hello from the stand-in model."}}],%s}`, usage)
 	}
@@ -156,13 +156,13 @@ func TestSmokeAKittyAsksBeforePostingAndTellsThePerson(t *testing.T) {
 		t.Fatalf("never happened: %s (gateway said: %s)", what, errOut.String())
 	}
 
-	// 1. The kitty is offered the connector as a native tool and answers a plain hello.
+	// 1. The kitty is offered the connector's actions as native tools and answers a plain hello.
 	chat := call("POST", "/v1/chats", map[string]any{"members": []string{"mimi"}})["chat"].(map[string]any)["id"].(string)
 	call("POST", "/v1/chats/"+chat+"/messages", map[string]any{"text": "hello"})
 	model.mu.Lock()
 	offered := strings.Join(model.tools, ",")
 	model.mu.Unlock()
-	if !strings.Contains(offered, "connector_hook") || !strings.Contains(offered, "memory_remember") {
+	if !strings.Contains(offered, "hook_send") || !strings.Contains(offered, "memory_remember") {
 		t.Fatalf("the model was offered %q", offered)
 	}
 
