@@ -109,6 +109,9 @@ type Context struct {
 	Group []string
 	// Connectors lists the external services the kitty may call, by name and description.
 	Connectors map[string]string
+	// NativeTools is true when the kitty is offered its connectors as tools (connector_<name>)
+	// rather than as lines of text.
+	NativeTools bool
 	// User is how to refer to the person, empty for "the user".
 	User string
 	// Peers lists the other kitties this one may hand a subtask to.
@@ -236,13 +239,21 @@ func (s Soul) SystemPrompt(c Context) string {
 			"Address a teammate with @name when a reply is for them.\n")
 	}
 	if len(c.Connectors) > 0 {
-		b.WriteString("You can use these external services by writing a line of the form " +
-			"@connector <name> <json arguments> on its own; the result comes back to you as a message:\n")
 		names := make([]string, 0, len(c.Connectors))
 		for n := range c.Connectors {
 			names = append(names, n)
 		}
 		sort.Strings(names)
+		if c.NativeTools {
+			b.WriteString("You can use these external services through your tools: each is the tool connector_<name>, " +
+				"with the action and its arguments as the tool's arguments. Call the tool: a call written as text " +
+				"in your answer does nothing for you. The result comes back to you:\n")
+		} else {
+			fmt.Fprintf(&b, "You can use these external services. To call one, write a line that starts with @connector, then "+
+				"its name and its arguments as one JSON object, for example\n@connector %s {\"action\": \"...\"}\n"+
+				"The line runs the call and its result comes back to you as a message: run it, never show it to %s "+
+				"as what you will do. The services:\n", names[0], user)
+		}
 		for _, n := range names {
 			fmt.Fprintf(&b, "- %s: %s\n", n, c.Connectors[n])
 		}

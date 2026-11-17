@@ -222,3 +222,40 @@ func TestMotita(t *testing.T) {
 type failingReader struct{}
 
 func (failingReader) Read([]byte) (int, error) { return 0, errors.New("read failed") }
+
+func TestParseShapesModelsWrite(t *testing.T) {
+	reply := "Voy a revisar los dos tickets.\n" +
+		"@jira {\"action\": \"request\", \"method\": \"GET\", \"path\": \"/rest/api/3/issue/SMDFS-1243\", \"query\": {\"fields\": \"summary,status\", \"expand\": \"renderedFields\"}}\n" +
+		"```\n@connector_jira {\"action\": \"request\", \"path\": \"/rest/api/3/issue/SMDFS-1053\"}\n```\n" +
+		"@jira request {\"path\": \"/rest/api/3/myself\"}\n" +
+		"@luna {\"not\": \"a connector\"}\n" +
+		"@jira mira esto {roto}\n" +
+		"@jira hola"
+	calls, rest := Parse(reply, "jira", "slack")
+	if len(calls) != 3 {
+		t.Fatalf("Parse = %+v", calls)
+	}
+	if calls[0].Name != "jira" || calls[0].Args["action"] != "request" || calls[0].Args["path"] != "/rest/api/3/issue/SMDFS-1243" {
+		t.Errorf("short shape: %+v", calls[0])
+	}
+	if q, _ := calls[0].Args["query"].(map[string]any); q["expand"] != "renderedFields" {
+		t.Errorf("query: %+v", calls[0].Args)
+	}
+	if calls[1].Name != "jira" || calls[1].Args["path"] != "/rest/api/3/issue/SMDFS-1053" {
+		t.Errorf("native name as text: %+v", calls[1])
+	}
+	if calls[2].Args["action"] != "request" || calls[2].Args["path"] != "/rest/api/3/myself" {
+		t.Errorf("action before the object: %+v", calls[2])
+	}
+	want := "Voy a revisar los dos tickets.\n@luna {\"not\": \"a connector\"}\n@jira mira esto {roto}\n@jira hola"
+	if rest != want {
+		t.Errorf("rest = %q", rest)
+	}
+	// Without names the short shape is not read, and a fence with words stays.
+	if calls, _ := Parse("@jira {\"a\": 1}"); len(calls) != 0 {
+		t.Errorf("unknown short name: %+v", calls)
+	}
+	if _, rest := Parse("```\nls\n@connector sh {}\n```", "sh"); rest != "```\nls\n```" {
+		t.Errorf("a fence with words stays: %q", rest)
+	}
+}

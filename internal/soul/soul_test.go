@@ -108,3 +108,20 @@ func TestLeadAndFollowersPrompts(t *testing.T) {
 		t.Errorf("no lead: %s", none)
 	}
 }
+
+// The prompt says how connectors are called the way the kitty can call them: as tools when it
+// has them, as a line with an example otherwise.
+func TestConnectorWords(t *testing.T) {
+	s := Default("Mimi")
+	conns := map[string]string{"jira": "Jira issues", "slack": "posts"}
+	text := s.SystemPrompt(Context{Connectors: conns, User: "Pat"})
+	for _, want := range []string{"@connector jira {\"action\": \"...\"}", "never show it to Pat", "- jira: Jira issues", "- slack: posts"} {
+		if !strings.Contains(text, want) {
+			t.Errorf("text prompt lacks %q:\n%s", want, text)
+		}
+	}
+	native := s.SystemPrompt(Context{Connectors: conns, NativeTools: true})
+	if !strings.Contains(native, "connector_<name>") || strings.Contains(native, "@connector") || !strings.Contains(native, "- jira: Jira issues") {
+		t.Errorf("native prompt:\n%s", native)
+	}
+}

@@ -89,8 +89,7 @@ func (s *Service) toolSet(k *kitty.Kitty, allowed map[string]string) []provider.
 		tools = append(tools, provider.Tool{Name: "machine", Description: machineHelp, Parameters: obj(map[string]any{"action": str("status (the default), on or off")})})
 	}
 	for _, name := range sortedKeys(allowed) {
-		tools = append(tools, provider.Tool{Name: prefixConnector + name, Description: allowed[name],
-			Parameters: obj(map[string]any{"action": str("the action to run (the first when empty)"), "text": str("the text, for actions that take one")})})
+		tools = append(tools, provider.Tool{Name: prefixConnector + name, Description: allowed[name], Parameters: connectorSchema()})
 	}
 	if s.skills != nil {
 		tools = append(tools,
@@ -203,8 +202,9 @@ func fromCalls(calls []provider.ToolCall) []action {
 	return out
 }
 
-// fromText turns the lines of a reply into actions and returns the remaining text.
-func fromText(text string) ([]action, string) {
+// fromText turns the lines of a reply into actions and returns the remaining text. connectors
+// are the kitty's connectors by name: a line "@<name> {...}" for one of them is its call.
+func fromText(text string, connectors map[string]string) ([]action, string) {
 	var out []action
 	tools, rest := desktop.Parse(text)
 	for _, t := range tools {
@@ -218,7 +218,7 @@ func fromText(text string) ([]action, string) {
 	for _, d := range directives {
 		out = append(out, action{kind: d.Kind, name: d.Verb, args: d.Args, raw: d.Raw})
 	}
-	calls, rest := connector.Parse(rest)
+	calls, rest := connector.Parse(rest, sortedKeys(connectors)...)
 	for _, c := range calls {
 		out = append(out, action{kind: "connector", name: c.Name, args: c.Args, raw: c.Raw})
 	}
@@ -312,11 +312,32 @@ func (s *Service) runNonDesktop(ctx context.Context, id string, actions []action
 	return out
 }
 
+// connectorSchema is the arguments of a connector tool. Each action takes its own (listed in the
+// tool's description) and the object takes them besides these (no additionalProperties: false,
+// and none named, which Gemini refuses); request's are named, because with only action and text
+// a model sees no way to pass a method, a path and a query, and writes the call as text.
+func connectorSchema() map[string]any {
+	str := func(help string) map[string]any { return map[string]any{"type": "string", "description": help} }
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"action": str("the action to run (the first when empty)"),
+			"text":   str("the text, for actions that take one"),
+			"method": str("request: GET (default), POST, PUT, PATCH or DELETE"),
+			"path":   str("request: the endpoint, relative to the service's API"),
+			"query":  map[string]any{"type": "object", "description": "request: the query parameters"},
+			"body":   map[string]any{"type": "object", "description": "request: the JSON body"},
+		},
+	}
+}
+
 // feedback builds the messages that answer a batch: tool results for native calls, one user
 // message for text lines. extra is appended as a user message (a screenshot with its words).
 func feedback(native bool, reply provider.Reply, replyText string, outs []outcome, extra *provider.Message) []provider.Message {
 	var msgs []provider.Message
-	if native {
+	// A model offered tools may still write its calls as lines: those are answered as lines, since
+	// a tool result needs the call it answers.
+	if native && len(reply.Calls) > 0 {
 		msgs = append(msgs, provider.Message{Role: "assistant", Content: reply.Content, ToolCalls: reply.Calls})
 		for _, o := range outs {
 			msgs = append(msgs, provider.Message{Role: "tool", ToolCallID: o.action.callID, ToolName: o.action.raw, Content: o.result()})

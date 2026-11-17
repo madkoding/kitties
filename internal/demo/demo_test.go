@@ -109,10 +109,10 @@ func TestBrain(t *testing.T) {
 	if got := ask(t, b, desk, "[scheduler]: Goal: Triage\nLook.\n\nWhy now: an event from github (issues):\nissue #1"); !strings.Contains(got, "Something arrived for **Triage**") {
 		t.Error(got)
 	}
-	if firstConnector("x @connector <name> y\n\nno list") != "" || firstConnector("nothing") != "" {
+	if firstConnector("x You can use these external services y\n\nno list") != "" || firstConnector("nothing") != "" {
 		t.Error("firstConnector without a list")
 	}
-	if firstConnector("@connector <name> y\n- coder: runs code\n- team-slack: posts to #launch\n") != "team-slack" || firstConnector("@connector <name> y\n- coder: runs code\n- wiki: notes\n") != "coder" {
+	if firstConnector("You can use these external services y\n@connector coder {}\nThe services:\n- coder: runs code\n- team-slack: posts to #launch\n") != "team-slack" || firstConnector("You can use these external services y\n- coder: runs code\n- wiki: notes\nYour team:\n- bo: x\n") != "coder" {
 		t.Error("firstConnector prefers a messaging service, else the first")
 	}
 	if got := ask(t, b, desk, "[Pat]: plan the launch"); !strings.Contains(got, "1. Research") || !strings.Contains(got, "@artifact save") {

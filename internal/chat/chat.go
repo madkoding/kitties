@@ -1190,6 +1190,12 @@ type pendingTask struct {
 	pre map[int]outcome
 }
 
+// speaksTools reports whether the kitty's calls go as native tool calls with this brain.
+func (s *Service) speaksTools(brain provider.Client) bool {
+	tc, ok := brain.(provider.ToolClient)
+	return ok && s.nativeTools && tc.SupportsTools()
+}
+
 // ask asks the brain, with the tools when native.
 func ask(ctx context.Context, brain provider.Client, native bool, messages []provider.Message, tools []provider.Tool) (provider.Reply, error) {
 	if native {
@@ -1224,7 +1230,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		}
 	}
 	sc := soul.Context{
-		KittyName: k.Name, Desktop: k.Desktop, Workspace: workspaceOf(k), Group: group, Connectors: allowed, User: s.user,
+		KittyName: k.Name, Desktop: k.Desktop, Workspace: workspaceOf(k), Group: group, Connectors: allowed, NativeTools: s.speaksTools(brain), User: s.user,
 		Peers: s.peers(k, id), Unattended: !k.Limits.Or(s.DefaultLimits).Attended,
 	}
 	if k.Lead {
@@ -1271,7 +1277,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 
 	native := false
 	var tools []provider.Tool
-	if tc, ok := brain.(provider.ToolClient); ok && s.nativeTools && tc.SupportsTools() {
+	if s.speaksTools(brain) {
 		tools = s.toolSet(k, allowed)
 		if exposed {
 			tools = ownComputerTools(tools)
@@ -1304,7 +1310,7 @@ func (s *Service) answer(ctx context.Context, id string, k *kitty.Kitty, members
 		if native && len(reply.Calls) > 0 {
 			actions = fromCalls(reply.Calls)
 		} else {
-			actions, text = fromText(reply.Content)
+			actions, text = fromText(reply.Content, allowed)
 		}
 		if text = strings.TrimSpace(text); text != "" {
 			parts = append(parts, text)
@@ -1761,7 +1767,7 @@ func (s *Service) attempt(ctx context.Context, id string, index int, k *kitty.Ki
 		if p.native && len(answer.Calls) > 0 {
 			st.actions, text = fromCalls(answer.Calls), answer.Content
 		} else {
-			st.actions, text = fromText(answer.Content)
+			st.actions, text = fromText(answer.Content, p.allowed)
 		}
 		if plan, ok := planStep(s.now(), text, st.actions); ok {
 			// The kitty says what it goes on to do: a line the person follows, not the answer,

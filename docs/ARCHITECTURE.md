@@ -200,7 +200,9 @@ Each responder answers in turn:
    are lines in the reply (`@tool`, `@connector`, `@skill`, `@artifact`). Both are parsed into
    one list of actions (`internal/chat/actions.go`), run the same way, and answered in the
    shape the model spoke: tool-result messages (with the screenshot as a following user turn)
-   or one text message. This repeats up to `MaxRounds` times. A file a connector answered with
+   or one text message. A connector line may also be written `@connector_<name> {…}` or, for
+   a connector the kitty has, `@<name> {…}` (models write those too); a line in a reply that
+   also had tools is answered as a line. This repeats up to `MaxRounds` times. A file a connector answered with
    is saved to the artifacts and named on the turn.
 3. The turn is saved with the connector results and the token usage.
 
