@@ -270,7 +270,8 @@ const dict: Dictionary = {
   "issues and pull requests": "issues e pull requests",
   "issues by JQL (the open ones of the project by default)":
     "issues por JQL (as abertas do projeto por padrão)",
-  "issues in Jira Cloud": "issues no Jira Cloud",
+  "issues in Jira Cloud or Data Center": "issues no Jira Cloud ou Data Center",
+  "of the Atlassian account that made the token; empty for a Data Center personal access token": "da conta Atlassian que criou o token; vazio para um token de acesso pessoal do Data Center",
   "issues in Linear": "issues no Linear",
   "issues on a Gitea or Forgejo server": "issues em um servidor Gitea ou Forgejo",
   "issues, pull requests and files on GitHub, with a token or a sign-in":
