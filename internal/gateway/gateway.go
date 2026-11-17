@@ -81,7 +81,7 @@ type Fleet interface {
 	SetConnector(name string, c config.Connector, change orchestrator.ConnectorChange) error
 	RemoveConnector(name string) error
 	// TestConnector checks a connector's account with a request that only reads.
-	TestConnector(ctx context.Context, name string) (string, error)
+	TestConnector(ctx context.Context, name string) (connector.Tested, error)
 	OAuth() *oauth.Manager
 	// Accounts are the AI sign-ins (ChatGPT, Copilot, Google, Claude) of the profiles.
 	Accounts() *llmauth.Manager
@@ -1244,16 +1244,24 @@ func (s *Server) handleSetConnector(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleTestConnector(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	account, err := s.fleet.TestConnector(ctx, r.PathValue("name"))
+	found, err := s.fleet.TestConnector(ctx, r.PathValue("name"))
 	switch {
 	case errors.Is(err, orchestrator.ErrNotFound):
 		fail(w, http.StatusNotFound, err)
 	case errors.Is(err, connector.ErrNoCheck):
 		reply(w, http.StatusOK, map[string]any{"ok": true, "tested": false, "message": err.Error()})
 	case err != nil:
-		reply(w, http.StatusOK, map[string]any{"ok": false, "tested": true, "error": err.Error()})
+		out := map[string]any{"ok": false, "tested": true, "error": err.Error()}
+		if hint := connector.HintOf(err); hint != nil {
+			out["hint"] = hint
+		}
+		reply(w, http.StatusOK, out)
 	default:
-		reply(w, http.StatusOK, map[string]any{"ok": true, "tested": true, "account": account})
+		out := map[string]any{"ok": true, "tested": true, "account": found.Account}
+		if found.Via != "" {
+			out["via"] = found.Via
+		}
+		reply(w, http.StatusOK, out)
 	}
 }
 

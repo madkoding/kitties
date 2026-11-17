@@ -20,6 +20,7 @@ import {
   savedConnection,
 } from "./api";
 import Tabs from "./Tabs";
+import { jiraSite } from "./jiraSite";
 import ConnectorLogo, { ProviderLogo, logoColor } from "./ConnectorLogo";
 import {
   PROVIDER_ORDER,
@@ -28,6 +29,7 @@ import {
   actionLabel,
   categoryLabel,
   friendlyError,
+  hintText,
   mayUse,
   people,
   pickOf,
@@ -862,6 +864,17 @@ function wayLabel(kind: string, way: string, service: string): string {
   return kind === "jira" || kind === "zendesk" ? t("API token") : t("API key or token");
 }
 
+// viaText says which way a connection's calls go, when it can take more than one.
+function viaText(via: string): string {
+  switch (via) {
+    case "site":
+      return t("Straight to the site.");
+    case "gateway":
+      return t("Through Atlassian's gateway (scoped token or sign-in).");
+  }
+  return "";
+}
+
 // wayHint says in a line what a way to connect asks for.
 function wayHint(way: string, builtin: boolean): string {
   switch (way) {
@@ -955,6 +968,7 @@ function FieldInput({
   alternative,
   onInput,
   onClear,
+  note,
 }: {
   f: ConnectorKind["fields"][number];
   // need marks a field the way chosen to connect cannot go without; alternative one that is not
@@ -968,6 +982,8 @@ function FieldInput({
   placeholder?: string;
   onInput: (v: string) => void;
   onClear?: (on: boolean) => void;
+  // note says, while typing, how the value will be read (bad marks one that will not work).
+  note?: { text: string; bad?: boolean } | null;
 }) {
   const id = "field-" + f.name;
   return (
@@ -1027,9 +1043,30 @@ function FieldInput({
           placeholder={placeholder || f.placeholder || ""}
         />
       )}
+      {note && (
+        <p
+          class={`text-xs mt-1 ${note.bad ? "text-[var(--c-red)]" : "text-[var(--t3)]"}`}
+          data-testid={`note-${f.name}`}
+        >
+          {note.text}
+        </p>
+      )}
       {f.help && <p class={HELP}>{t(f.help)}</p>}
     </div>
   );
+}
+
+// siteNote says how a Jira Site will be read: the address the calls go to when it is not what
+// was typed, or that it is no address.
+function siteNote(value: string): { text: string; bad?: boolean } | null {
+  const read = jiraSite(value);
+  if (!read) {
+    return null;
+  }
+  if (!read.site) {
+    return { text: t("Not an address: type it like https://acme.atlassian.net"), bad: true };
+  }
+  return read.changed ? { text: t("Kitties will use {site}", { site: read.site }) } : null;
 }
 
 // ConnectionForm adds or edits a connection: the fields the service needs, which kitties may
@@ -1247,6 +1284,7 @@ function ConnectionForm({
       cleared={cleared.has(f.name)}
       alternative={appFields.includes(f)}
       placeholder={f.name === "url" && def.name === "motita" ? motitaURL : undefined}
+      note={f.name === "url" && def.name === "jira" ? siteNote(values[f.name] || "") : null}
       onInput={(v) => set(f.name, v)}
       onClear={(on) => {
         const next = new Set(cleared);
@@ -1621,12 +1659,18 @@ function ConnectionRow({
           >
             {!test.ok
               ? t("✗ It does not work: {error}", {
-                  error: String(tech ? test.error : plainError(test.error || "")),
+                  error: String(
+                    tech
+                      ? test.error
+                      : test.hint
+                        ? hintText(test.hint)
+                        : plainError(test.error || ""),
+                  ),
                 })
               : test.tested
-                ? test.account
-                  ? t("✓ It works as {account}.", { account: test.account })
-                  : t("✓ It works.")
+                ? (test.account
+                    ? t("✓ It works as {account}.", { account: test.account })
+                    : t("✓ It works.")) + (test.via ? " " + viaText(test.via) : "")
                 : t(
                     "It cannot be tested without acting: it is tried the first time a kitty uses it.",
                   )}

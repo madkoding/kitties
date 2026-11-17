@@ -1,4 +1,5 @@
 import { t } from "./i18n";
+import type { Hint } from "./api";
 
 // Words for people: what the gateway calls openai, messaging or create_issue, as the screens
 // say it. Everything here is display only; the API keeps its own names.
@@ -267,6 +268,11 @@ export function friendlyError(msg: string): string {
 // plainError says what went wrong with a service the way a person who is not technical
 // understands it, and what they can do; one it does not recognise is kept as it is. It says
 // what the gateway's chat.Plain says.
+// hintText is what a hint says, in the app's language.
+export function hintText(h: Hint): string {
+  return t(h.key, { ...(h.args || {}), ...(h.cause ? { cause: hintText(h.cause) } : {}) });
+}
+
 export function plainError(msg: string): string {
   const status = msg.match(/\bHTTP (\d{3})\b/)?.[1];
   if (status === "401") {

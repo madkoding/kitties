@@ -2172,6 +2172,66 @@ test("a connection says what it uses, is tested from the list and after saving, 
   await page.request.delete(`${GATEWAY}/v1/settings/connectors/tw`, { headers });
 });
 
+test("Jira reads its Site while typed, says the way it goes and what failed in words", async ({
+  page,
+}) => {
+  const headers = { Authorization: "Bearer e2e-token" };
+  await page.request.put(`${GATEWAY}/v1/settings/connectors/jira`, {
+    headers,
+    data: {
+      kind: "jira",
+      settings: { project: "KIT", url: "https://acme.atlassian.net", email: "a@b.c", token: "t" },
+    },
+  });
+  await open(page, "#new-connectors");
+  // A refusal says what to check, with the site, not a generic error.
+  await page.route("**/v1/settings/connectors/jira/test", (route) =>
+    route.fulfill({
+      json: {
+        ok: false,
+        tested: true,
+        error: "Jira at https://acme.atlassian.net: cannot find acme.atlassian.net (DNS): dial tcp",
+        hint: {
+          key: "Jira at {site}: {cause}",
+          args: { site: "https://acme.atlassian.net" },
+          cause: {
+            key: "cannot find {host} (DNS): check the address, or the network or VPN",
+            args: { host: "acme.atlassian.net" },
+          },
+        },
+      },
+    }),
+  );
+  await page.getByTestId("test-jira").click();
+  await expect(page.getByTestId("test-result-jira")).toContainText(
+    "Jira at https://acme.atlassian.net: cannot find acme.atlassian.net (DNS)",
+  );
+  await expect(page.getByTestId("test-result-jira")).not.toContainText("could not be reached");
+  // A scoped token works through Atlassian's gateway, and the row says so.
+  await page.unroute("**/v1/settings/connectors/jira/test");
+  await page.route("**/v1/settings/connectors/jira/test", (route) =>
+    route.fulfill({ json: { ok: true, tested: true, account: "Mad", via: "gateway" } }),
+  );
+  await page.getByTestId("test-jira").click();
+  await expect(page.getByTestId("test-result-jira")).toHaveText(
+    "✓ It works as Mad. Through Atlassian's gateway (scoped token or sign-in).",
+  );
+  await shot(page, "87-jira-test");
+  // The Site is read while typed: the page it was copied from goes, a non-address is marked.
+  await open(page, "#connector/jira");
+  const form = page.getByTestId("connection-form");
+  await form.locator("#field-url").fill("acme.atlassian.net/jira/your-work");
+  await expect(form.getByTestId("note-url")).toHaveText(
+    "Kitties will use https://acme.atlassian.net",
+  );
+  await shot(page, "87-jira-site");
+  await form.locator("#field-url").fill("not an address");
+  await expect(form.getByTestId("note-url")).toContainText("Not an address");
+  await form.locator("#field-url").fill("https://acme.atlassian.net");
+  await expect(form.getByTestId("note-url")).toHaveCount(0);
+  await page.request.delete(`${GATEWAY}/v1/settings/connectors/jira`, { headers });
+});
+
 test("a message sent shows once, while the kitties are still answering", async ({ page }) => {
   const headers = { Authorization: "Bearer e2e-token" };
   const r = await page.request.post(`${GATEWAY}/v1/chats`, {

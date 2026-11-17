@@ -223,9 +223,9 @@ func catalog() []Kind {
 		{Name: "linear", Category: CatProductivity, Label: "Linear", Help: "issues in Linear",
 			Fields:  signIn([]Field{f("team", "Team id", "", true, false)}, f("token", "API key", "", false, true), "linear.app/settings/api/applications"),
 			Actions: []Action{{Name: "create_issue", Help: "create an issue", Args: []string{fTitle, "description"}}}, make: makeLinear, oauth: "linear"},
-		{Name: "jira", Category: CatProductivity, Label: "Jira", Help: "issues in Jira Cloud",
+		{Name: "jira", Category: CatProductivity, Label: "Jira", Help: "issues in Jira Cloud or Data Center",
 			Fields: signIn([]Field{f("project", "Project key", "KIT", true, false), keyed(f("url", "Site", "https://acme.atlassian.net", false, false), keyToken),
-				f("email", "Email", "with an API token", false, false)}, f("token", "API token", "", false, true), "developer.atlassian.com/console/myapps"),
+				f("email", "Email", "of the Atlassian account that made the token; empty for a Data Center personal access token", false, false)}, f("token", "API token", "", false, true), "developer.atlassian.com/console/myapps"),
 			Actions: []Action{{Name: "create_issue", Help: "create a task", Args: []string{"summary", "description"}}}, make: makeJira, oauth: "atlassian"},
 		{Name: "google-chat", Category: CatMessaging, Label: "Google Chat", Help: "posts to a Google Chat space through a webhook",
 			Fields: []Field{f("url", "Webhook URL", "", true, true)}, Actions: []Action{{Name: "send", Help: "post a message", Args: []string{fText}}}, make: makeGoogleChat},
@@ -577,10 +577,13 @@ type actionFn func(s Settings, args map[string]any) (request, error)
 
 // api is a connector made of actions over an HTTP service.
 type api struct {
-	kind    Kind
-	s       Settings
-	actions map[string]actionFn
-	first   string
+	mu sync.Mutex
+	// jiraCloud is the Jira site's cloud id once a scoped API token needed Atlassian's gateway.
+	jiraCloud string
+	kind      Kind
+	s         Settings
+	actions   map[string]actionFn
+	first     string
 	// render turns a successful answer into what the model reads.
 	render func(action string, data []byte) string
 	// token, when set, signs every request with the account's bearer token (OAuth kinds).
@@ -683,6 +686,9 @@ func (a *api) send(ctx context.Context, req *request) ([]byte, error) {
 		}
 		req.headers["Authorization"] = "Bearer " + tok
 	}
+	if a.kind.Name == "jira" {
+		return a.sendJira(ctx, req)
+	}
 	return do(ctx, *req)
 }
 
@@ -724,12 +730,12 @@ func do(ctx context.Context, r request) ([]byte, error) {
 	}
 	resp, err := httpDo(req)
 	if err != nil {
-		return nil, err
+		return nil, netError(err)
 	}
 	defer resp.Body.Close()
 	data, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, clip(string(data), 300))
+		return nil, &StatusError{Code: resp.StatusCode, Body: clip(string(data), 300)}
 	}
 	return data, nil
 }
@@ -781,10 +787,11 @@ func keyHeader(name, key string) map[string]string {
 // jiraTarget is where Jira calls go: the site with an email and an API token, or through
 // Atlassian's gateway for the signed-in site.
 func jiraTarget(s Settings) (string, [2]string) {
-	if s["token"] == "" && s["cloud_id"] != "" {
-		return "https://api.atlassian.com/ex/jira/" + url.PathEscape(s["cloud_id"]), [2]string{}
+	token := strings.TrimSpace(s["token"])
+	if token == "" && s["cloud_id"] != "" {
+		return jiraGateway + url.PathEscape(s["cloud_id"]), [2]string{}
 	}
-	return base(s, ""), [2]string{s["email"], s["token"]}
+	return jiraSite(s["url"]), [2]string{strings.TrimSpace(s["email"]), token}
 }
 
 func bearer(token string) map[string]string {

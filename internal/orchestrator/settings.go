@@ -658,16 +658,24 @@ func (m *Manager) stampToken(name string, c *config.Connector) {
 
 // TestConnector checks a connector's account with a request that only reads, and names the
 // account when the service says it; connector.ErrNoCheck when it cannot be tested without acting.
-func (m *Manager) TestConnector(ctx context.Context, name string) (string, error) {
+func (m *Manager) TestConnector(ctx context.Context, name string) (connector.Tested, error) {
 	c, ok := m.connectors.Get(name)
 	if !ok {
-		return "", fmt.Errorf("%w: connector %q", ErrNotFound, name)
+		return connector.Tested{}, fmt.Errorf("%w: connector %q", ErrNotFound, name)
 	}
 	ch, ok := c.(connector.Checker)
 	if !ok {
-		return "", connector.ErrNoCheck
+		return connector.Tested{}, connector.ErrNoCheck
 	}
-	return ch.Check(ctx)
+	account, err := ch.Check(ctx)
+	if err != nil {
+		return connector.Tested{}, err
+	}
+	t := connector.Tested{Account: account}
+	if r, ok := c.(connector.Router); ok {
+		t.Via = r.Route()
+	}
+	return t, nil
 }
 
 // needsAccount refuses a connector that signs in but has neither a sign-in nor a key: it would

@@ -623,6 +623,33 @@ const dict: Dictionary = {
   "Name of +{number}": "Nome de +{number}",
   "calls themselves {name}": "se chama de {name}",
   Forget: "Esquecer",
+  "Straight to the site.": "Direto ao site.",
+  "Through Atlassian's gateway (scoped token or sign-in).":
+    "Pelo gateway da Atlassian (token com escopos ou login).",
+  "Not an address: type it like https://acme.atlassian.net":
+    "Não é um endereço: escreva como https://acme.atlassian.net",
+  "Kitties will use {site}": "O Kitties usará {site}",
+  "Jira: the Site is missing (like https://acme.atlassian.net)":
+    "Jira: falta o Site (como https://acme.atlassian.net)",
+  "Jira at {site}: {cause}": "Jira em {site}: {cause}",
+  "Jira at {site} refused the email and API token (HTTP 401): the email must be the one of the Atlassian account that made the token, and the token a current one from id.atlassian.com/manage-profile/security/api-tokens":
+    "Jira em {site} recusou o email e o token de API (HTTP 401): o email deve ser o da conta Atlassian que criou o token, e o token um válido de id.atlassian.com/manage-profile/security/api-tokens",
+  "Jira at {site} refused the token (HTTP 401): on Jira Cloud fill in the account's email too; on Data Center use a current personal access token":
+    "Jira em {site} recusou o token (HTTP 401): no Jira Cloud preencha também o email da conta; no Data Center use um token de acesso pessoal válido",
+  "Jira at {site}: the account may not do that (HTTP 403): check its permissions in the project, or the token's scopes":
+    "Jira em {site}: a conta não pode fazer isso (HTTP 403): verifique as permissões no projeto ou os escopos do token",
+  "Jira at {site} answered 404: check the Site (just the address, like https://acme.atlassian.net) and the project key":
+    "Jira em {site} respondeu 404: verifique o Site (só o endereço, como https://acme.atlassian.net) e a chave do projeto",
+  "the address is missing": "falta o endereço",
+  "{address} is not a web address (it starts with https://)":
+    "{address} não é um endereço web (começa com https://)",
+  "cannot find {host} (DNS): check the address, or the network or VPN":
+    "não foi possível encontrar {host} (DNS): verifique o endereço, a rede ou a VPN",
+  "the certificate of {host} is not trusted (a proxy or a company certificate in between?)":
+    "o certificado de {host} não é confiável (um proxy ou certificado da empresa no meio?)",
+  "{host} did not answer in time (network, proxy or firewall)":
+    "{host} não respondeu a tempo (rede, proxy ou firewall)",
+  "{host} refused the connection": "{host} recusou a conexão",
 };
 
 export default dict;

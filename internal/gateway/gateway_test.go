@@ -235,16 +235,18 @@ func (f *fakeFleet) SetConnector(name string, c config.Connector, change orchest
 	f.signingIn, f.cleared = change.SigningIn, change.Clear
 	return config.ValidateConnector(name, c, "")
 }
-func (f *fakeFleet) TestConnector(_ context.Context, name string) (string, error) {
+func (f *fakeFleet) TestConnector(_ context.Context, name string) (connector.Tested, error) {
 	switch name {
 	case "c":
-		return "@me", nil
+		return connector.Tested{Account: "@me", Via: "site"}, nil
 	case "hook":
-		return "", connector.ErrNoCheck
+		return connector.Tested{}, connector.ErrNoCheck
 	case "bad":
-		return "", errors.New("HTTP 401: bad credentials")
+		return connector.Tested{}, errors.New("HTTP 401: bad credentials")
+	case "hinted":
+		return connector.Tested{}, &connector.Hinted{Key: "Jira at {site} refused", Args: map[string]string{"site": "x"}, Err: errors.New("HTTP 401: no")}
 	}
-	return "", orchestrator.ErrNotFound
+	return connector.Tested{}, orchestrator.ErrNotFound
 }
 func (f *fakeFleet) RemoveConnector(name string) error {
 	if name != "c" {
@@ -855,7 +857,7 @@ func TestSettingsRoutes(t *testing.T) {
 	if code, _, _ := call(t, srv, "PUT", "/v1/settings/connectors/c", "tok", "{"); code != 400 {
 		t.Error("connector bad json")
 	}
-	for name, want := range map[string]string{"c": `"account":"@me"`, "hook": `"tested":false`, "bad": `"ok":false`} {
+	for name, want := range map[string]string{"c": `"via":"site"`, "hook": `"tested":false`, "bad": `"ok":false`, "hinted": `"hint":{"key":"Jira at {site} refused","args":{"site":"x"}}`} {
 		if code, _, raw := call(t, srv, "POST", "/v1/settings/connectors/"+name+"/test", "tok", nil); code != 200 || !strings.Contains(string(raw), want) {
 			t.Errorf("test %s = %d %s", name, code, raw)
 		}
