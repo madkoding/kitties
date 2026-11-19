@@ -12,7 +12,7 @@ RUN npm ci --no-audit --no-fund
 COPY desktop/frontend/ ./
 RUN npm run build
 
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS binary
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS binary
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
